@@ -1,0 +1,3 @@
+[submodule "addon/latex_fixer"]
+	path = addon/latex_fixer
+	url = https://github.com/athulkrishna2015/ai-latex-fixer.git
