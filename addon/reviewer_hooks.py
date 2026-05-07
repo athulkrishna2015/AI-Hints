@@ -1,5 +1,6 @@
 import os
 from aqt import mw, gui_hooks
+from aqt.utils import showInfo, showWarning
 from .ai_client import AIClient
 from .card_parser import CardParser
 
@@ -60,12 +61,12 @@ def generate_hints():
         if provider in config.get("custom_providers", {}):
             api_key = config.get("custom_providers", {}).get(provider, {}).get("api_key")
             if not api_key:
-                mw.utils.showWarning(f"AI-Hints: API key for custom provider '{provider}' is not configured. Please add it in the add-on config.")
+                showWarning(f"AI-Hints: API key for custom provider '{provider}' is not configured. Please add it in the add-on config.")
                 return
         else:
             api_key = config.get("api_keys", {}).get(provider)
             if not api_key:
-                mw.utils.showWarning(f"AI-Hints: API key for '{provider}' is not configured. Please add it in the add-on config.")
+                showWarning(f"AI-Hints: API key for '{provider}' is not configured. Please add it in the add-on config.")
                 return
 
     parser = CardParser(
@@ -85,7 +86,7 @@ def generate_hints():
             options = []
 
         if not options:
-            mw.utils.showInfo("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
+            showInfo("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
             mw.reviewer.refresh()
             return
             
