@@ -43,7 +43,8 @@ def generate_hints():
     config = mw.addonManager.getConfig(__name__)
     parser = CardParser(
         config.get("target_fields", []),
-        config.get("note_type_fields", {})
+        config.get("note_type_fields", {}),
+        config.get("storage_mode", "html")
     )
     client = AIClient(config)
 

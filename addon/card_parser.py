@@ -3,10 +3,12 @@ from typing import List, Optional, Tuple
 from aqt import mw
 
 class CardParser:
-    def __init__(self, target_fields: List[str], note_type_fields: Dict[str, List[str]] = None):
+    def __init__(self, target_fields: List[str], note_type_fields: Dict[str, List[str]] = None, storage_mode: str = "html"):
         self.target_fields = target_fields
         self.note_type_fields = note_type_fields or {}
+        self.storage_mode = storage_mode
         self.container_class = "ai-hints-container"
+        self.json_class = "ai-hints-json"
 
     def get_note_content(self, note) -> Tuple[str, str]:
         """Extracts front and back content for AI context based on note type config."""
@@ -51,8 +53,12 @@ class CardParser:
         if not options:
             return False
 
-        # Build HTML
-        html_block = self._build_html_block(options)
+        # Build content block based on mode
+        import json
+        if self.storage_mode == "json":
+            content_block = f'<div class="{self.json_class}" style="display:none">{json.dumps(options)}</div>'
+        else:
+            content_block = self._build_html_block(options)
         
         # Find target field
         field_name = self._find_target_field(note)
@@ -62,12 +68,16 @@ class CardParser:
 
         current_val = note[field_name]
         
-        # Check if container already exists
-        pattern = rf'<div class="{self.container_class}".*?</div>'
-        if re.search(pattern, current_val, re.DOTALL):
-            new_val = re.sub(pattern, html_block, current_val, flags=re.DOTALL)
+        # Check if either container or json block already exists
+        pattern_html = rf'<div class="{self.container_class}".*?</div>'
+        pattern_json = rf'<div class="{self.json_class}".*?</div>'
+        
+        if re.search(pattern_json, current_val, re.DOTALL):
+            new_val = re.sub(pattern_json, content_block, current_val, flags=re.DOTALL)
+        elif re.search(pattern_html, current_val, re.DOTALL):
+            new_val = re.sub(pattern_html, content_block, current_val, flags=re.DOTALL)
         else:
-            new_val = current_val + "\n" + html_block
+            new_val = current_val + "\n" + content_block
 
         note[field_name] = new_val
         return True

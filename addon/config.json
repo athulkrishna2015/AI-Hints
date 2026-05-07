@@ -34,7 +34,9 @@
         "Text",
         "Extra"
     ],
-    "system_prompt": "You are a helpful assistant that helps students prepare for exams. Based on the provided Anki card Front and Back content, generate 3-4 plausible multiple-choice distractors or related hints. Return the result as a JSON array of strings only. Do not include the correct answer in the distractors. Format: [\"distractor1\", \"distractor2\", \"distractor3\"]",
+    "system_prompt": "You are a helpful assistant that helps students prepare for exams. Based on the provided Anki card Front and Back content, generate plausible multiple-choice distractors or related hints. Return the result as a JSON array of strings only. Do not include the correct answer in the distractors. Format: [\"distractor1\", \"distractor2\", ...]",
+    "storage_mode": "html",
+    "options_count": 4,
     "custom_providers": {},
     "note_type_fields": {
         "Cloze": ["Text"],

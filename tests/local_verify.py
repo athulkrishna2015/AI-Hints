@@ -77,6 +77,45 @@ try:
     generate_hints()
     print("SUCCESS: generate_hints() handles Future results correctly.")
 
+    # 5. Test JSON storage mode
+    print("Testing JSON storage mode...")
+    from addon.card_parser import CardParser
+    
+    json_parser = CardParser(target_fields=["Back"], storage_mode="json")
+    mock_note_json = MagicMock()
+    mock_note_json.keys.return_value = ["Back"]
+    mock_note_json.__getitem__.return_value = "original"
+    mock_note_json.model.return_value = {"name": "Basic"}
+    
+    json_parser.update_note_with_hints(mock_note_json, ["A", "B"])
+    
+    # Check if JSON was correctly set
+    set_value = mock_note_json.__setitem__.call_args[0][1]
+    if 'class="ai-hints-json"' in set_value and '["A", "B"]' in set_value:
+        print("SUCCESS: CardParser correctly formats JSON storage mode.")
+    else:
+        print(f"FAILED: CardParser incorrect JSON formatting: {set_value}")
+        sys.exit(1)
+
+    # 6. Test options_count injection in AIClient
+    print("Testing options_count injection...")
+    from addon.ai_client import AIClient
+    
+    config = {"options_count": 5, "system_prompt": "Prompt.", "ai_provider": "openai"}
+    client = AIClient(config)
+    
+    # We can't easily test the network call, but we can check if it tries to use the right prompt
+    # Let's mock _call_openai_compatible to see what system_prompt it receives
+    client._call_openai_compatible = MagicMock(return_value=[])
+    client.generate_options("F", "B")
+    
+    received_system_prompt = client._call_openai_compatible.call_args[0][1]
+    if "exactly 5 options" in received_system_prompt:
+        print("SUCCESS: AIClient correctly injects options_count into prompt.")
+    else:
+        print(f"FAILED: AIClient incorrect prompt injection: {received_system_prompt}")
+        sys.exit(1)
+
 except Exception as e:
     print(f"CRITICAL FAILURE during add-on load: {e}")
     import traceback

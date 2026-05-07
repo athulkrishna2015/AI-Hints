@@ -22,6 +22,20 @@ class ConfigDialog(QDialog):
         self.settings_tab = QWidget()
         settings_layout = QVBoxLayout()
         
+        # Help Guide
+        help_group = QGroupBox("Configuration Guide")
+        help_layout = QVBoxLayout()
+        help_text = QLabel(
+            "<b>ai_provider:</b> openai, anthropic, gemini, deepseek, groq, local, etc.<br>"
+            "<b>storage_mode:</b> 'html' (visible) or 'json' (hidden).<br>"
+            "<b>options_count:</b> Number of options to generate (default: 4).<br>"
+            "<b>note_type_fields:</b> Define specific fields for each card type."
+        )
+        help_text.setWordWrap(True)
+        help_layout.addWidget(help_text)
+        help_group.setLayout(help_layout)
+        settings_layout.addWidget(help_group)
+        
         self.config_editor = QTextEdit()
         self.config_editor.setPlainText(json.dumps(self.config, indent=4))
         self.config_editor.setAcceptRichText(False)

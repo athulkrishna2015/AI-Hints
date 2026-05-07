@@ -1,7 +1,28 @@
 (function() {
     function setupAIHints() {
-        const container = document.querySelector('.ai-hints-container');
+        let container = document.querySelector('.ai-hints-container');
+        const jsonBlock = document.querySelector('.ai-hints-json');
         const cardBody = document.body;
+
+        if (jsonBlock && !container) {
+            // Build container from JSON
+            try {
+                const options = JSON.parse(jsonBlock.innerText);
+                container = document.createElement('div');
+                container.className = 'ai-hints-container';
+                container.innerHTML = `
+                    <hr>
+                    <b>AI Generated Options:</b>
+                    <ul class="ai-hints-list">
+                        ${options.map(opt => `<li>${opt}</li>`).join('')}
+                    </ul>
+                `;
+                // Append near the JSON block or at the end
+                jsonBlock.parentNode.insertBefore(container, jsonBlock.nextSibling);
+            } catch (e) {
+                console.error("AI-Hints: Failed to parse JSON options", e);
+            }
+        }
 
         if (container) {
             const list = container.querySelector('.ai-hints-list');

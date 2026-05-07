@@ -10,6 +10,11 @@ class AIClient:
     def generate_options(self, front: str, back: str) -> List[str]:
         provider = self.config.get("ai_provider", "openai")
         system_prompt = self.config.get("system_prompt", "")
+        count = self.config.get("options_count", 4)
+        
+        # Append specific count instruction
+        system_prompt += f" Precisely generate exactly {count} options."
+        
         prompt = f"Front: {front}\nBack: {back}" if back else f"Content: {front}"
         
         custom_providers = self.config.get("custom_providers", {})
