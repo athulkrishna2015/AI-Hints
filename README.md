@@ -10,6 +10,9 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, and any OpenAI-compatible local API (like Ollama or LM Studio).
 - **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next configured provider.
 - **Model Fallbacks**: If a configured model is unavailable or returns unusable output, the add-on can try fallback models for the same provider before moving on.
+- **Multi-Cloze Support**: Optimized for cards with multiple cloze deletions of the same ID (e.g., `{{c1::A}} ... {{c1::B}}`). The AI now generates coordinated options (e.g., `A, B`) for these complex cards.
+- **Improved UI Stability**: Hints and options now consistently persist through the "Show Answer" transition and are only cleared when moving to a new card.
+- **Smart LaTeX Normalization**: Advanced math repair logic that handles nested delimiters, bare commands (like `sum` or `infty`), and multi-part mathematical expressions.
 - **Current-Card Hints**: Generated data is scoped to the current card, so cloze deletion and Image Occlusion siblings can each have their own hints/options.
 - **Alt-Click Reveal**: Alt-click the current cloze deletion or Image Occlusion mask to reveal only that card's hints/options. Ctrl-click and editable review fields are left alone.
 - **Speed Focus Mode Friendly**: Clicking AI-Hints buttons or Alt-click revealing hints restarts the Speed Focus Mode timer when that add-on is installed.
@@ -123,6 +126,16 @@ MIT
 
 
 ## Changelog
+
+### 1.0.6
+- **Multi-Cloze Support**: Added specialized handling for cards containing multiple cloze deletions with the same ID.
+- **Stability Improvements**: Fixed an issue where hints would "disappear" after pressing "Show Answer" due to stale card rendering.
+- **Enhanced LaTeX Fixer**: Improved the `ai-latex-fixer` library to handle nested delimiters (e.g., `\(\infty\)` inside larger blocks) and better standardize multi-part math strings.
+- **Aggressive Hiding**: Ensured hints and options stay strictly hidden on existing cards until manually revealed or just generated.
+
+### 1.0.5
+- **Bug Fixes**: Improved handling of nested LaTeX delimiters and double-escaped backslashes in AI responses.
+- **Performance**: Optimized card parsing for complex Cloze notes.
 
 ### 1.0.4
 - **Enhanced Logging**: Logs now show the specific model name being queried for every request.
