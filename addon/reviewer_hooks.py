@@ -82,6 +82,18 @@ def on_webview_did_receive_js_message(handled, message, context):
         return (True, None)
     return handled
 
+def on_reviewer_will_init_buttons(buttons, reviewer):
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    if not config.get("show_in_bottom_bar", False):
+        return
+    
+    label = "AI Hints"
+    # Anki's _addButton expects (label, function, shortcut, extra_classes)
+    # or sometimes just a list of functions.
+    # The hook expects us to append to the 'buttons' list.
+    # Each entry in 'buttons' is usually a tuple: (label, func, shortcut, ...)
+    buttons.append((label, generate_hints, "g"))
+
 def _find_speed_focus_module():
     import sys
     candidates = [
@@ -218,4 +230,5 @@ def init_hooks():
         return
     gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
     gui_hooks.webview_did_receive_js_message.append(on_webview_did_receive_js_message)
+    gui_hooks.reviewer_will_init_buttons.append(on_reviewer_will_init_buttons)
     _hooks_registered = True

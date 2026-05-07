@@ -102,6 +102,9 @@ class ConfigDialog(QDialog):
         self.show_options_cb = QCheckBox("Show Options Button (Sequential)")
         gen_layout.addRow(self.show_options_cb)
         
+        self.show_in_bottom_bar_cb = QCheckBox("Show Generate Button in Review Bar")
+        gen_layout.addRow(self.show_in_bottom_bar_cb)
+        
         self.general_tab.setLayout(gen_layout)
         self.tabs.addTab(self.general_tab, "General")
         
@@ -414,6 +417,7 @@ class ConfigDialog(QDialog):
         self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
         self.show_options_cb.setChecked(c.get("show_options_button", True))
+        self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", False))
         
         keys = c.get("api_keys", {}) or {}
         for p, edit in self.api_key_edits.items():
@@ -552,6 +556,7 @@ class ConfigDialog(QDialog):
             new_config["storage_mode"] = self.storage_mode_cb.currentText()
             new_config["show_hints_button"] = self.show_hints_cb.isChecked()
             new_config["show_options_button"] = self.show_options_cb.isChecked()
+            new_config["show_in_bottom_bar"] = self.show_in_bottom_bar_cb.isChecked()
             
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {
