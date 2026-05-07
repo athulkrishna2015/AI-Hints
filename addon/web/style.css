@@ -1,0 +1,43 @@
+.ai-hints-container {
+    margin-top: 20px;
+    padding: 10px;
+    border: 1px dashed #ccc;
+    border-radius: 8px;
+    background-color: rgba(0,0,0,0.05);
+    text-align: left;
+}
+
+.ai-hints-list {
+    margin-top: 10px;
+    padding-left: 20px;
+}
+
+.ai-hints-btn {
+    background-color: #4CAF50;
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 14px;
+    margin: 4px 2px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.ai-hints-btn:hover {
+    background-color: #45a049;
+}
+
+.ai-hints-btn-secondary {
+    background-color: #008CBA;
+}
+
+.ai-hints-btn-secondary:hover {
+    background-color: #007bb5;
+}
+
+.ai-hints-hidden {
+    display: none;
+}

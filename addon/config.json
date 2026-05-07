@@ -1,0 +1,43 @@
+{
+    "ai_provider": "openai",
+    "api_keys": {
+        "openai": "",
+        "anthropic": "",
+        "gemini": "",
+        "openrouter": "",
+        "grok": "",
+        "deepseek": "",
+        "groq": "",
+        "nvidia": "",
+        "mistral": "",
+        "huggingface": ""
+    },
+    "local_endpoint": {
+        "base_url": "http://localhost:11434/v1",
+        "model": "llama3"
+    },
+    "models": {
+        "openai": "gpt-4o-mini",
+        "anthropic": "claude-3-haiku-20240307",
+        "gemini": "gemini-1.5-flash",
+        "openrouter": "meta-llama/llama-3-8b-instruct",
+        "grok": "grok-1",
+        "deepseek": "deepseek-chat",
+        "groq": "llama3-8b-8192",
+        "nvidia": "meta/llama3-8b-instruct",
+        "mistral": "mistral-small-latest",
+        "huggingface": "meta-llama/Meta-Llama-3-8B-Instruct"
+    },
+    "target_fields": [
+        "Extras",
+        "Back",
+        "Text",
+        "Extra"
+    ],
+    "system_prompt": "You are a helpful assistant that helps students prepare for exams. Based on the provided Anki card Front and Back content, generate 3-4 plausible multiple-choice distractors or related hints. Return the result as a JSON array of strings only. Do not include the correct answer in the distractors. Format: [\"distractor1\", \"distractor2\", \"distractor3\"]",
+    "custom_providers": {},
+    "note_type_fields": {
+        "Cloze": ["Text"],
+        "Basic": ["Front", "Back"]
+    }
+}
