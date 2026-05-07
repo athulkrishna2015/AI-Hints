@@ -25,28 +25,6 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Persistent Storage**: Generated hints are saved directly in your card's fields (e.g., "Extras" or "Back"), so they work on AnkiMobile and AnkiDroid too.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
 
-## Changelog
-
-### 1.0.4
-- **Enhanced Logging**: Logs now show the specific model name being queried for every request.
-- **Advanced Log Filtering**: Added a real-time search box to the Logs tab to filter entries by keyword (e.g., model name, provider, or error).
-- **Bug Fixes**: Improved handling of nested LaTeX delimiters and double-escaped backslashes in AI responses.
-
-### 1.0.3
-- **Dynamic Model Discovery**: Added "Fetch" and "Fetch All" buttons to retrieve the latest models directly from AI provider APIs.
-- **Customizable Fallback Priority**: New drag-and-drop list to set the preferred order for provider fallbacks.
-- **UI Upgrade**: Replaced model name text fields with editable dropdowns containing popular model suggestions.
-- **Smarter Defaults**: Updated default models to `gemini-2.0-flash-exp` (Gemini), `llama-3.3-70b-versatile` (Groq), and `google/gemini-2.0-flash-exp:free` (OpenRouter).
-
-### 1.0.2
-- **LaTeX Instruction Refinement**: Updated system prompts to strictly require `\(` and `\[` delimiters and explicitly forbid `$` signs.
-- **MathJax-Aware Rendering**: Improved preservation and repair of common LaTeX output patterns.
-
-### 1.0.0
-- **Initial Release**: Multi-provider support with automatic fallback and persistent hint storage.
-- **MathJax Support**: Core logic for handling LaTeX/MathJax in AI-generated hints and options.
-- **Live Log Viewer**: Real-time debugging interface in the configuration dialog.
-
 ## Configuration
 
 Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configuration window.
@@ -79,7 +57,7 @@ To use this add-on, you need an API key from one of the supported providers.
 - **Anthropic (Claude)**: [console.anthropic.com](https://console.anthropic.com/)
 - **DeepSeek**: [platform.deepseek.com](https://platform.deepseek.com/api_keys)
 - **Together AI**: [api.together.xyz](https://api.together.xyz/settings/api-keys) (Requires initial deposit)
-- **Mistral**: [console.mistral.ai](https://console.mistral.ai/api-keys/)
+- **Mistral**: [console.mistral.ai](https://console.aimistral.ai/api-keys/)
 - **Grok (xAI)**: [console.x.ai](https://console.x.ai/)
 - **NVIDIA**: [build.nvidia.com](https://build.nvidia.com/explore/discover)
 
@@ -135,3 +113,25 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions and technical detail
 ## License
 
 MIT
+
+## Changelog
+
+### 1.0.4
+- **Enhanced Logging**: Logs now show the specific model name being queried for every request.
+- **Advanced Log Filtering**: Added a real-time search box to the Logs tab to filter entries by keyword (e.g., model name, provider, or error).
+- **Bug Fixes**: Improved handling of nested LaTeX delimiters and double-escaped backslashes in AI responses.
+
+### 1.0.3
+- **Dynamic Model Discovery**: Added "Fetch" and "Fetch All" buttons to retrieve the latest models directly from AI provider APIs.
+- **Customizable Fallback Priority**: New drag-and-drop list to set the preferred order for provider fallbacks.
+- **UI Upgrade**: Replaced model name text fields with editable dropdowns containing popular model suggestions.
+- **Smarter Defaults**: Updated default models to `gemini-2.0-flash-exp` (Gemini), `llama-3.3-70b-versatile` (Groq), and `google/gemini-2.0-flash-exp:free` (OpenRouter).
+
+### 1.0.2
+- **LaTeX Instruction Refinement**: Updated system prompts to strictly require `\(` and `\[` delimiters and explicitly forbid `$` signs.
+- **MathJax-Aware Rendering**: Improved preservation and repair of common LaTeX output patterns.
+
+### 1.0.0
+- **Initial Release**: Multi-provider support with automatic fallback and persistent hint storage.
+- **MathJax Support**: Core logic for handling LaTeX/MathJax in AI-generated hints and options.
+- **Live Log Viewer**: Real-time debugging interface in the configuration dialog.
