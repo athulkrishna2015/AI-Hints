@@ -63,7 +63,11 @@ def generate_hints():
             return
             
         note = card.note()
-        if parser.update_note_with_hints(note, options):
+        toggles = {
+            "show_hints_button": config.get("show_hints_button", True),
+            "show_options_button": config.get("show_options_button", True)
+        }
+        if parser.update_note_with_hints(note, options, toggles):
             note.flush()
             mw.reviewer.refresh()
 

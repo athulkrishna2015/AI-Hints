@@ -26,6 +26,9 @@
                     ${optionsHtml}
                 `;
                 jsonBlock.parentNode.insertBefore(container, jsonBlock.nextSibling);
+                // Inherit data attributes
+                container.setAttribute('data-show-hints', jsonBlock.getAttribute('data-show-hints'));
+                container.setAttribute('data-show-options', jsonBlock.getAttribute('data-show-options'));
             } catch (e) {
                 console.error("AI-Hints: Failed to parse JSON options", e);
             }
@@ -34,6 +37,9 @@
         if (container) {
             const optionsList = container.querySelector('.ai-hints-list');
             const hintsList = container.querySelector('.ai-hints-hint-list');
+            
+            const showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
+            const showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
             
             // Shuffle options
             if (optionsList) {
@@ -54,7 +60,7 @@
             const btnContainer = document.createElement('div');
             btnContainer.style.marginTop = '10px';
 
-            if (hintsList) {
+            if (hintsList && showHintsCfg) {
                 const hintBtn = document.createElement('button');
                 hintBtn.innerText = 'Show Hints';
                 hintBtn.className = 'ai-hints-btn';
@@ -65,7 +71,7 @@
                 btnContainer.appendChild(hintBtn);
             }
 
-            if (optionsList) {
+            if (optionsList && showOptionsCfg) {
                 const showBtn = document.createElement('button');
                 showBtn.innerText = 'Show Options';
                 showBtn.className = 'ai-hints-btn';

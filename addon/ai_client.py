@@ -185,8 +185,6 @@ class AIClient:
                     "hints": parsed.get("hints", []),
                     "options": parsed.get("options", [])
                 }
-            elif isinstance(parsed, list):
-                return {"hints": [], "options": parsed}
             return {"hints": [], "options": []}
         except:
             return {"hints": [], "options": []}

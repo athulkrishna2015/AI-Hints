@@ -49,16 +49,20 @@ class CardParser:
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
-    def update_note_with_hints(self, note, data: Dict[str, List[str]]) -> bool:
+    def update_note_with_hints(self, note, data: Dict[str, List[str]], toggles: Dict[str, bool] = None) -> bool:
         """Appends or replaces the AI hints block in the target field."""
         if not data or (not data.get("hints") and not data.get("options")):
             return False
 
         # Build content block based on mode
+        toggles_attr = ""
+        if toggles:
+            toggles_attr = f'data-show-hints="{str(toggles.get("show_hints_button", True)).lower()}" data-show-options="{str(toggles.get("show_options_button", True)).lower()}"'
+
         if self.storage_mode == "json":
-            content_block = f'<div class="{self.json_class}" style="display:none">{json.dumps(data)}</div>'
+            content_block = f'<div class="{self.json_class}" {toggles_attr} style="display:none">{json.dumps(data)}</div>'
         else:
-            content_block = self._build_html_block(data)
+            content_block = self._build_html_block(data, toggles_attr)
         
         # Find target field
         field_name = self._find_target_field(note)
@@ -89,7 +93,7 @@ class CardParser:
                 return target
         return None
 
-    def _build_html_block(self, data: Dict[str, List[str]]) -> str:
+    def _build_html_block(self, data: Dict[str, List[str]], toggles_attr: str = "") -> str:
         hints = data.get("hints", [])
         options = data.get("options", [])
         
@@ -104,7 +108,7 @@ class CardParser:
             options_html = f'<b>AI Options:</b><ul class="ai-hints-list">{items}</ul>'
             
         return f"""
-<div class="{self.container_class}">
+<div class="{self.container_class}" {toggles_attr}>
     <hr>
     {hints_html}
     {options_html}
