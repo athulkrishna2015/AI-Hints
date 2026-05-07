@@ -169,8 +169,6 @@ def on_webview_will_set_content(web_content, context):
 def _trigger_frontend_setup(card):
     if not card:
         return
-    payload = _card_context_payload(None) # This helper needs mw.reviewer.card or similar
-    # Better: just use the card passed in
     card_data = {"id": str(card.id), "ord": int(card.ord)}
     mw.reviewer.web.eval(f"if (window.aiHintsSetup) {{ window.aiHintsSetup({json.dumps(card_data)}); }}")
 
@@ -538,12 +536,12 @@ def show_bottom_bar_menu():
     
     # 1. Show Hint
     a_hint = QAction("Show Hint", menu)
-    a_hint.triggered.connect(lambda: reviewer.web.eval("document.querySelector('[data-ai-hints-action=\"toggle-hints\"]').click()"))
+    a_hint.triggered.connect(lambda: reviewer.web.eval(_click_ai_hints_action_script("toggle-hints")))
     menu.addAction(a_hint)
     
     # 2. Show Options
     a_opts = QAction("Show Options", menu)
-    a_opts.triggered.connect(lambda: reviewer.web.eval("document.querySelector('[data-ai-hints-action=\"toggle-options\"]').click()"))
+    a_opts.triggered.connect(lambda: reviewer.web.eval(_click_ai_hints_action_script("toggle-options")))
     menu.addAction(a_opts)
     
     menu.addSeparator()
@@ -568,6 +566,17 @@ def show_bottom_bar_menu():
     # Position menu above the bottom bar button
     # This is a bit tricky with webview buttons, so we'll just show it at cursor for now
     menu.exec(QPoint(mw.cursor().pos()))
+
+def _click_ai_hints_action_script(action: str) -> str:
+    selector = json.dumps(f'[data-ai-hints-action="{action}"]')
+    return f"""
+        (function() {{
+            const button = document.querySelector({selector});
+            if (button && !button.disabled) {{
+                button.click();
+            }}
+        }})();
+    """
 
 class ResultsPopup(QDialog):
     def __init__(self, parent, html_content):

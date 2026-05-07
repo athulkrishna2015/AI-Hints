@@ -4,6 +4,11 @@ import html
 from typing import List, Optional, Tuple, Dict
 
 class CardParser:
+    _MATH_BLOCK_RE = re.compile(
+        r'(\\\(.*?\\\)|\\\[.*?\\\]|<anki-mathjax\b[^>]*>.*?</anki-mathjax>)',
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+
     def __init__(self, target_fields: List[str], note_type_fields: Dict[str, List[str]] = None, storage_mode: str = "json", mathjax_format: str = "delimiters"):
         self.target_fields = target_fields
         self.note_type_fields = note_type_fields or {}
@@ -42,6 +47,7 @@ class CardParser:
 
         text = self._normalize_overescaped_math_delimiters(text)
         text = self._normalize_anki_mathjax_tags(text)
+        text = self._normalize_dollar_math_delimiters(text)
         text = self._normalize_mixed_math_delimiters(text)
         text = re.sub(
             r'\\\((.*?)\\\)',
@@ -76,15 +82,122 @@ class CardParser:
             flags=re.DOTALL | re.IGNORECASE,
         )
 
+    def _math_block_ranges(self, text: str) -> List[Tuple[int, int]]:
+        return [match.span() for match in self._MATH_BLOCK_RE.finditer(text)]
+
+    def _index_in_ranges(self, index: int, ranges: List[Tuple[int, int]]) -> bool:
+        return any(start <= index < end for start, end in ranges)
+
+    def _normalize_dollar_math_delimiters(self, text: str) -> str:
+        def convert_display(match):
+            inner = match.group(1)
+            if self._looks_like_math_span(inner):
+                return r'\[' + self._fix_latex_span(inner) + r'\]'
+            return match.group(0)
+
+        def convert_inline(match):
+            inner = match.group(1)
+            if self._looks_like_math_span(inner):
+                return r'\(' + self._fix_latex_span(inner) + r'\)'
+            return match.group(0)
+
+        text = re.sub(
+            r'(?<!\\)\$\$(.*?)(?<!\\)\$\$',
+            convert_display,
+            text,
+            flags=re.DOTALL,
+        )
+        return re.sub(
+            r'(?<!\\)\$(?!\$)([^\n$]{1,220})(?<!\\)\$(?!\$)',
+            convert_inline,
+            text,
+        )
+
     def _normalize_mixed_math_delimiters(self, text: str) -> str:
-        text = self._normalize_plain_open_escaped_close(text)
+        protected = self._math_block_ranges(text)
+        text = self._normalize_plain_display_open_escaped_close(text, protected)
+        protected = self._math_block_ranges(text)
+        text = self._normalize_plain_open_escaped_close(text, protected)
+        text = self._normalize_escaped_display_open_plain_close(text)
         return self._normalize_escaped_open_plain_close(text)
 
-    def _normalize_plain_open_escaped_close(self, text: str) -> str:
+    def _normalize_plain_display_open_escaped_close(self, text: str, protected_ranges: List[Tuple[int, int]] = None) -> str:
+        protected_ranges = protected_ranges or []
         result = []
         i = 0
         while i < len(text):
-            if text[i] != "(" or self._is_escaped(text, i):
+            if (
+                text[i] != "["
+                or self._is_escaped(text, i)
+                or self._index_in_ranges(i, protected_ranges)
+            ):
+                result.append(text[i])
+                i += 1
+                continue
+
+            if i > 0 and re.match(r'[A-Za-z0-9]', text[i - 1]):
+                result.append(text[i])
+                i += 1
+                continue
+
+            close = self._find_next_escaped_display_close(text, i + 1)
+            if close == -1:
+                result.append(text[i])
+                i += 1
+                continue
+
+            inner = text[i + 1:close]
+            if self._looks_like_math_span(self._unwrap_math_delimiters_inside_span(inner)):
+                result.append(r'\[')
+                result.append(self._fix_latex_span(inner))
+                result.append(r'\]')
+                i = close + 2
+            else:
+                result.append(text[i])
+                i += 1
+        return "".join(result)
+
+    def _normalize_escaped_display_open_plain_close(self, text: str) -> str:
+        result = []
+        i = 0
+        while i < len(text):
+            if not text.startswith(r'\[', i):
+                result.append(text[i])
+                i += 1
+                continue
+
+            if self._find_next_escaped_display_close(text, i + 2) != -1:
+                result.append(r'\[')
+                i += 2
+                continue
+
+            close = self._find_next_unescaped_close_bracket(text, i + 2)
+            if close == -1:
+                result.append(text[i])
+                i += 1
+                continue
+
+            inner = text[i + 2:close]
+            if self._looks_like_math_span(self._unwrap_math_delimiters_inside_span(inner)):
+                result.append(r'\[')
+                result.append(self._fix_latex_span(inner))
+                result.append(r'\]')
+                i = close + 1
+            else:
+                result.append(text[i])
+                i += 1
+        return "".join(result)
+
+    def _normalize_plain_open_escaped_close(self, text: str, protected_ranges: List[Tuple[int, int]] = None) -> str:
+        protected_ranges = protected_ranges or []
+        result = []
+        i = 0
+        while i < len(text):
+            if (
+                text[i] != "("
+                or self._is_escaped(text, i)
+                or self._index_in_ranges(i, protected_ranges)
+            ):
                 result.append(text[i])
                 i += 1
                 continue
@@ -159,10 +272,35 @@ class CardParser:
             idx += 1
         return -1
 
+    def _find_next_escaped_display_close(self, text: str, start: int) -> int:
+        idx = start
+        depth = 0
+        while idx < len(text) - 1:
+            if text.startswith(r'\[', idx):
+                depth += 1
+                idx += 2
+                continue
+            if text.startswith(r'\]', idx):
+                if depth == 0:
+                    return idx
+                depth -= 1
+                idx += 2
+                continue
+            idx += 1
+        return -1
+
     def _find_next_unescaped_close_paren(self, text: str, start: int) -> int:
         idx = start
         while idx < len(text):
             if text[idx] == ")" and not self._is_escaped(text, idx):
+                return idx
+            idx += 1
+        return -1
+
+    def _find_next_unescaped_close_bracket(self, text: str, start: int) -> int:
+        idx = start
+        while idx < len(text):
+            if text[idx] == "]" and not self._is_escaped(text, idx):
                 return idx
             idx += 1
         return -1
@@ -174,11 +312,19 @@ class CardParser:
         """Repair LaTeX only inside text already identified as math."""
         commands = [
             "exp", "lambda", "frac", "left", "right", "sin", "cos", "tan",
-            "sqrt", "log", "ln", "approx", "cdot", "text", "partial",
+            "sqrt", "log", "ln", "lim", "min", "max", "det", "dim", "ker",
+            "approx", "cdot", "times", "div", "pm", "mp", "text", "mathrm",
+            "operatorname", "partial", "nabla", "int", "iint", "iiint", "oint",
+            "sum", "prod", "infty", "to", "rightarrow", "leftarrow",
+            "leftrightarrow", "le", "leq", "ge", "geq", "ne", "neq", "in",
+            "notin", "subset", "subseteq", "supset", "supseteq", "cup", "cap",
+            "forall", "exists", "emptyset", "mathbb", "mathcal", "mathfrak",
+            "vec", "hat", "bar", "overline", "underline", "dot", "ddot",
+            "tilde", "widehat", "widetilde", "begin", "end",
             "alpha", "beta", "gamma", "delta", "epsilon", "phi", "theta",
-            "omega",
+            "omega", "mu", "nu", "pi", "rho", "sigma", "tau", "chi", "psi",
         ]
-        functions = ["exp", "sin", "cos", "tan", "log", "ln"]
+        functions = ["exp", "sin", "cos", "tan", "log", "ln", "lim"]
         command_alt = "|".join(re.escape(cmd) for cmd in commands)
         protected = []
 
@@ -192,6 +338,7 @@ class CardParser:
             span,
         )
         span = self._unwrap_math_delimiters_inside_span(span)
+        span = self._normalize_latex_operators(span)
 
         span = re.sub(rf'\\\\(?=(?:{command_alt})\b)', lambda _m: "\\", span)
         for func in functions:
@@ -212,22 +359,51 @@ class CardParser:
                 lambda m: m.group(1) + "\\" + m.group(2),
                 span,
             )
+        span = self._normalize_parenthesized_scripts(span)
         for idx, value in enumerate(protected):
             span = span.replace(f"@@AI_HINTS_LATEX_TEXT_{idx}@@", value)
         return span
+
+    def _normalize_latex_operators(self, span: str) -> str:
+        span = re.sub(r'(?<!\\)<->', r'\\leftrightarrow ', span)
+        span = re.sub(r'(?<!\\)->', r'\\to ', span)
+        span = re.sub(r'(?<!\\)<=', r'\\le ', span)
+        span = re.sub(r'(?<!\\)>=', r'\\ge ', span)
+        return re.sub(r'(?<!\\)!=', r'\\ne ', span)
+
+    def _normalize_parenthesized_scripts(self, span: str) -> str:
+        result = []
+        i = 0
+        while i < len(span):
+            if span[i] in "^_" and i + 1 < len(span) and span[i + 1] == "(":
+                end = self._find_matching_paren(span, i + 1)
+                if end != -1:
+                    inner = span[i + 2:end].strip()
+                    if self._looks_like_script_group(inner):
+                        result.append(span[i])
+                        result.append("{")
+                        result.append(inner)
+                        result.append("}")
+                        i = end + 1
+                        continue
+            result.append(span[i])
+            i += 1
+        return "".join(result)
+
+    def _looks_like_script_group(self, text: str) -> bool:
+        stripped = text.strip()
+        if not stripped or len(stripped) > 120:
+            return False
+        return bool(re.search(r'[\\A-Za-z0-9+\-*/=^_{}<>]', stripped))
 
     def _unwrap_math_delimiters_inside_span(self, span: str) -> str:
         span = re.sub(r'\\\((.*?)\\\)', lambda m: m.group(1).strip(), span, flags=re.DOTALL)
         return re.sub(r'\\\[(.*?)\\\]', lambda m: m.group(1).strip(), span, flags=re.DOTALL)
 
     def _wrap_parenthetical_math(self, text: str) -> str:
-        math_block = re.compile(
-            r'(\\\(.*?\\\)|\\\[.*?\\\]|<anki-mathjax\b[^>]*>.*?</anki-mathjax>)',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
         parts = []
         last = 0
-        for match in math_block.finditer(text):
+        for match in self._MATH_BLOCK_RE.finditer(text):
             parts.append(self._wrap_parenthetical_math_plain(text[last:match.start()]))
             parts.append(match.group(0))
             last = match.end()
@@ -265,13 +441,9 @@ class CardParser:
         return "".join(result)
 
     def _wrap_bare_math_tokens(self, text: str) -> str:
-        math_block = re.compile(
-            r'(\\\(.*?\\\)|\\\[.*?\\\]|<anki-mathjax\b[^>]*>.*?</anki-mathjax>)',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
         parts = []
         last = 0
-        for match in math_block.finditer(text):
+        for match in self._MATH_BLOCK_RE.finditer(text):
             parts.append(self._wrap_bare_math_tokens_plain(text[last:match.start()]))
             parts.append(match.group(0))
             last = match.end()

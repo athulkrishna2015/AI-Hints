@@ -426,6 +426,71 @@ try:
         print(f"FAILED: Reported superconductivity payload normalization incorrect: {normalized_reported}")
         sys.exit(1)
 
+    print("Testing user-reported valid MathJax payload stays valid...")
+    user_reported_data = {
+        "hints": [
+            "This equation models the exponential decay of the magnetic field inside a semi-infinite superconductor.",
+            "Note that the London Penetration Depth \\( \\lambda_L \\) determines how quickly the magnetic field decays.",
+            "You can think of this relationship like radioactive decay, where the magnetic field decreases exponentially away from the surface.",
+        ],
+        "options": [
+            "\\(B(x) = B_0 / (1 + \\frac{x}{\\lambda_L})\\)",
+            "\\(B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right)\\)",
+            "\\(B(x) = B_0 \\sin\\left(-\\frac{x}{\\lambda_L}\\right)\\)",
+            "\\(B(x) = B_0 + e^(-x/\\lambda_L)\\)",
+        ],
+    }
+    normalized_user_reported = json_parser.normalize_hint_data(user_reported_data)
+    normalized_again = json_parser.normalize_hint_data(normalized_user_reported)
+    user_options = normalized_user_reported["options"]
+    if (
+        normalized_user_reported == normalized_again
+        and user_options[0] == "\\(B(x) = B_0 / (1 + \\frac{x}{\\lambda_L})\\)"
+        and user_options[1] == "\\(B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right)\\)"
+        and user_options[2] == "\\(B(x) = B_0 \\sin\\left(-\\frac{x}{\\lambda_L}\\right)\\)"
+        and user_options[3] == "\\(B(x) = B_0 + e^{-x/\\lambda_L}\\)"
+        and all(option.count("\\(") == 1 and option.count("\\)") == 1 for option in user_options)
+    ):
+        print("SUCCESS: User-reported MathJax payload remains valid and idempotent.")
+    else:
+        print(f"FAILED: User-reported MathJax payload normalization incorrect: {normalized_user_reported}")
+        sys.exit(1)
+
+    print("Testing complex MathJax command and delimiter repairs...")
+    complex_math_data = {
+        "hints": [
+            r"Dollar inline: $x^2 + y^2 = z^2$ and cost $5 and $10 stay.",
+            r"Dollar display: $$ int_0^infty exp(-x^2) dx $$",
+            r"Matrix: \[ begin{pmatrix} a & b \\ c & d end{pmatrix} \]",
+            r"Cases: \[ f(x)=begin{cases} x^2 & x ge 0 \\ -x & x < 0 end{cases} \]",
+            r"Mismatched display [ E = mc^2 \] and \[ F = ma ]",
+            r"Vector: \( vec{v} cdot hat{n} \), set \( mathbb{R} -> mathcal{F} \), compare \( a <= b != c >= d \).",
+        ],
+        "options": [],
+    }
+    normalized_complex = json_parser.normalize_hint_data(complex_math_data)["hints"]
+    if (
+        r"\(x^2 + y^2 = z^2\)" in normalized_complex[0]
+        and "$5 and $10" in normalized_complex[0]
+        and r"\[ \int_0^\infty \exp(-x^2) dx \]" in normalized_complex[1]
+        and r"\[ \begin{pmatrix} a & b \\ c & d \end{pmatrix} \]" in normalized_complex[2]
+        and r"\begin{cases}" in normalized_complex[3]
+        and r"x \ge 0" in normalized_complex[3]
+        and r"\[ E = mc^2 \]" in normalized_complex[4]
+        and r"\[ F = ma \]" in normalized_complex[4]
+        and r"\vec{v} \cdot \hat{n}" in normalized_complex[5]
+        and r"\mathbb{R}" in normalized_complex[5]
+        and r"\to" in normalized_complex[5]
+        and r"\mathcal{F}" in normalized_complex[5]
+        and r"\le" in normalized_complex[5]
+        and r"\ne" in normalized_complex[5]
+        and r"\ge" in normalized_complex[5]
+    ):
+        print("SUCCESS: Complex MathJax commands, displays, dollars, and operators normalize safely.")
+    else:
+        print(f"FAILED: Complex MathJax normalization incorrect: {normalized_complex}")
+        sys.exit(1)
+
     print("Testing visible HTML mode escapes generated text...")
     html_parser = CardParser(target_fields=["Back"], storage_mode="html")
     html_block = html_parser.build_hints_block({"hints": ["<script>alert(1)</script>"], "options": ["\\( B_0 \\)"]})
@@ -593,6 +658,23 @@ try:
         print("SUCCESS: AIClient handles raw config values defensively.")
     else:
         print(f"FAILED: AIClient raw config handling incorrect: {raw_models} / {raw_headers}")
+        sys.exit(1)
+
+    print("Testing AIClient handles malformed api_keys/models config...")
+    malformed_client = AIClient({
+        "ai_provider": "openai",
+        "api_keys": ["bad"],
+        "models": {"openai": 12345},
+        "model_fallbacks": ["bad"],
+    })
+    if malformed_client.has_ready_provider("openai"):
+        print("FAILED: AIClient accepted malformed api_keys config.")
+        sys.exit(1)
+    malformed_models = malformed_client._models_for_provider("openai")
+    if malformed_models and malformed_models[0] == "12345":
+        print("SUCCESS: AIClient handles malformed api_keys/models config defensively.")
+    else:
+        print(f"FAILED: AIClient malformed config handling incorrect: {malformed_models}")
         sys.exit(1)
 
     print("Testing model fallback after bad output...")

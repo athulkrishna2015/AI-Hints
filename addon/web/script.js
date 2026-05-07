@@ -132,9 +132,37 @@
         return -1;
     }
 
+    function findNextEscapedDisplayClose(text, start) {
+        let depth = 0;
+        for (let i = start; i < text.length - 1; i++) {
+            if (text.startsWith('\\[', i)) {
+                depth++;
+                i++;
+                continue;
+            }
+            if (text.startsWith('\\]', i)) {
+                if (depth === 0) {
+                    return i;
+                }
+                depth--;
+                i++;
+            }
+        }
+        return -1;
+    }
+
     function findNextUnescapedCloseParen(text, start) {
         for (let i = start; i < text.length; i++) {
             if (text[i] === ')' && !isEscaped(text, i)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    function findNextUnescapedCloseBracket(text, start) {
+        for (let i = start; i < text.length; i++) {
+            if (text[i] === ']' && !isEscaped(text, i)) {
                 return i;
             }
         }
@@ -163,11 +191,19 @@
         let text = String(span || '');
         const commands = [
             'exp', 'lambda', 'frac', 'left', 'right', 'sin', 'cos', 'tan',
-            'sqrt', 'log', 'ln', 'approx', 'cdot', 'text', 'partial',
+            'sqrt', 'log', 'ln', 'lim', 'min', 'max', 'det', 'dim', 'ker',
+            'approx', 'cdot', 'times', 'div', 'pm', 'mp', 'text', 'mathrm',
+            'operatorname', 'partial', 'nabla', 'int', 'iint', 'iiint', 'oint',
+            'sum', 'prod', 'infty', 'to', 'rightarrow', 'leftarrow',
+            'leftrightarrow', 'le', 'leq', 'ge', 'geq', 'ne', 'neq', 'in',
+            'notin', 'subset', 'subseteq', 'supset', 'supseteq', 'cup', 'cap',
+            'forall', 'exists', 'emptyset', 'mathbb', 'mathcal', 'mathfrak',
+            'vec', 'hat', 'bar', 'overline', 'underline', 'dot', 'ddot',
+            'tilde', 'widehat', 'widetilde', 'begin', 'end',
             'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'phi', 'theta',
-            'omega'
+            'omega', 'mu', 'nu', 'pi', 'rho', 'sigma', 'tau', 'chi', 'psi'
         ];
-        const functions = ['exp', 'sin', 'cos', 'tan', 'log', 'ln'];
+        const functions = ['exp', 'sin', 'cos', 'tan', 'log', 'ln', 'lim'];
         const commandAlt = commands.join('|');
         const protectedText = [];
 
@@ -176,6 +212,7 @@
             return '@@AI_HINTS_LATEX_TEXT_' + (protectedText.length - 1) + '@@';
         });
         text = unwrapMathDelimitersInsideSpan(text);
+        text = normalizeLatexOperators(text);
 
         text = text.replace(new RegExp('\\\\\\\\(?=(?:' + commandAlt + ')\\b)', 'g'), '\\');
         functions.forEach(function(fn) {
@@ -189,17 +226,64 @@
                 return prefix + '\\' + name;
             });
         });
+        text = normalizeParenthesizedScripts(text);
         protectedText.forEach(function(value, index) {
             text = text.replace('@@AI_HINTS_LATEX_TEXT_' + index + '@@', value);
         });
         return text;
     }
 
-    function normalizePlainOpenEscapedClose(content) {
+    function normalizeLatexOperators(text) {
+        return text
+            .replace(/(^|[^\\])<->/g, function(match, prefix) {
+                return prefix + '\\leftrightarrow ';
+            })
+            .replace(/(^|[^\\])->/g, function(match, prefix) {
+                return prefix + '\\to ';
+            })
+            .replace(/(^|[^\\])<=/g, function(match, prefix) {
+                return prefix + '\\le ';
+            })
+            .replace(/(^|[^\\])>=/g, function(match, prefix) {
+                return prefix + '\\ge ';
+            })
+            .replace(/(^|[^\\])!=/g, function(match, prefix) {
+                return prefix + '\\ne ';
+            });
+    }
+
+    function normalizeParenthesizedScripts(text) {
+        let result = '';
+        let i = 0;
+        while (i < text.length) {
+            if ((text[i] === '^' || text[i] === '_') && i + 1 < text.length && text[i + 1] === '(') {
+                const end = findMatchingParen(text, i + 1);
+                if (end !== -1) {
+                    const inner = text.slice(i + 2, end).trim();
+                    if (looksLikeScriptGroup(inner)) {
+                        result += text[i] + '{' + inner + '}';
+                        i = end + 1;
+                        continue;
+                    }
+                }
+            }
+            result += text[i];
+            i++;
+        }
+        return result;
+    }
+
+    function looksLikeScriptGroup(text) {
+        const stripped = String(text || '').trim();
+        return Boolean(stripped && stripped.length <= 120 && /[\\A-Za-z0-9+\-*/=^_{}<>]/.test(stripped));
+    }
+
+    function normalizePlainOpenEscapedClose(content, protectedRanges) {
+        protectedRanges = protectedRanges || [];
         let result = '';
         let i = 0;
         while (i < content.length) {
-            if (content[i] !== '(' || isEscaped(content, i)) {
+            if (content[i] !== '(' || isEscaped(content, i) || indexInRanges(i, protectedRanges)) {
                 result += content[i];
                 i++;
                 continue;
@@ -265,8 +349,118 @@
         return result;
     }
 
+    function normalizePlainDisplayOpenEscapedClose(content, protectedRanges) {
+        protectedRanges = protectedRanges || [];
+        let result = '';
+        let i = 0;
+        while (i < content.length) {
+            if (content[i] !== '[' || isEscaped(content, i) || indexInRanges(i, protectedRanges)) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            if (i > 0 && /[A-Za-z0-9]/.test(content[i - 1])) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            const close = findNextEscapedDisplayClose(content, i + 1);
+            if (close === -1) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            const inner = content.slice(i + 1, close);
+            if (looksLikeMathSpan(unwrapMathDelimitersInsideSpan(inner))) {
+                result += '\\[' + fixLatexSpan(inner) + '\\]';
+                i = close + 2;
+            } else {
+                result += content[i];
+                i++;
+            }
+        }
+        return result;
+    }
+
+    function normalizeEscapedDisplayOpenPlainClose(content) {
+        let result = '';
+        let i = 0;
+        while (i < content.length) {
+            if (!content.startsWith('\\[', i)) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            if (findNextEscapedDisplayClose(content, i + 2) !== -1) {
+                result += '\\[';
+                i += 2;
+                continue;
+            }
+
+            const close = findNextUnescapedCloseBracket(content, i + 2);
+            if (close === -1) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            const inner = content.slice(i + 2, close);
+            if (looksLikeMathSpan(unwrapMathDelimitersInsideSpan(inner))) {
+                result += '\\[' + fixLatexSpan(inner) + '\\]';
+                i = close + 1;
+            } else {
+                result += content[i];
+                i++;
+            }
+        }
+        return result;
+    }
+
+    function mathBlockRanges(content) {
+        const mathBlock = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|<anki-mathjax\b[^>]*>[\s\S]*?<\/anki-mathjax>)/gi;
+        const ranges = [];
+        let match;
+        while ((match = mathBlock.exec(content)) !== null) {
+            ranges.push([match.index, match.index + match[0].length]);
+        }
+        return ranges;
+    }
+
+    function indexInRanges(index, ranges) {
+        return ranges.some(function(range) {
+            return range[0] <= index && index < range[1];
+        });
+    }
+
+    function normalizeDollarMathDelimiters(content) {
+        let text = content.replace(/(^|[^\\])\$\$([\s\S]*?)(^|[^\\])\$\$/g, function(match, prefix, inner, beforeClose) {
+            const span = inner + beforeClose;
+            if (looksLikeMathSpan(span)) {
+                return prefix + '\\[' + fixLatexSpan(span) + '\\]';
+            }
+            return match;
+        });
+        text = text.replace(/(^|[^\\])\$(?!\$)([^\n$]{1,220})(^|[^\\])\$(?!\$)/g, function(match, prefix, inner, beforeClose) {
+            const span = inner + beforeClose;
+            if (looksLikeMathSpan(span)) {
+                return prefix + '\\(' + fixLatexSpan(span) + '\\)';
+            }
+            return match;
+        });
+        return text;
+    }
+
     function normalizeMixedMathDelimiters(content) {
-        return normalizeEscapedOpenPlainClose(normalizePlainOpenEscapedClose(content));
+        let protectedRanges = mathBlockRanges(content);
+        let text = normalizePlainDisplayOpenEscapedClose(content, protectedRanges);
+        protectedRanges = mathBlockRanges(text);
+        text = normalizePlainOpenEscapedClose(text, protectedRanges);
+        text = normalizeEscapedDisplayOpenPlainClose(text);
+        return normalizeEscapedOpenPlainClose(text);
     }
 
     function normalizeAnkiMathjaxTags(content) {
@@ -371,6 +565,7 @@
         let content = String(value);
         content = content.replace(/\\\\([()\[\]])/g, '\\$1');
         content = normalizeAnkiMathjaxTags(content);
+        content = normalizeDollarMathDelimiters(content);
         content = normalizeMixedMathDelimiters(content);
         content = content.replace(/\\\(([\s\S]*?)\\\)/g, function(match, inner) {
             return '\\(' + fixLatexSpan(inner) + '\\)';

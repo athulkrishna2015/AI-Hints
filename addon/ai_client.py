@@ -195,7 +195,7 @@ class AIClient:
             model = str(custom_cfg.get("model", "") or "").strip()
             return bool(url and model)
 
-        return bool(str((self.config.get("api_keys") or {}).get(provider, "") or "").strip())
+        return bool(self._api_key_for(provider))
 
     def _call_provider(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         custom_providers = self.config.get("custom_providers") or {}
@@ -254,7 +254,7 @@ class AIClient:
         return {"hints": [], "options": []}
 
     def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
-        api_key = str((self.config.get("api_keys") or {}).get(provider, "") or "").strip()
+        api_key = self._api_key_for(provider)
         models = self._models_for_provider(provider)
         
         base_url = "https://api.openai.com/v1"
@@ -344,7 +344,7 @@ class AIClient:
         return {"hints": [], "options": []}
 
     def _call_anthropic(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
-        api_key = str((self.config.get("api_keys") or {}).get("anthropic", "") or "").strip()
+        api_key = self._api_key_for("anthropic")
         models = self._models_for_provider("anthropic")
         url = "https://api.anthropic.com/v1/messages"
         
@@ -377,7 +377,7 @@ class AIClient:
         return {"hints": [], "options": []}
 
     def _call_gemini(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
-        api_key = str((self.config.get("api_keys") or {}).get("gemini", "") or "").strip()
+        api_key = self._api_key_for("gemini")
         models = self._models_for_provider("gemini")
 
         headers = self._json_headers()
@@ -557,8 +557,18 @@ class AIClient:
             count = 4
         return max(1, min(count, 10))
 
+    def _api_keys(self) -> Dict[str, Any]:
+        api_keys = self.config.get("api_keys") or {}
+        return api_keys if isinstance(api_keys, dict) else {}
+
+    def _api_key_for(self, provider: str) -> str:
+        return str(self._api_keys().get(provider, "") or "").strip()
+
     def _get_model(self, provider: str) -> str:
-        model = ((self.config.get("models") or {}).get(provider, "") or DEFAULT_MODELS.get(provider, "")).strip()
+        models = self.config.get("models") or {}
+        if not isinstance(models, dict):
+            models = {}
+        model = models.get(provider, "") or DEFAULT_MODELS.get(provider, "")
         return self._normalize_model(provider, model)
 
     def _normalize_model(self, provider: str, model: str) -> str:
@@ -575,7 +585,10 @@ class AIClient:
         return model
 
     def _models_for_provider(self, provider: str, primary_model: str = "", extra_fallbacks: List[str] = None) -> List[str]:
-        configured_fallbacks = self._model_list((self.config.get("model_fallbacks") or {}).get(provider, []))
+        configured = self.config.get("model_fallbacks") or {}
+        if not isinstance(configured, dict):
+            configured = {}
+        configured_fallbacks = self._model_list(configured.get(provider, []))
         candidates = [
             primary_model or self._get_model(provider),
             *self._model_list(extra_fallbacks),
