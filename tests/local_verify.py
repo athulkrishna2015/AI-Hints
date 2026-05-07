@@ -80,6 +80,8 @@ try:
     
     # Mock card and reviewer state
     mock_card = MagicMock()
+    mock_card.id = 123
+    mock_card.ord = 0
     mock_note = MagicMock()
     # Mock dict-like behavior for note
     mock_note.keys.return_value = ["Front", "Back"]
@@ -88,6 +90,17 @@ try:
     mock_note.model.return_value = {"name": "Basic"}
     mock_card.note.return_value = mock_note
     mock_mw.reviewer.card = mock_card
+    mock_mw.reviewer.state = "question"
+    mock_mw.addonManager.getConfig.return_value = {
+        "ai_provider": "openai",
+        "api_keys": {"openai": "test-key"},
+        "models": {"openai": "gpt-4o-mini"},
+        "target_fields": ["Back"],
+        "storage_mode": "json",
+        "show_hints_button": True,
+        "show_options_button": True,
+        "options_count": 2,
+    }
     
     # Setup mock for run_in_background to execute callback immediately
     def mock_run_in_background(task, on_done):
@@ -111,22 +124,50 @@ try:
     mock_note_json.keys.return_value = ["Back"]
     mock_note_json.__getitem__.return_value = "original"
     mock_note_json.model.return_value = {"name": "Basic"}
+    mock_card_json = MagicMock()
+    mock_card_json.id = 456
+    mock_card_json.ord = 2
     
-    json_parser.update_note_with_hints(mock_note_json, {"hints": ["H"], "options": ["O"]})
+    json_parser.update_note_with_hints(mock_note_json, {"hints": ["H"], "options": ["O"]}, card=mock_card_json)
     
     # Check if JSON was correctly set
     set_value = mock_note_json.__setitem__.call_args[0][1]
-    if 'class="ai-hints-json"' in set_value and '"hints": ["H"]' in set_value:
-        print("SUCCESS: CardParser correctly formats JSON storage mode.")
+    if (
+        'class="ai-hints-json"' in set_value
+        and '"hints": ["H"]' in set_value
+        and 'data-ai-hints-card-id="456"' in set_value
+        and 'data-ai-hints-card-ord="2"' in set_value
+    ):
+        print("SUCCESS: CardParser correctly formats per-card JSON storage mode.")
     else:
         print(f"FAILED: CardParser incorrect JSON formatting: {set_value}")
+        sys.exit(1)
+
+    print("Testing current cloze targeting...")
+    cloze_parser = CardParser(target_fields=["Extra"], note_type_fields={"Cloze": ["Text"]}, storage_mode="json")
+    mock_cloze_note = MagicMock()
+    mock_cloze_note.model.return_value = {"name": "Cloze"}
+    mock_cloze_note.__contains__.side_effect = lambda k: k == "Text"
+    mock_cloze_note.__getitem__.return_value = "{{c1::first answer}} and {{c2::second answer::hint}}"
+    mock_cloze_card = MagicMock()
+    mock_cloze_card.ord = 1
+    front, back = cloze_parser.get_note_content(mock_cloze_note, mock_cloze_card)
+    if "Current cloze deletion: second answer" in front and "first answer" in front and "c1::" not in front:
+        print("SUCCESS: CardParser targets only the current cloze.")
+    else:
+        print(f"FAILED: CardParser did not target current cloze: {front!r} / {back!r}")
         sys.exit(1)
 
     # 6. Test options_count injection in AIClient
     print("Testing options_count injection...")
     from addon.ai_client import AIClient
     
-    config = {"options_count": 5, "system_prompt": "Prompt.", "ai_provider": "openai"}
+    config = {
+        "options_count": 5,
+        "system_prompt": "Prompt.",
+        "ai_provider": "openai",
+        "api_keys": {"openai": "test-key"},
+    }
     client = AIClient(config)
     
     # We can't easily test the network call, but we can check if it tries to use the right prompt
@@ -135,7 +176,7 @@ try:
     client.generate_options("F", "B")
     
     received_system_prompt = client._call_openai_compatible.call_args[0][1]
-    if "exactly 5 options" in received_system_prompt:
+    if "exactly 5 plausible options" in received_system_prompt:
         print("SUCCESS: AIClient correctly injects options_count into prompt.")
     else:
         print(f"FAILED: AIClient incorrect prompt injection: {received_system_prompt}")

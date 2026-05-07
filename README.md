@@ -6,8 +6,11 @@ AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate
 
 ## Features
 
-- **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, and any OpenAI-compatible local API (like Ollama or LM Studio).
+- **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, and any OpenAI-compatible local API (like Ollama or LM Studio).
 - **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next configured provider.
+- **Current-Card Hints**: Generated data is scoped to the current card, so cloze deletion and Image Occlusion siblings can each have their own hints/options.
+- **Alt-Click Reveal**: Alt-click the current cloze deletion or Image Occlusion mask to reveal only that card's hints/options. Ctrl-click and editable review fields are left alone.
+- **Speed Focus Mode Friendly**: Clicking AI-Hints buttons or Alt-click revealing hints restarts the Speed Focus Mode timer when that add-on is installed.
 - **Live Log Viewer**: Debug issues in real-time with a built-in log viewer in the config dialog, featuring auto-refresh and a "Live" status indicator.
 - **Custom AI Support**: Define your own custom endpoints and headers.
 - **Universal Compatibility**: Works with Basic, Cloze, Image Occlusion, and custom note types.
@@ -25,10 +28,12 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 ### Configuration Options
 
 - **General Tab**: Select your `ai_provider`, configure the number of distractors (`options_count`), toggle the visibility of the buttons, and choose the `storage_mode` (`"json"` for a hidden data block or `"html"` for a visible block).
-- **AI Providers Tab**: Enter your `api_keys` for supported providers, configure a local LLM endpoint (like Ollama), or use the **Custom Providers** section to add, edit, or remove your own API endpoints and custom headers!
+- **AI Providers Tab**: Enter your `api_keys` for supported providers, change model names, configure a local LLM endpoint (like Ollama), or use the **Custom Providers** section to add, edit, or remove your own API endpoints and custom headers.
+- **Local Fallback**: Enable "Use Local AI as fallback" if you want Ollama/LM Studio to be tried after cloud providers fail. Selecting `local` as the active provider always uses the configured local endpoint.
 - **Advanced Tab**: 
   - `system_prompt`: The base instructions for the AI.
   - `Note Type Fields`: A graphical dropdown selector that allows you to specify exactly which fields should be sent to the AI for each of your specific note types.
+  - `Raw JSON Editor`: Advanced users can edit the full config directly; when the raw editor is enabled, it is saved as the source of truth.
 
 ## Get Your API Keys
 
@@ -61,7 +66,20 @@ You can also use the **Raw JSON Editor** in the Advanced tab if you prefer editi
     "options_count": 4,
     "api_keys": {
         "openai": "sk-...",
-        "groq": "gsk_..."
+        "groq": "gsk_...",
+        "sambanova": "",
+        "cerebras": ""
+    },
+    "models": {
+        "gemini": "gemini-2.5-flash",
+        "groq": "llama-3.1-8b-instant",
+        "openrouter": "meta-llama/llama-3.1-8b-instruct"
+    },
+    "local_endpoint": {
+        "enabled": false,
+        "base_url": "http://localhost:11434/v1",
+        "model": "llama3",
+        "api_key": ""
     },
     "note_type_fields": {
         "Cloze": ["Text"],

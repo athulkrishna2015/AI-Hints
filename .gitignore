@@ -3,6 +3,7 @@ __pycache__/
 *.ankiaddon
 meta.json
 addon/meta.json
+addon/ai_hints.log
 .vscode/
 .idea/
 .DS_Store

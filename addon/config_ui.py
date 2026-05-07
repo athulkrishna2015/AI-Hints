@@ -4,6 +4,7 @@ from aqt import mw
 from aqt.qt import *
 from aqt.utils import showInfo, tooltip
 from .logger import logger, get_logger
+from .ai_client import DEFAULT_MODELS, LEGACY_MODEL_REPLACEMENTS, PROVIDER_ORDER
 import logging
 
 # Resolve the top-level addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
@@ -42,7 +43,7 @@ class CustomProviderDialog(QDialog):
             return
         try:
             json.loads(self.headers_edit.toPlainText() or "{}")
-        except:
+        except Exception:
             showInfo("Headers must be valid JSON.")
             return
         self.accept()
@@ -53,8 +54,8 @@ class ConfigDialog(QDialog):
         self.setWindowTitle("AI-Hints Configuration")
         self.setMinimumSize(600, 700)
         self.addon_dir = os.path.dirname(__file__)
-        self.config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-        self.custom_providers_data = self.config.get("custom_providers", {})
+        self.config = self._normalize_config(mw.addonManager.getConfig(ADDON_PACKAGE) or {})
+        self.custom_providers_data = self.config.get("custom_providers", {}) or {}
         
         self.setup_ui()
         self.load_config_into_ui()
@@ -123,13 +124,16 @@ class ConfigDialog(QDialog):
             "mistral": "https://console.mistral.ai/api-keys/",
             "together": "https://api.together.xyz/settings/api-keys",
             "huggingface": "https://huggingface.co/settings/tokens",
+            "sambanova": "https://cloud.sambanova.ai/apis",
+            "cerebras": "https://cloud.cerebras.ai/",
             "grok": "https://console.x.ai/",
             "nvidia": "https://build.nvidia.com/explore/discover"
         }
         
         self.api_key_edits = {}
+        self.model_edits = {}
         
-        free_providers = ["gemini", "groq", "openrouter", "together", "huggingface"]
+        free_providers = ["gemini", "groq", "openrouter", "huggingface", "sambanova", "cerebras"]
         free_group = QGroupBox("Free / Freemium Providers")
         free_layout = QFormLayout()
         for p in free_providers:
@@ -145,7 +149,7 @@ class ConfigDialog(QDialog):
         free_group.setLayout(free_layout)
         self.prov_layout.addRow(free_group)
         
-        paid_providers = ["openai", "anthropic", "deepseek", "mistral", "nvidia", "grok"]
+        paid_providers = ["openai", "anthropic", "deepseek", "mistral", "together", "nvidia", "grok"]
         paid_group = QGroupBox("Paid Providers")
         paid_layout = QFormLayout()
         for p in paid_providers:
@@ -166,10 +170,27 @@ class ConfigDialog(QDialog):
         local_layout = QFormLayout()
         self.local_url_edit = QLineEdit()
         self.local_model_edit = QLineEdit()
+        self.local_api_key_edit = QLineEdit()
+        self.local_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.local_fallback_cb = QCheckBox("Use Local AI as fallback")
+        local_layout.addRow(self.local_fallback_cb)
         local_layout.addRow("Base URL:", self.local_url_edit)
         local_layout.addRow("Model Name:", self.local_model_edit)
+        local_layout.addRow("API Key (optional):", self.local_api_key_edit)
         local_group.setLayout(local_layout)
         self.prov_layout.addRow(local_group)
+
+        model_group = QGroupBox("Model Names")
+        model_layout = QFormLayout()
+        for p in PROVIDER_ORDER:
+            if p == "local":
+                continue
+            edit = QLineEdit()
+            edit.setPlaceholderText(DEFAULT_MODELS.get(p, ""))
+            self.model_edits[p] = edit
+            model_layout.addRow(f"{p.capitalize()} model:", edit)
+        model_group.setLayout(model_layout)
+        self.prov_layout.addRow(model_group)
         
         # Custom Providers Group
         custom_group = QGroupBox("Custom Providers")
@@ -312,7 +333,7 @@ class ConfigDialog(QDialog):
         level_filter = self.log_level_cb.currentText()
         
         try:
-            with open(log_file, "r") as f:
+            with open(log_file, "r", encoding="utf-8") as f:
                 lines = f.readlines()
             
             if level_filter != "ALL":
@@ -327,7 +348,7 @@ class ConfigDialog(QDialog):
     def clear_log(self):
         log_file = os.path.join(self.addon_dir, "ai_hints.log")
         try:
-            open(log_file, "w").close()
+            open(log_file, "w", encoding="utf-8").close()
             self.log_view.setPlainText("Log cleared.")
             logger.info("Log cleared by user.")
         except Exception as e:
@@ -391,13 +412,19 @@ class ConfigDialog(QDialog):
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
         self.show_options_cb.setChecked(c.get("show_options_button", True))
         
-        keys = c.get("api_keys", {})
+        keys = c.get("api_keys", {}) or {}
         for p, edit in self.api_key_edits.items():
             edit.setText(keys.get(p, ""))
+
+        models = c.get("models", {}) or {}
+        for p, edit in self.model_edits.items():
+            edit.setText(models.get(p, DEFAULT_MODELS.get(p, "")))
             
-        local = c.get("local_endpoint", {})
+        local = c.get("local_endpoint", {}) or {}
         self.local_url_edit.setText(local.get("base_url", ""))
         self.local_model_edit.setText(local.get("model", ""))
+        self.local_api_key_edit.setText(local.get("api_key", ""))
+        self.local_fallback_cb.setChecked(local.get("enabled", False))
         
         self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
         
@@ -466,7 +493,7 @@ class ConfigDialog(QDialog):
         
         current_selection = self.ai_provider_cb.currentText()
         self.ai_provider_cb.clear()
-        providers = ["gemini", "groq", "openrouter", "together", "huggingface", "local", "openai", "anthropic", "deepseek", "mistral", "nvidia", "grok"]
+        providers = PROVIDER_ORDER
         self.ai_provider_cb.addItems(providers + list(self.custom_providers_data.keys()))
         if current_selection:
             self.ai_provider_cb.setCurrentText(current_selection)
@@ -510,8 +537,12 @@ class ConfigDialog(QDialog):
 
     def save_config(self):
         try:
-            # If raw editor was used and is visible, prioritize it? 
-            # Or just sync everything. Let's sync from GUI.
+            if self.raw_toggle.isChecked():
+                raw_config = json.loads(self.raw_editor.toPlainText() or "{}")
+                mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(raw_config))
+                self.accept()
+                return
+
             new_config = self.config.copy()
             new_config["ai_provider"] = self.ai_provider_cb.currentText()
             new_config["options_count"] = self.options_count_sb.value()
@@ -519,10 +550,16 @@ class ConfigDialog(QDialog):
             new_config["show_hints_button"] = self.show_hints_cb.isChecked()
             new_config["show_options_button"] = self.show_options_cb.isChecked()
             
-            new_config["api_keys"] = {p: edit.text() for p, edit in self.api_key_edits.items()}
+            new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
+            new_config["models"] = {
+                p: (edit.text().strip() or DEFAULT_MODELS.get(p, ""))
+                for p, edit in self.model_edits.items()
+            }
             new_config["local_endpoint"] = {
-                "base_url": self.local_url_edit.text(),
-                "model": self.local_model_edit.text()
+                "enabled": self.local_fallback_cb.isChecked(),
+                "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
+                "model": self.local_model_edit.text().strip() or DEFAULT_MODELS["local"],
+                "api_key": self.local_api_key_edit.text().strip()
             }
             new_config["system_prompt"] = self.system_prompt_edit.toPlainText()
             
@@ -532,10 +569,38 @@ class ConfigDialog(QDialog):
                 new_config["note_type_fields"] = json.loads(self.note_fields_edit.toPlainText())
             
             new_config["custom_providers"] = self.custom_providers_data
-            mw.addonManager.writeConfig(ADDON_PACKAGE, new_config)
+            mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(new_config))
             self.accept()
         except Exception as e:
             showInfo(f"Error saving configuration: {e}")
+
+    def _normalize_config(self, config):
+        config = dict(config or {})
+
+        api_keys = dict(config.get("api_keys", {}) or {})
+        for provider in PROVIDER_ORDER:
+            if provider != "local":
+                api_keys.setdefault(provider, "")
+        config["api_keys"] = api_keys
+
+        models = dict(DEFAULT_MODELS)
+        models.update(config.get("models", {}) or {})
+        for provider, model in list(models.items()):
+            models[provider] = LEGACY_MODEL_REPLACEMENTS.get((provider, model), model)
+        config["models"] = models
+
+        local = {
+            "enabled": False,
+            "base_url": "http://localhost:11434/v1",
+            "model": DEFAULT_MODELS["local"],
+            "api_key": "",
+        }
+        local.update(config.get("local_endpoint", {}) or {})
+        config["local_endpoint"] = local
+
+        config.setdefault("custom_providers", {})
+        config.setdefault("note_type_fields", {})
+        return config
 
 _config_dialog_instance = None
 

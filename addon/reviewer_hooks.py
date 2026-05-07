@@ -1,17 +1,22 @@
 import os
+import json
 from aqt import mw, gui_hooks
-from aqt.utils import showInfo, showWarning
+from aqt.utils import showInfo
 from .ai_client import AIClient
 from .card_parser import CardParser
-from .config_ui import on_config_dialog
+from .config_ui import ADDON_PACKAGE, on_config_dialog
 from aqt.qt import QMessageBox
 from .logger import logger
 
-def show_api_error_dialog(provider, is_custom=False):
+_hooks_registered = False
+
+def show_api_error_dialog(provider=None, is_custom=False):
     msg = QMessageBox(mw)
     msg.setIcon(QMessageBox.Icon.Warning)
     msg.setWindowTitle("AI-Hints")
-    if is_custom:
+    if provider is None:
+        msg.setText("No AI provider is configured. Add an API key or set the active provider to a running local endpoint.")
+    elif is_custom:
         msg.setText(f"API key for custom provider '{provider}' is not configured. Please add it in the add-on config.")
     else:
         msg.setText(f"API key for '{provider}' is not configured. Please add it in the add-on config.")
@@ -25,6 +30,22 @@ def show_api_error_dialog(provider, is_custom=False):
 
 def get_addon_dir():
     return os.path.dirname(__file__)
+
+def _card_context_payload(context):
+    reviewer = context if type(context).__name__ == "Reviewer" else getattr(context, "reviewer", None)
+    card = getattr(reviewer, "card", None) or getattr(mw.reviewer, "card", None)
+    if not card:
+        return {"id": "", "ord": None}
+
+    try:
+        card_id = str(card.id)
+    except Exception:
+        card_id = ""
+    try:
+        card_ord = int(card.ord)
+    except Exception:
+        card_ord = None
+    return {"id": card_id, "ord": card_ord}
 
 def on_webview_will_set_content(web_content, context):
     # Determine if we are in the reviewer context
@@ -41,52 +62,77 @@ def on_webview_will_set_content(web_content, context):
     addon_dir = get_addon_dir()
     
     # Read CSS and JS
-    with open(os.path.join(addon_dir, "web", "style.css"), "r") as f:
+    with open(os.path.join(addon_dir, "web", "style.css"), "r", encoding="utf-8") as f:
         css = f.read()
-    with open(os.path.join(addon_dir, "web", "script.js"), "r") as f:
+    with open(os.path.join(addon_dir, "web", "script.js"), "r", encoding="utf-8") as f:
         js = f.read()
 
+    card_payload = json.dumps(_card_context_payload(context))
+
     web_content.head += f"<style>{css}</style>"
+    web_content.body += f"<script>window.aiHintsCurrentCard = {card_payload};</script>"
     web_content.body += f"<script>{js}</script>"
 
 def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_generate":
         generate_hints()
         return (True, None)
+    if message == "ai_hints_restart_speed_focus":
+        restart_speed_focus_timer()
+        return (True, None)
     return handled
+
+def _find_speed_focus_module():
+    import sys
+    candidates = [
+        "1046608507.reviewer",
+        "speed_focus_mode.reviewer",
+    ]
+    for name in candidates:
+        module = sys.modules.get(name)
+        if module and hasattr(module, "set_answer_timeouts"):
+            return module
+
+    for module in list(sys.modules.values()):
+        if (
+            getattr(module, "PYCMD_IDENTIFIER", None) == "spdf"
+            and hasattr(module, "set_answer_timeouts")
+            and hasattr(module, "set_question_timeouts")
+        ):
+            return module
+    return None
+
+def restart_speed_focus_timer():
+    sfm = _find_speed_focus_module()
+    if not sfm:
+        return
+
+    try:
+        reviewer = mw.reviewer
+        if not reviewer or not reviewer.card:
+            return
+
+        if reviewer.state == "question":
+            sfm.clear_answer_timeouts(reviewer)
+            sfm.clear_question_timeouts(reviewer)
+            sfm.set_answer_timeouts(reviewer)
+        elif reviewer.state == "answer":
+            sfm.clear_answer_timeouts(reviewer)
+            sfm.clear_question_timeouts(reviewer)
+            sfm.set_question_timeouts(reviewer)
+    except Exception as e:
+        logger.error(f"Failed to restart Speed Focus timer: {e}")
 
 def generate_hints():
     card = mw.reviewer.card
     if not card:
         return
 
-    import sys
-    sfm = sys.modules.get("1046608507.reviewer")
-    if sfm:
-        try:
-            if mw.reviewer.state == "question":
-                sfm.clear_question_timeouts(mw.reviewer)
-                sfm.set_answer_timeouts(mw.reviewer)
-            elif mw.reviewer.state == "answer":
-                sfm.clear_answer_timeouts(mw.reviewer)
-                sfm.set_question_timeouts(mw.reviewer)
-        except Exception as e:
-            logger.error(f"Failed to restart speed focus timer: {e}")
+    restart_speed_focus_timer()
 
-    config = mw.addonManager.getConfig(__name__)
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     
     provider = config.get("ai_provider", "openai")
-    if provider != "local":
-        if provider in config.get("custom_providers", {}):
-            api_key = config.get("custom_providers", {}).get(provider, {}).get("api_key")
-            if not api_key:
-                show_api_error_dialog(provider, is_custom=True)
-                return
-        else:
-            api_key = config.get("api_keys", {}).get(provider)
-            if not api_key:
-                show_api_error_dialog(provider, is_custom=False)
-                return
 
     parser = CardParser(
         config.get("target_fields", []),
@@ -94,17 +140,21 @@ def generate_hints():
         config.get("storage_mode", "json")
     )
     client = AIClient(config)
+    if not client.has_any_ready_provider():
+        is_custom = provider in (config.get("custom_providers") or {})
+        show_api_error_dialog(provider if provider else None, is_custom=is_custom)
+        return
 
-    front, back = parser.get_note_content(card.note())
+    front, back = parser.get_note_content(card.note(), card)
 
     def on_done(future):
         try:
-            options = future.result()
+            data = future.result()
         except Exception as e:
             logger.error(f"AI-Hints Future Error: {e}")
-            options = []
+            data = {"hints": [], "options": []}
 
-        if not options:
+        if not data or (not data.get("hints") and not data.get("options")):
             showInfo("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
             mw.reviewer.refresh()
             return
@@ -114,9 +164,11 @@ def generate_hints():
             "show_hints_button": config.get("show_hints_button", True),
             "show_options_button": config.get("show_options_button", True)
         }
-        if parser.update_note_with_hints(note, options, toggles):
+        if parser.update_note_with_hints(note, data, toggles, card):
             note.flush()
             mw.reviewer.refresh()
+        else:
+            showInfo("AI-Hints: No hints or options were generated.")
 
     mw.taskman.run_in_background(
         lambda: client.generate_options(front, back),
@@ -124,5 +176,9 @@ def generate_hints():
     )
 
 def init_hooks():
+    global _hooks_registered
+    if _hooks_registered:
+        return
     gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
     gui_hooks.webview_did_receive_js_message.append(on_webview_did_receive_js_message)
+    _hooks_registered = True
