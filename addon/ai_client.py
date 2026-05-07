@@ -4,6 +4,18 @@ import urllib.error
 from typing import List, Optional, Dict, Any
 from .logger import logger
 
+DEFAULT_MODELS = {
+    "openai":     "gpt-4o-mini",
+    "anthropic":  "claude-3-haiku-20240307",
+    "gemini":     "gemini-1.5-flash",
+    "groq":       "llama3-8b-8192",
+    "deepseek":   "deepseek-chat",
+    "grok":       "grok-2-latest",
+    "mistral":    "mistral-small-latest",
+    "openrouter": "meta-llama/llama-3-8b-instruct",
+    "nvidia":     "meta/llama3-8b-instruct",
+}
+
 class AIClient:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
@@ -68,7 +80,7 @@ class AIClient:
 
     def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         api_key = self.config.get("api_keys", {}).get(provider, "")
-        model = self.config.get("models", {}).get(provider, "")
+        model = self.config.get("models", {}).get(provider, "") or DEFAULT_MODELS.get(provider, "")
         
         base_url = "https://api.openai.com/v1"
         if provider == "deepseek":
@@ -148,7 +160,7 @@ class AIClient:
 
     def _call_gemini(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         api_key = self.config.get("api_keys", {}).get("gemini", "")
-        model = self.config.get("models", {}).get("gemini", "")
+        model = self.config.get("models", {}).get("gemini", "") or DEFAULT_MODELS["gemini"]
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         
         headers = {"Content-Type": "application/json"}
