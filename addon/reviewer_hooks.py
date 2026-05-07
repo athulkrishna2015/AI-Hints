@@ -9,6 +9,7 @@ from .logger import logger, info, tooltip
 
 _hooks_registered = False
 _generating_card_ids = set()
+_just_generated_card_ids = set()
 _popup_dialog_instance = None
 
 def show_api_error_dialog(provider=None, is_custom=False):
@@ -68,11 +69,34 @@ def on_webview_will_set_content(web_content, context):
         js = f.read()
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        target_fields=config.get("target_fields", []),
+        note_type_fields=config.get("note_type_fields", {}),
+        storage_mode=config.get("storage_mode", "json")
+    )
+
+    card = getattr(context, "card", None) or getattr(mw.reviewer, "card", None)
+    hints_block = ""
+    auto_reveal = False
+    if card:
+        try:
+            hints_block = parser.find_hints_block(card.note(), card) or ""
+            if card.id in _just_generated_card_ids:
+                auto_reveal = True
+                _just_generated_card_ids.discard(card.id)
+        except Exception as e:
+            logger.error(f"Failed to find hints block in on_webview_will_set_content: {e}")
+
+    card_payload = json.dumps(_card_context_payload(context))
     ui_payload = json.dumps({
         "show_on_card": config.get("show_on_card", True),
+        "auto_reveal": auto_reveal
     })
 
     web_content.head += f"<style>{css}</style>"
+    if hints_block:
+        web_content.body += hints_block
+    web_content.body += f"<script>window.aiHintsCurrentCard = {card_payload};</script>"
     web_content.body += f"<script>window.aiHintsUiConfig = {ui_payload};</script>"
     web_content.body += f"<script>{js}</script>"
 
@@ -235,16 +259,21 @@ def refresh_current_card():
         return
 
     try:
-        # Explicitly reload the card from database to get latest field content
+        # Explicitly reload the card and note from database to get latest field content
         card = getattr(reviewer, "card", None)
         if card:
             card.load()
+            try:
+                card.note().load()
+            except:
+                pass
 
-        refresh = getattr(reviewer, "refresh", None)
-        if callable(refresh):
-            refresh()
+        # Use the standard refresh if available, it's usually the most reliable
+        if hasattr(reviewer, "refresh") and callable(reviewer.refresh):
+            reviewer.refresh()
             return
 
+        # Fallbacks for different Anki versions
         redraw = getattr(reviewer, "_redraw_current_card", None)
         if callable(redraw):
             redraw()
@@ -393,6 +422,7 @@ def generate_hints():
                 )
                 if is_current:
                     tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
+                    _just_generated_card_ids.add(card.id)
                     refresh_current_card()
                     
                     if config.get("show_in_popup", False):

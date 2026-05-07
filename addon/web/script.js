@@ -350,6 +350,10 @@
             btnContainer.style.margin = '20px auto';
             cardBody.appendChild(btnContainer);
         }
+
+        if (uiCfg.auto_reveal) {
+            revealAIHints();
+        }
     }
 
     window.aiHintsSetup = function(cardData) {
