@@ -193,12 +193,11 @@ class AIClient:
         # Try providers in sequence
         for provider in all_potential:
             try:
-                logger.info(f"Attempting to generate hints using provider: {provider}")
                 result = self._call_provider(provider, system_prompt, prompt)
                 if result.get("hints") or result.get("options"):
                     result = self._ensure_correct_answer_option(result, back)
                     if provider != primary_provider:
-                        logger.info(f"Fallback successful using provider: {provider}")
+                        logger.info(f"AI-Hints: Fallback successful using provider: {provider}")
                     return result
             except Exception as e:
                 logger.error(f"Provider {provider} failed: {e}")
@@ -680,7 +679,9 @@ class AIClient:
 
     def _log_model_attempt(self, provider: str, model: str, models: List[str]) -> None:
         if models and model != models[0]:
-            logger.info(f"Trying fallback model for {provider}: {model}")
+            logger.info(f"AI-Hints: Trying fallback model for {provider}: {model}")
+        else:
+            logger.info(f"AI-Hints: Calling {provider} with model: {model}")
 
     def _json_headers(self, api_key: str = "") -> Dict[str, str]:
         api_key = str(api_key or "").strip()

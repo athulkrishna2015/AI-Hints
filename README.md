@@ -25,14 +25,27 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Persistent Storage**: Generated hints are saved directly in your card's fields (e.g., "Extras" or "Back"), so they work on AnkiMobile and AnkiDroid too.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
 
-## Release Notes
+## Changelog
+
+### 1.0.4
+- **Enhanced Logging**: Logs now show the specific model name being queried for every request.
+- **Advanced Log Filtering**: Added a real-time search box to the Logs tab to filter entries by keyword (e.g., model name, provider, or error).
+- **Bug Fixes**: Improved handling of nested LaTeX delimiters and double-escaped backslashes in AI responses.
+
+### 1.0.3
+- **Dynamic Model Discovery**: Added "Fetch" and "Fetch All" buttons to retrieve the latest models directly from AI provider APIs.
+- **Customizable Fallback Priority**: New drag-and-drop list to set the preferred order for provider fallbacks.
+- **UI Upgrade**: Replaced model name text fields with editable dropdowns containing popular model suggestions.
+- **Smarter Defaults**: Updated default models to `gemini-2.0-flash-exp` (Gemini), `llama-3.3-70b-versatile` (Groq), and `google/gemini-2.0-flash-exp:free` (OpenRouter).
+
+### 1.0.2
+- **LaTeX Instruction Refinement**: Updated system prompts to strictly require `\(` and `\[` delimiters and explicitly forbid `$` signs.
+- **MathJax-Aware Rendering**: Improved preservation and repair of common LaTeX output patterns.
 
 ### 1.0.0
-
-- Improved MathJax handling for AI-generated hints and options.
-- Repairs common malformed model output such as missing LaTeX command slashes, mixed delimiters like `( ... \)`, and nested delimiters inside larger formulas.
-- Preserves valid `\( ... \)`, `\[ ... \]`, and `<anki-mathjax>` content without wrapping entire prose sentences as math.
-- Keeps visible HTML storage escaped while still allowing Anki MathJax tags.
+- **Initial Release**: Multi-provider support with automatic fallback and persistent hint storage.
+- **MathJax Support**: Core logic for handling LaTeX/MathJax in AI-generated hints and options.
+- **Live Log Viewer**: Real-time debugging interface in the configuration dialog.
 
 ## Configuration
 

@@ -344,11 +344,18 @@ class ConfigDialog(QDialog):
         
         # Level filter
         filter_layout = QHBoxLayout()
-        filter_layout.addWidget(QLabel("Filter:"))
+        filter_layout.addWidget(QLabel("Level:"))
         self.log_level_cb = QComboBox()
         self.log_level_cb.addItems(["ALL", "DEBUG", "INFO", "WARNING", "ERROR"])
         self.log_level_cb.currentIndexChanged.connect(self.load_log)
         filter_layout.addWidget(self.log_level_cb)
+        
+        filter_layout.addWidget(QLabel(" Search:"))
+        self.log_search_edit = QLineEdit()
+        self.log_search_edit.setPlaceholderText("Filter text...")
+        self.log_search_edit.textChanged.connect(self.load_log)
+        filter_layout.addWidget(self.log_search_edit)
+        
         filter_layout.addStretch()
         
         self.auto_clear_cb = QCheckBox("Clear on startup")
@@ -392,6 +399,7 @@ class ConfigDialog(QDialog):
             return
         
         level_filter = self.log_level_cb.currentText()
+        search_filter = self.log_search_edit.text().strip().lower()
         
         try:
             with open(log_file, "r", encoding="utf-8") as f:
@@ -400,7 +408,10 @@ class ConfigDialog(QDialog):
             if level_filter != "ALL":
                 lines = [l for l in lines if f" - {level_filter} - " in l]
             
-            content = "".join(lines) if lines else "No entries matching the selected level."
+            if search_filter:
+                lines = [l for l in lines if search_filter in l.lower()]
+            
+            content = "".join(lines) if lines else "No entries matching the selected filters."
             if self.log_view.toPlainText() == content:
                 return
 
