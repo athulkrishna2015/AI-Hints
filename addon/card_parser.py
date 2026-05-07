@@ -57,7 +57,11 @@ class CardParser:
         # Build content block based on mode
         toggles_attr = ""
         if toggles:
-            toggles_attr = f'data-show-hints="{str(toggles.get("show_hints_button", True)).lower()}" data-show-options="{str(toggles.get("show_options_button", True)).lower()}"'
+            toggles_attr = (
+                f'data-show-hints="{str(toggles.get("show_hints_button", True)).lower()}" '
+                f'data-show-options="{str(toggles.get("show_options_button", True)).lower()}" '
+                f'data-combined="{str(toggles.get("use_combined_button", False)).lower()}"'
+            )
 
         if self.storage_mode == "json":
             content_block = f'<div class="{self.json_class}" {toggles_attr} style="display:none">{json.dumps(data)}</div>'

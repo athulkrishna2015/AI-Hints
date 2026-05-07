@@ -29,6 +29,7 @@ class ConfigDialog(QDialog):
             "<b>ai_provider:</b> openai, anthropic, gemini, deepseek, groq, local, etc.<br>"
             "<b>storage_mode:</b> 'html' (visible) or 'json' (hidden).<br>"
             "<b>options_count:</b> Number of options to generate (default: 4).<br>"
+            "<b>use_combined_button:</b> If true, shows one 'Show AI Help' button instead of separate Hint/Option buttons.<br>"
             "<b>note_type_fields:</b> Define specific fields for each card type."
         )
         help_text.setWordWrap(True)

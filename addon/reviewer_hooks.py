@@ -65,7 +65,8 @@ def generate_hints():
         note = card.note()
         toggles = {
             "show_hints_button": config.get("show_hints_button", True),
-            "show_options_button": config.get("show_options_button", True)
+            "show_options_button": config.get("show_options_button", True),
+            "use_combined_button": config.get("use_combined_button", False)
         }
         if parser.update_note_with_hints(note, options, toggles):
             note.flush()
