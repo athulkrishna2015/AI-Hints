@@ -35,7 +35,7 @@
         "Extra"
     ],
     "system_prompt": "You are a helpful assistant that helps students prepare for exams. Based on the provided Anki card Front and Back content, generate both helpful hints AND plausible multiple-choice distractors. Return the result as a JSON object with two keys: 'hints' (array of strings) and 'options' (array of strings). Do not include the correct answer in the options. Format: {\"hints\": [\"hint1\", ...], \"options\": [\"opt1\", ...]}",
-    "storage_mode": "html",
+    "storage_mode": "json",
     "options_count": 4,
     "show_hints_button": true,
     "show_options_button": true,

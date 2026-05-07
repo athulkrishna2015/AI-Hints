@@ -23,7 +23,7 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to set up your providers.
 ### Configuration Options
 
 - `ai_provider`: The AI service to use (e.g., `openai`, `anthropic`, `gemini`, `deepseek`, `groq`, `local`, etc.).
-- `storage_mode`: `"html"` (visible block) or `"json"` (hidden data block).
+- `storage_mode`: `"json"` (hidden data block, default) or `"html"` (visible block).
 - `options_count`: Number of distractors to generate.
 - `api_keys`: Your API keys for the respective providers.
 - `local_endpoint`: URL and model name for local LLMs like Ollama.
@@ -34,7 +34,7 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to set up your providers.
 ```json
 {
     "ai_provider": "openai",
-    "storage_mode": "html",
+    "storage_mode": "json",
     "options_count": 4,
     "api_keys": {
         "openai": "sk-...",

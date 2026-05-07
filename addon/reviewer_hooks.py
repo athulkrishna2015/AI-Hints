@@ -44,7 +44,7 @@ def generate_hints():
     parser = CardParser(
         config.get("target_fields", []),
         config.get("note_type_fields", {}),
-        config.get("storage_mode", "html")
+        config.get("storage_mode", "json")
     )
     client = AIClient(config)
 

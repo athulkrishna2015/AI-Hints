@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple, Dict
 from aqt import mw
 
 class CardParser:
-    def __init__(self, target_fields: List[str], note_type_fields: Dict[str, List[str]] = None, storage_mode: str = "html"):
+    def __init__(self, target_fields: List[str], note_type_fields: Dict[str, List[str]] = None, storage_mode: str = "json"):
         self.target_fields = target_fields
         self.note_type_fields = note_type_fields or {}
         self.storage_mode = storage_mode
