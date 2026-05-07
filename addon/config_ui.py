@@ -42,6 +42,12 @@ class ConfigDialog(QDialog):
         
         support_data = [
             {
+                "name": "Ko-fi",
+                "id": "https://ko-fi.com/D1D01W6NQT",
+                "qr": None,
+                "is_link": True
+            },
+            {
                 "name": "UPI",
                 "id": "athulkrishnasv2015-2@okhdfcbank",
                 "qr": "UPI.jpg"
@@ -63,29 +69,31 @@ class ConfigDialog(QDialog):
             group_layout = QVBoxLayout()
             
             # QR Code Image
-            qr_label = QLabel()
-            qr_path = os.path.join(self.addon_dir, "Support", item["qr"])
-            if os.path.exists(qr_path):
-                pixmap = QPixmap(qr_path)
-                # Ensure it's not too small, e.g., max width 300
-                qr_label.setPixmap(pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                group_layout.addWidget(qr_label)
-            else:
-                group_layout.addWidget(QLabel(f"QR Code not found: {item['qr']}"))
+            if item.get("qr"):
+                qr_label = QLabel()
+                qr_path = os.path.join(self.addon_dir, "Support", item["qr"])
+                if os.path.exists(qr_path):
+                    pixmap = QPixmap(qr_path)
+                    qr_label.setPixmap(pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                    qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    group_layout.addWidget(qr_label)
             
-            # ID and Copy Button
+            # ID and Buttons
             id_layout = QHBoxLayout()
             id_text = QLineEdit(item["id"])
             id_text.setReadOnly(True)
-            
-            copy_btn = QPushButton("Copy")
-            copy_btn.clicked.connect(lambda checked, text=item["id"]: self.copy_to_clipboard(text))
-            
             id_layout.addWidget(id_text)
-            id_layout.addWidget(copy_btn)
-            group_layout.addLayout(id_layout)
+
+            if item.get("is_link"):
+                open_btn = QPushButton("Open in Browser")
+                open_btn.clicked.connect(lambda checked, url=item["id"]: QDesktopServices.openUrl(QUrl(url)))
+                id_layout.addWidget(open_btn)
+            else:
+                copy_btn = QPushButton("Copy")
+                copy_btn.clicked.connect(lambda checked, text=item["id"]: self.copy_to_clipboard(text))
+                id_layout.addWidget(copy_btn)
             
+            group_layout.addLayout(id_layout)
             group.setLayout(group_layout)
             scroll_layout.addWidget(group)
             
@@ -119,7 +127,9 @@ class ConfigDialog(QDialog):
         except Exception as e:
             showInfo(f"Invalid JSON configuration: {e}")
 
-def on_config_dialog(parent):
+def on_config_dialog(parent=None):
+    if parent is None:
+        parent = mw
     ConfigDialog(parent).exec()
 
 def init_config_ui():

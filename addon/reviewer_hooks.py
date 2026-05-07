@@ -1,6 +1,5 @@
 import os
 from aqt import mw, gui_hooks
-from aqt.webview import WebView
 from .ai_client import AIClient
 from .card_parser import CardParser
 
@@ -8,7 +7,15 @@ def get_addon_dir():
     return os.path.dirname(__file__)
 
 def on_webview_will_set_content(web_content, context):
-    if not context or context.name != "reviewer":
+    # Determine if we are in the reviewer context
+    # Use getattr to safely handle objects without .name attribute
+    is_reviewer = (
+        getattr(context, "name", None) == "reviewer" or 
+        type(context).__name__ == "Reviewer" or
+        (context is None and any("reviewer.css" in c for c in web_content.css))
+    )
+    
+    if not is_reviewer:
         return
 
     addon_dir = get_addon_dir()
@@ -22,7 +29,7 @@ def on_webview_will_set_content(web_content, context):
     web_content.head += f"<style>{css}</style>"
     web_content.body += f"<script>{js}</script>"
 
-def on_webview_did_receive_message(handled, message, context):
+def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_generate":
         generate_hints()
         return (True, None)
@@ -60,4 +67,4 @@ def generate_hints():
 
 def init_hooks():
     gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
-    gui_hooks.webview_did_receive_message.append(on_webview_did_receive_message)
+    gui_hooks.webview_did_receive_js_message.append(on_webview_did_receive_js_message)
