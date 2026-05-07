@@ -162,6 +162,7 @@ class AIClient:
         api_key = self.config.get("api_keys", {}).get("gemini", "")
         model = self.config.get("models", {}).get("gemini", "") or DEFAULT_MODELS["gemini"]
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        logger.debug(f"Calling Gemini with model: {model}")
         
         headers = {"Content-Type": "application/json"}
         

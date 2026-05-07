@@ -514,9 +514,19 @@ class ConfigDialog(QDialog):
         except Exception as e:
             showInfo(f"Error saving configuration: {e}")
 
+_config_dialog_instance = None
+
 def on_config_dialog(parent=None):
+    global _config_dialog_instance
     if parent is None: parent = mw
-    ConfigDialog(parent).exec()
+    # Reuse existing window if already open
+    if _config_dialog_instance is not None and _config_dialog_instance.isVisible():
+        _config_dialog_instance.raise_()
+        _config_dialog_instance.activateWindow()
+        return
+    _config_dialog_instance = ConfigDialog(parent)
+    _config_dialog_instance.setWindowFlag(Qt.WindowType.Window, True)
+    _config_dialog_instance.show()
 
 def init_config_ui():
     mw.addonManager.setConfigAction(ADDON_PACKAGE, on_config_dialog)
