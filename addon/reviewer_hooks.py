@@ -5,6 +5,7 @@ from .ai_client import AIClient
 from .card_parser import CardParser
 from .config_ui import on_config_dialog
 from aqt.qt import QMessageBox
+from .logger import logger
 
 def show_api_error_dialog(provider, is_custom=False):
     msg = QMessageBox(mw)
@@ -70,7 +71,7 @@ def generate_hints():
                 sfm.clear_answer_timeouts(mw.reviewer)
                 sfm.set_question_timeouts(mw.reviewer)
         except Exception as e:
-            print(f"Failed to restart speed focus timer: {e}")
+            logger.error(f"Failed to restart speed focus timer: {e}")
 
     config = mw.addonManager.getConfig(__name__)
     
@@ -100,7 +101,7 @@ def generate_hints():
         try:
             options = future.result()
         except Exception as e:
-            print(f"AI-Hints Future Error: {e}")
+            logger.error(f"AI-Hints Future Error: {e}")
             options = []
 
         if not options:

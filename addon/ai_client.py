@@ -2,6 +2,7 @@ import json
 import urllib.request
 import urllib.error
 from typing import List, Optional, Dict, Any
+from .logger import logger
 
 class AIClient:
     def __init__(self, config: Dict[str, Any]):
@@ -62,7 +63,7 @@ class AIClient:
                     content = str(result)
                 return self._parse_json_result(content)
         except Exception as e:
-            print(f"AI-Hints Error (Custom Provider {provider_name}): {e}")
+            logger.error(f"AI-Hints Error (Custom Provider {provider_name}): {e}")
             return {"hints": [], "options": []}
 
     def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
@@ -114,7 +115,7 @@ class AIClient:
                 content = result["choices"][0]["message"]["content"]
                 return self._parse_json_result(content)
         except Exception as e:
-            print(f"AI-Hints Error ({provider}): {e}")
+            logger.error(f"AI-Hints Error ({provider}): {e}")
             return {"hints": [], "options": []}
 
     def _call_anthropic(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
@@ -142,7 +143,7 @@ class AIClient:
                 content = result["content"][0]["text"]
                 return self._parse_json_result(content)
         except Exception as e:
-            print(f"AI-Hints Error (Anthropic): {e}")
+            logger.error(f"AI-Hints Error (Anthropic): {e}")
             return {"hints": [], "options": []}
 
     def _call_gemini(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
@@ -165,7 +166,7 @@ class AIClient:
                 content = result["candidates"][0]["content"]["parts"][0]["text"]
                 return self._parse_json_result(content)
         except Exception as e:
-            print(f"AI-Hints Error (Gemini): {e}")
+            logger.error(f"AI-Hints Error (Gemini): {e}")
             return {"hints": [], "options": []}
 
     def _parse_json_result(self, content: str) -> Dict[str, List[str]]:

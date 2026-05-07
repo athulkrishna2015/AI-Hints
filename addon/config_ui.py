@@ -3,6 +3,8 @@ import json
 from aqt import mw
 from aqt.qt import *
 from aqt.utils import showInfo, tooltip
+from .logger import logger, get_logger
+import logging
 
 class CustomProviderDialog(QDialog):
     def __init__(self, parent, name="", data=None):
@@ -223,6 +225,10 @@ class ConfigDialog(QDialog):
         self.support_tab = self._create_support_tab()
         self.tabs.addTab(self.support_tab, "Support")
         
+        # --- Tab 5: Logs ---
+        self.log_tab = self._create_log_tab()
+        self.tabs.addTab(self.log_tab, "Logs")
+        
         layout.addWidget(self.tabs)
         
         # --- Bottom Buttons ---
@@ -232,6 +238,67 @@ class ConfigDialog(QDialog):
         layout.addWidget(btn_box)
         
         self.setLayout(layout)
+
+    def _create_log_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        # Level filter
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Filter:"))
+        self.log_level_cb = QComboBox()
+        self.log_level_cb.addItems(["ALL", "DEBUG", "INFO", "WARNING", "ERROR"])
+        self.log_level_cb.currentIndexChanged.connect(self.load_log)
+        filter_layout.addWidget(self.log_level_cb)
+        filter_layout.addStretch()
+        
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.clicked.connect(self.load_log)
+        filter_layout.addWidget(refresh_btn)
+        
+        clear_btn = QPushButton("Clear Log")
+        clear_btn.clicked.connect(self.clear_log)
+        filter_layout.addWidget(clear_btn)
+        
+        layout.addLayout(filter_layout)
+        
+        self.log_view = QPlainTextEdit()
+        self.log_view.setReadOnly(True)
+        self.log_view.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        layout.addWidget(self.log_view)
+        
+        self.load_log()
+        return tab
+
+    def load_log(self):
+        log_file = os.path.join(self.addon_dir, "ai_hints.log")
+        if not os.path.exists(log_file):
+            self.log_view.setPlainText("No log file found yet. Errors will appear here after using the add-on.")
+            return
+        
+        level_filter = self.log_level_cb.currentText()
+        
+        try:
+            with open(log_file, "r") as f:
+                lines = f.readlines()
+            
+            if level_filter != "ALL":
+                lines = [l for l in lines if f" - {level_filter} - " in l]
+            
+            self.log_view.setPlainText("".join(lines) if lines else "No entries matching the selected level.")
+            # Scroll to bottom
+            self.log_view.verticalScrollBar().setValue(self.log_view.verticalScrollBar().maximum())
+        except Exception as e:
+            self.log_view.setPlainText(f"Error reading log: {e}")
+
+    def clear_log(self):
+        log_file = os.path.join(self.addon_dir, "ai_hints.log")
+        try:
+            open(log_file, "w").close()
+            self.log_view.setPlainText("Log cleared.")
+            logger.info("Log cleared by user.")
+        except Exception as e:
+            showInfo(f"Could not clear log: {e}")
 
     def _create_support_tab(self):
         tab = QWidget()
