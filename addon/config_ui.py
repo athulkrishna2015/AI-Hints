@@ -259,6 +259,13 @@ class ConfigDialog(QDialog):
         refresh_btn.clicked.connect(self.load_log)
         filter_layout.addWidget(refresh_btn)
         
+        copy_btn = QPushButton("Copy")
+        copy_btn.clicked.connect(lambda: (
+            QApplication.clipboard().setText(self.log_view.toPlainText()),
+            tooltip("Log copied to clipboard")
+        ))
+        filter_layout.addWidget(copy_btn)
+        
         clear_btn = QPushButton("Clear Log")
         clear_btn.clicked.connect(self.clear_log)
         filter_layout.addWidget(clear_btn)
