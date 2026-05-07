@@ -18,17 +18,15 @@ AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate
 
 ## Configuration
 
-Go to **Tools -> Add-ons -> AI-Hints -> Config** to set up your providers.
+Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configuration window.
 
 ### Configuration Options
 
-- `ai_provider`: The AI service to use (e.g., `openai`, `anthropic`, `gemini`, `deepseek`, `groq`, `local`, etc.).
-- `storage_mode`: `"json"` (hidden data block, default) or `"html"` (visible block).
-- `options_count`: Number of distractors to generate.
-- `api_keys`: Your API keys for the respective providers.
-- `local_endpoint`: URL and model name for local LLMs like Ollama.
-- `note_type_fields`: A map of note type names to lists of fields that should be sent to the AI.
-- `system_prompt`: The base instructions for the AI.
+- **General Tab**: Select your `ai_provider`, configure the number of distractors (`options_count`), toggle the visibility of the buttons, and choose the `storage_mode` (`"json"` for a hidden data block or `"html"` for a visible block).
+- **AI Providers Tab**: Enter your `api_keys` for supported providers, configure a local LLM endpoint (like Ollama), or use the **Custom Providers** section to add, edit, or remove your own API endpoints and custom headers!
+- **Advanced Tab**: 
+  - `system_prompt`: The base instructions for the AI.
+  - `Note Type Fields`: A graphical dropdown selector that allows you to specify exactly which fields should be sent to the AI for each of your specific note types.
 
 ## Get Your API Keys
 
@@ -45,7 +43,8 @@ To use this add-on, you need an API key from one of the supported providers:
 - **NVIDIA**: [build.nvidia.com](https://build.nvidia.com/explore/discover)
 - **Ollama (Local AI)**: [ollama.com](https://ollama.com/) (No API key required for local use)
 
-### Example Config:
+### Example Config (Advanced Users):
+You can also use the **Raw JSON Editor** in the Advanced tab if you prefer editing JSON directly:
 ```json
 {
     "ai_provider": "openai",

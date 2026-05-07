@@ -4,6 +4,44 @@ from aqt import mw
 from aqt.qt import *
 from aqt.utils import showInfo, tooltip
 
+class CustomProviderDialog(QDialog):
+    def __init__(self, parent, name="", data=None):
+        super().__init__(parent)
+        self.setWindowTitle("Custom Provider")
+        layout = QFormLayout(self)
+        
+        self.name_edit = QLineEdit(name)
+        if name:
+            self.name_edit.setReadOnly(True)
+            
+        self.url_edit = QLineEdit(data.get("url", "") if data else "")
+        self.key_edit = QLineEdit(data.get("api_key", "") if data else "")
+        self.model_edit = QLineEdit(data.get("model", "") if data else "")
+        self.headers_edit = QTextEdit()
+        self.headers_edit.setPlainText(json.dumps(data.get("headers", {}), indent=2) if data else "{}")
+        
+        layout.addRow("Provider Name (ID):", self.name_edit)
+        layout.addRow("Endpoint URL:", self.url_edit)
+        layout.addRow("API Key:", self.key_edit)
+        layout.addRow("Model Name:", self.model_edit)
+        layout.addRow("Headers (JSON):", self.headers_edit)
+        
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.accepted.connect(self.validate_and_accept)
+        btns.rejected.connect(self.reject)
+        layout.addRow(btns)
+
+    def validate_and_accept(self):
+        if not self.name_edit.text().strip():
+            showInfo("Provider name cannot be empty.")
+            return
+        try:
+            json.loads(self.headers_edit.toPlainText() or "{}")
+        except:
+            showInfo("Headers must be valid JSON.")
+            return
+        self.accept()
+
 class ConfigDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
@@ -11,6 +49,7 @@ class ConfigDialog(QDialog):
         self.setMinimumSize(600, 700)
         self.addon_dir = os.path.dirname(__file__)
         self.config = mw.addonManager.getConfig(__name__)
+        self.custom_providers_data = self.config.get("custom_providers", {})
         
         self.setup_ui()
         self.load_config_into_ui()
@@ -24,9 +63,6 @@ class ConfigDialog(QDialog):
         gen_layout = QFormLayout()
         
         self.ai_provider_cb = QComboBox()
-        providers = ["openai", "anthropic", "gemini", "deepseek", "groq", "grok", "mistral", "openrouter", "nvidia", "local"]
-        custom_providers = list(self.config.get("custom_providers", {}).keys())
-        self.ai_provider_cb.addItems(providers + custom_providers)
         gen_layout.addRow("Active AI Provider:", self.ai_provider_cb)
         
         self.options_count_sb = QSpinBox()
@@ -69,6 +105,7 @@ class ConfigDialog(QDialog):
         }
         
         self.api_key_edits = {}
+        providers = ["openai", "anthropic", "gemini", "deepseek", "groq", "grok", "mistral", "openrouter", "nvidia", "local"]
         for p in providers:
             if p == "local": continue
             edit = QLineEdit()
@@ -91,6 +128,29 @@ class ConfigDialog(QDialog):
         local_group.setLayout(local_layout)
         self.prov_layout.addRow(local_group)
         
+        # Custom Providers Group
+        custom_group = QGroupBox("Custom Providers")
+        custom_layout = QVBoxLayout()
+        
+        self.custom_list = QListWidget()
+        custom_layout.addWidget(self.custom_list)
+        
+        cbtn_layout = QHBoxLayout()
+        self.add_custom_btn = QPushButton("Add")
+        self.add_custom_btn.clicked.connect(self.on_add_custom)
+        self.edit_custom_btn = QPushButton("Edit")
+        self.edit_custom_btn.clicked.connect(self.on_edit_custom)
+        self.remove_custom_btn = QPushButton("Remove")
+        self.remove_custom_btn.clicked.connect(self.on_remove_custom)
+        
+        cbtn_layout.addWidget(self.add_custom_btn)
+        cbtn_layout.addWidget(self.edit_custom_btn)
+        cbtn_layout.addWidget(self.remove_custom_btn)
+        custom_layout.addLayout(cbtn_layout)
+        
+        custom_group.setLayout(custom_layout)
+        self.prov_layout.addRow(custom_group)
+        
         prov_scroll.setWidget(prov_content)
         prov_main_layout.addWidget(prov_scroll)
         self.providers_tab.setLayout(prov_main_layout)
@@ -107,14 +167,20 @@ class ConfigDialog(QDialog):
         adv_layout.addWidget(QLabel("Note Type Fields:"))
         
         if mw.col is not None:
-            self.note_type_tree = QTreeWidget()
-            self.note_type_tree.setHeaderHidden(True)
-            adv_layout.addWidget(self.note_type_tree)
+            self.nt_selector_layout = QVBoxLayout()
+            self.nt_cb = QComboBox()
+            self.nt_cb.currentIndexChanged.connect(self.on_nt_changed)
+            self.nt_selector_layout.addWidget(self.nt_cb)
+            
+            self.fld_list = QListWidget()
+            self.fld_list.itemChanged.connect(self.on_fld_changed)
+            self.nt_selector_layout.addWidget(self.fld_list)
+            
+            adv_layout.addLayout(self.nt_selector_layout)
             
             self.note_fields_edit = QTextEdit()
             self.note_fields_edit.setVisible(False)
         else:
-            self.note_type_tree = None
             adv_layout.addWidget(QLabel("(Raw JSON editor since collection is closed)"))
             self.note_fields_edit = QTextEdit()
             self.note_fields_edit.setMaximumHeight(150)
@@ -198,6 +264,7 @@ class ConfigDialog(QDialog):
 
     def load_config_into_ui(self):
         c = self.config
+        self.refresh_custom_list()
         self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
         self.options_count_sb.setValue(c.get("options_count", 4))
         self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
@@ -214,31 +281,112 @@ class ConfigDialog(QDialog):
         
         self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
         
-        nt_fields = c.get("note_type_fields", {})
-        if self.note_type_tree:
-            self.note_type_tree.clear()
-            for model in mw.col.models.all():
-                m_item = QTreeWidgetItem(self.note_type_tree, [model["name"]])
-                m_item.setExpanded(False)
-                active_fields = nt_fields.get(model["name"], [])
-                has_checked = False
-                for fld in model["flds"]:
-                    f_item = QTreeWidgetItem(m_item, [fld["name"]])
-                    f_item.setFlags(f_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                    if fld["name"] in active_fields:
-                        f_item.setCheckState(0, Qt.CheckState.Checked)
-                        has_checked = True
-                    else:
-                        f_item.setCheckState(0, Qt.CheckState.Unchecked)
-                if has_checked:
-                    m_item.setExpanded(True)
+        self.note_type_fields_data = c.get("note_type_fields", {})
+        if hasattr(self, 'nt_cb'):
+            self.nt_cb.blockSignals(True)
+            self.nt_cb.clear()
+            self.models_cache = {m['name']: m['flds'] for m in mw.col.models.all()}
+            self.nt_cb.addItems(list(self.models_cache.keys()))
+            self.nt_cb.blockSignals(False)
+            if self.nt_cb.count() > 0:
+                self.nt_cb.setCurrentIndex(0)
+                self.on_nt_changed()
         
-        self.note_fields_edit.setPlainText(json.dumps(nt_fields, indent=4))
+        self.note_fields_edit.setPlainText(json.dumps(self.note_type_fields_data, indent=4))
         self.raw_editor.setPlainText(json.dumps(c, indent=4))
 
     def copy_to_clipboard(self, text):
         QApplication.clipboard().setText(text)
         tooltip("Copied to clipboard")
+
+    def on_nt_changed(self):
+        self.fld_list.blockSignals(True)
+        self.fld_list.clear()
+        nt_name = self.nt_cb.currentText()
+        if not nt_name:
+            self.fld_list.blockSignals(False)
+            return
+            
+        flds = self.models_cache.get(nt_name, [])
+        active_flds = self.note_type_fields_data.get(nt_name, [])
+        
+        for fld in flds:
+            item = QListWidgetItem(fld["name"])
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            if fld["name"] in active_flds:
+                item.setCheckState(Qt.CheckState.Checked)
+            else:
+                item.setCheckState(Qt.CheckState.Unchecked)
+            self.fld_list.addItem(item)
+            
+        self.fld_list.blockSignals(False)
+
+    def on_fld_changed(self, item):
+        nt_name = self.nt_cb.currentText()
+        if not nt_name: return
+        
+        fld_name = item.text()
+        active_flds = self.note_type_fields_data.get(nt_name, [])
+        
+        if item.checkState() == Qt.CheckState.Checked:
+            if fld_name not in active_flds:
+                active_flds.append(fld_name)
+        else:
+            if fld_name in active_flds:
+                active_flds.remove(fld_name)
+                
+        if active_flds:
+            self.note_type_fields_data[nt_name] = active_flds
+        elif nt_name in self.note_type_fields_data:
+            del self.note_type_fields_data[nt_name]
+
+    def refresh_custom_list(self):
+        self.custom_list.clear()
+        self.custom_list.addItems(self.custom_providers_data.keys())
+        
+        current_selection = self.ai_provider_cb.currentText()
+        self.ai_provider_cb.clear()
+        providers = ["openai", "anthropic", "gemini", "deepseek", "groq", "grok", "mistral", "openrouter", "nvidia", "local"]
+        self.ai_provider_cb.addItems(providers + list(self.custom_providers_data.keys()))
+        if current_selection:
+            self.ai_provider_cb.setCurrentText(current_selection)
+
+    def on_add_custom(self):
+        dlg = CustomProviderDialog(self)
+        if dlg.exec():
+            name = dlg.name_edit.text().strip()
+            self.custom_providers_data[name] = {
+                "url": dlg.url_edit.text().strip(),
+                "api_key": dlg.key_edit.text().strip(),
+                "model": dlg.model_edit.text().strip(),
+                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}")
+            }
+            self.refresh_custom_list()
+            
+    def on_edit_custom(self):
+        item = self.custom_list.currentItem()
+        if not item: return
+        name = item.text()
+        data = self.custom_providers_data.get(name, {})
+        dlg = CustomProviderDialog(self, name=name, data=data)
+        if dlg.exec():
+            new_name = dlg.name_edit.text().strip()
+            if new_name != name:
+                del self.custom_providers_data[name]
+            self.custom_providers_data[new_name] = {
+                "url": dlg.url_edit.text().strip(),
+                "api_key": dlg.key_edit.text().strip(),
+                "model": dlg.model_edit.text().strip(),
+                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}")
+            }
+            self.refresh_custom_list()
+
+    def on_remove_custom(self):
+        item = self.custom_list.currentItem()
+        if not item: return
+        name = item.text()
+        del self.custom_providers_data[name]
+        self.refresh_custom_list()
 
     def save_config(self):
         try:
@@ -258,22 +406,12 @@ class ConfigDialog(QDialog):
             }
             new_config["system_prompt"] = self.system_prompt_edit.toPlainText()
             
-            if hasattr(self, 'note_type_tree') and self.note_type_tree:
-                nt_fields = {}
-                for i in range(self.note_type_tree.topLevelItemCount()):
-                    m_item = self.note_type_tree.topLevelItem(i)
-                    m_name = m_item.text(0)
-                    checked_fields = []
-                    for j in range(m_item.childCount()):
-                        f_item = m_item.child(j)
-                        if f_item.checkState(0) == Qt.CheckState.Checked:
-                            checked_fields.append(f_item.text(0))
-                    if checked_fields:
-                        nt_fields[m_name] = checked_fields
-                new_config["note_type_fields"] = nt_fields
+            if hasattr(self, 'nt_cb'):
+                new_config["note_type_fields"] = self.note_type_fields_data
             else:
                 new_config["note_type_fields"] = json.loads(self.note_fields_edit.toPlainText())
             
+            new_config["custom_providers"] = self.custom_providers_data
             mw.addonManager.writeConfig(__name__, new_config)
             self.accept()
         except Exception as e:
