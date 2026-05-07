@@ -140,7 +140,10 @@
         const cardBody = document.getElementById('qa') || document.body;
 
         if (cardBody && cardBody.dataset.aiHintsLastCardKey === cardKey) {
-            return;
+            // If we think we've already processed this card, verify buttons exist
+            if (document.querySelector('.ai-hints-btn, .ai-hints-actions')) {
+                return;
+            }
         }
         if (cardBody) {
             cardBody.dataset.aiHintsLastCardKey = cardKey;
@@ -185,6 +188,7 @@
         }
 
         if (container) {
+            container.style.display = 'block'; // Ensure matched container is visible
             hideOtherContainers(container);
             const optionsList = container.querySelector('.ai-hints-list');
             const hintsList = container.querySelector('.ai-hints-hint-list');

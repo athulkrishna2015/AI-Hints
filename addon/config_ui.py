@@ -273,6 +273,9 @@ class ConfigDialog(QDialog):
         
         layout.addWidget(self.tabs)
         
+        # Set Logs tab as default
+        self.tabs.setCurrentIndex(4)
+        
         # --- Bottom Buttons ---
         btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         btn_box.accepted.connect(self.save_config)
