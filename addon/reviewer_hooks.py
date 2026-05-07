@@ -639,6 +639,7 @@ def generate_hints():
                     refresh_current_card()
                 return
 
+            data = parser.normalize_hint_data(data)
             logger.info(
                 "AI-Hints response for card %s: %s",
                 card_id,

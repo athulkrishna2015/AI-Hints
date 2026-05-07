@@ -16,49 +16,348 @@ class CardParser:
         """Repairs common AI math errors like missing backslashes or joined commands."""
         if not isinstance(text, str):
             return text
-        
-        # 1. Fix joined commands like expleft -> \exp \left
-        text = text.replace('expleft', '\\exp \\left')
-        text = text.replace('sinleft', '\\sin \\left')
-        text = text.replace('cosleft', '\\cos \\left')
-        
-        # 2. Aggressively fix missing backslashes on common commands
-        # Use a regex that finds these words when NOT preceded by a backslash, 
-        # even if they are part of a string or followed by a backslash/brace
-        cmds = ['exp', 'lambda', 'frac', 'left', 'right', 'sin', 'cos', 'tan', 'sqrt', 'log', 'ln', 'approx', 'cdot', 'text', 'partial', 'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'phi', 'theta', 'omega']
-        for cmd in cmds:
-            # Match cmd if:
-            # - Not preceded by \
-            # - Preceded by start of string, whitespace, or math punctuation ( ( [ { = + - / )
-            # - Followed by word boundary, underscore, or math punctuation
-            pattern = rf'(?<!\\)(^|(?<=[^a-zA-Z])){cmd}(?=[^a-zA-Z]|$)'
-            text = re.sub(pattern, rf'\\{cmd}', text)
-        
-        # 3. Fix cases where AI joins commands without space: \frac{x}{lambda_L\right} -> \frac{x}{\lambda_L \right}
-        # This helps cases where step 2 might have missed it if joined to a backslash
-        text = re.sub(r'(?<!\\)lambda(?=\\)', r'\\lambda ', text)
-        text = re.sub(r'(?<!\\)exp(?=\\)', r'\\exp ', text)
 
-        # 4. Fix joined commands like \exp\left -> \exp \left (helps MathJax parsing)
-        text = re.sub(r'\\([a-z]+)\\([a-z]+)', r'\\\1 \\\2', text)
-        
-        # 5. Fix missing backslashes on parentheses used as math delimiters
-        stripped = text.strip()
-        if stripped.startswith('(') and stripped.endswith(')') and any(c in stripped for c in ['_', '^', '\\', '=', '/']):
-            if not stripped.startswith('\\('):
-                text = text.replace('(', '\\(', 1)
-            if not stripped.endswith('\\)'):
-                text = text[::-1].replace(')', ')\\', 1)[::-1]
-                
-        return text
+        return self._normalize_math_text(text)
 
-    def _convert_to_mathjax_tags(self, text: str) -> str:
-        """Converts standard LaTeX delimiters \( \) and \[ \] to Anki's <anki-mathjax> tags."""
+    def normalize_hint_data(self, data: Dict[str, List[str]]) -> Dict[str, List[str]]:
+        """Normalize generated hint text before storage or direct reviewer injection."""
+        normalized = {"hints": [], "options": []}
+        if not isinstance(data, dict):
+            return normalized
+
+        for key in ("hints", "options"):
+            values = data.get(key, [])
+            if not isinstance(values, list):
+                values = [values]
+            for value in values:
+                text = self._normalize_math_text(str(value))
+                if self.mathjax_format == "tags":
+                    text = self._convert_to_mathjax_tags(text)
+                normalized[key].append(text)
+        return normalized
+
+    def _normalize_math_text(self, text: str) -> str:
         if not isinstance(text, str):
             return text
-        
-        # First repair the content
-        text = self._fix_lazy_latex(text)
+
+        text = self._normalize_overescaped_math_delimiters(text)
+        text = self._normalize_anki_mathjax_tags(text)
+        text = self._normalize_mixed_math_delimiters(text)
+        text = re.sub(
+            r'\\\((.*?)\\\)',
+            lambda m: r'\(' + self._fix_latex_span(m.group(1)) + r'\)',
+            text,
+            flags=re.DOTALL,
+        )
+        text = re.sub(
+            r'\\\[(.*?)\\\]',
+            lambda m: r'\[' + self._fix_latex_span(m.group(1)) + r'\]',
+            text,
+            flags=re.DOTALL,
+        )
+
+        if "<anki-mathjax" not in text.lower():
+            if self._should_wrap_standalone_math(text):
+                text = r'\(' + self._fix_latex_span(text.strip()) + r'\)'
+            else:
+                text = self._wrap_parenthetical_math(text)
+                text = self._wrap_bare_math_tokens(text)
+
+        return text
+
+    def _normalize_overescaped_math_delimiters(self, text: str) -> str:
+        return re.sub(r'\\\\([()\[\]])', lambda m: "\\" + m.group(1), text)
+
+    def _normalize_anki_mathjax_tags(self, text: str) -> str:
+        return re.sub(
+            r'(<anki-mathjax\b[^>]*>)(.*?)(</anki-mathjax>)',
+            lambda m: m.group(1) + self._fix_latex_span(m.group(2)) + m.group(3),
+            text,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+
+    def _normalize_mixed_math_delimiters(self, text: str) -> str:
+        text = self._normalize_plain_open_escaped_close(text)
+        return self._normalize_escaped_open_plain_close(text)
+
+    def _normalize_plain_open_escaped_close(self, text: str) -> str:
+        result = []
+        i = 0
+        while i < len(text):
+            if text[i] != "(" or self._is_escaped(text, i):
+                result.append(text[i])
+                i += 1
+                continue
+
+            if i > 0 and re.match(r'[A-Za-z]', text[i - 1]):
+                result.append(text[i])
+                i += 1
+                continue
+
+            close = self._find_next_escaped_math_close(text, i + 1)
+            if close == -1:
+                result.append(text[i])
+                i += 1
+                continue
+
+            inner = text[i + 1:close]
+            if self._looks_like_math_span(self._unwrap_math_delimiters_inside_span(inner)):
+                result.append(r'\(')
+                result.append(self._fix_latex_span(inner))
+                result.append(r'\)')
+                i = close + 2
+            else:
+                result.append(text[i])
+                i += 1
+        return "".join(result)
+
+    def _normalize_escaped_open_plain_close(self, text: str) -> str:
+        result = []
+        i = 0
+        while i < len(text):
+            if not text.startswith(r'\(', i):
+                result.append(text[i])
+                i += 1
+                continue
+
+            if self._find_next_escaped_math_close(text, i + 2) != -1:
+                result.append(r'\(')
+                i += 2
+                continue
+
+            close = self._find_next_unescaped_close_paren(text, i + 2)
+            if close == -1:
+                result.append(text[i])
+                i += 1
+                continue
+
+            inner = text[i + 2:close]
+            if self._looks_like_math_span(self._unwrap_math_delimiters_inside_span(inner)):
+                result.append(r'\(')
+                result.append(self._fix_latex_span(inner))
+                result.append(r'\)')
+                i = close + 1
+            else:
+                result.append(text[i])
+                i += 1
+        return "".join(result)
+
+    def _find_next_escaped_math_close(self, text: str, start: int) -> int:
+        idx = start
+        depth = 0
+        while idx < len(text) - 1:
+            if text.startswith(r'\(', idx):
+                depth += 1
+                idx += 2
+                continue
+            if text.startswith(r'\)', idx):
+                if depth == 0:
+                    return idx
+                depth -= 1
+                idx += 2
+                continue
+            idx += 1
+        return -1
+
+    def _find_next_unescaped_close_paren(self, text: str, start: int) -> int:
+        idx = start
+        while idx < len(text):
+            if text[idx] == ")" and not self._is_escaped(text, idx):
+                return idx
+            idx += 1
+        return -1
+
+    def _is_math_delimiter_escape(self, text: str, index: int) -> bool:
+        return index > 0 and text[index] == "\\" and index + 1 < len(text) and text[index + 1] in "()[]"
+
+    def _fix_latex_span(self, span: str) -> str:
+        """Repair LaTeX only inside text already identified as math."""
+        commands = [
+            "exp", "lambda", "frac", "left", "right", "sin", "cos", "tan",
+            "sqrt", "log", "ln", "approx", "cdot", "text", "partial",
+            "alpha", "beta", "gamma", "delta", "epsilon", "phi", "theta",
+            "omega",
+        ]
+        functions = ["exp", "sin", "cos", "tan", "log", "ln"]
+        command_alt = "|".join(re.escape(cmd) for cmd in commands)
+        protected = []
+
+        def protect_text_command(match):
+            protected.append(match.group(0))
+            return f"@@AI_HINTS_LATEX_TEXT_{len(protected) - 1}@@"
+
+        span = re.sub(
+            r'\\(?:text|mathrm|operatorname)\{[^{}]*\}',
+            protect_text_command,
+            span,
+        )
+        span = self._unwrap_math_delimiters_inside_span(span)
+
+        span = re.sub(rf'\\\\(?=(?:{command_alt})\b)', lambda _m: "\\", span)
+        for func in functions:
+            span = re.sub(
+                rf'\\{func}left(?=\s*\()',
+                lambda _m, f=func: "\\" + f + r"\left",
+                span,
+            )
+            span = re.sub(
+                rf'(^|[^\\A-Za-z]){func}left(?=\s*\()',
+                lambda m, f=func: m.group(1) + "\\" + f + r"\left",
+                span,
+            )
+
+        for cmd in commands:
+            span = re.sub(
+                rf'(^|[^\\A-Za-z])({cmd})(?=(_|\b|[{{}}\[\]()+\-=/^*,]))',
+                lambda m: m.group(1) + "\\" + m.group(2),
+                span,
+            )
+        for idx, value in enumerate(protected):
+            span = span.replace(f"@@AI_HINTS_LATEX_TEXT_{idx}@@", value)
+        return span
+
+    def _unwrap_math_delimiters_inside_span(self, span: str) -> str:
+        span = re.sub(r'\\\((.*?)\\\)', lambda m: m.group(1).strip(), span, flags=re.DOTALL)
+        return re.sub(r'\\\[(.*?)\\\]', lambda m: m.group(1).strip(), span, flags=re.DOTALL)
+
+    def _wrap_parenthetical_math(self, text: str) -> str:
+        math_block = re.compile(
+            r'(\\\(.*?\\\)|\\\[.*?\\\]|<anki-mathjax\b[^>]*>.*?</anki-mathjax>)',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        parts = []
+        last = 0
+        for match in math_block.finditer(text):
+            parts.append(self._wrap_parenthetical_math_plain(text[last:match.start()]))
+            parts.append(match.group(0))
+            last = match.end()
+        parts.append(self._wrap_parenthetical_math_plain(text[last:]))
+        return "".join(parts)
+
+    def _wrap_parenthetical_math_plain(self, text: str) -> str:
+        result = []
+        i = 0
+        while i < len(text):
+            if text[i] != "(" or self._is_escaped(text, i):
+                result.append(text[i])
+                i += 1
+                continue
+
+            end = self._find_matching_paren(text, i)
+            if end == -1:
+                result.append(text[i])
+                i += 1
+                continue
+
+            if i > 0 and re.match(r'[A-Za-z]', text[i - 1]):
+                result.append(text[i:end + 1])
+                i = end + 1
+                continue
+
+            inner = text[i + 1:end]
+            if self._looks_like_math_span(inner) or re.fullmatch(r'\s*[A-Za-z]\s*', inner):
+                result.append(r'\(')
+                result.append(self._fix_latex_span(inner))
+                result.append(r'\)')
+            else:
+                result.append(text[i:end + 1])
+            i = end + 1
+        return "".join(result)
+
+    def _wrap_bare_math_tokens(self, text: str) -> str:
+        math_block = re.compile(
+            r'(\\\(.*?\\\)|\\\[.*?\\\]|<anki-mathjax\b[^>]*>.*?</anki-mathjax>)',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        parts = []
+        last = 0
+        for match in math_block.finditer(text):
+            parts.append(self._wrap_bare_math_tokens_plain(text[last:match.start()]))
+            parts.append(match.group(0))
+            last = match.end()
+        parts.append(self._wrap_bare_math_tokens_plain(text[last:]))
+        return "".join(parts)
+
+    def _wrap_bare_math_tokens_plain(self, text: str) -> str:
+        greek = "lambda|alpha|beta|gamma|delta|epsilon|phi|theta|omega"
+
+        text = re.sub(
+            r'(?<![\\A-Za-z0-9])([A-Za-z])\(([A-Za-z0-9_,+\-*/^ ]{1,40})\)',
+            lambda m: r'\(' + self._fix_latex_span(f"{m.group(1)}({m.group(2)})") + r'\)',
+            text,
+        )
+        text = re.sub(
+            rf'(?<![A-Za-z0-9])(\\(?:{greek})_[A-Za-z0-9]+)(?![A-Za-z0-9])',
+            lambda m: r'\( ' + self._fix_latex_span(m.group(1)) + r' \)',
+            text,
+            flags=re.IGNORECASE,
+        )
+        return re.sub(
+            rf'(?<![\\A-Za-z0-9])((?:{greek}|[A-Za-z])_[A-Za-z0-9]+)(?![A-Za-z0-9])',
+            lambda m: r'\( ' + self._fix_latex_span(m.group(1)) + r' \)',
+            text,
+            flags=re.IGNORECASE,
+        )
+
+    def _find_matching_paren(self, text: str, start: int) -> int:
+        depth = 0
+        for idx in range(start, len(text)):
+            if self._is_escaped(text, idx):
+                continue
+            if text[idx] == "(":
+                depth += 1
+            elif text[idx] == ")":
+                depth -= 1
+                if depth == 0:
+                    return idx
+        return -1
+
+    def _is_escaped(self, text: str, index: int) -> bool:
+        slashes = 0
+        pos = index - 1
+        while pos >= 0 and text[pos] == "\\":
+            slashes += 1
+            pos -= 1
+        return slashes % 2 == 1
+
+    def _looks_like_math_span(self, text: str) -> bool:
+        stripped = text.strip()
+        if not stripped or len(stripped) > 220:
+            return False
+        return bool(
+            re.search(r'[\\_=^{}]', stripped)
+            or re.search(r'\b[A-Za-z]+\s*\([^)]*\)', stripped)
+        )
+
+    def _should_wrap_standalone_math(self, text: str) -> bool:
+        stripped = text.strip()
+        if (
+            not stripped
+            or len(stripped) > 200
+            or re.search(r'\\[\(\[]|<anki-mathjax', stripped, flags=re.IGNORECASE)
+            or not self._looks_like_math_span(stripped)
+        ):
+            return False
+        if " " in stripped and not re.search(r'[=\\]', stripped):
+            return False
+        prose_probe = re.sub(r'\\[A-Za-z]+(?:_[A-Za-z0-9]+)?', ' ', stripped)
+        prose_probe = re.sub(
+            r'\b(?:exp|lambda|frac|left|right|sin|cos|tan|sqrt|log|ln|approx|cdot|partial|alpha|beta|gamma|delta|epsilon|phi|theta|omega)(?:_[A-Za-z0-9]+)?\b',
+            ' ',
+            prose_probe,
+            flags=re.IGNORECASE,
+        )
+        prose_probe = re.sub(r'\b[A-Za-z]_[A-Za-z0-9]+\b', ' ', prose_probe)
+        prose_probe = re.sub(r'\b[A-Za-z]\b', ' ', prose_probe)
+        prose_words = re.findall(r'\b[A-Za-z]{2,}\b', prose_probe)
+        return len(prose_words) <= 1
+
+    def _convert_to_mathjax_tags(self, text: str) -> str:
+        r"""Converts standard LaTeX delimiters \( \) and \[ \] to Anki's <anki-mathjax> tags."""
+        if not isinstance(text, str):
+            return text
+
+        text = self._normalize_math_text(text)
         
         # Replace \( ... \) and \[ ... \] with <anki-mathjax> ... </anki-mathjax>
         text = re.sub(r'\\\((.*?)\\\)', r'<anki-mathjax>\1</anki-mathjax>', text, flags=re.DOTALL)
@@ -134,12 +433,7 @@ class CardParser:
         if not data or (not data.get("hints") and not data.get("options")):
             return False
 
-        # Convert to Anki MathJax tags if requested
-        if self.mathjax_format == "tags":
-            data = {
-                "hints": [self._convert_to_mathjax_tags(h) for h in data.get("hints", [])],
-                "options": [self._convert_to_mathjax_tags(o) for o in data.get("options", [])]
-            }
+        data = self.normalize_hint_data(data)
 
         content_block = self.build_hints_block(data, toggles, card)
         
@@ -158,6 +452,7 @@ class CardParser:
 
     def build_hints_block(self, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None) -> str:
         """Build the persisted/injected hints block for the configured storage mode."""
+        data = self.normalize_hint_data(data)
         attrs = self._build_attrs(toggles, card)
         if self.storage_mode == "json":
             payload = html.escape(json.dumps(data), quote=False)
@@ -301,12 +596,12 @@ class CardParser:
         
         hints_html = ""
         if hints:
-            items = "".join([f"<li>{str(h)}</li>" for h in hints])
+            items = "".join([f"<li>{self._safe_hint_item_html(h)}</li>" for h in hints])
             hints_html = f'<b>AI Hints:</b><br><ul class="ai-hints-hint-list">{items}</ul>'
             
         options_html = ""
         if options:
-            items = "".join([f"<li>{str(o)}</li>" for o in options])
+            items = "".join([f"<li>{self._safe_hint_item_html(o)}</li>" for o in options])
             options_html = f'<b>AI Options:</b><br><ul class="ai-hints-list">{items}</ul>'
             
         return f"""
@@ -316,3 +611,9 @@ class CardParser:
     {options_html}
 </div>
 """
+
+    def _safe_hint_item_html(self, value) -> str:
+        escaped = html.escape(str(value), quote=True)
+        escaped = re.sub(r'&lt;(anki-mathjax)&gt;', r'<\1>', escaped, flags=re.IGNORECASE)
+        escaped = re.sub(r'&lt;/(anki-mathjax)&gt;', r'</\1>', escaped, flags=re.IGNORECASE)
+        return escaped

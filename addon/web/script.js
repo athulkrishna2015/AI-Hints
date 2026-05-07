@@ -87,6 +87,326 @@
         button.setAttribute('aria-disabled', enabled ? 'false' : 'true');
     }
 
+    function isEscaped(text, index) {
+        let slashes = 0;
+        for (let i = index - 1; i >= 0 && text[i] === '\\'; i--) {
+            slashes++;
+        }
+        return slashes % 2 === 1;
+    }
+
+    function findMatchingParen(text, start) {
+        let depth = 0;
+        for (let i = start; i < text.length; i++) {
+            if (isEscaped(text, i)) {
+                continue;
+            }
+            if (text[i] === '(') {
+                depth++;
+            } else if (text[i] === ')') {
+                depth--;
+                if (depth === 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    function findNextEscapedMathClose(text, start) {
+        let depth = 0;
+        for (let i = start; i < text.length - 1; i++) {
+            if (text.startsWith('\\(', i)) {
+                depth++;
+                i++;
+                continue;
+            }
+            if (text.startsWith('\\)', i)) {
+                if (depth === 0) {
+                    return i;
+                }
+                depth--;
+                i++;
+            }
+        }
+        return -1;
+    }
+
+    function findNextUnescapedCloseParen(text, start) {
+        for (let i = start; i < text.length; i++) {
+            if (text[i] === ')' && !isEscaped(text, i)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    function looksLikeMathSpan(text) {
+        const stripped = String(text || '').trim();
+        if (!stripped || stripped.length > 220) {
+            return false;
+        }
+        return /[\\_=^{}]/.test(stripped) || /\b[A-Za-z]+\s*\([^)]*\)/.test(stripped);
+    }
+
+    function unwrapMathDelimitersInsideSpan(span) {
+        return String(span || '')
+            .replace(/\\\(([\s\S]*?)\\\)/g, function(match, inner) {
+                return inner.trim();
+            })
+            .replace(/\\\[([\s\S]*?)\\\]/g, function(match, inner) {
+                return inner.trim();
+            });
+    }
+
+    function fixLatexSpan(span) {
+        let text = String(span || '');
+        const commands = [
+            'exp', 'lambda', 'frac', 'left', 'right', 'sin', 'cos', 'tan',
+            'sqrt', 'log', 'ln', 'approx', 'cdot', 'text', 'partial',
+            'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'phi', 'theta',
+            'omega'
+        ];
+        const functions = ['exp', 'sin', 'cos', 'tan', 'log', 'ln'];
+        const commandAlt = commands.join('|');
+        const protectedText = [];
+
+        text = text.replace(/\\(?:text|mathrm|operatorname)\{[^{}]*\}/g, function(match) {
+            protectedText.push(match);
+            return '@@AI_HINTS_LATEX_TEXT_' + (protectedText.length - 1) + '@@';
+        });
+        text = unwrapMathDelimitersInsideSpan(text);
+
+        text = text.replace(new RegExp('\\\\\\\\(?=(?:' + commandAlt + ')\\b)', 'g'), '\\');
+        functions.forEach(function(fn) {
+            text = text.replace(new RegExp('\\\\' + fn + 'left(?=\\s*\\()', 'g'), '\\' + fn + '\\left');
+            text = text.replace(new RegExp('(^|[^\\\\A-Za-z])' + fn + 'left(?=\\s*\\()', 'g'), function(match, prefix) {
+                return prefix + '\\' + fn + '\\left';
+            });
+        });
+        commands.forEach(function(cmd) {
+            text = text.replace(new RegExp('(^|[^\\\\A-Za-z])(' + cmd + ')(?=(_|\\b|[{}\\[\\]()+\\-=/^*,]))', 'g'), function(match, prefix, name) {
+                return prefix + '\\' + name;
+            });
+        });
+        protectedText.forEach(function(value, index) {
+            text = text.replace('@@AI_HINTS_LATEX_TEXT_' + index + '@@', value);
+        });
+        return text;
+    }
+
+    function normalizePlainOpenEscapedClose(content) {
+        let result = '';
+        let i = 0;
+        while (i < content.length) {
+            if (content[i] !== '(' || isEscaped(content, i)) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            if (i > 0 && /[A-Za-z]/.test(content[i - 1])) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            const close = findNextEscapedMathClose(content, i + 1);
+            if (close === -1) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            const inner = content.slice(i + 1, close);
+            if (looksLikeMathSpan(unwrapMathDelimitersInsideSpan(inner))) {
+                result += '\\(' + fixLatexSpan(inner) + '\\)';
+                i = close + 2;
+            } else {
+                result += content[i];
+                i++;
+            }
+        }
+        return result;
+    }
+
+    function normalizeEscapedOpenPlainClose(content) {
+        let result = '';
+        let i = 0;
+        while (i < content.length) {
+            if (!content.startsWith('\\(', i)) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            if (findNextEscapedMathClose(content, i + 2) !== -1) {
+                result += '\\(';
+                i += 2;
+                continue;
+            }
+
+            const close = findNextUnescapedCloseParen(content, i + 2);
+            if (close === -1) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            const inner = content.slice(i + 2, close);
+            if (looksLikeMathSpan(unwrapMathDelimitersInsideSpan(inner))) {
+                result += '\\(' + fixLatexSpan(inner) + '\\)';
+                i = close + 1;
+            } else {
+                result += content[i];
+                i++;
+            }
+        }
+        return result;
+    }
+
+    function normalizeMixedMathDelimiters(content) {
+        return normalizeEscapedOpenPlainClose(normalizePlainOpenEscapedClose(content));
+    }
+
+    function normalizeAnkiMathjaxTags(content) {
+        return content.replace(/(<anki-mathjax\b[^>]*>)([\s\S]*?)(<\/anki-mathjax>)/gi, function(match, openTag, inner, closeTag) {
+            return openTag + fixLatexSpan(inner) + closeTag;
+        });
+    }
+
+    function wrapParentheticalMathPlain(content) {
+        let result = '';
+        let i = 0;
+        while (i < content.length) {
+            if (content[i] !== '(' || isEscaped(content, i)) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            const end = findMatchingParen(content, i);
+            if (end === -1) {
+                result += content[i];
+                i++;
+                continue;
+            }
+
+            if (i > 0 && /[A-Za-z]/.test(content[i - 1])) {
+                result += content.slice(i, end + 1);
+                i = end + 1;
+                continue;
+            }
+
+            const inner = content.slice(i + 1, end);
+            if (looksLikeMathSpan(inner) || /^\s*[A-Za-z]\s*$/.test(inner)) {
+                result += '\\(' + fixLatexSpan(inner) + '\\)';
+            } else {
+                result += content.slice(i, end + 1);
+            }
+            i = end + 1;
+        }
+        return result;
+    }
+
+    function wrapParentheticalMath(content) {
+        const mathBlock = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|<anki-mathjax\b[^>]*>[\s\S]*?<\/anki-mathjax>)/gi;
+        let result = '';
+        let last = 0;
+        let match;
+        while ((match = mathBlock.exec(content)) !== null) {
+            result += wrapParentheticalMathPlain(content.slice(last, match.index));
+            result += match[0];
+            last = match.index + match[0].length;
+        }
+        result += wrapParentheticalMathPlain(content.slice(last));
+        return result;
+    }
+
+    function wrapBareMathTokensPlain(content) {
+        const greek = 'lambda|alpha|beta|gamma|delta|epsilon|phi|theta|omega';
+        let text = content.replace(/(^|[^\\A-Za-z0-9])([A-Za-z])\(([A-Za-z0-9_,+\-*/^ ]{1,40})\)/g, function(match, prefix, name, args) {
+            return prefix + '\\(' + fixLatexSpan(name + '(' + args + ')') + '\\)';
+        });
+        text = text.replace(new RegExp('(^|[^A-Za-z0-9])(\\\\(?:' + greek + ')_[A-Za-z0-9]+)(?![A-Za-z0-9])', 'gi'), function(match, prefix, token) {
+            return prefix + '\\( ' + fixLatexSpan(token) + ' \\)';
+        });
+        text = text.replace(new RegExp('(^|[^\\\\A-Za-z0-9])((?:' + greek + '|[A-Za-z])_[A-Za-z0-9]+)(?![A-Za-z0-9])', 'gi'), function(match, prefix, token) {
+            return prefix + '\\( ' + fixLatexSpan(token) + ' \\)';
+        });
+        return text;
+    }
+
+    function wrapBareMathTokens(content) {
+        const mathBlock = /(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|<anki-mathjax\b[^>]*>[\s\S]*?<\/anki-mathjax>)/gi;
+        let result = '';
+        let last = 0;
+        let match;
+        while ((match = mathBlock.exec(content)) !== null) {
+            result += wrapBareMathTokensPlain(content.slice(last, match.index));
+            result += match[0];
+            last = match.index + match[0].length;
+        }
+        result += wrapBareMathTokensPlain(content.slice(last));
+        return result;
+    }
+
+    function shouldWrapStandaloneMath(content) {
+        const stripped = String(content || '').trim();
+        if (!stripped || stripped.length > 200 || /\\[\(\[]|<anki-mathjax/i.test(stripped) || !looksLikeMathSpan(stripped)) {
+            return false;
+        }
+        if (stripped.includes(' ') && !/[=\\]/.test(stripped)) {
+            return false;
+        }
+        let proseProbe = stripped.replace(/\\[A-Za-z]+(?:_[A-Za-z0-9]+)?/g, ' ');
+        proseProbe = proseProbe.replace(/\b(?:exp|lambda|frac|left|right|sin|cos|tan|sqrt|log|ln|approx|cdot|partial|alpha|beta|gamma|delta|epsilon|phi|theta|omega)(?:_[A-Za-z0-9]+)?\b/gi, ' ');
+        proseProbe = proseProbe.replace(/\b[A-Za-z]_[A-Za-z0-9]+\b/g, ' ');
+        proseProbe = proseProbe.replace(/\b[A-Za-z]\b/g, ' ');
+        const proseWords = proseProbe.match(/\b[A-Za-z]{2,}\b/g) || [];
+        return proseWords.length <= 1;
+    }
+
+    function normalizeMathContent(value) {
+        let content = String(value);
+        content = content.replace(/\\\\([()\[\]])/g, '\\$1');
+        content = normalizeAnkiMathjaxTags(content);
+        content = normalizeMixedMathDelimiters(content);
+        content = content.replace(/\\\(([\s\S]*?)\\\)/g, function(match, inner) {
+            return '\\(' + fixLatexSpan(inner) + '\\)';
+        });
+        content = content.replace(/\\\[([\s\S]*?)\\\]/g, function(match, inner) {
+            return '\\[' + fixLatexSpan(inner) + '\\]';
+        });
+        if (!/<anki-mathjax/i.test(content)) {
+            if (shouldWrapStandaloneMath(content)) {
+                content = '\\(' + fixLatexSpan(content.trim()) + '\\)';
+            } else {
+                content = wrapParentheticalMath(content);
+                content = wrapBareMathTokens(content);
+            }
+        }
+        return content;
+    }
+
+    function appendRenderedContent(target, content) {
+        const tagPattern = /<anki-mathjax\b[^>]*>([\s\S]*?)<\/anki-mathjax>/gi;
+        let last = 0;
+        let match;
+        while ((match = tagPattern.exec(content)) !== null) {
+            if (match.index > last) {
+                target.appendChild(document.createTextNode(content.slice(last, match.index)));
+            }
+            const mathNode = document.createElement('anki-mathjax');
+            mathNode.textContent = match[1];
+            target.appendChild(mathNode);
+            last = match.index + match[0].length;
+        }
+        if (last < content.length) {
+            target.appendChild(document.createTextNode(content.slice(last)));
+        }
+    }
+
     function isEditableTarget(target) {
         if (!(target instanceof Element)) {
             return false;
@@ -109,29 +429,7 @@
         list.className = className;
         items.forEach(function(item) {
             const li = document.createElement('li');
-            let content = String(item);
-            
-            // Fix common AI over-escaping: \\( -> \(
-            content = content.replace(/\\\\([()\[\]])/g, '\\$1');
-            
-            // If the AI forgot delimiters but the content looks like LaTeX (has backslashes or subscripts)
-            // wrap it in MathJax delimiters if it doesn't have them
-            if (content.includes('_') || content.includes('^') || content.includes('\\')) {
-                const hasDelimiters = content.trim().startsWith('\\(') || 
-                                    content.trim().startsWith('\\[') || 
-                                    content.includes('<anki-mathjax>');
-                
-                if (!hasDelimiters && content.length < 200 && !content.includes('\n')) {
-                    const cfg = window.aiHintsUiConfig || {};
-                    if (cfg.mathjax_format === 'tags') {
-                        content = '<anki-mathjax>' + content + '</anki-mathjax>';
-                    } else {
-                        content = '\\(' + content + '\\)';
-                    }
-                }
-            }
-            
-            li.innerHTML = content;
+            appendRenderedContent(li, normalizeMathContent(item));
             list.appendChild(li);
         });
         fragment.appendChild(list);

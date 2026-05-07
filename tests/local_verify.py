@@ -323,6 +323,127 @@ try:
         print(f"FAILED: CardParser mangled MathJax backslashes: {math_set_value}")
         sys.exit(1)
 
+    print("Testing lazy LaTeX render normalization...")
+    meissner_data = {
+        "hints": [
+            "Note the form of the magnetic induction expression and the role of lambda_L as the decay length.",
+        ],
+        "options": [
+            "The correct expression is ( B(x) = B_0 \\expleft(-\\frac{x}{\\lambda_L}\\right) ), but this does not grow exponentially.",
+        ],
+    }
+    normalized_meissner = json_parser.normalize_hint_data(meissner_data)
+    normalized_option = normalized_meissner["options"][0]
+    normalized_hint = normalized_meissner["hints"][0]
+    if (
+        normalized_option.startswith("The correct expression is ")
+        and "\\( B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) \\)" in normalized_option
+        and "\\expleft" not in normalized_option
+        and "\\( \\lambda_L \\)" in normalized_hint
+        and not normalized_hint.startswith("\\(")
+    ):
+        print("SUCCESS: CardParser normalizes inline math without wrapping prose.")
+    else:
+        print(f"FAILED: CardParser render normalization incorrect: {normalized_meissner}")
+        sys.exit(1)
+
+    print("Testing generic MathJax normalization cases...")
+    generic_math_data = {
+        "hints": [
+            r"Already delimited: \( y = sqrt{x} \).",
+            r"Display math: \[ E = mc^2 \]",
+            r"Overescaped delimiters: \\( B_0 \\)",
+            "Plain prose says the left side is not always right.",
+            "The ai_hints_config key should stay literal.",
+            "<anki-mathjax>lambda_L</anki-mathjax>",
+            r"Text command stays valid: \( \text{left side} \)",
+        ],
+        "options": [
+            r"B(x) = B_0 exp(-frac{x}{lambda_L})",
+            r"Use alpha_1 and \beta_2 in the same sentence.",
+            "sin(x)",
+            r"The magnetic field strength is independent of the position ( x ) within the superconductor.",
+            r"The magnetic induction is proportional to ( \frac{x}{\( \lambda_L \)} \)",
+            "B(x) is a constant value inside the semi-infinite superconductor.",
+        ],
+    }
+    normalized_generic = json_parser.normalize_hint_data(generic_math_data)
+    generic_hints = normalized_generic["hints"]
+    generic_options = normalized_generic["options"]
+    if (
+        r"\( y = \sqrt{x} \)" in generic_hints[0]
+        and r"\[ E = mc^2 \]" in generic_hints[1]
+        and r"\( B_0 \)" in generic_hints[2]
+        and "\\left" not in generic_hints[3]
+        and "\\right" not in generic_hints[3]
+        and "ai_hints_config" in generic_hints[4]
+        and "\\(" not in generic_hints[4]
+        and "<anki-mathjax>\\lambda_L</anki-mathjax>" in generic_hints[5]
+        and r"\text{left side}" in generic_hints[6]
+        and r"\text{\left" not in generic_hints[6]
+        and r"\(B(x) = B_0 \exp(-\frac{x}{\lambda_L})\)" in generic_options[0]
+        and r"\( \alpha_1 \)" in generic_options[1]
+        and r"\( \beta_2 \)" in generic_options[1]
+        and r"\(\sin(x)\)" in generic_options[2]
+        and r"position\(x\)within" in generic_options[3].replace(" ", "")
+        and r"\(\frac{x}{\lambda_L}\)" in generic_options[4].replace(" ", "")
+        and generic_options[4].count("\\(") == 1
+        and generic_options[4].count("\\)") == 1
+        and r"\(B(x)\) is a constant" in generic_options[5]
+    ):
+        print("SUCCESS: CardParser handles broad MathJax normalization cases.")
+    else:
+        print(f"FAILED: Generic MathJax normalization incorrect: {normalized_generic}")
+        sys.exit(1)
+
+    print("Testing reported superconductivity payload normalization...")
+    reported_data = {
+        "hints": [
+            "The magnetic induction expression shows an exponential decay, which means it decreases rapidly as depth increases.",
+            "The London Penetration Depth, \\( \\lambda_L \\), determines the rate of this exponential decay.",
+            "Recall that the decay length represents the distance where the magnetic field drops to a significant portion, which is an important property of superconductors.",
+        ],
+        "options": [
+            "The correct expression for the magnetic induction inside a semi-infinite superconductor is indeed \\( B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) \\).",
+            "The magnetic field strength inside a semi-infinite superconductor is independent of the position ( x ) within the superconductor.",
+            "The magnetic induction inside a semi-infinite superconductor is proportional to ( \\frac{x}{\\( \\lambda_L \\)} \\)",
+            "B(x) is a constant value inside the semi-infinite superconductor, which is incorrect for the Meissner equation.",
+        ],
+    }
+    normalized_reported = json_parser.normalize_hint_data(reported_data)
+    reported_text = "\n".join(normalized_reported["hints"] + normalized_reported["options"])
+    if (
+        "\\( \\lambda_L \\)" in normalized_reported["hints"][1]
+        and "\\(x\\)" in normalized_reported["options"][1].replace(" ", "")
+        and "\\(\\frac{x}{\\lambda_L}\\)" in normalized_reported["options"][2].replace(" ", "")
+        and "\\( \\lambda_L \\)" not in normalized_reported["options"][2]
+        and normalized_reported["options"][3].startswith("\\(B(x)\\) is a constant")
+        and "\\( \\(" not in reported_text
+        and "\\) \\)" not in reported_text
+    ):
+        print("SUCCESS: Reported superconductivity payload normalizes to valid MathJax.")
+    else:
+        print(f"FAILED: Reported superconductivity payload normalization incorrect: {normalized_reported}")
+        sys.exit(1)
+
+    print("Testing visible HTML mode escapes generated text...")
+    html_parser = CardParser(target_fields=["Back"], storage_mode="html")
+    html_block = html_parser.build_hints_block({"hints": ["<script>alert(1)</script>"], "options": ["\\( B_0 \\)"]})
+    if "&lt;script&gt;alert(1)&lt;/script&gt;" in html_block and "<script>alert" not in html_block and "\\( B_0 \\)" in html_block:
+        print("SUCCESS: CardParser escapes visible HTML while preserving MathJax delimiters.")
+    else:
+        print(f"FAILED: CardParser visible HTML escaping incorrect: {html_block}")
+        sys.exit(1)
+
+    print("Testing visible HTML mode preserves Anki MathJax tags safely...")
+    tag_html_parser = CardParser(target_fields=["Back"], storage_mode="html", mathjax_format="tags")
+    tag_html_block = tag_html_parser.build_hints_block({"hints": ["<b>not html</b>"], "options": ["\\( B_0 \\)"]})
+    if "&lt;b&gt;not html&lt;/b&gt;" in tag_html_block and "<anki-mathjax> B_0 </anki-mathjax>" in tag_html_block:
+        print("SUCCESS: CardParser preserves only Anki MathJax tags in visible HTML mode.")
+    else:
+        print(f"FAILED: CardParser Anki MathJax tag preservation incorrect: {tag_html_block}")
+        sys.exit(1)
+
     print("Testing find_hints_block and clear_hints_from_note regex fixes...")
     # Test multiple classes and single quotes
     multi_class_html = '<div class="foo ai-hints-json bar" data-ai-hints-card-id="456">payload</div>'

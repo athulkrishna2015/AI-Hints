@@ -435,7 +435,7 @@ class AIClient:
         )
 
     def _repair_json_backslashes(self, content: str) -> str:
-        """
+        r"""
         Fixes backslash loss in AI-generated JSON. Many models send single 
         backslashes for LaTeX (e.g. \( \exp \)) which json.loads() strips.
         We escape them unless they are part of a valid JSON escape (like \").
