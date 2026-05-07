@@ -323,6 +323,13 @@
             refreshBtn.disabled = true;
             refreshBtn.innerText = 'Refreshing...';
             sendCommand('ai_hints_refresh');
+            // Auto-reset if refresh takes too long or fails to reload page
+            setTimeout(function() {
+                if (refreshBtn) {
+                    refreshBtn.disabled = false;
+                    refreshBtn.innerText = 'Refresh';
+                }
+            }, 2000);
         };
         btnContainer.appendChild(refreshBtn);
 

@@ -246,6 +246,11 @@ def refresh_current_card():
         return
 
     try:
+        # Explicitly reload the card from database to get latest field content
+        card = getattr(reviewer, "card", None)
+        if card:
+            card.load()
+
         refresh = getattr(reviewer, "refresh", None)
         if callable(refresh):
             refresh()
@@ -255,10 +260,6 @@ def refresh_current_card():
         if callable(redraw):
             redraw()
             return
-
-        card = getattr(reviewer, "card", None)
-        if card and hasattr(card, "load"):
-            card.load()
 
         if getattr(reviewer, "state", None) == "answer":
             show_answer = getattr(reviewer, "_showAnswer", None)
