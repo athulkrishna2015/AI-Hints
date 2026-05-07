@@ -25,7 +25,8 @@ class ConfigDialog(QDialog):
         
         self.ai_provider_cb = QComboBox()
         providers = ["openai", "anthropic", "gemini", "deepseek", "groq", "grok", "mistral", "openrouter", "nvidia", "local"]
-        self.ai_provider_cb.addItems(providers)
+        custom_providers = list(self.config.get("custom_providers", {}).keys())
+        self.ai_provider_cb.addItems(providers + custom_providers)
         gen_layout.addRow("Active AI Provider:", self.ai_provider_cb)
         
         self.options_count_sb = QSpinBox()
@@ -50,24 +51,22 @@ class ConfigDialog(QDialog):
         self.providers_tab = QWidget()
         prov_main_layout = QVBoxLayout()
         
-        # Help Guide with links
-        help_label = QLabel(
-            "<b>Get API Keys:</b> "
-            "<a href='https://platform.openai.com/api-keys'>OpenAI</a> | "
-            "<a href='https://console.anthropic.com/'>Anthropic</a> | "
-            "<a href='https://aistudio.google.com/app/apikey'>Gemini</a> | "
-            "<a href='https://console.groq.com/keys'>Groq</a> | "
-            "<a href='https://platform.deepseek.com/api_keys'>DeepSeek</a> | "
-            "<a href='https://openrouter.ai/keys'>OpenRouter</a>"
-        )
-        help_label.setOpenExternalLinks(True)
-        help_label.setWordWrap(True)
-        prov_main_layout.addWidget(help_label)
-        
         prov_scroll = QScrollArea()
         prov_scroll.setWidgetResizable(True)
         prov_content = QWidget()
         self.prov_layout = QFormLayout(prov_content)
+        
+        provider_urls = {
+            "openai": "https://platform.openai.com/api-keys",
+            "anthropic": "https://console.anthropic.com/",
+            "gemini": "https://aistudio.google.com/app/apikey",
+            "groq": "https://console.groq.com/keys",
+            "deepseek": "https://platform.deepseek.com/api_keys",
+            "openrouter": "https://openrouter.ai/keys",
+            "mistral": "https://console.mistral.ai/api-keys/",
+            "grok": "https://console.x.ai/",
+            "nvidia": "https://build.nvidia.com/explore/discover"
+        }
         
         self.api_key_edits = {}
         for p in providers:
@@ -75,7 +74,12 @@ class ConfigDialog(QDialog):
             edit = QLineEdit()
             edit.setEchoMode(QLineEdit.EchoMode.Password)
             self.api_key_edits[p] = edit
-            self.prov_layout.addRow(f"{p.capitalize()} API Key:", edit)
+            
+            url = provider_urls.get(p)
+            label_text = f"<a href='{url}' style='color: #008CBA; text-decoration: none;'>{p.capitalize()} API Key:</a>" if url else f"{p.capitalize()} API Key:"
+            label = QLabel(label_text)
+            label.setOpenExternalLinks(True)
+            self.prov_layout.addRow(label, edit)
             
         # Local Endpoint Group
         local_group = QGroupBox("Local AI / Ollama Settings")
@@ -100,10 +104,21 @@ class ConfigDialog(QDialog):
         self.system_prompt_edit = QTextEdit()
         adv_layout.addWidget(self.system_prompt_edit)
         
-        adv_layout.addWidget(QLabel("Note Type Fields (JSON):"))
-        self.note_fields_edit = QTextEdit()
-        self.note_fields_edit.setMaximumHeight(150)
-        adv_layout.addWidget(self.note_fields_edit)
+        adv_layout.addWidget(QLabel("Note Type Fields:"))
+        
+        if mw.col is not None:
+            self.note_type_tree = QTreeWidget()
+            self.note_type_tree.setHeaderHidden(True)
+            adv_layout.addWidget(self.note_type_tree)
+            
+            self.note_fields_edit = QTextEdit()
+            self.note_fields_edit.setVisible(False)
+        else:
+            self.note_type_tree = None
+            adv_layout.addWidget(QLabel("(Raw JSON editor since collection is closed)"))
+            self.note_fields_edit = QTextEdit()
+            self.note_fields_edit.setMaximumHeight(150)
+            adv_layout.addWidget(self.note_fields_edit)
         
         # Raw Editor Toggle
         self.raw_toggle = QPushButton("Show Raw JSON Editor")
@@ -198,7 +213,27 @@ class ConfigDialog(QDialog):
         self.local_model_edit.setText(local.get("model", ""))
         
         self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
-        self.note_fields_edit.setPlainText(json.dumps(c.get("note_type_fields", {}), indent=4))
+        
+        nt_fields = c.get("note_type_fields", {})
+        if self.note_type_tree:
+            self.note_type_tree.clear()
+            for model in mw.col.models.all():
+                m_item = QTreeWidgetItem(self.note_type_tree, [model["name"]])
+                m_item.setExpanded(False)
+                active_fields = nt_fields.get(model["name"], [])
+                has_checked = False
+                for fld in model["flds"]:
+                    f_item = QTreeWidgetItem(m_item, [fld["name"]])
+                    f_item.setFlags(f_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                    if fld["name"] in active_fields:
+                        f_item.setCheckState(0, Qt.CheckState.Checked)
+                        has_checked = True
+                    else:
+                        f_item.setCheckState(0, Qt.CheckState.Unchecked)
+                if has_checked:
+                    m_item.setExpanded(True)
+        
+        self.note_fields_edit.setPlainText(json.dumps(nt_fields, indent=4))
         self.raw_editor.setPlainText(json.dumps(c, indent=4))
 
     def copy_to_clipboard(self, text):
@@ -222,7 +257,22 @@ class ConfigDialog(QDialog):
                 "model": self.local_model_edit.text()
             }
             new_config["system_prompt"] = self.system_prompt_edit.toPlainText()
-            new_config["note_type_fields"] = json.loads(self.note_fields_edit.toPlainText())
+            
+            if hasattr(self, 'note_type_tree') and self.note_type_tree:
+                nt_fields = {}
+                for i in range(self.note_type_tree.topLevelItemCount()):
+                    m_item = self.note_type_tree.topLevelItem(i)
+                    m_name = m_item.text(0)
+                    checked_fields = []
+                    for j in range(m_item.childCount()):
+                        f_item = m_item.child(j)
+                        if f_item.checkState(0) == Qt.CheckState.Checked:
+                            checked_fields.append(f_item.text(0))
+                    if checked_fields:
+                        nt_fields[m_name] = checked_fields
+                new_config["note_type_fields"] = nt_fields
+            else:
+                new_config["note_type_fields"] = json.loads(self.note_fields_edit.toPlainText())
             
             mw.addonManager.writeConfig(__name__, new_config)
             self.accept()
