@@ -13,29 +13,14 @@
 }
 
 .ai-hints-btn {
-    background-color: #4CAF50;
-    border: none;
-    color: white;
-    padding: 8px 16px;
+    padding: 2px 8px;
     text-align: center;
     text-decoration: none;
     display: inline-block;
-    font-size: 14px;
-    margin: 4px 2px;
+    font-size: 12px;
+    margin: 2px;
     cursor: pointer;
-    border-radius: 4px;
-}
-
-.ai-hints-btn:hover {
-    background-color: #45a049;
-}
-
-.ai-hints-btn-secondary {
-    background-color: #008CBA;
-}
-
-.ai-hints-btn-secondary:hover {
-    background-color: #007bb5;
+    border-radius: 3px;
 }
 
 .ai-hints-hidden {

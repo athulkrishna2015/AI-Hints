@@ -1,6 +1,6 @@
 import os
 import json
-from aqt import mw, gui_hooks
+from aqt import mw
 from aqt.qt import *
 from aqt.utils import showInfo, tooltip
 
@@ -8,125 +8,118 @@ class ConfigDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("AI-Hints Configuration")
-        self.setMinimumSize(500, 600)
+        self.setMinimumSize(600, 700)
         self.addon_dir = os.path.dirname(__file__)
         self.config = mw.addonManager.getConfig(__name__)
         
         self.setup_ui()
+        self.load_config_into_ui()
 
     def setup_ui(self):
         layout = QVBoxLayout()
         self.tabs = QTabWidget()
         
-        # --- Tab 1: Settings ---
-        self.settings_tab = QWidget()
-        settings_layout = QVBoxLayout()
+        # --- Tab 1: General Settings ---
+        self.general_tab = QWidget()
+        gen_layout = QFormLayout()
         
-        # Help Guide
-        help_group = QGroupBox("Configuration Guide")
-        help_layout = QVBoxLayout()
-        help_text = QLabel(
-            "<b>ai_provider:</b> openai, anthropic, gemini, deepseek, groq, local, etc.<br>"
-            "<b>storage_mode:</b> 'html' (visible) or 'json' (hidden).<br>"
-            "<b>options_count:</b> Number of options to generate (default: 4).<br>"
-            "<b>note_type_fields:</b> Define specific fields for each card type.<br><br>"
+        self.ai_provider_cb = QComboBox()
+        providers = ["openai", "anthropic", "gemini", "deepseek", "groq", "grok", "mistral", "openrouter", "nvidia", "local"]
+        self.ai_provider_cb.addItems(providers)
+        gen_layout.addRow("Active AI Provider:", self.ai_provider_cb)
+        
+        self.options_count_sb = QSpinBox()
+        self.options_count_sb.setRange(1, 10)
+        gen_layout.addRow("Number of Options:", self.options_count_sb)
+        
+        self.storage_mode_cb = QComboBox()
+        self.storage_mode_cb.addItems(["json", "html"])
+        self.storage_mode_cb.setToolTip("JSON: Invisible (cleaner). HTML: Visible on all devices.")
+        gen_layout.addRow("Storage Mode:", self.storage_mode_cb)
+        
+        self.show_hints_cb = QCheckBox("Show Hints Button")
+        gen_layout.addRow(self.show_hints_cb)
+        
+        self.show_options_cb = QCheckBox("Show Options Button (Sequential)")
+        gen_layout.addRow(self.show_options_cb)
+        
+        self.general_tab.setLayout(gen_layout)
+        self.tabs.addTab(self.general_tab, "General")
+        
+        # --- Tab 2: AI Providers (API Keys) ---
+        self.providers_tab = QWidget()
+        prov_main_layout = QVBoxLayout()
+        
+        # Help Guide with links
+        help_label = QLabel(
             "<b>Get API Keys:</b> "
             "<a href='https://platform.openai.com/api-keys'>OpenAI</a> | "
             "<a href='https://console.anthropic.com/'>Anthropic</a> | "
             "<a href='https://aistudio.google.com/app/apikey'>Gemini</a> | "
             "<a href='https://console.groq.com/keys'>Groq</a> | "
             "<a href='https://platform.deepseek.com/api_keys'>DeepSeek</a> | "
-            "<a href='https://openrouter.ai/keys'>OpenRouter</a> | "
-            "<a href='https://console.mistral.ai/api-keys/'>Mistral</a> | "
-            "<a href='https://console.x.ai/'>Grok</a> | "
-            "<a href='https://ollama.com/'>Ollama</a>"
+            "<a href='https://openrouter.ai/keys'>OpenRouter</a>"
         )
-        help_text.setWordWrap(True)
-        help_text.setOpenExternalLinks(True)
-        help_layout.addWidget(help_text)
-        help_group.setLayout(help_layout)
-        settings_layout.addWidget(help_group)
+        help_label.setOpenExternalLinks(True)
+        help_label.setWordWrap(True)
+        prov_main_layout.addWidget(help_label)
         
-        self.config_editor = QTextEdit()
-        self.config_editor.setPlainText(json.dumps(self.config, indent=4))
-        self.config_editor.setAcceptRichText(False)
-        settings_layout.addWidget(QLabel("Edit Configuration (JSON):"))
-        settings_layout.addWidget(self.config_editor)
+        prov_scroll = QScrollArea()
+        prov_scroll.setWidgetResizable(True)
+        prov_content = QWidget()
+        self.prov_layout = QFormLayout(prov_content)
         
-        self.settings_tab.setLayout(settings_layout)
-        self.tabs.addTab(self.settings_tab, "Settings")
-        
-        # --- Tab 2: Support ---
-        self.support_tab = QWidget()
-        support_main_layout = QVBoxLayout()
-        
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-        
-        support_data = [
-            {
-                "name": "Ko-fi",
-                "id": "https://ko-fi.com/D1D01W6NQT",
-                "qr": None,
-                "is_link": True
-            },
-            {
-                "name": "UPI",
-                "id": "athulkrishnasv2015-2@okhdfcbank",
-                "qr": "UPI.jpg"
-            },
-            {
-                "name": "Bitcoin (BTC)",
-                "id": "bc1qrrek3m7sr33qujjrktj949wav6mehdsk057cfx",
-                "qr": "BTC.jpg"
-            },
-            {
-                "name": "Ethereum (ETH)",
-                "id": "0xce6899e4903EcB08bE5Be65E44549fadC3F45D27",
-                "qr": "ETH.jpg"
-            }
-        ]
-        
-        for item in support_data:
-            group = QGroupBox(item["name"])
-            group_layout = QVBoxLayout()
+        self.api_key_edits = {}
+        for p in providers:
+            if p == "local": continue
+            edit = QLineEdit()
+            edit.setEchoMode(QLineEdit.EchoMode.Password)
+            self.api_key_edits[p] = edit
+            self.prov_layout.addRow(f"{p.capitalize()} API Key:", edit)
             
-            # QR Code Image
-            if item.get("qr"):
-                qr_label = QLabel()
-                qr_path = os.path.join(self.addon_dir, "Support", item["qr"])
-                if os.path.exists(qr_path):
-                    pixmap = QPixmap(qr_path)
-                    qr_label.setPixmap(pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-                    qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    group_layout.addWidget(qr_label)
-            
-            # ID and Buttons
-            id_layout = QHBoxLayout()
-            id_text = QLineEdit(item["id"])
-            id_text.setReadOnly(True)
-            id_layout.addWidget(id_text)
-
-            if item.get("is_link"):
-                open_btn = QPushButton("Open in Browser")
-                open_btn.clicked.connect(lambda checked, url=item["id"]: QDesktopServices.openUrl(QUrl(url)))
-                id_layout.addWidget(open_btn)
-            else:
-                copy_btn = QPushButton("Copy")
-                copy_btn.clicked.connect(lambda checked, text=item["id"]: self.copy_to_clipboard(text))
-                id_layout.addWidget(copy_btn)
-            
-            group_layout.addLayout(id_layout)
-            group.setLayout(group_layout)
-            scroll_layout.addWidget(group)
-            
-        scroll_layout.addStretch()
-        scroll.setWidget(scroll_content)
-        support_main_layout.addWidget(scroll)
+        # Local Endpoint Group
+        local_group = QGroupBox("Local AI / Ollama Settings")
+        local_layout = QFormLayout()
+        self.local_url_edit = QLineEdit()
+        self.local_model_edit = QLineEdit()
+        local_layout.addRow("Base URL:", self.local_url_edit)
+        local_layout.addRow("Model Name:", self.local_model_edit)
+        local_group.setLayout(local_layout)
+        self.prov_layout.addRow(local_group)
         
-        self.support_tab.setLayout(support_main_layout)
+        prov_scroll.setWidget(prov_content)
+        prov_main_layout.addWidget(prov_scroll)
+        self.providers_tab.setLayout(prov_main_layout)
+        self.tabs.addTab(self.providers_tab, "AI Providers")
+        
+        # --- Tab 3: Advanced ---
+        self.advanced_tab = QWidget()
+        adv_layout = QVBoxLayout()
+        
+        adv_layout.addWidget(QLabel("System Prompt:"))
+        self.system_prompt_edit = QTextEdit()
+        adv_layout.addWidget(self.system_prompt_edit)
+        
+        adv_layout.addWidget(QLabel("Note Type Fields (JSON):"))
+        self.note_fields_edit = QTextEdit()
+        self.note_fields_edit.setMaximumHeight(150)
+        adv_layout.addWidget(self.note_fields_edit)
+        
+        # Raw Editor Toggle
+        self.raw_toggle = QPushButton("Show Raw JSON Editor")
+        self.raw_toggle.setCheckable(True)
+        adv_layout.addWidget(self.raw_toggle)
+        
+        self.raw_editor = QTextEdit()
+        self.raw_editor.setVisible(False)
+        self.raw_toggle.toggled.connect(self.raw_editor.setVisible)
+        adv_layout.addWidget(self.raw_editor)
+        
+        self.advanced_tab.setLayout(adv_layout)
+        self.tabs.addTab(self.advanced_tab, "Advanced")
+        
+        # --- Tab 4: Support ---
+        self.support_tab = self._create_support_tab()
         self.tabs.addTab(self.support_tab, "Support")
         
         layout.addWidget(self.tabs)
@@ -139,22 +132,105 @@ class ConfigDialog(QDialog):
         
         self.setLayout(layout)
 
+    def _create_support_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        s_layout = QVBoxLayout(content)
+        
+        support_data = [
+            {"name": "Ko-fi", "id": "https://ko-fi.com/D1D01W6NQT", "qr": None, "is_link": True},
+            {"name": "UPI", "id": "athulkrishnasv2015-2@okhdfcbank", "qr": "UPI.jpg"},
+            {"name": "Bitcoin (BTC)", "id": "bc1qrrek3m7sr33qujjrktj949wav6mehdsk057cfx", "qr": "BTC.jpg"},
+            {"name": "Ethereum (ETH)", "id": "0xce6899e4903EcB08bE5Be65E44549fadC3F45D27", "qr": "ETH.jpg"}
+        ]
+        
+        for item in support_data:
+            group = QGroupBox(item["name"])
+            gl = QVBoxLayout()
+            if item.get("qr"):
+                qr_label = QLabel()
+                qr_path = os.path.join(self.addon_dir, "Support", item["qr"])
+                if os.path.exists(qr_path):
+                    pixmap = QPixmap(qr_path)
+                    qr_label.setPixmap(pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                    qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    gl.addWidget(qr_label)
+            
+            id_layout = QHBoxLayout()
+            id_text = QLineEdit(item["id"])
+            id_text.setReadOnly(True)
+            id_layout.addWidget(id_text)
+            if item.get("is_link"):
+                btn = QPushButton("Open")
+                btn.clicked.connect(lambda chk, u=item["id"]: QDesktopServices.openUrl(QUrl(u)))
+                id_layout.addWidget(btn)
+            else:
+                btn = QPushButton("Copy")
+                btn.clicked.connect(lambda chk, t=item["id"]: self.copy_to_clipboard(t))
+                id_layout.addWidget(btn)
+            gl.addLayout(id_layout)
+            group.setLayout(gl)
+            s_layout.addWidget(group)
+            
+        s_layout.addStretch()
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+        tab.setLayout(layout)
+        return tab
+
+    def load_config_into_ui(self):
+        c = self.config
+        self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
+        self.options_count_sb.setValue(c.get("options_count", 4))
+        self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
+        self.show_hints_cb.setChecked(c.get("show_hints_button", True))
+        self.show_options_cb.setChecked(c.get("show_options_button", True))
+        
+        keys = c.get("api_keys", {})
+        for p, edit in self.api_key_edits.items():
+            edit.setText(keys.get(p, ""))
+            
+        local = c.get("local_endpoint", {})
+        self.local_url_edit.setText(local.get("base_url", ""))
+        self.local_model_edit.setText(local.get("model", ""))
+        
+        self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
+        self.note_fields_edit.setPlainText(json.dumps(c.get("note_type_fields", {}), indent=4))
+        self.raw_editor.setPlainText(json.dumps(c, indent=4))
+
     def copy_to_clipboard(self, text):
-        clipboard = QApplication.clipboard()
-        clipboard.setText(text)
+        QApplication.clipboard().setText(text)
         tooltip("Copied to clipboard")
 
     def save_config(self):
         try:
-            new_config = json.loads(self.config_editor.toPlainText())
+            # If raw editor was used and is visible, prioritize it? 
+            # Or just sync everything. Let's sync from GUI.
+            new_config = self.config.copy()
+            new_config["ai_provider"] = self.ai_provider_cb.currentText()
+            new_config["options_count"] = self.options_count_sb.value()
+            new_config["storage_mode"] = self.storage_mode_cb.currentText()
+            new_config["show_hints_button"] = self.show_hints_cb.isChecked()
+            new_config["show_options_button"] = self.show_options_cb.isChecked()
+            
+            new_config["api_keys"] = {p: edit.text() for p, edit in self.api_key_edits.items()}
+            new_config["local_endpoint"] = {
+                "base_url": self.local_url_edit.text(),
+                "model": self.local_model_edit.text()
+            }
+            new_config["system_prompt"] = self.system_prompt_edit.toPlainText()
+            new_config["note_type_fields"] = json.loads(self.note_fields_edit.toPlainText())
+            
             mw.addonManager.writeConfig(__name__, new_config)
             self.accept()
         except Exception as e:
-            showInfo(f"Invalid JSON configuration: {e}")
+            showInfo(f"Error saving configuration: {e}")
 
 def on_config_dialog(parent=None):
-    if parent is None:
-        parent = mw
+    if parent is None: parent = mw
     ConfigDialog(parent).exec()
 
 def init_config_ui():

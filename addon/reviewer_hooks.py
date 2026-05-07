@@ -40,7 +40,34 @@ def generate_hints():
     if not card:
         return
 
+    import sys
+    sfm = sys.modules.get("1046608507.reviewer")
+    if sfm:
+        try:
+            if mw.reviewer.state == "question":
+                sfm.clear_question_timeouts(mw.reviewer)
+                sfm.set_answer_timeouts(mw.reviewer)
+            elif mw.reviewer.state == "answer":
+                sfm.clear_answer_timeouts(mw.reviewer)
+                sfm.set_question_timeouts(mw.reviewer)
+        except Exception as e:
+            print(f"Failed to restart speed focus timer: {e}")
+
     config = mw.addonManager.getConfig(__name__)
+    
+    provider = config.get("ai_provider", "openai")
+    if provider != "local":
+        if provider in config.get("custom_providers", {}):
+            api_key = config.get("custom_providers", {}).get(provider, {}).get("api_key")
+            if not api_key:
+                mw.utils.showWarning(f"AI-Hints: API key for custom provider '{provider}' is not configured. Please add it in the add-on config.")
+                return
+        else:
+            api_key = config.get("api_keys", {}).get(provider)
+            if not api_key:
+                mw.utils.showWarning(f"AI-Hints: API key for '{provider}' is not configured. Please add it in the add-on config.")
+                return
+
     parser = CardParser(
         config.get("target_fields", []),
         config.get("note_type_fields", {}),
