@@ -50,7 +50,6 @@ def _card_context_payload(context):
 
 def on_webview_will_set_content(web_content, context):
     # Determine if we are in the reviewer context
-    # Use getattr to safely handle objects without .name attribute
     is_reviewer = (
         getattr(context, "name", None) == "reviewer" or 
         type(context).__name__ == "Reviewer" or
@@ -69,31 +68,21 @@ def on_webview_will_set_content(web_content, context):
         js = f.read()
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-    parser = CardParser(
-        target_fields=config.get("target_fields", []),
-        note_type_fields=config.get("note_type_fields", {}),
-        storage_mode=config.get("storage_mode", "json")
-    )
-
-    card = getattr(context, "card", None) or getattr(mw.reviewer, "card", None)
-    hints_block = ""
-    if card:
-        try:
-            hints_block = parser.find_hints_block(card.note(), card) or ""
-        except Exception as e:
-            logger.error(f"Failed to find hints block in on_webview_will_set_content: {e}")
-
-    card_payload = json.dumps(_card_context_payload(context))
     ui_payload = json.dumps({
         "show_on_card": config.get("show_on_card", True),
     })
 
     web_content.head += f"<style>{css}</style>"
-    if hints_block:
-        web_content.body += hints_block
-    web_content.body += f"<script>window.aiHintsCurrentCard = {card_payload};</script>"
     web_content.body += f"<script>window.aiHintsUiConfig = {ui_payload};</script>"
     web_content.body += f"<script>{js}</script>"
+
+def _trigger_frontend_setup(card):
+    if not card:
+        return
+    payload = _card_context_payload(None) # This helper needs mw.reviewer.card or similar
+    # Better: just use the card passed in
+    card_data = {"id": str(card.id), "ord": int(card.ord)}
+    mw.reviewer.web.eval(f"if (window.aiHintsSetup) {{ window.aiHintsSetup({json.dumps(card_data)}); }}")
 
 def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_generate":
@@ -428,8 +417,14 @@ def init_hooks():
         return
     gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
     gui_hooks.webview_did_receive_js_message.append(on_webview_did_receive_js_message)
+    
+    # Bottom bar button
     gui_hooks.reviewer_did_show_question.append(update_bottom_bar_button)
     gui_hooks.reviewer_did_show_answer.append(update_bottom_bar_button)
+    
+    # Frontend setup trigger
+    gui_hooks.reviewer_did_show_question.append(_trigger_frontend_setup)
+    gui_hooks.reviewer_did_show_answer.append(_trigger_frontend_setup)
     
     # Close popup on next card or when leaving reviewer
     gui_hooks.reviewer_did_show_question.append(lambda _card: close_popup_if_open())

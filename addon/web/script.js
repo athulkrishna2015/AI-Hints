@@ -179,29 +179,25 @@
 
     function setupAIHints() {
         const current = currentCard();
+        if (!current.id && current.ord == null) {
+            return;
+        }
+
         const cardKey = (current.id || '') + '_' + (current.ord || '0');
         const cardBody = document.getElementById('qa') || document.body;
-        let container = selectCurrentBlock('.ai-hints-container');
-        const jsonBlock = selectCurrentBlock('.ai-hints-json');
-
-        if (cardBody && cardBody.dataset.aiHintsLastCardKey === cardKey) {
-            if (document.querySelector('.ai-hints-actions')) {
-                return;
-            }
-        }
-        if (cardBody) {
-            cardBody.dataset.aiHintsLastCardKey = cardKey;
-        }
-
-        // Cleanup: Remove any dynamic buttons from previous cards
-        document.querySelectorAll('.ai-hints-actions, .ai-hints-btn, .ai-hints-btn-secondary, .ai-hints-generate-btn').forEach(function(el) {
-            el.remove();
-        });
         
         // Hide all containers initially, then show the matched one
         document.querySelectorAll('.ai-hints-container').forEach(function(el) {
             el.style.display = 'none';
         });
+
+        // Cleanup: Remove any dynamic buttons/actions from previous cards
+        document.querySelectorAll('.ai-hints-actions').forEach(function(el) {
+            el.remove();
+        });
+
+        let container = selectCurrentBlock('.ai-hints-container');
+        const jsonBlock = selectCurrentBlock('.ai-hints-json');
 
         if (jsonBlock && !container) {
             try {
@@ -244,27 +240,32 @@
         let showOptionsCfg = true;
 
         if (container) {
-            container.style.display = 'block';
-            hideOtherContainers(container);
-            optionsList = container.querySelector('.ai-hints-list');
-            hintsList = container.querySelector('.ai-hints-hint-list');
-            
-            showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
-            showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
-            
-            // Reset and shuffle options
-            if (optionsList) {
-                const items = Array.from(optionsList.children);
-                for (let i = items.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [items[i], items[j]] = [items[j], items[i]];
+            // Only show if it matches the current card
+            if (matchesCurrentCard(container)) {
+                container.style.display = 'block';
+                hideOtherContainers(container);
+                optionsList = container.querySelector('.ai-hints-list');
+                hintsList = container.querySelector('.ai-hints-hint-list');
+                
+                showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
+                showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
+                
+                // Reset and shuffle options
+                if (optionsList) {
+                    const items = Array.from(optionsList.children);
+                    for (let i = items.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [items[i], items[j]] = [items[j], items[i]];
+                    }
+                    items.forEach(item => optionsList.appendChild(item));
+                    optionsList.classList.add('ai-hints-hidden');
                 }
-                items.forEach(item => optionsList.appendChild(item));
-                optionsList.classList.add('ai-hints-hidden');
-            }
 
-            if (hintsList) {
-                hintsList.classList.add('ai-hints-hidden');
+                if (hintsList) {
+                    hintsList.classList.add('ai-hints-hidden');
+                }
+            } else {
+                container.style.display = 'none';
             }
         }
 
@@ -342,7 +343,7 @@
         };
         btnContainer.appendChild(regenBtn);
 
-        if (container) {
+        if (container && container.style.display !== 'none') {
             const separator = container.querySelector('hr');
             container.insertBefore(btnContainer, separator ? separator.nextSibling : container.firstChild);
         } else {
@@ -350,6 +351,11 @@
             cardBody.appendChild(btnContainer);
         }
     }
+
+    window.aiHintsSetup = function(cardData) {
+        window.aiHintsCurrentCard = cardData;
+        setupAIHints();
+    };
 
     // Single global listener
     if (!window.aiHintsClickBound) {
