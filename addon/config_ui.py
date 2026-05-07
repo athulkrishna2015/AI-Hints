@@ -609,14 +609,17 @@ class ConfigDialog(QDialog):
     def _normalize_config(self, config):
         config = dict(config or {})
 
-        api_keys = dict(config.get("api_keys", {}) or {})
+        raw_api_keys = config.get("api_keys", {}) or {}
+        api_keys = dict(raw_api_keys) if isinstance(raw_api_keys, dict) else {}
         for provider in PROVIDER_ORDER:
             if provider != "local":
                 api_keys.setdefault(provider, "")
         config["api_keys"] = api_keys
 
         models = dict(DEFAULT_MODELS)
-        models.update(config.get("models", {}) or {})
+        raw_models = config.get("models", {}) or {}
+        if isinstance(raw_models, dict):
+            models.update(raw_models)
         for provider, model in list(models.items()):
             models[provider] = LEGACY_MODEL_REPLACEMENTS.get((provider, model), model)
         config["models"] = models
@@ -625,7 +628,9 @@ class ConfigDialog(QDialog):
             provider: list(fallbacks)
             for provider, fallbacks in MODEL_FALLBACKS.items()
         }
-        model_fallbacks.update(config.get("model_fallbacks", {}) or {})
+        raw_model_fallbacks = config.get("model_fallbacks", {}) or {}
+        if isinstance(raw_model_fallbacks, dict):
+            model_fallbacks.update(raw_model_fallbacks)
         config["model_fallbacks"] = model_fallbacks
 
         local = {
@@ -634,11 +639,23 @@ class ConfigDialog(QDialog):
             "model": DEFAULT_MODELS["local"],
             "api_key": "",
         }
-        local.update(config.get("local_endpoint", {}) or {})
+        raw_local = config.get("local_endpoint", {}) or {}
+        if isinstance(raw_local, dict):
+            local.update(raw_local)
         config["local_endpoint"] = local
 
-        config.setdefault("custom_providers", {})
-        config.setdefault("note_type_fields", {})
+        if not isinstance(config.get("custom_providers", {}), dict):
+            config["custom_providers"] = {}
+        else:
+            config.setdefault("custom_providers", {})
+        if not isinstance(config.get("note_type_fields", {}), dict):
+            config["note_type_fields"] = {}
+        else:
+            config.setdefault("note_type_fields", {})
+        try:
+            config["options_count"] = max(1, min(int(config.get("options_count", 4)), 10))
+        except (TypeError, ValueError):
+            config["options_count"] = 4
         config.setdefault("show_on_card", True)
         config.setdefault("show_in_bottom_bar", True)
         config.setdefault("show_in_popup", False)

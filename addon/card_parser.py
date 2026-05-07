@@ -29,6 +29,7 @@ class CardParser:
         
         # Fallback to default heuristic
         fields = note.items()
+        fields = list(fields)
         front = ""
         back = ""
         
@@ -175,15 +176,17 @@ class CardParser:
                 continue
             
             new_val = current_val
+            field_cleared = False
             matches = list(pattern.finditer(current_val))
             # Work backwards to avoid offset issues
             for match in reversed(matches):
                 if self._block_matches_card(match.group(0), card):
                     new_val = new_val[:match.start()] + new_val[match.end():]
-                    cleared = True
+                    field_cleared = True
             
-            if cleared:
+            if field_cleared:
                 note[f_name] = new_val
+                cleared = True
         
         return cleared
 

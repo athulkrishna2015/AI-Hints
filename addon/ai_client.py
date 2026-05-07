@@ -1,4 +1,6 @@
 import json
+import re
+import html
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -149,7 +151,10 @@ class AIClient:
         return bool(self._candidate_providers(primary))
 
     def _candidate_providers(self, primary_provider: str) -> List[str]:
-        custom_providers = list((self.config.get("custom_providers") or {}).keys())
+        custom_provider_config = self.config.get("custom_providers") or {}
+        if not isinstance(custom_provider_config, dict):
+            custom_provider_config = {}
+        custom_providers = list(custom_provider_config.keys())
         candidates = []
 
         if self._is_provider_ready(primary_provider, primary=True):
@@ -169,19 +174,29 @@ class AIClient:
     def _is_provider_ready(self, provider: str, primary: bool = False) -> bool:
         if provider == "local":
             local_cfg = self.config.get("local_endpoint") or {}
+            if not isinstance(local_cfg, dict):
+                local_cfg = {}
             if primary:
                 return True
             return bool(local_cfg.get("enabled", False))
 
         custom_providers = self.config.get("custom_providers") or {}
+        if not isinstance(custom_providers, dict):
+            custom_providers = {}
         if provider in custom_providers:
             custom_cfg = custom_providers[provider]
-            return bool(custom_cfg.get("url", "").strip() and custom_cfg.get("model", "").strip())
+            if not isinstance(custom_cfg, dict):
+                return False
+            url = str(custom_cfg.get("url", "") or "").strip()
+            model = str(custom_cfg.get("model", "") or "").strip()
+            return bool(url and model)
 
-        return bool((self.config.get("api_keys") or {}).get(provider, "").strip())
+        return bool(str((self.config.get("api_keys") or {}).get(provider, "") or "").strip())
 
     def _call_provider(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         custom_providers = self.config.get("custom_providers") or {}
+        if not isinstance(custom_providers, dict):
+            custom_providers = {}
         if provider == "anthropic":
             return self._call_anthropic(system_prompt, prompt)
         elif provider == "gemini":
@@ -192,10 +207,20 @@ class AIClient:
             return self._call_openai_compatible(provider, system_prompt, prompt)
 
     def _call_custom_provider(self, provider_name: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
-        custom_cfg = (self.config.get("custom_providers") or {}).get(provider_name, {})
-        url = custom_cfg.get("url", "")
-        api_key = custom_cfg.get("api_key", "").strip()
+        custom_providers = self.config.get("custom_providers") or {}
+        if not isinstance(custom_providers, dict):
+            custom_providers = {}
+        custom_cfg = custom_providers.get(provider_name, {})
+        if not isinstance(custom_cfg, dict):
+            custom_cfg = {}
+        url = str(custom_cfg.get("url", "") or "").strip()
+        api_key = str(custom_cfg.get("api_key", "") or "").strip()
         custom_headers = custom_cfg.get("headers", {})
+        if not isinstance(custom_headers, dict):
+            logger.warning(
+                f"AI-Hints: Ignoring non-object custom headers for provider {provider_name}."
+            )
+            custom_headers = {}
 
         headers = self._json_headers(api_key)
         headers.update(custom_headers)
@@ -225,7 +250,7 @@ class AIClient:
         return {"hints": [], "options": []}
 
     def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
-        api_key = (self.config.get("api_keys") or {}).get(provider, "").strip()
+        api_key = str((self.config.get("api_keys") or {}).get(provider, "") or "").strip()
         models = self._models_for_provider(provider)
         
         base_url = "https://api.openai.com/v1"
@@ -241,8 +266,10 @@ class AIClient:
             base_url = "https://openrouter.ai/api/v1"
         elif provider == "local":
             local_cfg = self.config.get("local_endpoint") or {}
+            if not isinstance(local_cfg, dict):
+                local_cfg = {}
             base_url = local_cfg.get("base_url", "http://localhost:11434/v1")
-            api_key = (local_cfg.get("api_key", "") or api_key).strip()
+            api_key = str(local_cfg.get("api_key", "") or api_key).strip()
             models = self._models_for_provider(provider, local_cfg.get("model", "") or DEFAULT_MODELS["local"])
         elif provider == "mistral":
             base_url = "https://api.mistral.ai/v1"
@@ -313,7 +340,7 @@ class AIClient:
         return {"hints": [], "options": []}
 
     def _call_anthropic(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
-        api_key = (self.config.get("api_keys") or {}).get("anthropic", "").strip()
+        api_key = str((self.config.get("api_keys") or {}).get("anthropic", "") or "").strip()
         models = self._models_for_provider("anthropic")
         url = "https://api.anthropic.com/v1/messages"
         
@@ -346,7 +373,7 @@ class AIClient:
         return {"hints": [], "options": []}
 
     def _call_gemini(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
-        api_key = (self.config.get("api_keys") or {}).get("gemini", "").strip()
+        api_key = str((self.config.get("api_keys") or {}).get("gemini", "") or "").strip()
         models = self._models_for_provider("gemini")
 
         headers = self._json_headers()
@@ -453,7 +480,9 @@ class AIClient:
         if not answer:
             return ""
         text = str(answer)
-        text = json.loads(json.dumps(text))
+        text = re.sub(r"<(script|style).*?>.*?</\1>", "", text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r"<.*?>", " ", text)
+        text = html.unescape(text)
         text = " ".join(text.replace("\n", " ").split())
         return text.strip()
 
@@ -472,7 +501,7 @@ class AIClient:
         return self._normalize_model(provider, model)
 
     def _normalize_model(self, provider: str, model: str) -> str:
-        model = (model or "").strip()
+        model = str(model or "").strip()
         if provider == "gemini" and model.startswith("models/"):
             model = model.split("/", 1)[1]
 
@@ -515,6 +544,7 @@ class AIClient:
             logger.info(f"Trying fallback model for {provider}: {model}")
 
     def _json_headers(self, api_key: str = "") -> Dict[str, str]:
+        api_key = str(api_key or "").strip()
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",

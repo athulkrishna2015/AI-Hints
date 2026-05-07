@@ -53,6 +53,12 @@ def _card_context_payload(context):
     return {"id": card_id, "ord": card_ord}
 
 def on_webview_will_set_content(web_content, context):
+    if type(context).__name__ == "ReviewerBottomBar":
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        if config.get("show_in_bottom_bar", False):
+            web_content.body += f"<script>{_bottom_bar_button_script()}</script>"
+        return
+
     # Determine if we are in the reviewer context
     is_reviewer = (
         getattr(context, "name", None) == "reviewer" or 
@@ -168,9 +174,23 @@ def update_bottom_bar_button(card=None):
         try:
             bottom.eval("""
                 (function() {
-                    const slot = document.getElementById('ai-hints-bottom-slot');
-                    if (slot) {
-                        slot.remove();
+                    const legacySlot = document.getElementById('ai-hints-bottom-slot');
+                    if (legacySlot) {
+                        legacySlot.remove();
+                    }
+                    const spacer = document.getElementById('ai-hints-bottom-spacer');
+                    if (spacer) {
+                        spacer.remove();
+                    }
+                    const group = document.getElementById('ai-hints-bottom-group');
+                    const button = document.getElementById('ai-hints-bottom-button');
+                    if (group && button) {
+                        button.remove();
+                        const parentCell = group.closest('td');
+                        const children = Array.from(group.childNodes);
+                        if (parentCell) {
+                            parentCell.replaceChildren(...children);
+                        }
                     }
                 })();
             """)
@@ -179,72 +199,80 @@ def update_bottom_bar_button(card=None):
         return
 
     try:
-        bottom.eval("""
-            (function() {
-                const outer = document.getElementById('outer');
-                const timer = document.getElementById('time');
-                const rightCell = timer
-                    ? timer.closest('td')
-                    : (outer ? outer.querySelector('td.stat:last-child') : null);
-                if (!rightCell) {
-                    return;
-                }
-                rightCell.style.whiteSpace = 'nowrap';
-
-                function updateAIHintsBottomButton() {
-                    const slot = document.getElementById('ai-hints-bottom-slot');
-                    const button = document.getElementById('ai-hints-bottom-button');
-                    if (!slot || !button || !outer) {
-                        return;
-                    }
-
-                    slot.style.display = 'inline-block';
-                    button.textContent = window.innerWidth < 520 ? 'AI' : 'AI Hints';
-
-                    if (outer.scrollWidth > outer.clientWidth && button.textContent !== 'AI') {
-                        button.textContent = 'AI';
-                    }
-                    if (outer.scrollWidth > outer.clientWidth && window.innerWidth < 320) {
-                        slot.style.display = 'none';
-                    }
-                }
-
-                if (document.getElementById('ai-hints-bottom-slot')) {
-                    updateAIHintsBottomButton();
-                    return;
-                }
-
-                const button = document.createElement('button');
-                button.id = 'ai-hints-bottom-button';
-                button.type = 'button';
-                button.title = 'Generate AI hints';
-                button.textContent = 'AI Hints';
-                button.style.minWidth = '0';
-                button.style.paddingLeft = '4px';
-                button.style.paddingRight = '4px';
-                button.onclick = function() {
-                    if (typeof pycmd === 'function') {
-                        pycmd('ai_hints_show_menu');
-                    }
-                };
-
-                const slot = document.createElement('span');
-                slot.id = 'ai-hints-bottom-slot';
-                slot.style.display = 'inline-block';
-                slot.style.marginRight = '4px';
-                slot.style.whiteSpace = 'nowrap';
-                slot.appendChild(button);
-
-                rightCell.insertBefore(slot, rightCell.firstChild);
-                updateAIHintsBottomButton();
-                if (!window.aiHintsBottomResizeBound) {
-                    window.aiHintsBottomResizeBound = true;
-                    window.addEventListener('resize', updateAIHintsBottomButton);
-                }
-            })();
-        """)
+        bottom.eval(_bottom_bar_button_script())
     except Exception as e:
         logger.error(f"Failed to add AI-Hints bottom button: {e}")
+
+def _bottom_bar_button_script() -> str:
+    return """
+        (function() {
+            const legacySlot = document.getElementById('ai-hints-bottom-slot');
+            if (legacySlot) {
+                legacySlot.remove();
+            }
+            if (document.getElementById('ai-hints-bottom-button')) {
+                return;
+            }
+
+            const editBtn = document.querySelector("button[onclick*=\\"pycmd('edit')\\"], input[onclick*=\\"pycmd('edit')\\"]");
+            const editCell = editBtn ? editBtn.closest('td') : null;
+            const middle = document.getElementById('middle');
+            if (!editBtn || !editCell || !middle) {
+                return;
+            }
+
+            function cloneReviewButton(source, text) {
+                const cloned = source.cloneNode(true);
+                cloned.removeAttribute('id');
+                cloned.title = 'AI-Hints';
+                if (cloned.tagName === 'INPUT') {
+                    cloned.value = text;
+                } else {
+                    cloned.textContent = text;
+                }
+                return cloned;
+            }
+
+            const aiBtn = cloneReviewButton(editBtn, 'AI Hints');
+            aiBtn.id = 'ai-hints-bottom-button';
+            aiBtn.removeAttribute('onclick');
+            aiBtn.style.marginLeft = '0';
+            aiBtn.onclick = function(event) {
+                if (typeof pycmd === 'function') {
+                    pycmd('ai_hints_show_menu');
+                }
+                event.preventDefault();
+                event.stopPropagation();
+            };
+
+            const group = document.createElement('div');
+            group.id = 'ai-hints-bottom-group';
+            group.style.display = 'inline-flex';
+            group.style.alignItems = 'flex-start';
+            group.style.whiteSpace = 'nowrap';
+            group.appendChild(editBtn);
+            group.appendChild(aiBtn);
+            editCell.replaceChildren(group);
+
+            const placeholderCell = document.createElement('td');
+            placeholderCell.id = 'ai-hints-bottom-spacer';
+            placeholderCell.className = 'stat';
+            placeholderCell.align = 'center';
+            placeholderCell.vAlign = 'top';
+            placeholderCell.setAttribute('aria-hidden', 'true');
+
+            const placeholderBtn = cloneReviewButton(editBtn, 'AI Hints');
+            placeholderBtn.removeAttribute('onclick');
+            placeholderBtn.tabIndex = -1;
+            placeholderBtn.disabled = true;
+            placeholderBtn.style.marginLeft = '0';
+            placeholderBtn.style.visibility = 'hidden';
+            placeholderBtn.style.pointerEvents = 'none';
+            placeholderCell.appendChild(placeholderBtn);
+
+            middle.insertAdjacentElement('afterend', placeholderCell);
+        })();
+    """
 
 def _find_speed_focus_module():
     import sys
@@ -289,28 +317,42 @@ def restart_speed_focus_timer():
 
 def refresh_current_card():
     reviewer = getattr(mw, "reviewer", None)
-    if not reviewer:
+    if not reviewer or not getattr(reviewer, "card", None):
         return
 
     try:
-        # Explicitly reload the card and note from database to get latest field content
-        card = getattr(reviewer, "card", None)
-        if card:
-            card.load()
+        old_card = reviewer.card
+        timer_started = getattr(
+            old_card,
+            "timer_started",
+            getattr(old_card, "timerStarted", None),
+        )
+
+        get_card = getattr(getattr(mw, "col", None), "getCard", None)
+        if callable(get_card):
+            reviewer.card = get_card(old_card.id)
+        else:
             try:
-                card.note().load()
-            except:
+                old_card.load()
+            except Exception:
                 pass
 
-        # Use the standard refresh if available, it's usually the most reliable
+        if timer_started is not None and getattr(reviewer, "card", None):
+            if hasattr(reviewer.card, "timer_started"):
+                reviewer.card.timer_started = timer_started
+            else:
+                reviewer.card.timerStarted = timer_started
+
+        # Force the current face to redraw so newly-saved hints appear on the
+        # question side immediately instead of waiting for Show Answer.
+        if getattr(reviewer, "state", None) == "question":
+            show_question = getattr(reviewer, "_showQuestion", None)
+            if callable(show_question):
+                show_question()
+                return
+
         if hasattr(reviewer, "refresh") and callable(reviewer.refresh):
             reviewer.refresh()
-            return
-
-        # Fallbacks for different Anki versions
-        redraw = getattr(reviewer, "_redraw_current_card", None)
-        if callable(redraw):
-            redraw()
             return
 
         if getattr(reviewer, "state", None) == "answer":
@@ -319,9 +361,10 @@ def refresh_current_card():
                 show_answer()
                 return
 
-        show_question = getattr(reviewer, "_showQuestion", None)
-        if callable(show_question):
-            show_question()
+        redraw = getattr(reviewer, "_redraw_current_card", None)
+        if callable(redraw):
+            redraw()
+            return
     except Exception as e:
         logger.error(f"Failed to refresh reviewer card: {e}")
 
@@ -456,9 +499,6 @@ def generate_hints():
                 )
                 if is_current:
                     _just_generated_card_ids.add(card.id)
-                    # Push data directly to webview for instantaneous update
-                    mw.reviewer.web.eval(f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}); }}")
-                    
                     tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
                     refresh_current_card()
                     

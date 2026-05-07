@@ -62,17 +62,38 @@ try:
     # 3. Test Config Dialog call (the recent bug)
     print("Testing config dialog entry point...")
     from addon.config_ui import on_config_dialog
+    import addon.config_ui
+    original_config_dialog = addon.config_ui.ConfigDialog
     
     # Simulate Anki calling it without arguments
     try:
         # Mock ConfigDialog to not actually open a window
-        import addon.config_ui
         addon.config_ui.ConfigDialog = MagicMock()
         
         on_config_dialog()
         print("SUCCESS: on_config_dialog() works without arguments.")
     except TypeError as e:
         print(f"FAILED: on_config_dialog() still has TypeError: {e}")
+        sys.exit(1)
+
+    print("Testing malformed raw config normalization...")
+    normalized_config = original_config_dialog._normalize_config(None, {
+        "api_keys": ["bad"],
+        "models": ["bad"],
+        "model_fallbacks": ["bad"],
+        "local_endpoint": ["bad"],
+        "custom_providers": ["bad"],
+        "note_type_fields": ["bad"],
+        "options_count": "999",
+    })
+    if (
+        isinstance(normalized_config["api_keys"], dict)
+        and isinstance(normalized_config["custom_providers"], dict)
+        and normalized_config["options_count"] == 10
+    ):
+        print("SUCCESS: malformed raw config is normalized safely.")
+    else:
+        print(f"FAILED: malformed raw config normalization incorrect: {normalized_config}")
         sys.exit(1)
         
     # 4. Test Reviewer Hooks and Future handling
@@ -118,19 +139,29 @@ try:
 
     print("Testing reviewer refresh compatibility...")
     import addon.reviewer_hooks as reviewer_hooks
-    redraw_calls = []
+    refresh_calls = []
     original_reviewer = mock_mw.reviewer
+    original_get_card = mock_mw.col.getCard
+    old_refresh_card = SimpleNamespace(id=321, timer_started=123)
+    fresh_refresh_card = SimpleNamespace(id=321, timer_started=None)
+    mock_mw.col.getCard = lambda cid: fresh_refresh_card
     mock_mw.reviewer = SimpleNamespace(
-        card=mock_card,
+        card=old_refresh_card,
         state="question",
-        _redraw_current_card=lambda: redraw_calls.append("redraw"),
+        _showQuestion=lambda: refresh_calls.append("question"),
     )
     reviewer_hooks.refresh_current_card()
+    refreshed_card = mock_mw.reviewer.card
     mock_mw.reviewer = original_reviewer
-    if redraw_calls == ["redraw"]:
-        print("SUCCESS: refresh_current_card() works without Reviewer.refresh().")
+    mock_mw.col.getCard = original_get_card
+    if (
+        refresh_calls == ["question"]
+        and refreshed_card is fresh_refresh_card
+        and getattr(refreshed_card, "timer_started", None) == 123
+    ):
+        print("SUCCESS: refresh_current_card() reloads and redraws the current reviewer card.")
     else:
-        print(f"FAILED: refresh_current_card() did not use redraw fallback: {redraw_calls}")
+        print(f"FAILED: refresh_current_card() did not reload/redraw correctly: {refresh_calls} / {refreshed_card}")
         sys.exit(1)
 
     # 5. Test JSON storage mode
@@ -198,6 +229,23 @@ try:
         print("FAILED: clear_hints_from_note returned False.")
         sys.exit(1)
 
+    print("Testing clear_hints_from_note only writes changed fields...")
+    scoped_html = '<div class="ai-hints-json" data-ai-hints-card-id="456">payload</div>'
+    other_html = '<div class="ai-hints-json" data-ai-hints-card-id="999">payload</div>'
+    multi_field_note = MagicMock()
+    multi_field_note.keys.return_value = ["Back", "Extra"]
+    multi_field_values = {"Back": f"A {scoped_html} B", "Extra": f"C {other_html} D"}
+    multi_field_note.__getitem__.side_effect = multi_field_values.__getitem__
+    if not json_parser.clear_hints_from_note(multi_field_note, mock_card_json):
+        print("FAILED: clear_hints_from_note returned False for multi-field note.")
+        sys.exit(1)
+    set_calls = multi_field_note.__setitem__.call_args_list
+    if len(set_calls) == 1 and set_calls[0][0] == ("Back", "A  B"):
+        print("SUCCESS: clear_hints_from_note leaves unchanged fields untouched.")
+    else:
+        print(f"FAILED: clear_hints_from_note wrote unexpected fields: {set_calls}")
+        sys.exit(1)
+
     print("Testing current cloze targeting...")
     cloze_parser = CardParser(target_fields=["Extra"], note_type_fields={"Cloze": ["Text"]}, storage_mode="json")
     mock_cloze_note = MagicMock()
@@ -253,6 +301,46 @@ try:
         print("SUCCESS: AIClient includes the correct answer as an MCQ option.")
     else:
         print(f"FAILED: AIClient did not include correct answer: {answer_result}")
+        sys.exit(1)
+
+    print("Testing HTML cleanup for correct answer options...")
+    html_answer_client = AIClient({
+        "options_count": 2,
+        "ai_provider": "openai",
+        "api_keys": {"openai": "test-key"},
+    })
+    html_answer_client._call_openai_compatible = MagicMock(return_value={
+        "hints": ["H"],
+        "options": ["Distractor", "Other"],
+    })
+    html_answer_result = html_answer_client.generate_options("Q", "<b>Paris</b><br>France")
+    if "Paris France" in html_answer_result["options"]:
+        print("SUCCESS: AIClient strips HTML from inserted correct answer.")
+    else:
+        print(f"FAILED: AIClient kept HTML in correct answer: {html_answer_result}")
+        sys.exit(1)
+
+    print("Testing raw config robustness for non-string model/header values...")
+    raw_client = AIClient({
+        "ai_provider": "custom",
+        "custom_providers": {
+            "custom": {
+                "url": "http://example.invalid/v1/chat/completions",
+                "api_key": 123,
+                "model": 456,
+                "headers": ["not", "a", "dict"],
+            }
+        },
+    })
+    if not raw_client.has_ready_provider("custom"):
+        print("FAILED: AIClient rejected string-coercible custom provider config.")
+        sys.exit(1)
+    raw_models = raw_client._models_for_provider("custom", 456, [789])
+    raw_headers = raw_client._json_headers(123)
+    if raw_models[:2] == ["456", "789"] and raw_headers.get("Authorization") == "Bearer 123":
+        print("SUCCESS: AIClient handles raw config values defensively.")
+    else:
+        print(f"FAILED: AIClient raw config handling incorrect: {raw_models} / {raw_headers}")
         sys.exit(1)
 
     print("Testing model fallback after bad output...")

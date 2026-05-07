@@ -210,6 +210,11 @@
         let container = selectCurrentBlock('.ai-hints-container');
         const jsonBlock = selectCurrentBlock('.ai-hints-json');
 
+        if (manualData && container) {
+            container.remove();
+            container = null;
+        }
+
         if ((jsonBlock || manualData) && !container) {
             try {
                 let data;
@@ -311,7 +316,7 @@
             btnContainer.appendChild(mainGenBtn);
         } else {
             // Show toggle and utility buttons only if data exists
-            if (showOptionsCfg) {
+            if (showOptionsCfg && optionsList) {
                 const optBtn = document.createElement('button');
                 optBtn.innerText = 'Show Options';
                 optBtn.className = 'ai-hints-btn';
@@ -330,7 +335,7 @@
                 btnContainer.appendChild(optBtn);
             }
 
-            if (showHintsCfg) {
+            if (showHintsCfg && hintsList) {
                 const hintBtn = document.createElement('button');
                 hintBtn.innerText = 'Show Hints';
                 hintBtn.className = 'ai-hints-btn';
