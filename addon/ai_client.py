@@ -28,12 +28,12 @@ PROVIDER_ORDER = [
 DEFAULT_MODELS = {
     "openai":     "gpt-4o-mini",
     "anthropic":  "claude-3-5-haiku-20241022",
-    "gemini":     "gemini-2.5-flash",
+    "gemini":     "gemini-3-flash-preview",
     "groq":       "llama-3.1-8b-instant",
     "deepseek":   "deepseek-chat",
     "grok":       "grok-3-mini",
     "mistral":    "mistral-small-latest",
-    "openrouter": "meta-llama/llama-3.1-8b-instruct",
+    "openrouter": "openrouter/auto",
     "nvidia":     "meta/llama-3.1-8b-instruct",
     "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
     "together":   "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
@@ -44,8 +44,10 @@ DEFAULT_MODELS = {
 
 LEGACY_MODEL_REPLACEMENTS = {
     ("anthropic", "claude-3-haiku-20240307"): "claude-3-5-haiku-20241022",
-    ("gemini", "gemini-1.5-flash"): "gemini-2.5-flash",
-    ("gemini", "models/gemini-1.5-flash"): "gemini-2.5-flash",
+    ("gemini", "gemini-1.5-flash"): "gemini-3-flash-preview",
+    ("gemini", "gemini-2.5-flash"): "gemini-3-flash-preview",
+    ("gemini", "models/gemini-1.5-flash"): "gemini-3-flash-preview",
+    ("gemini", "models/gemini-2.5-flash"): "gemini-3-flash-preview",
     ("groq", "llama3-8b-8192"): "llama-3.1-8b-instant",
     ("groq", "llama3-70b-8192"): "llama-3.3-70b-versatile",
     ("grok", "grok-1"): "grok-3-mini",
@@ -61,13 +63,15 @@ MODEL_FALLBACKS = {
         "claude-3-haiku-20240307",
     ],
     "gemini": [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
         "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
     ],
     "groq": [
         "llama-3.1-8b-instant",
         "llama-3.3-70b-versatile",
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b",
     ],
     "grok": [
         "grok-3-mini",
@@ -81,6 +85,7 @@ MODEL_FALLBACKS = {
     "openrouter": [
         "meta-llama/llama-3.1-8b-instruct",
         "meta-llama/llama-3.1-8b-instruct:free",
+        "openrouter/auto",
     ],
     "together": [
         "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
@@ -257,6 +262,30 @@ class AIClient:
             headers["HTTP-Referer"] = "https://github.com/athulkrishna2015/ai-hints"
             headers["X-Title"] = "Anki AI-Hints"
 
+        # OpenRouter supports a 'models' array for automatic server-side fallbacks
+        if provider == "openrouter" and len(models) > 1:
+            data = {
+                "models": models,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                "response_format": {"type": "json_object"}
+            }
+            try:
+                logger.info(f"Calling OpenRouter with models array: {models}")
+                result = self._post_json(url, data, headers)
+                content = self._extract_content(result)
+                parsed = self._parse_json_result(content)
+                if parsed.get("hints") or parsed.get("options"):
+                    return parsed
+                logger.warning("AI-Hints: OpenRouter models array returned no parseable hints/options.")
+            except urllib.error.HTTPError as e:
+                logger.error(f"AI-Hints Error (OpenRouter models array): {e} - {self._read_http_error(e)}")
+            except Exception as e:
+                logger.error(f"AI-Hints Error (OpenRouter models array): {e}")
+            # If the models array call fails, we fall back to the per-model loop below as a safety measure.
+
         for model in models:
             data = {
                 "model": model,
@@ -265,7 +294,7 @@ class AIClient:
                     {"role": "user", "content": prompt}
                 ],
             }
-            if provider in ["openai", "groq", "deepseek", "mistral"]:
+            if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "together", "sambanova", "cerebras", "nvidia"]:
                 data["response_format"] = {"type": "json_object"}
 
             try:

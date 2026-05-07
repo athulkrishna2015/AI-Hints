@@ -23,8 +23,8 @@
     "models": {
         "openai": "gpt-4o-mini",
         "anthropic": "claude-3-5-haiku-20241022",
-        "gemini": "gemini-2.5-flash",
-        "openrouter": "meta-llama/llama-3.1-8b-instruct",
+        "gemini": "gemini-3-flash-preview",
+        "openrouter": "openrouter/auto",
         "grok": "grok-3-mini",
         "deepseek": "deepseek-chat",
         "groq": "llama-3.1-8b-instant",
@@ -37,13 +37,15 @@
     },
     "model_fallbacks": {
         "gemini": [
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-2.0-flash"
+            "gemini-3-flash-preview",
+            "gemini-3.1-flash-lite-preview",
+            "gemini-2.5-flash"
         ],
         "groq": [
             "llama-3.1-8b-instant",
-            "llama-3.3-70b-versatile"
+            "llama-3.3-70b-versatile",
+            "openai/gpt-oss-20b",
+            "openai/gpt-oss-120b"
         ],
         "openrouter": [
             "meta-llama/llama-3.1-8b-instruct",

@@ -186,9 +186,13 @@ def generate_hints():
             logger.error(f"AI-Hints Future Error: {e}")
             data = {"hints": [], "options": []}
 
+        # Check if the card is still the same one we started with
+        is_current = mw.reviewer.card and mw.reviewer.card.id == card.id
+
         if not data or (not data.get("hints") and not data.get("options")):
-            showInfo("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
-            refresh_current_card()
+            if is_current:
+                showInfo("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
+                refresh_current_card()
             return
             
         note = card.note()
@@ -198,8 +202,9 @@ def generate_hints():
         }
         if parser.update_note_with_hints(note, data, toggles, card):
             note.flush()
-            refresh_current_card()
-        else:
+            if is_current:
+                refresh_current_card()
+        elif is_current:
             showInfo("AI-Hints: No hints or options were generated.")
 
     mw.taskman.run_in_background(

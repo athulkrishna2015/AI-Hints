@@ -72,12 +72,12 @@ You can also use the **Raw JSON Editor** in the Advanced tab if you prefer editi
         "cerebras": ""
     },
     "models": {
-        "gemini": "gemini-2.5-flash",
+        "gemini": "gemini-3-flash-preview",
         "groq": "llama-3.1-8b-instant",
         "openrouter": "meta-llama/llama-3.1-8b-instruct"
     },
     "model_fallbacks": {
-        "gemini": ["gemini-2.5-flash-lite", "gemini-2.0-flash"],
+        "gemini": ["gemini-3.1-flash-lite-preview", "gemini-2.5-flash"],
         "groq": ["llama-3.3-70b-versatile"]
     },
     "local_endpoint": {

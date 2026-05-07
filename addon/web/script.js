@@ -135,14 +135,30 @@
     }
 
     function setupAIHints() {
-        if (document.body.dataset.aiHintsReady === 'true') {
+        const current = currentCard();
+        const cardKey = (current.id || '') + '_' + (current.ord || '0');
+        const cardBody = document.getElementById('qa') || document.body;
+
+        // Cleanup: Remove any dynamic buttons or containers from previous cards
+        // that might have been appended to document.body or are no longer valid.
+        document.querySelectorAll('.ai-hints-actions, .ai-hints-btn, .ai-hints-btn-secondary').forEach(function(el) {
+            el.remove();
+        });
+        
+        // Hide containers that don't match the current card
+        document.querySelectorAll('.ai-hints-container').forEach(function(container) {
+            if (!matchesCurrentCard(container)) {
+                container.style.display = 'none';
+            }
+        });
+
+        if (cardBody.dataset.aiHintsLastCardKey === cardKey) {
             return;
         }
-        document.body.dataset.aiHintsReady = 'true';
+        cardBody.dataset.aiHintsLastCardKey = cardKey;
 
         let container = selectCurrentBlock('.ai-hints-container');
         const jsonBlock = selectCurrentBlock('.ai-hints-json');
-        const cardBody = document.body;
 
         if (jsonBlock && !container) {
             try {
