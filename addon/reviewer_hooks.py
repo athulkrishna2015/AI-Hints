@@ -49,7 +49,13 @@ def generate_hints():
 
     front, back = parser.get_note_content(card.note())
 
-    def on_success(options):
+    def on_done(future):
+        try:
+            options = future.result()
+        except Exception as e:
+            print(f"AI-Hints Future Error: {e}")
+            options = []
+
         if not options:
             mw.utils.showInfo("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
             mw.reviewer.refresh()
@@ -62,7 +68,7 @@ def generate_hints():
 
     mw.taskman.run_in_background(
         lambda: client.generate_options(front, back),
-        on_success
+        on_done
     )
 
 def init_hooks():

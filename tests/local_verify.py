@@ -49,6 +49,34 @@ try:
         print(f"FAILED: on_config_dialog() still has TypeError: {e}")
         sys.exit(1)
         
+    # 4. Test Reviewer Hooks and Future handling
+    print("Testing reviewer hooks and future handling...")
+    from addon.reviewer_hooks import generate_hints
+    
+    # Mock card and reviewer state
+    mock_card = MagicMock()
+    mock_note = MagicMock()
+    # Mock dict-like behavior for note
+    mock_note.keys.return_value = ["Front", "Back"]
+    mock_note.items.return_value = [("Front", "Q"), ("Back", "A")]
+    mock_note.__getitem__.side_effect = lambda k: "current value"
+    mock_note.model.return_value = {"name": "Basic"}
+    mock_card.note.return_value = mock_note
+    mock_mw.reviewer.card = mock_card
+    
+    # Setup mock for run_in_background to execute callback immediately
+    def mock_run_in_background(task, on_done):
+        class MockFuture:
+            def result(self):
+                return ["Test Option 1", "Test Option 2"]
+        on_done(MockFuture())
+        
+    mock_mw.taskman.run_in_background = mock_run_in_background
+    
+    # This should not raise TypeError anymore
+    generate_hints()
+    print("SUCCESS: generate_hints() handles Future results correctly.")
+
 except Exception as e:
     print(f"CRITICAL FAILURE during add-on load: {e}")
     import traceback
