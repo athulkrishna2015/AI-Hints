@@ -99,6 +99,9 @@ def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_generate":
         generate_hints()
         return (True, None)
+    if message == "ai_hints_refresh":
+        refresh_current_card()
+        return (True, None)
     if message == "ai_hints_restart_speed_focus":
         restart_speed_focus_timer()
         return (True, None)
@@ -287,15 +290,20 @@ def show_bottom_bar_menu():
     menu.addAction(a_opts)
     
     menu.addSeparator()
+
+    # 3. Refresh
+    a_refresh = QAction("Refresh", menu)
+    a_refresh.triggered.connect(refresh_current_card)
+    menu.addAction(a_refresh)
     
-    # 3. Regenerate
+    # 4. Regenerate
     a_regen = QAction("Regenerate All", menu)
     a_regen.triggered.connect(generate_hints)
     menu.addAction(a_regen)
     
     menu.addSeparator()
     
-    # 4. Config
+    # 5. Config
     a_config = QAction("Settings...", menu)
     a_config.triggered.connect(lambda: on_config_dialog(mw))
     menu.addAction(a_config)
@@ -307,6 +315,8 @@ def show_bottom_bar_menu():
 class ResultsPopup(QDialog):
     def __init__(self, parent, html_content):
         super().__init__(parent)
+        self.mw = mw  # Fix: Attribute 'toolbarWeb' access in eventFilter
+        self.toolbarWeb = getattr(mw, "toolbarWeb", None)
         self.setWindowTitle("AI Results")
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
         layout = QVBoxLayout(self)

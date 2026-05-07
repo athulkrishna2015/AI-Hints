@@ -55,13 +55,6 @@
         return legacyMatch || null;
     }
 
-    function hasExpectedActions(container) {
-        if (!container) {
-            return false;
-        }
-        return Boolean(container.querySelector('.ai-hints-actions'));
-    }
-
     function hideOtherContainers(activeContainer) {
         document.querySelectorAll('.ai-hints-container').forEach(function(container) {
             if (container !== activeContainer) {
@@ -153,8 +146,8 @@
 
         const hintsList = container.querySelector('.ai-hints-hint-list');
         const optionsList = container.querySelector('.ai-hints-list');
-        const hintBtn = container.querySelector('[data-ai-hints-action="toggle-hints"]');
-        const showBtn = container.querySelector('[data-ai-hints-action="toggle-options"]');
+        const hintBtn = document.querySelector('[data-ai-hints-action="toggle-hints"]');
+        const showBtn = document.querySelector('[data-ai-hints-action="toggle-options"]');
         
         const showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
         const showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
@@ -190,13 +183,9 @@
         const cardBody = document.getElementById('qa') || document.body;
         let container = selectCurrentBlock('.ai-hints-container');
         const jsonBlock = selectCurrentBlock('.ai-hints-json');
-        const hasHintSource = Boolean(container || jsonBlock);
 
         if (cardBody && cardBody.dataset.aiHintsLastCardKey === cardKey) {
-            if (hasExpectedActions(container)) {
-                return;
-            }
-            if (!hasHintSource && document.querySelector('.ai-hints-generate-btn')) {
+            if (document.querySelector('.ai-hints-actions')) {
                 return;
             }
         }
@@ -237,16 +226,33 @@
             }
         }
 
+        const uiCfg = window.aiHintsUiConfig || {};
+        const showOnCard = uiCfg.show_on_card !== false;
+        
+        if (!showOnCard && !container) {
+            return;
+        }
+
+        const btnContainer = document.createElement('div');
+        btnContainer.className = 'ai-hints-actions';
+        btnContainer.style.marginTop = '10px';
+        btnContainer.style.textAlign = 'center';
+
+        let hintsList = null;
+        let optionsList = null;
+        let showHintsCfg = true;
+        let showOptionsCfg = true;
+
         if (container) {
             container.style.display = 'block';
             hideOtherContainers(container);
-            const optionsList = container.querySelector('.ai-hints-list');
-            const hintsList = container.querySelector('.ai-hints-hint-list');
+            optionsList = container.querySelector('.ai-hints-list');
+            hintsList = container.querySelector('.ai-hints-hint-list');
             
-            const showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
-            const showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
+            showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
+            showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
             
-            // Reset and shuffle
+            // Reset and shuffle options
             if (optionsList) {
                 const items = Array.from(optionsList.children);
                 for (let i = items.length - 1; i > 0; i--) {
@@ -260,78 +266,81 @@
             if (hintsList) {
                 hintsList.classList.add('ai-hints-hidden');
             }
+        }
 
-            // Create buttons
-            const btnContainer = document.createElement('div');
-            btnContainer.className = 'ai-hints-actions';
-            btnContainer.style.marginTop = '10px';
+        const triggerGenerate = function(btn) {
+            restartSpeedFocusTimer();
+            btn.disabled = true;
+            btn.innerText = 'Generating...';
+            sendCommand('ai_hints_generate');
+        };
 
-            let showBtn = null;
-            if (optionsList && showOptionsCfg) {
-                showBtn = document.createElement('button');
-                showBtn.innerText = 'Show Options';
-                showBtn.className = 'ai-hints-btn';
-                showBtn.dataset.aiHintsAction = 'toggle-options';
-                showBtn.onclick = function() {
+        // Show Options Button
+        if (showOptionsCfg) {
+            const optBtn = document.createElement('button');
+            optBtn.innerText = 'Show Options';
+            optBtn.className = 'ai-hints-btn';
+            optBtn.dataset.aiHintsAction = 'toggle-options';
+            optBtn.onclick = function() {
+                if (optionsList) {
                     restartSpeedFocusTimer();
                     const isHidden = optionsList.classList.contains('ai-hints-hidden');
                     optionsList.classList.toggle('ai-hints-hidden');
-                    showBtn.innerText = isHidden ? 'Hide Options' : 'Show Options';
-                };
-                
-                if (hintsList && showHintsCfg) {
-                    showBtn.style.display = 'none';
+                    optBtn.innerText = isHidden ? 'Hide Options' : 'Show Options';
+                } else {
+                    triggerGenerate(optBtn);
                 }
-                btnContainer.appendChild(showBtn);
-            }
+            };
+            btnContainer.appendChild(optBtn);
+        }
 
-            if (hintsList && showHintsCfg) {
-                const hintBtn = document.createElement('button');
-                hintBtn.innerText = 'Show Hints';
-                hintBtn.className = 'ai-hints-btn';
-                hintBtn.dataset.aiHintsAction = 'toggle-hints';
-                hintBtn.onclick = function() {
+        // Show Hints Button
+        if (showHintsCfg) {
+            const hintBtn = document.createElement('button');
+            hintBtn.innerText = 'Show Hints';
+            hintBtn.className = 'ai-hints-btn';
+            hintBtn.dataset.aiHintsAction = 'toggle-hints';
+            hintBtn.onclick = function() {
+                if (hintsList) {
                     restartSpeedFocusTimer();
                     const isHidden = hintsList.classList.contains('ai-hints-hidden');
                     hintsList.classList.toggle('ai-hints-hidden');
                     hintBtn.innerText = isHidden ? 'Hide Hints' : 'Show Hints';
-                    
-                    if (isHidden && showBtn) {
-                        showBtn.style.display = 'inline-block';
-                    }
-                };
-                btnContainer.appendChild(hintBtn);
-            }
+                } else {
+                    triggerGenerate(hintBtn);
+                }
+            };
+            btnContainer.appendChild(hintBtn);
+        }
 
-            if (showGenerateOnCard()) {
-                const regenBtn = document.createElement('button');
-                regenBtn.innerText = 'Regenerate';
-                regenBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
-                regenBtn.onclick = function() {
-                    restartSpeedFocusTimer();
-                    regenBtn.disabled = true;
-                    regenBtn.innerText = 'Regenerating...';
-                    sendCommand('ai_hints_generate');
-                };
-                btnContainer.appendChild(regenBtn);
-            }
+        // Refresh Button
+        const refreshBtn = document.createElement('button');
+        refreshBtn.innerText = 'Refresh';
+        refreshBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
+        refreshBtn.title = 'Refresh hints from card cache';
+        refreshBtn.onclick = function() {
+            restartSpeedFocusTimer();
+            refreshBtn.disabled = true;
+            refreshBtn.innerText = 'Refreshing...';
+            sendCommand('ai_hints_refresh');
+        };
+        btnContainer.appendChild(refreshBtn);
 
+        // Regenerate Button
+        const regenBtn = document.createElement('button');
+        regenBtn.innerText = container ? 'Regenerate' : 'Generate';
+        regenBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
+        regenBtn.onclick = function() {
+            triggerGenerate(regenBtn);
+        };
+        btnContainer.appendChild(regenBtn);
+
+        if (container) {
             const separator = container.querySelector('hr');
             container.insertBefore(btnContainer, separator ? separator.nextSibling : container.firstChild);
-
-        } else if (showGenerateOnCard()) {
-            const genBtn = document.createElement('button');
-            genBtn.innerText = 'Generate AI Hints/Options';
-            genBtn.className = 'ai-hints-btn ai-hints-generate-btn';
-            genBtn.style.display = 'block';
-            genBtn.style.margin = '20px auto';
-            genBtn.onclick = function() {
-                restartSpeedFocusTimer();
-                genBtn.disabled = true;
-                genBtn.innerText = 'Generating...';
-                sendCommand('ai_hints_generate');
-            };
-            cardBody.appendChild(genBtn);
+        } else {
+            btnContainer.style.margin = '20px auto';
+            cardBody.appendChild(btnContainer);
         }
     }
 
