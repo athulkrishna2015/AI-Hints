@@ -10,7 +10,9 @@ from .logger import logger, info, tooltip
 _hooks_registered = False
 _generating_card_ids = set()
 _just_generated_card_ids = set()
+_generated_hint_cache = {}
 _popup_dialog_instance = None
+MAX_HINT_CACHE_SIZE = 200
 
 def show_api_error_dialog(provider=None, is_custom=False):
     msg = QMessageBox(mw)
@@ -51,6 +53,44 @@ def _card_context_payload(context):
     except Exception:
         card_ord = None
     return {"id": card_id, "ord": card_ord}
+
+def _card_cache_key(card):
+    if not card:
+        return None
+    try:
+        card_id = str(card.id)
+    except Exception:
+        card_id = ""
+    if card_id:
+        return ("id", card_id)
+
+    try:
+        card_ord = int(card.ord)
+    except Exception:
+        card_ord = None
+    if card_ord is None:
+        return None
+    return ("ord", card_ord)
+
+def _remember_generated_hints(card, data, toggles):
+    key = _card_cache_key(card)
+    if key is None:
+        return
+    _generated_hint_cache[key] = {"data": data, "toggles": toggles or {}}
+    while len(_generated_hint_cache) > MAX_HINT_CACHE_SIZE:
+        oldest_key = next(iter(_generated_hint_cache))
+        del _generated_hint_cache[oldest_key]
+
+def _forget_generated_hints(card):
+    key = _card_cache_key(card)
+    if key is not None:
+        _generated_hint_cache.pop(key, None)
+
+def _cached_hints_for_card(card):
+    key = _card_cache_key(card)
+    if key is None:
+        return None
+    return _generated_hint_cache.get(key)
 
 def on_webview_will_set_content(web_content, context):
     if type(context).__name__ == "ReviewerBottomBar":
@@ -94,6 +134,14 @@ def on_webview_will_set_content(web_content, context):
     if card:
         try:
             hints_block = parser.find_hints_block(card.note(), card) or ""
+            if not hints_block:
+                cached = _cached_hints_for_card(card)
+                if cached:
+                    hints_block = parser.build_hints_block(
+                        cached.get("data", {}),
+                        cached.get("toggles", {}),
+                        card,
+                    )
             if card.id in _just_generated_card_ids:
                 auto_reveal = True
                 _just_generated_card_ids.discard(card.id)
@@ -157,9 +205,20 @@ def clear_hints():
     note = card.note()
     if parser.clear_hints_from_note(note, card):
         note.flush()
+        _forget_generated_hints(card)
         logger.info("AI-Hints cleared for card %s", card.id)
         tooltip("AI-Hints: Cleared.")
-        refresh_current_card()
+        try:
+            mw.reviewer.web.eval("if (window.aiHintsClearData) { window.aiHintsClearData(); }")
+        except Exception:
+            refresh_current_card()
+    elif _cached_hints_for_card(card):
+        _forget_generated_hints(card)
+        tooltip("AI-Hints: Cleared.")
+        try:
+            mw.reviewer.web.eval("if (window.aiHintsClearData) { window.aiHintsClearData(); }")
+        except Exception:
+            refresh_current_card()
     else:
         tooltip("AI-Hints: No cached data found to clear.")
 
@@ -490,6 +549,7 @@ def generate_hints():
             }
             if parser.update_note_with_hints(note, data, toggles, card):
                 note.flush()
+                _remember_generated_hints(card, data, toggles)
                 logger.info(
                     "AI-Hints saved %d hints and %d options to note %s for card %s.",
                     len(data.get("hints", [])),
@@ -500,7 +560,13 @@ def generate_hints():
                 if is_current:
                     _just_generated_card_ids.add(card.id)
                     tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
-                    refresh_current_card()
+                    try:
+                        mw.reviewer.web.eval(
+                            f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}); }}"
+                        )
+                    except Exception as e:
+                        logger.error(f"AI-Hints direct web update failed: {e}")
+                        refresh_current_card()
                     
                     if config.get("show_in_popup", False):
                         global _popup_dialog_instance

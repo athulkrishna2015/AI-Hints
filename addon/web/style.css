@@ -30,6 +30,17 @@
     background-color: #eee;
 }
 
+.ai-hints-btn:disabled,
+.ai-hints-btn[aria-disabled="true"] {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.ai-hints-btn:disabled:hover,
+.ai-hints-btn[aria-disabled="true"]:hover {
+    background-color: #f8f8f8;
+}
+
 .ai-hints-btn-secondary {
     background-color: #e8e8e8;
 }
@@ -52,4 +63,3 @@
 .ai-hints-container ul li {
     margin-bottom: 4px;
 }
-

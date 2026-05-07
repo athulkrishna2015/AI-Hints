@@ -80,14 +80,7 @@ class CardParser:
         if not data or (not data.get("hints") and not data.get("options")):
             return False
 
-        # Build content block based on mode
-        attrs = self._build_attrs(toggles, card)
-
-        if self.storage_mode == "json":
-            payload = html.escape(json.dumps(data), quote=False)
-            content_block = f'<div class="{self.json_class}" {attrs} style="display:none">{payload}</div>'
-        else:
-            content_block = self._build_html_block(data, attrs)
+        content_block = self.build_hints_block(data, toggles, card)
         
         # Find target field
         field_name = self._find_target_field(note)
@@ -101,6 +94,14 @@ class CardParser:
 
         note[field_name] = new_val
         return True
+
+    def build_hints_block(self, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None) -> str:
+        """Build the persisted/injected hints block for the configured storage mode."""
+        attrs = self._build_attrs(toggles, card)
+        if self.storage_mode == "json":
+            payload = html.escape(json.dumps(data), quote=False)
+            return f'<div class="{self.json_class}" {attrs} style="display:none">{payload}</div>'
+        return self._build_html_block(data, attrs)
 
     def _find_target_field(self, note) -> Optional[str]:
         note_fields = note.keys()

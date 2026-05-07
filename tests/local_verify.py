@@ -137,8 +137,25 @@ try:
     generate_hints()
     print("SUCCESS: generate_hints() handles Dict results correctly.")
 
-    print("Testing reviewer refresh compatibility...")
+    print("Testing generated data is pushed and cached for stale note renders...")
     import addon.reviewer_hooks as reviewer_hooks
+    eval_calls = [call[0][0] for call in mock_mw.reviewer.web.eval.call_args_list]
+    if any("aiHintsUpdateData" in call for call in eval_calls):
+        print("SUCCESS: generate_hints() pushes generated data to the current webview.")
+    else:
+        print(f"FAILED: generate_hints() did not push generated data: {eval_calls}")
+        sys.exit(1)
+
+    mock_note.values.return_value = ["Front", "Back without saved block yet"]
+    web_content = SimpleNamespace(head="", body="", css=["reviewer.css"])
+    reviewer_hooks.on_webview_will_set_content(web_content, SimpleNamespace(name="reviewer", card=mock_card))
+    if "Hint 1" in web_content.body and "ai-hints-json" in web_content.body:
+        print("SUCCESS: cached generated data is injected during stale redraws.")
+    else:
+        print(f"FAILED: cached generated data was not injected: {web_content.body}")
+        sys.exit(1)
+
+    print("Testing reviewer refresh compatibility...")
     refresh_calls = []
     original_reviewer = mock_mw.reviewer
     original_get_card = mock_mw.col.getCard
