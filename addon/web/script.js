@@ -139,6 +139,13 @@
         const cardKey = (current.id || '') + '_' + (current.ord || '0');
         const cardBody = document.getElementById('qa') || document.body;
 
+        if (cardBody && cardBody.dataset.aiHintsLastCardKey === cardKey) {
+            return;
+        }
+        if (cardBody) {
+            cardBody.dataset.aiHintsLastCardKey = cardKey;
+        }
+
         // Cleanup: Remove any dynamic buttons or containers from previous cards
         // that might have been appended to document.body or are no longer valid.
         document.querySelectorAll('.ai-hints-actions, .ai-hints-btn, .ai-hints-btn-secondary').forEach(function(el) {
@@ -151,11 +158,6 @@
                 container.style.display = 'none';
             }
         });
-
-        if (cardBody.dataset.aiHintsLastCardKey === cardKey) {
-            return;
-        }
-        cardBody.dataset.aiHintsLastCardKey = cardKey;
 
         let container = selectCurrentBlock('.ai-hints-container');
         const jsonBlock = selectCurrentBlock('.ai-hints-json');
