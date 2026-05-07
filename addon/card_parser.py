@@ -147,6 +147,21 @@ class CardParser:
             return int(value.strip())
         return None
 
+    def find_hints_block(self, note, card=None) -> Optional[str]:
+        """Searches all fields of the note for an AI hints block matching the card."""
+        pattern = re.compile(
+            rf'<div\b(?=[^>]*class=["\']([^"\']*(?:{self.json_class}|{self.container_class})[^"\']*)["\'])[^>]*>.*?</div>',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        for f_val in note.values():
+            if not isinstance(f_val, str):
+                continue
+            for match in pattern.finditer(f_val):
+                block = match.group(0)
+                if self._block_matches_card(block, card):
+                    return block
+        return None
+
     def _replace_or_append_block(self, current_val: str, content_block: str, card=None) -> str:
         pattern = re.compile(
             rf'<div\b(?=[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'])[^>]*>.*?</div>',
@@ -197,12 +212,12 @@ class CardParser:
         hints_html = ""
         if hints:
             items = "".join([f"<li>{html.escape(str(h))}</li>" for h in hints])
-            hints_html = f'<b>AI Hints:</b><ul class="ai-hints-hint-list">{items}</ul>'
+            hints_html = f'<b>AI Hints:</b><br><ul class="ai-hints-hint-list">{items}</ul>'
             
         options_html = ""
         if options:
             items = "".join([f"<li>{html.escape(str(o))}</li>" for o in options])
-            options_html = f'<b>AI Options:</b><ul class="ai-hints-list">{items}</ul>'
+            options_html = f'<b>AI Options:</b><br><ul class="ai-hints-list">{items}</ul>'
             
         return f"""
 <div class="{self.container_class}" {attrs}>

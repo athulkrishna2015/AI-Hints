@@ -15,3 +15,13 @@ def get_logger():
     return logger
 
 logger = get_logger()
+
+def info(msg, parent=None):
+    from aqt.utils import showInfo
+    logger.info(f"Notification: {msg}")
+    showInfo(msg, parent=parent)
+
+def tooltip(msg, period=3000):
+    from aqt.utils import tooltip as aqt_tooltip
+    logger.info(f"Notification: {msg}")
+    aqt_tooltip(msg, period=period)

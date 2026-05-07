@@ -2,8 +2,7 @@ import os
 import json
 from aqt import mw
 from aqt.qt import *
-from aqt.utils import showInfo, tooltip
-from .logger import logger, get_logger
+from .logger import logger, get_logger, info, tooltip
 from .ai_client import DEFAULT_MODELS, LEGACY_MODEL_REPLACEMENTS, MODEL_FALLBACKS, PROVIDER_ORDER
 import logging
 
@@ -39,12 +38,12 @@ class CustomProviderDialog(QDialog):
 
     def validate_and_accept(self):
         if not self.name_edit.text().strip():
-            showInfo("Provider name cannot be empty.")
+            info("Provider name cannot be empty.")
             return
         try:
             json.loads(self.headers_edit.toPlainText() or "{}")
         except Exception:
-            showInfo("Headers must be valid JSON.")
+            info("Headers must be valid JSON.")
             return
         self.accept()
 
@@ -64,11 +63,12 @@ class ConfigDialog(QDialog):
         self.log_timer = QTimer(self)
         self.log_timer.timeout.connect(self.load_log)
         self.tabs.currentChanged.connect(self.on_tab_changed)
+        self.on_tab_changed(self.tabs.currentIndex())
 
     def on_tab_changed(self, index):
         if self.tabs.tabText(index) == "Logs":
             self.load_log()
-            self.log_timer.start(2000)  # Refresh every 2 seconds
+            self.log_timer.start(1000)
             if hasattr(self, "live_label"):
                 self.live_label.setVisible(True)
         else:
@@ -102,8 +102,14 @@ class ConfigDialog(QDialog):
         self.show_options_cb = QCheckBox("Show Options Button (Sequential)")
         gen_layout.addRow(self.show_options_cb)
         
+        self.show_on_card_cb = QCheckBox("Show Generate Button on Review Card")
+        gen_layout.addRow(self.show_on_card_cb)
+        
         self.show_in_bottom_bar_cb = QCheckBox("Show Generate Button in Review Bar")
         gen_layout.addRow(self.show_in_bottom_bar_cb)
+
+        self.show_in_popup_cb = QCheckBox("Show Results in Popup Window")
+        gen_layout.addRow(self.show_in_popup_cb)
         
         self.general_tab.setLayout(gen_layout)
         self.tabs.addTab(self.general_tab, "General")
@@ -345,9 +351,17 @@ class ConfigDialog(QDialog):
             if level_filter != "ALL":
                 lines = [l for l in lines if f" - {level_filter} - " in l]
             
-            self.log_view.setPlainText("".join(lines) if lines else "No entries matching the selected level.")
-            # Scroll to bottom
-            self.log_view.verticalScrollBar().setValue(self.log_view.verticalScrollBar().maximum())
+            content = "".join(lines) if lines else "No entries matching the selected level."
+            if self.log_view.toPlainText() == content:
+                return
+
+            vbar = self.log_view.verticalScrollBar()
+            was_at_bottom = vbar.value() >= vbar.maximum() - 10
+            
+            self.log_view.setPlainText(content)
+            
+            if was_at_bottom:
+                vbar.setValue(vbar.maximum())
         except Exception as e:
             self.log_view.setPlainText(f"Error reading log: {e}")
 
@@ -358,7 +372,7 @@ class ConfigDialog(QDialog):
             self.log_view.setPlainText("Log cleared.")
             logger.info("Log cleared by user.")
         except Exception as e:
-            showInfo(f"Could not clear log: {e}")
+            info(f"Could not clear log: {e}")
 
     def _create_support_tab(self):
         tab = QWidget()
@@ -417,7 +431,9 @@ class ConfigDialog(QDialog):
         self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
         self.show_options_cb.setChecked(c.get("show_options_button", True))
-        self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", False))
+        self.show_on_card_cb.setChecked(c.get("show_on_card", True))
+        self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", True))
+        self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
         
         keys = c.get("api_keys", {}) or {}
         for p, edit in self.api_key_edits.items():
@@ -556,7 +572,9 @@ class ConfigDialog(QDialog):
             new_config["storage_mode"] = self.storage_mode_cb.currentText()
             new_config["show_hints_button"] = self.show_hints_cb.isChecked()
             new_config["show_options_button"] = self.show_options_cb.isChecked()
+            new_config["show_on_card"] = self.show_on_card_cb.isChecked()
             new_config["show_in_bottom_bar"] = self.show_in_bottom_bar_cb.isChecked()
+            new_config["show_in_popup"] = self.show_in_popup_cb.isChecked()
             
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {
@@ -580,7 +598,7 @@ class ConfigDialog(QDialog):
             mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(new_config))
             self.accept()
         except Exception as e:
-            showInfo(f"Error saving configuration: {e}")
+            info(f"Error saving configuration: {e}")
 
     def _normalize_config(self, config):
         config = dict(config or {})
@@ -615,6 +633,9 @@ class ConfigDialog(QDialog):
 
         config.setdefault("custom_providers", {})
         config.setdefault("note_type_fields", {})
+        config.setdefault("show_on_card", True)
+        config.setdefault("show_in_bottom_bar", True)
+        config.setdefault("show_in_popup", False)
         return config
 
 _config_dialog_instance = None

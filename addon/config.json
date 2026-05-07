@@ -38,8 +38,7 @@
     "model_fallbacks": {
         "gemini": [
             "gemini-3-flash-preview",
-            "gemini-3.1-flash-lite-preview",
-            "gemini-2.5-flash"
+            "gemini-3.1-flash-lite-preview"
         ],
         "groq": [
             "llama-3.1-8b-instant",
@@ -75,7 +74,8 @@
     "options_count": 4,
     "show_hints_button": true,
     "show_options_button": true,
-    "show_in_bottom_bar": false,
+    "show_on_card": true,
+    "show_in_bottom_bar": true,
     "custom_providers": {},
     "note_type_fields": {
         "Cloze": ["Text"],

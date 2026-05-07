@@ -12,7 +12,8 @@ AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate
 - **Current-Card Hints**: Generated data is scoped to the current card, so cloze deletion and Image Occlusion siblings can each have their own hints/options.
 - **Alt-Click Reveal**: Alt-click the current cloze deletion or Image Occlusion mask to reveal only that card's hints/options. Ctrl-click and editable review fields are left alone.
 - **Speed Focus Mode Friendly**: Clicking AI-Hints buttons or Alt-click revealing hints restarts the Speed Focus Mode timer when that add-on is installed.
-- **Live Log Viewer**: Debug issues in real-time with a built-in log viewer in the config dialog, featuring auto-refresh and a "Live" status indicator.
+- **Live Log Viewer**: Debug issues in real-time with a built-in log viewer in the config dialog. It features smart scrolling (only scrolls to bottom if you are already there), auto-refresh, and a "Live" status indicator.
+- **Improved UI Reset**: Hints and options are now consistently cleared and reset whenever you move to a new card, ensuring a clean state for every review session.
 - **Custom AI Support**: Define your own custom endpoints and headers.
 - **Universal Compatibility**: Works with Basic, Cloze, Image Occlusion, and custom note types.
 - **Smart Shuffling**: Options are shuffled every time you review the card to prevent pattern memorization.
@@ -20,7 +21,7 @@ AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate
 - **Configurable Options**: Set exactly how many MCQ options the AI should generate, including the correct answer (default is 4).
 - **Field Customization**: Specify exactly which fields to send to the AI for each note type. Optimized for Cloze cards by default.
 - **Persistent Storage**: Generated hints are saved directly in your card's fields (e.g., "Extras" or "Back"), so they work on AnkiMobile and AnkiDroid too.
-- **Manual Control**: Generate, show, or regenerate hints with embedded buttons on the card.
+- **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
 
 ## Configuration
 
@@ -28,7 +29,7 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 
 ### Configuration Options
 
-- **General Tab**: Select your `ai_provider`, configure the total number of MCQ options (`options_count`), toggle the visibility of the buttons, and choose the `storage_mode` (`"json"` for a hidden data block or `"html"` for a visible block).
+- **General Tab**: Select your `ai_provider`, configure the total number of MCQ options (`options_count`), choose whether the Generate button appears on the review card, the review bar, or both, and choose the `storage_mode` (`"json"` for a hidden data block or `"html"` for a visible block).
 - **AI Providers Tab**: Enter your `api_keys` for supported providers, change model names, configure a local LLM endpoint (like Ollama), or use the **Custom Providers** section to add, edit, or remove your own API endpoints and custom headers.
 - **Local Fallback**: Enable "Use Local AI as fallback" if you want Ollama/LM Studio to be tried after cloud providers fail. Selecting `local` as the active provider always uses the configured local endpoint.
 - **Advanced Tab**: 
@@ -77,7 +78,7 @@ You can also use the **Raw JSON Editor** in the Advanced tab if you prefer editi
         "openrouter": "meta-llama/llama-3.1-8b-instruct"
     },
     "model_fallbacks": {
-        "gemini": ["gemini-3.1-flash-lite-preview", "gemini-2.5-flash"],
+        "gemini": ["gemini-3.1-flash-lite-preview"],
         "groq": ["llama-3.3-70b-versatile"]
     },
     "local_endpoint": {

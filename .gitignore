@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 *.ankiaddon
+*.log
 meta.json
 addon/meta.json
 addon/ai_hints.log
