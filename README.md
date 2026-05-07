@@ -32,20 +32,25 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 
 ## Get Your API Keys
 
-To use this add-on, you need an API key from one of the supported providers:
+To use this add-on, you need an API key from one of the supported providers.
 
-- **OpenAI**: [platform.openai.com](https://platform.openai.com/api-keys)
-- **Anthropic (Claude)**: [console.anthropic.com](https://console.anthropic.com/)
+### Free / Freemium Providers (No credit card required)
 - **Google Gemini**: [aistudio.google.com](https://aistudio.google.com/app/apikey)
 - **Groq**: [console.groq.com](https://console.groq.com/keys)
-- **DeepSeek**: [platform.deepseek.com](https://platform.deepseek.com/api_keys)
-- **OpenRouter**: [openrouter.ai](https://openrouter.ai/keys)
-- **Together AI**: [api.together.xyz](https://api.together.xyz/settings/api-keys)
+- **SambaNova**: [cloud.sambanova.ai/apis](https://cloud.sambanova.ai/apis)
+- **Cerebras**: [cloud.cerebras.ai](https://cloud.cerebras.ai/)
 - **Hugging Face**: [huggingface.co](https://huggingface.co/settings/tokens)
+- **OpenRouter**: [openrouter.ai](https://openrouter.ai/keys) (Offers many $0/token models)
+- **Ollama (Local AI)**: [ollama.com](https://ollama.com/) (No API key or internet required)
+
+### Paid Providers
+- **OpenAI**: [platform.openai.com](https://platform.openai.com/api-keys)
+- **Anthropic (Claude)**: [console.anthropic.com](https://console.anthropic.com/)
+- **DeepSeek**: [platform.deepseek.com](https://platform.deepseek.com/api_keys)
+- **Together AI**: [api.together.xyz](https://api.together.xyz/settings/api-keys) (Requires initial deposit)
 - **Mistral**: [console.mistral.ai](https://console.mistral.ai/api-keys/)
 - **Grok (xAI)**: [console.x.ai](https://console.x.ai/)
 - **NVIDIA**: [build.nvidia.com](https://build.nvidia.com/explore/discover)
-- **Ollama (Local AI)**: [ollama.com](https://ollama.com/) (No API key required for local use)
 
 ### Example Config (Advanced Users):
 You can also use the **Raw JSON Editor** in the Advanced tab if you prefer editing JSON directly:
