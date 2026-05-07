@@ -4,12 +4,66 @@ import html
 from typing import List, Optional, Tuple, Dict
 
 class CardParser:
-    def __init__(self, target_fields: List[str], note_type_fields: Dict[str, List[str]] = None, storage_mode: str = "json"):
+    def __init__(self, target_fields: List[str], note_type_fields: Dict[str, List[str]] = None, storage_mode: str = "json", mathjax_format: str = "delimiters"):
         self.target_fields = target_fields
         self.note_type_fields = note_type_fields or {}
         self.storage_mode = storage_mode
+        self.mathjax_format = mathjax_format
         self.container_class = "ai-hints-container"
         self.json_class = "ai-hints-json"
+
+    def _fix_lazy_latex(self, text: str) -> str:
+        """Repairs common AI math errors like missing backslashes or joined commands."""
+        if not isinstance(text, str):
+            return text
+        
+        # 1. Fix joined commands like expleft -> \exp \left
+        text = text.replace('expleft', '\\exp \\left')
+        text = text.replace('sinleft', '\\sin \\left')
+        text = text.replace('cosleft', '\\cos \\left')
+        
+        # 2. Aggressively fix missing backslashes on common commands
+        # Use a regex that finds these words when NOT preceded by a backslash, 
+        # even if they are part of a string or followed by a backslash/brace
+        cmds = ['exp', 'lambda', 'frac', 'left', 'right', 'sin', 'cos', 'tan', 'sqrt', 'log', 'ln', 'approx', 'cdot', 'text', 'partial', 'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'phi', 'theta', 'omega']
+        for cmd in cmds:
+            # Match cmd if:
+            # - Not preceded by \
+            # - Preceded by start of string, whitespace, or math punctuation ( ( [ { = + - / )
+            # - Followed by word boundary, underscore, or math punctuation
+            pattern = rf'(?<!\\)(^|(?<=[^a-zA-Z])){cmd}(?=[^a-zA-Z]|$)'
+            text = re.sub(pattern, rf'\\{cmd}', text)
+        
+        # 3. Fix cases where AI joins commands without space: \frac{x}{lambda_L\right} -> \frac{x}{\lambda_L \right}
+        # This helps cases where step 2 might have missed it if joined to a backslash
+        text = re.sub(r'(?<!\\)lambda(?=\\)', r'\\lambda ', text)
+        text = re.sub(r'(?<!\\)exp(?=\\)', r'\\exp ', text)
+
+        # 4. Fix joined commands like \exp\left -> \exp \left (helps MathJax parsing)
+        text = re.sub(r'\\([a-z]+)\\([a-z]+)', r'\\\1 \\\2', text)
+        
+        # 5. Fix missing backslashes on parentheses used as math delimiters
+        stripped = text.strip()
+        if stripped.startswith('(') and stripped.endswith(')') and any(c in stripped for c in ['_', '^', '\\', '=', '/']):
+            if not stripped.startswith('\\('):
+                text = text.replace('(', '\\(', 1)
+            if not stripped.endswith('\\)'):
+                text = text[::-1].replace(')', ')\\', 1)[::-1]
+                
+        return text
+
+    def _convert_to_mathjax_tags(self, text: str) -> str:
+        """Converts standard LaTeX delimiters \( \) and \[ \] to Anki's <anki-mathjax> tags."""
+        if not isinstance(text, str):
+            return text
+        
+        # First repair the content
+        text = self._fix_lazy_latex(text)
+        
+        # Replace \( ... \) and \[ ... \] with <anki-mathjax> ... </anki-mathjax>
+        text = re.sub(r'\\\((.*?)\\\)', r'<anki-mathjax>\1</anki-mathjax>', text, flags=re.DOTALL)
+        text = re.sub(r'\\\[(.*?)\\\]', r'<anki-mathjax>\1</anki-mathjax>', text, flags=re.DOTALL)
+        return text
 
     def get_note_content(self, note, card=None) -> Tuple[str, str]:
         """Extracts front and back content for AI context based on note type config."""
@@ -79,6 +133,13 @@ class CardParser:
         """Appends or replaces the AI hints block in the target field."""
         if not data or (not data.get("hints") and not data.get("options")):
             return False
+
+        # Convert to Anki MathJax tags if requested
+        if self.mathjax_format == "tags":
+            data = {
+                "hints": [self._convert_to_mathjax_tags(h) for h in data.get("hints", [])],
+                "options": [self._convert_to_mathjax_tags(o) for o in data.get("options", [])]
+            }
 
         content_block = self.build_hints_block(data, toggles, card)
         
@@ -240,12 +301,12 @@ class CardParser:
         
         hints_html = ""
         if hints:
-            items = "".join([f"<li>{html.escape(str(h))}</li>" for h in hints])
+            items = "".join([f"<li>{str(h)}</li>" for h in hints])
             hints_html = f'<b>AI Hints:</b><br><ul class="ai-hints-hint-list">{items}</ul>'
             
         options_html = ""
         if options:
-            items = "".join([f"<li>{html.escape(str(o))}</li>" for o in options])
+            items = "".join([f"<li>{str(o)}</li>" for o in options])
             options_html = f'<b>AI Options:</b><br><ul class="ai-hints-list">{items}</ul>'
             
         return f"""

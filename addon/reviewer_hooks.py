@@ -121,7 +121,8 @@ def on_webview_will_set_content(web_content, context):
     parser = CardParser(
         target_fields=config.get("target_fields", []),
         note_type_fields=config.get("note_type_fields", {}),
-        storage_mode=config.get("storage_mode", "json")
+        storage_mode=config.get("storage_mode", "json"),
+        mathjax_format=config.get("mathjax_format", "delimiters")
     )
 
     card = getattr(context, "card", None)
@@ -151,7 +152,8 @@ def on_webview_will_set_content(web_content, context):
     card_payload = json.dumps(_card_context_payload(context))
     ui_payload = json.dumps({
         "show_on_card": config.get("show_on_card", True),
-        "auto_reveal": auto_reveal
+        "auto_reveal": auto_reveal,
+        "mathjax_format": config.get("mathjax_format", "delimiters")
     })
 
     web_content.head += f"<style>{css}</style>"
@@ -199,7 +201,8 @@ def clear_hints():
     parser = CardParser(
         config.get("target_fields", []),
         config.get("note_type_fields", {}),
-        config.get("storage_mode", "json")
+        config.get("storage_mode", "json"),
+        mathjax_format=config.get("mathjax_format", "delimiters")
     )
     
     note = card.note()
@@ -257,7 +260,8 @@ def clear_ai_hints_from_browser_selection(browser):
     parser = CardParser(
         config.get("target_fields", []),
         config.get("note_type_fields", {}),
-        config.get("storage_mode", "json")
+        config.get("storage_mode", "json"),
+        mathjax_format=config.get("mathjax_format", "delimiters")
     )
 
     notes_by_id = {}
@@ -604,7 +608,8 @@ def generate_hints():
     parser = CardParser(
         config.get("target_fields", []),
         config.get("note_type_fields", {}),
-        config.get("storage_mode", "json")
+        config.get("storage_mode", "json"),
+        mathjax_format=config.get("mathjax_format", "delimiters")
     )
     client = AIClient(config)
     if not client.has_any_ready_provider():

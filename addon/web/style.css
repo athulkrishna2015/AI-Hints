@@ -63,3 +63,17 @@
 .ai-hints-container ul li {
     margin-bottom: 4px;
 }
+
+.ai-hints-json-view {
+    margin-top: 10px;
+    padding: 8px;
+    background: #f4f4f4;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    text-align: left;
+    color: #333;
+}

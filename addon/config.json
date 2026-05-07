@@ -72,6 +72,7 @@
     ],
     "system_prompt": "You are a helpful assistant that helps students prepare for exams. Based on the provided Anki card Front and Back content, generate helpful hints and multiple-choice options. Return the result as a JSON object with two keys: 'hints' (array of strings) and 'options' (array of strings). Include the correct answer as one of the options, and make the remaining options plausible incorrect distractors. Format: {\"hints\": [\"hint1\", ...], \"options\": [\"correct answer\", \"distractor1\", ...]}",
     "storage_mode": "json",
+    "mathjax_format": "delimiters",
     "options_count": 4,
     "show_hints_button": true,
     "show_options_button": true,

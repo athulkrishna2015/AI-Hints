@@ -312,6 +312,17 @@ try:
         print(f"FAILED: CardParser incorrect JSON formatting: {set_value}")
         sys.exit(1)
 
+    print("Testing MathJax delimiter preservation...")
+    math_data = {"hints": ["\\( B_0 \\)"], "options": ["\\( \\lambda \\)"]}
+    json_parser.update_note_with_hints(mock_note_json, math_data, card=mock_card_json)
+    math_set_value = mock_note_json.__setitem__.call_args[0][1]
+    # In the stored JSON string, the backslash should be double-escaped: \\\\(
+    if "\\\\( B_0 \\\\)" in math_set_value:
+        print("SUCCESS: CardParser preserves MathJax backslashes in JSON.")
+    else:
+        print(f"FAILED: CardParser mangled MathJax backslashes: {math_set_value}")
+        sys.exit(1)
+
     print("Testing find_hints_block and clear_hints_from_note regex fixes...")
     # Test multiple classes and single quotes
     multi_class_html = '<div class="foo ai-hints-json bar" data-ai-hints-card-id="456">payload</div>'
@@ -513,6 +524,20 @@ except Exception as e:
     print(f"CRITICAL FAILURE during add-on load: {e}")
     import traceback
     traceback.print_exc()
+    sys.exit(1)
+
+print("Testing AIClient JSON repair...")
+from addon.ai_client import AIClient
+repair_client = AIClient({})
+# Mangle a common LaTeX string: single backslashes for delimiters and commands
+mangled = '{"hints": ["\\( \\exp(x) \\)"], "options": ["\\n", "\\"quote\\""]}'
+# After repair, it should have double backslashes for \( and \exp, but NOT for \"
+# Note: in Python string literal, \\( is two chars.
+repaired = repair_client._repair_json_backslashes(mangled)
+if '\\\\(' in repaired and '\\\\exp' in repaired and '\\"quote\\"' in repaired:
+    print("SUCCESS: _repair_json_backslashes correctly escapes LaTeX while preserving JSON quotes.")
+else:
+    print(f"FAILED: _repair_json_backslashes mangled output: {repaired}")
     sys.exit(1)
 
 print("\nAll local verification tests passed.")

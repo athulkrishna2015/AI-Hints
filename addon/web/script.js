@@ -109,7 +109,29 @@
         list.className = className;
         items.forEach(function(item) {
             const li = document.createElement('li');
-            li.textContent = String(item);
+            let content = String(item);
+            
+            // Fix common AI over-escaping: \\( -> \(
+            content = content.replace(/\\\\([()\[\]])/g, '\\$1');
+            
+            // If the AI forgot delimiters but the content looks like LaTeX (has backslashes or subscripts)
+            // wrap it in MathJax delimiters if it doesn't have them
+            if (content.includes('_') || content.includes('^') || content.includes('\\')) {
+                const hasDelimiters = content.trim().startsWith('\\(') || 
+                                    content.trim().startsWith('\\[') || 
+                                    content.includes('<anki-mathjax>');
+                
+                if (!hasDelimiters && content.length < 200 && !content.includes('\n')) {
+                    const cfg = window.aiHintsUiConfig || {};
+                    if (cfg.mathjax_format === 'tags') {
+                        content = '<anki-mathjax>' + content + '</anki-mathjax>';
+                    } else {
+                        content = '\\(' + content + '\\)';
+                    }
+                }
+            }
+            
+            li.innerHTML = content;
             list.appendChild(li);
         });
         fragment.appendChild(list);
@@ -156,13 +178,36 @@
         return isMaskShape && cardHasImageOcclusion;
     }
 
-    function renderMathjax() {
-        if (typeof MathJax !== 'undefined' && typeof MathJax.typesetPromise === 'function') {
-            MathJax.typesetPromise().catch(function(err) {
-                console.warn('AI-Hints: MathJax typeset failed', err);
-            });
-        } else if (typeof MathJax !== 'undefined' && typeof MathJax.Hub !== 'undefined') {
-            MathJax.Hub.Queue(["Typeset", MathJax.Hub]);
+    function renderMathjax(root, retryCount) {
+        if (typeof MathJax !== 'undefined') {
+            try {
+                const target = root || document.body;
+                // Check if MathJax is actually ready
+                const isReady = typeof MathJax.typesetPromise === 'function' || 
+                                (typeof MathJax.Hub !== 'undefined' && typeof MathJax.Hub.Queue === 'function');
+                
+                if (!isReady && (retryCount || 0) < 5) {
+                    setTimeout(function() {
+                        renderMathjax(root, (retryCount || 0) + 1);
+                    }, 200);
+                    return;
+                }
+
+                if (typeof MathJax.typesetPromise === 'function') {
+                    // v3
+                    MathJax.typesetPromise([target]).catch(function(err) {
+                        console.warn('AI-Hints: MathJax typeset failed', err);
+                    });
+                } else if (typeof MathJax.typeset === 'function') {
+                    // v3 alternative
+                    MathJax.typeset([target]);
+                } else if (typeof MathJax.Hub !== 'undefined' && typeof MathJax.Hub.Queue === 'function') {
+                    // v2
+                    MathJax.Hub.Queue(["Typeset", MathJax.Hub, target]);
+                }
+            } catch (err) {
+                console.warn('AI-Hints: MathJax rendering error', err);
+            }
         }
     }
 
@@ -201,7 +246,7 @@
         }
         if (revealed) {
             restartSpeedFocusTimer();
-            renderMathjax();
+            renderMathjax(container);
         }
         return revealed;
     }
@@ -345,7 +390,7 @@
             optionsList.classList.toggle('ai-hints-hidden');
             optBtn.innerText = isHidden ? 'Hide Options' : 'Show Options';
             if (isHidden) {
-                renderMathjax();
+                renderMathjax(container);
             }
         };
         btnContainer.appendChild(optBtn);
@@ -364,7 +409,7 @@
             hintsList.classList.toggle('ai-hints-hidden');
             hintBtn.innerText = isHidden ? 'Hide Hints' : 'Show Hints';
             if (isHidden) {
-                renderMathjax();
+                renderMathjax(container);
             }
         };
         btnContainer.appendChild(hintBtn);
@@ -404,6 +449,42 @@
         };
         btnContainer.appendChild(refreshBtn);
 
+        // JSON View Button
+        const jsonViewBtn = document.createElement('button');
+        jsonViewBtn.innerText = 'Show JSON';
+        jsonViewBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
+        jsonViewBtn.title = 'Show raw JSON data';
+        setButtonEnabled(jsonViewBtn, hasAnyData);
+        jsonViewBtn.onclick = function() {
+            if (!container) return;
+            let view = container.querySelector('.ai-hints-json-view');
+            if (view) {
+                view.remove();
+                jsonViewBtn.innerText = 'Show JSON';
+            } else {
+                view = document.createElement('div');
+                view.className = 'ai-hints-json-view';
+                
+                // Try to get data from jsonBlock or container
+                const targetJsonBlock = selectCurrentBlock('.ai-hints-json');
+                let raw = '';
+                if (manualData) {
+                    raw = JSON.stringify(manualData, null, 2);
+                } else if (targetJsonBlock) {
+                    try {
+                        raw = JSON.stringify(JSON.parse(targetJsonBlock.textContent), null, 2);
+                    } catch(e) {
+                        raw = targetJsonBlock.textContent;
+                    }
+                }
+                
+                view.textContent = raw || 'No JSON data found.';
+                container.appendChild(view);
+                jsonViewBtn.innerText = 'Hide JSON';
+            }
+        };
+        btnContainer.appendChild(jsonViewBtn);
+
         if (container && container.style.display !== 'none') {
             // Ensure container is in the visible area (#qa) if it was injected outside (e.g. on front side)
             if (cardBody && cardBody !== document.body && !cardBody.contains(container)) {
@@ -423,7 +504,7 @@
         }
 
         if (container && container.style.display !== 'none') {
-            renderMathjax();
+            renderMathjax(container);
         }
     }
 
@@ -463,7 +544,34 @@
                 return;
             }
 
-            if (revealAIHints()) {
+            const container = selectCurrentBlock('.ai-hints-container');
+            if (!container) {
+                event.preventDefault();
+                event.stopPropagation();
+                restartSpeedFocusTimer();
+                sendCommand('ai_hints_generate');
+                return;
+            }
+
+            const hintsList = container.querySelector('.ai-hints-hint-list');
+            const optionsList = container.querySelector('.ai-hints-list');
+            const showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
+            const showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
+
+            const hintsHidden = hintsList && hintsList.classList.contains('ai-hints-hidden') && showHintsCfg;
+            const optionsHidden = optionsList && optionsList.classList.contains('ai-hints-hidden') && showOptionsCfg;
+
+            if (hintsHidden) {
+                if (revealAIHints('hints')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+            } else if (optionsHidden) {
+                if (revealAIHints('options')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+            } else {
                 event.preventDefault();
                 event.stopPropagation();
             }

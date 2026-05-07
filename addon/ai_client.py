@@ -119,7 +119,10 @@ class AIClient:
             "Return only valid JSON with two array keys: hints and options. "
             f"Generate exactly {count} options total and 2-3 helpful hints. "
             "Include the correct answer as one of the options. "
-            f"The remaining {max(count - 1, 0)} options should be plausible incorrect distractors."
+            f"The remaining {max(count - 1, 0)} options should be plausible incorrect distractors. "
+            "IMPORTANT: You MUST use standard LaTeX/MathJax delimiters \\( ... \\) for ALL math/variables. "
+            "NEVER omit backslashes for LaTeX commands (use \\\\exp, \\\\lambda, \\\\frac, \\\\left, \\\\right, etc.). "
+            "Example: \\( B(x) = B_0 \\\\exp\\\\left(-\\\\frac{x}{\\\\lambda_L}\\\\right) \\)."
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
 
@@ -431,6 +434,44 @@ class AIClient:
             or "rate-limits" in body_text
         )
 
+    def _repair_json_backslashes(self, content: str) -> str:
+        """
+        Fixes backslash loss in AI-generated JSON. Many models send single 
+        backslashes for LaTeX (e.g. \( \exp \)) which json.loads() strips.
+        We escape them unless they are part of a valid JSON escape (like \").
+        """
+        repaired = ""
+        i = 0
+        while i < len(content):
+            if content[i] == '\\':
+                if i + 1 < len(content):
+                    next_char = content[i+1]
+                    if next_char == '"':
+                        # Keep \" as is to preserve JSON structure
+                        repaired += '\\"'
+                        i += 2
+                    elif next_char == '\\':
+                        # Keep \\ as is (already escaped)
+                        repaired += '\\\\'
+                        i += 2
+                    elif next_char == 'u' and i + 5 < len(content) and all(c in '0123456789abcdefABCDEF' for c in content[i+2:i+6]):
+                        # Keep \uXXXX unicode escapes
+                        repaired += content[i:i+6]
+                        i += 6
+                    else:
+                        # Escape any other backslash (like \(, \exp, \frac, \n, etc.)
+                        # Most AIs mean literal backslashes for these in LaTeX context.
+                        repaired += '\\\\'
+                        i += 1
+                else:
+                    # Trailing backslash
+                    repaired += '\\\\'
+                    i += 1
+            else:
+                repaired += content[i]
+                i += 1
+        return repaired
+
     def _parse_json_result(self, content: str) -> Dict[str, List[str]]:
         content = (content or "").strip()
         if content.startswith("```json"):
@@ -440,6 +481,9 @@ class AIClient:
         if content.endswith("```"):
             content = content[:-3]
         content = content.strip()
+        
+        # Repair backslashes before parsing
+        content = self._repair_json_backslashes(content)
         
         try:
             parsed = json.loads(content)
