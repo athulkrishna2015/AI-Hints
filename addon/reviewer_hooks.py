@@ -82,17 +82,69 @@ def on_webview_did_receive_js_message(handled, message, context):
         return (True, None)
     return handled
 
-def on_reviewer_will_init_buttons(buttons, reviewer):
+def update_bottom_bar_button(card=None):
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-    if not config.get("show_in_bottom_bar", False):
+    reviewer = getattr(mw, "reviewer", None)
+    bottom = getattr(getattr(reviewer, "bottom", None), "web", None)
+    if not bottom:
         return
-    
-    label = "AI Hints"
-    # Anki's _addButton expects (label, function, shortcut, extra_classes)
-    # or sometimes just a list of functions.
-    # The hook expects us to append to the 'buttons' list.
-    # Each entry in 'buttons' is usually a tuple: (label, func, shortcut, ...)
-    buttons.append((label, generate_hints, "g"))
+
+    if not config.get("show_in_bottom_bar", False):
+        try:
+            bottom.eval("""
+                (function() {
+                    const slot = document.getElementById('ai-hints-bottom-slot');
+                    if (slot) {
+                        slot.remove();
+                    }
+                })();
+            """)
+        except Exception as e:
+            logger.error(f"Failed to remove AI-Hints bottom button: {e}")
+        return
+
+    try:
+        bottom.eval("""
+            (function() {
+                const middle = document.getElementById('middle');
+                if (!middle || document.getElementById('ai-hints-bottom-slot')) {
+                    return;
+                }
+
+                const button = document.createElement('button');
+                button.id = 'ai-hints-bottom-button';
+                button.type = 'button';
+                button.title = 'Generate AI hints';
+                button.textContent = 'AI Hints';
+                button.onclick = function() {
+                    if (typeof pycmd === 'function') {
+                        pycmd('ai_hints_generate');
+                    }
+                };
+
+                const slot = document.createElement('td');
+                slot.id = 'ai-hints-bottom-slot';
+                slot.className = 'stat2';
+                slot.setAttribute('align', 'center');
+                slot.style.paddingRight = '6px';
+                slot.appendChild(button);
+
+                const row = middle.querySelector('table tr');
+                if (row) {
+                    row.insertBefore(slot, row.firstChild);
+                    return;
+                }
+
+                const wrapper = document.createElement('table');
+                wrapper.setAttribute('cellpadding', '0');
+                const wrapperRow = document.createElement('tr');
+                wrapperRow.appendChild(slot);
+                wrapper.appendChild(wrapperRow);
+                middle.appendChild(wrapper);
+            })();
+        """)
+    except Exception as e:
+        logger.error(f"Failed to add AI-Hints bottom button: {e}")
 
 def _find_speed_focus_module():
     import sys
@@ -230,5 +282,6 @@ def init_hooks():
         return
     gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
     gui_hooks.webview_did_receive_js_message.append(on_webview_did_receive_js_message)
-    gui_hooks.reviewer_will_init_buttons.append(on_reviewer_will_init_buttons)
+    gui_hooks.reviewer_did_show_question.append(update_bottom_bar_button)
+    gui_hooks.reviewer_did_show_answer.append(update_bottom_bar_button)
     _hooks_registered = True

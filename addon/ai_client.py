@@ -115,10 +115,11 @@ class AIClient:
             f"{system_prompt}\n\n" if system_prompt else ""
         ) + (
             "Return only valid JSON with two array keys: hints and options. "
-            f"Generate exactly {count} plausible options and 2-3 helpful hints. "
-            "Do not include the correct answer in options."
+            f"Generate exactly {count} options total and 2-3 helpful hints. "
+            "Include the correct answer as one of the options. "
+            f"The remaining {max(count - 1, 0)} options should be plausible incorrect distractors."
         )
-        prompt = f"Front: {front}\nBack: {back}" if back else f"Content: {front}"
+        prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
 
         all_potential = self._candidate_providers(primary_provider)
         if not all_potential:
@@ -131,6 +132,7 @@ class AIClient:
                 logger.info(f"Attempting to generate hints using provider: {provider}")
                 result = self._call_provider(provider, system_prompt, prompt)
                 if result.get("hints") or result.get("options"):
+                    result = self._ensure_correct_answer_option(result, back)
                     if provider != primary_provider:
                         logger.info(f"Fallback successful using provider: {provider}")
                     return result
@@ -415,8 +417,49 @@ class AIClient:
 
         return {
             "hints": self._normalize_string_list(parsed.get("hints", [])),
-            "options": self._normalize_string_list(parsed.get("options", []))[:self._options_count()],
+            "options": self._normalize_string_list(parsed.get("options", [])),
         }
+
+    def _ensure_correct_answer_option(self, result: Dict[str, List[str]], answer: str) -> Dict[str, List[str]]:
+        count = self._options_count()
+        options = self._normalize_string_list(result.get("options", []))
+        answer_text = self._clean_answer_for_option(answer)
+
+        if not answer_text:
+            result["options"] = options[:count]
+            return result
+
+        answer_key = self._option_key(answer_text)
+        deduped = []
+        has_answer = False
+        seen = set()
+        for option in options:
+            key = self._option_key(option)
+            if not key or key in seen:
+                continue
+            if key == answer_key:
+                has_answer = True
+            seen.add(key)
+            deduped.append(option)
+
+        if not has_answer:
+            if len(deduped) >= count:
+                deduped = deduped[:max(count - 1, 0)]
+            deduped.append(answer_text)
+
+        result["options"] = deduped[:count]
+        return result
+
+    def _clean_answer_for_option(self, answer: str) -> str:
+        if not answer:
+            return ""
+        text = str(answer)
+        text = json.loads(json.dumps(text))
+        text = " ".join(text.replace("\n", " ").split())
+        return text.strip()
+
+    def _option_key(self, text: str) -> str:
+        return " ".join(str(text).strip().casefold().split())
 
     def _options_count(self) -> int:
         try:

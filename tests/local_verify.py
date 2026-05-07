@@ -194,10 +194,28 @@ try:
     client.generate_options("F", "B")
     
     received_system_prompt = client._call_openai_compatible.call_args[0][1]
-    if "exactly 5 plausible options" in received_system_prompt:
+    if "exactly 5 options total" in received_system_prompt and "Include the correct answer" in received_system_prompt:
         print("SUCCESS: AIClient correctly injects options_count into prompt.")
     else:
         print(f"FAILED: AIClient incorrect prompt injection: {received_system_prompt}")
+        sys.exit(1)
+
+    print("Testing correct answer inclusion in options...")
+    answer_client = AIClient({
+        "options_count": 4,
+        "system_prompt": "Prompt.",
+        "ai_provider": "openai",
+        "api_keys": {"openai": "test-key"},
+    })
+    answer_client._call_openai_compatible = MagicMock(return_value={
+        "hints": ["H"],
+        "options": ["Lyon", "Marseille", "Bordeaux", "Nice"],
+    })
+    answer_result = answer_client.generate_options("Capital of France?", "Paris")
+    if "Paris" in answer_result["options"] and len(answer_result["options"]) == 4:
+        print("SUCCESS: AIClient includes the correct answer as an MCQ option.")
+    else:
+        print(f"FAILED: AIClient did not include correct answer: {answer_result}")
         sys.exit(1)
 
     print("Testing model fallback after bad output...")

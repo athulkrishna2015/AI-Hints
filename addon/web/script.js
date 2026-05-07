@@ -50,6 +50,30 @@
         return legacyMatch || null;
     }
 
+    function hasExpectedActions(container) {
+        if (!container) {
+            return false;
+        }
+
+        const actions = container.querySelector('.ai-hints-actions');
+        if (!actions) {
+            return false;
+        }
+
+        const hintsList = container.querySelector('.ai-hints-hint-list');
+        const optionsList = container.querySelector('.ai-hints-list');
+        const showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
+        const showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
+
+        if (hintsList && showHintsCfg && !actions.querySelector('[data-ai-hints-action="toggle-hints"]')) {
+            return false;
+        }
+        if (optionsList && showOptionsCfg && !actions.querySelector('[data-ai-hints-action="toggle-options"]')) {
+            return false;
+        }
+        return true;
+    }
+
     function hideOtherContainers(activeContainer) {
         document.querySelectorAll('.ai-hints-container').forEach(function(container) {
             if (container !== activeContainer) {
@@ -138,10 +162,15 @@
         const current = currentCard();
         const cardKey = (current.id || '') + '_' + (current.ord || '0');
         const cardBody = document.getElementById('qa') || document.body;
+        let container = selectCurrentBlock('.ai-hints-container');
+        const jsonBlock = selectCurrentBlock('.ai-hints-json');
+        const hasHintSource = Boolean(container || jsonBlock);
 
         if (cardBody && cardBody.dataset.aiHintsLastCardKey === cardKey) {
-            // If we think we've already processed this card, verify buttons exist
-            if (document.querySelector('.ai-hints-btn, .ai-hints-actions')) {
+            if (hasExpectedActions(container)) {
+                return;
+            }
+            if (!hasHintSource && document.querySelector('.ai-hints-generate-btn')) {
                 return;
             }
         }
@@ -162,12 +191,10 @@
             }
         });
 
-        let container = selectCurrentBlock('.ai-hints-container');
-        const jsonBlock = selectCurrentBlock('.ai-hints-json');
-
         if (jsonBlock && !container) {
             try {
-                const data = JSON.parse(jsonBlock.innerText);
+                const rawData = (jsonBlock.textContent || jsonBlock.innerText || '').trim();
+                const data = JSON.parse(rawData);
                 container = document.createElement('div');
                 container.className = 'ai-hints-container';
 
@@ -222,6 +249,7 @@
                 showBtn = document.createElement('button');
                 showBtn.innerText = 'Show Options';
                 showBtn.className = 'ai-hints-btn';
+                showBtn.dataset.aiHintsAction = 'toggle-options';
                 showBtn.onclick = function() {
                     restartSpeedFocusTimer();
                     optionsList.classList.toggle('ai-hints-hidden');
@@ -239,6 +267,7 @@
                 hintBtn = document.createElement('button');
                 hintBtn.innerText = 'Show Hints';
                 hintBtn.className = 'ai-hints-btn';
+                hintBtn.dataset.aiHintsAction = 'toggle-hints';
                 hintBtn.onclick = function() {
                     restartSpeedFocusTimer();
                     const isHidden = hintsList.classList.contains('ai-hints-hidden');
@@ -265,7 +294,8 @@
             btnContainer.appendChild(regenBtn);
 
             // Insert buttons at the top of the container
-            container.insertBefore(btnContainer, container.firstChild.nextSibling);
+            const separator = container.querySelector('hr');
+            container.insertBefore(btnContainer, separator ? separator.nextSibling : container.firstChild);
 
             function revealAIHints() {
                 let revealed = false;
@@ -316,7 +346,7 @@
         } else {
             const genBtn = document.createElement('button');
             genBtn.innerText = 'Generate AI Hints/Options';
-            genBtn.className = 'ai-hints-btn';
+            genBtn.className = 'ai-hints-btn ai-hints-generate-btn';
             genBtn.style.display = 'block';
             genBtn.style.margin = '20px auto';
             genBtn.onclick = function() {

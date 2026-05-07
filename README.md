@@ -2,7 +2,7 @@
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/D1D01W6NQT)
 
-AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate helpful hints or multiple-choice distractors for your flashcards during review. It helps simulate real exam conditions by providing plausible options even for open-ended cards.
+AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate helpful hints or multiple-choice options for your flashcards during review. It helps simulate real exam conditions by including the correct answer alongside plausible distractors even for open-ended cards.
 
 ## Features
 
@@ -17,7 +17,7 @@ AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate
 - **Universal Compatibility**: Works with Basic, Cloze, Image Occlusion, and custom note types.
 - **Smart Shuffling**: Options are shuffled every time you review the card to prevent pattern memorization.
 - **Storage Modes**: Choose between **visible HTML** (visible on all devices) or **invisible JSON** (cleaner look, requires add-on to render).
-- **Configurable Options**: Set exactly how many distractors the AI should generate (default is 4).
+- **Configurable Options**: Set exactly how many MCQ options the AI should generate, including the correct answer (default is 4).
 - **Field Customization**: Specify exactly which fields to send to the AI for each note type. Optimized for Cloze cards by default.
 - **Persistent Storage**: Generated hints are saved directly in your card's fields (e.g., "Extras" or "Back"), so they work on AnkiMobile and AnkiDroid too.
 - **Manual Control**: Generate, show, or regenerate hints with embedded buttons on the card.
@@ -28,7 +28,7 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 
 ### Configuration Options
 
-- **General Tab**: Select your `ai_provider`, configure the number of distractors (`options_count`), toggle the visibility of the buttons, and choose the `storage_mode` (`"json"` for a hidden data block or `"html"` for a visible block).
+- **General Tab**: Select your `ai_provider`, configure the total number of MCQ options (`options_count`), toggle the visibility of the buttons, and choose the `storage_mode` (`"json"` for a hidden data block or `"html"` for a visible block).
 - **AI Providers Tab**: Enter your `api_keys` for supported providers, change model names, configure a local LLM endpoint (like Ollama), or use the **Custom Providers** section to add, edit, or remove your own API endpoints and custom headers.
 - **Local Fallback**: Enable "Use Local AI as fallback" if you want Ollama/LM Studio to be tried after cloud providers fail. Selecting `local` as the active provider always uses the configured local endpoint.
 - **Advanced Tab**: 
