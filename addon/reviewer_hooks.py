@@ -3,6 +3,24 @@ from aqt import mw, gui_hooks
 from aqt.utils import showInfo, showWarning
 from .ai_client import AIClient
 from .card_parser import CardParser
+from .config_ui import on_config_dialog
+from aqt.qt import QMessageBox
+
+def show_api_error_dialog(provider, is_custom=False):
+    msg = QMessageBox(mw)
+    msg.setIcon(QMessageBox.Icon.Warning)
+    msg.setWindowTitle("AI-Hints")
+    if is_custom:
+        msg.setText(f"API key for custom provider '{provider}' is not configured. Please add it in the add-on config.")
+    else:
+        msg.setText(f"API key for '{provider}' is not configured. Please add it in the add-on config.")
+    
+    config_btn = msg.addButton("Open Config", QMessageBox.ButtonRole.ActionRole)
+    msg.addButton(QMessageBox.StandardButton.Cancel)
+    
+    msg.exec()
+    if msg.clickedButton() == config_btn:
+        on_config_dialog(mw)
 
 def get_addon_dir():
     return os.path.dirname(__file__)
@@ -61,12 +79,12 @@ def generate_hints():
         if provider in config.get("custom_providers", {}):
             api_key = config.get("custom_providers", {}).get(provider, {}).get("api_key")
             if not api_key:
-                showWarning(f"AI-Hints: API key for custom provider '{provider}' is not configured. Please add it in the add-on config.")
+                show_api_error_dialog(provider, is_custom=True)
                 return
         else:
             api_key = config.get("api_keys", {}).get(provider)
             if not api_key:
-                showWarning(f"AI-Hints: API key for '{provider}' is not configured. Please add it in the add-on config.")
+                show_api_error_dialog(provider, is_custom=False)
                 return
 
     parser = CardParser(
