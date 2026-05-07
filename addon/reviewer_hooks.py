@@ -123,6 +123,38 @@ def restart_speed_focus_timer():
     except Exception as e:
         logger.error(f"Failed to restart Speed Focus timer: {e}")
 
+def refresh_current_card():
+    reviewer = getattr(mw, "reviewer", None)
+    if not reviewer:
+        return
+
+    try:
+        refresh = getattr(reviewer, "refresh", None)
+        if callable(refresh):
+            refresh()
+            return
+
+        redraw = getattr(reviewer, "_redraw_current_card", None)
+        if callable(redraw):
+            redraw()
+            return
+
+        card = getattr(reviewer, "card", None)
+        if card and hasattr(card, "load"):
+            card.load()
+
+        if getattr(reviewer, "state", None) == "answer":
+            show_answer = getattr(reviewer, "_showAnswer", None)
+            if callable(show_answer):
+                show_answer()
+                return
+
+        show_question = getattr(reviewer, "_showQuestion", None)
+        if callable(show_question):
+            show_question()
+    except Exception as e:
+        logger.error(f"Failed to refresh reviewer card: {e}")
+
 def generate_hints():
     card = mw.reviewer.card
     if not card:
@@ -156,7 +188,7 @@ def generate_hints():
 
         if not data or (not data.get("hints") and not data.get("options")):
             showInfo("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
-            mw.reviewer.refresh()
+            refresh_current_card()
             return
             
         note = card.note()
@@ -166,7 +198,7 @@ def generate_hints():
         }
         if parser.update_note_with_hints(note, data, toggles, card):
             note.flush()
-            mw.reviewer.refresh()
+            refresh_current_card()
         else:
             showInfo("AI-Hints: No hints or options were generated.")
 

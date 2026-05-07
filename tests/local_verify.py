@@ -1,5 +1,6 @@
 import sys
 import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 # 1. Setup Mock Anki Environment
@@ -115,6 +116,23 @@ try:
     generate_hints()
     print("SUCCESS: generate_hints() handles Dict results correctly.")
 
+    print("Testing reviewer refresh compatibility...")
+    import addon.reviewer_hooks as reviewer_hooks
+    redraw_calls = []
+    original_reviewer = mock_mw.reviewer
+    mock_mw.reviewer = SimpleNamespace(
+        card=mock_card,
+        state="question",
+        _redraw_current_card=lambda: redraw_calls.append("redraw"),
+    )
+    reviewer_hooks.refresh_current_card()
+    mock_mw.reviewer = original_reviewer
+    if redraw_calls == ["redraw"]:
+        print("SUCCESS: refresh_current_card() works without Reviewer.refresh().")
+    else:
+        print(f"FAILED: refresh_current_card() did not use redraw fallback: {redraw_calls}")
+        sys.exit(1)
+
     # 5. Test JSON storage mode
     print("Testing JSON storage mode...")
     from addon.card_parser import CardParser
@@ -180,6 +198,30 @@ try:
         print("SUCCESS: AIClient correctly injects options_count into prompt.")
     else:
         print(f"FAILED: AIClient incorrect prompt injection: {received_system_prompt}")
+        sys.exit(1)
+
+    print("Testing model fallback after bad output...")
+    fallback_client = AIClient({
+        "ai_provider": "groq",
+        "api_keys": {"groq": "test-key"},
+        "models": {"groq": "bad-model"},
+        "model_fallbacks": {"groq": ["good-model"]},
+        "options_count": 2,
+    })
+    attempted_models = []
+
+    def fake_post_json(url, data, headers):
+        attempted_models.append(data["model"])
+        if data["model"] == "bad-model":
+            return {"choices": [{"message": {"content": "not json"}}]}
+        return {"choices": [{"message": {"content": '{"hints":["H"],"options":["O1","O2"]}'}}]}
+
+    fallback_client._post_json = fake_post_json
+    fallback_result = fallback_client._call_openai_compatible("groq", "system", "prompt")
+    if attempted_models == ["bad-model", "good-model"] and fallback_result["hints"] == ["H"]:
+        print("SUCCESS: AIClient falls back to another model after unusable output.")
+    else:
+        print(f"FAILED: AIClient model fallback failed: {attempted_models} / {fallback_result}")
         sys.exit(1)
 
 except Exception as e:

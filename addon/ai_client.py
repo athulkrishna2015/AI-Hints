@@ -55,6 +55,47 @@ LEGACY_MODEL_REPLACEMENTS = {
     ("together", "mistralai/Mixtral-8x7B-Instruct-v0.1"): "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
 }
 
+MODEL_FALLBACKS = {
+    "anthropic": [
+        "claude-3-5-haiku-20241022",
+        "claude-3-haiku-20240307",
+    ],
+    "gemini": [
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash",
+    ],
+    "groq": [
+        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile",
+    ],
+    "grok": [
+        "grok-3-mini",
+    ],
+    "huggingface": [
+        "meta-llama/Llama-3.1-8B-Instruct",
+    ],
+    "nvidia": [
+        "meta/llama-3.1-8b-instruct",
+    ],
+    "openrouter": [
+        "meta-llama/llama-3.1-8b-instruct",
+        "meta-llama/llama-3.1-8b-instruct:free",
+    ],
+    "together": [
+        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    ],
+    "sambanova": [
+        "Meta-Llama-3.1-8B-Instruct",
+        "Meta-Llama-3.3-70B-Instruct",
+    ],
+    "cerebras": [
+        "llama3.1-8b",
+        "llama-3.3-70b",
+    ],
+}
+
 class AIClient:
     def __init__(self, config: Dict[str, Any]):
         self.config = config or {}
@@ -148,34 +189,38 @@ class AIClient:
         custom_cfg = (self.config.get("custom_providers") or {}).get(provider_name, {})
         url = custom_cfg.get("url", "")
         api_key = custom_cfg.get("api_key", "").strip()
-        model = custom_cfg.get("model", "")
         custom_headers = custom_cfg.get("headers", {})
 
         headers = self._json_headers(api_key)
         headers.update(custom_headers)
 
-        data = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ]
-        }
+        models = self._models_for_provider(provider_name, custom_cfg.get("model", ""), custom_cfg.get("model_fallbacks", []))
+        for model in models:
+            data = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ]
+            }
 
-        try:
-            result = self._post_json(url, data, headers)
-            content = self._extract_content(result)
-            return self._parse_json_result(content)
-        except urllib.error.HTTPError as e:
-            logger.error(f"AI-Hints Error (Custom Provider {provider_name}): {e} - {self._read_http_error(e)}")
-            return {"hints": [], "options": []}
-        except Exception as e:
-            logger.error(f"AI-Hints Error (Custom Provider {provider_name}): {e}")
-            return {"hints": [], "options": []}
+            try:
+                self._log_model_attempt(provider_name, model, models)
+                result = self._post_json(url, data, headers)
+                content = self._extract_content(result)
+                parsed = self._parse_json_result(content)
+                if parsed.get("hints") or parsed.get("options"):
+                    return parsed
+                logger.warning(f"AI-Hints: Custom provider {provider_name} model '{model}' returned no parseable hints/options.")
+            except urllib.error.HTTPError as e:
+                logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e} - {self._read_http_error(e)}")
+            except Exception as e:
+                logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
+        return {"hints": [], "options": []}
 
     def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         api_key = (self.config.get("api_keys") or {}).get(provider, "").strip()
-        model = self._get_model(provider)
+        models = self._models_for_provider(provider)
         
         base_url = "https://api.openai.com/v1"
         if provider == "deepseek":
@@ -191,8 +236,8 @@ class AIClient:
         elif provider == "local":
             local_cfg = self.config.get("local_endpoint") or {}
             base_url = local_cfg.get("base_url", "http://localhost:11434/v1")
-            model = (local_cfg.get("model", "") or model or DEFAULT_MODELS["local"]).strip()
             api_key = (local_cfg.get("api_key", "") or api_key).strip()
+            models = self._models_for_provider(provider, local_cfg.get("model", "") or DEFAULT_MODELS["local"])
         elif provider == "mistral":
             base_url = "https://api.mistral.ai/v1"
         elif provider == "huggingface":
@@ -212,30 +257,34 @@ class AIClient:
             headers["HTTP-Referer"] = "https://github.com/athulkrishna2015/ai-hints"
             headers["X-Title"] = "Anki AI-Hints"
 
-        data = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ],
-        }
-        if provider in ["openai", "groq", "deepseek", "mistral"]:
-            data["response_format"] = {"type": "json_object"}
+        for model in models:
+            data = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+            }
+            if provider in ["openai", "groq", "deepseek", "mistral"]:
+                data["response_format"] = {"type": "json_object"}
 
-        try:
-            result = self._post_json(url, data, headers)
-            content = self._extract_content(result)
-            return self._parse_json_result(content)
-        except urllib.error.HTTPError as e:
-            logger.error(f"AI-Hints Error ({provider}): {e} - {self._read_http_error(e)}")
-            return {"hints": [], "options": []}
-        except Exception as e:
-            logger.error(f"AI-Hints Error ({provider}): {e}")
-            return {"hints": [], "options": []}
+            try:
+                self._log_model_attempt(provider, model, models)
+                result = self._post_json(url, data, headers)
+                content = self._extract_content(result)
+                parsed = self._parse_json_result(content)
+                if parsed.get("hints") or parsed.get("options"):
+                    return parsed
+                logger.warning(f"AI-Hints: {provider} model '{model}' returned no parseable hints/options.")
+            except urllib.error.HTTPError as e:
+                logger.error(f"AI-Hints Error ({provider}, model {model}): {e} - {self._read_http_error(e)}")
+            except Exception as e:
+                logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
+        return {"hints": [], "options": []}
 
     def _call_anthropic(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         api_key = (self.config.get("api_keys") or {}).get("anthropic", "").strip()
-        model = self._get_model("anthropic")
+        models = self._models_for_provider("anthropic")
         url = "https://api.anthropic.com/v1/messages"
         
         headers = self._json_headers()
@@ -243,61 +292,70 @@ class AIClient:
             "x-api-key": api_key,
             "anthropic-version": "2023-06-01"
         })
-        
-        data = {
-            "model": model,
-            "system": system_prompt,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 1024
-        }
-        
-        try:
-            result = self._post_json(url, data, headers)
-            content = self._extract_content(result)
-            return self._parse_json_result(content)
-        except urllib.error.HTTPError as e:
-            logger.error(f"AI-Hints Error (Anthropic): {e} - {self._read_http_error(e)}")
-            return {"hints": [], "options": []}
-        except Exception as e:
-            logger.error(f"AI-Hints Error (Anthropic): {e}")
-            return {"hints": [], "options": []}
+
+        for model in models:
+            data = {
+                "model": model,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1024
+            }
+
+            try:
+                self._log_model_attempt("anthropic", model, models)
+                result = self._post_json(url, data, headers)
+                content = self._extract_content(result)
+                parsed = self._parse_json_result(content)
+                if parsed.get("hints") or parsed.get("options"):
+                    return parsed
+                logger.warning(f"AI-Hints: Anthropic model '{model}' returned no parseable hints/options.")
+            except urllib.error.HTTPError as e:
+                logger.error(f"AI-Hints Error (Anthropic, model {model}): {e} - {self._read_http_error(e)}")
+            except Exception as e:
+                logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
+        return {"hints": [], "options": []}
 
     def _call_gemini(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         api_key = (self.config.get("api_keys") or {}).get("gemini", "").strip()
-        model = self._get_model("gemini")
-        model_path = urllib.parse.quote(model, safe="")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_path}:generateContent"
-        logger.debug(f"Calling Gemini with model: {model}")
-        
+        models = self._models_for_provider("gemini")
+
         headers = self._json_headers()
         headers["x-goog-api-key"] = api_key
-        
-        data = {
-            "system_instruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "responseJsonSchema": {
-                    "type": "object",
-                    "properties": {
-                        "hints": {"type": "array", "items": {"type": "string"}},
-                        "options": {"type": "array", "items": {"type": "string"}},
+
+        for model in models:
+            model_path = urllib.parse.quote(model, safe="")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_path}:generateContent"
+            logger.debug(f"Calling Gemini with model: {model}")
+
+            data = {
+                "system_instruction": {"parts": [{"text": system_prompt}]},
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "responseJsonSchema": {
+                        "type": "object",
+                        "properties": {
+                            "hints": {"type": "array", "items": {"type": "string"}},
+                            "options": {"type": "array", "items": {"type": "string"}},
+                        },
+                        "required": ["hints", "options"],
                     },
-                    "required": ["hints", "options"],
                 },
-            },
-        }
-        
-        try:
-            result = self._post_json(url, data, headers)
-            content = self._extract_content(result)
-            return self._parse_json_result(content)
-        except urllib.error.HTTPError as e:
-            logger.error(f"AI-Hints Error (Gemini): {e} - {self._read_http_error(e)}")
-            return {"hints": [], "options": []}
-        except Exception as e:
-            logger.error(f"AI-Hints Error (Gemini): {e}")
-            return {"hints": [], "options": []}
+            }
+
+            try:
+                self._log_model_attempt("gemini", model, models)
+                result = self._post_json(url, data, headers)
+                content = self._extract_content(result)
+                parsed = self._parse_json_result(content)
+                if parsed.get("hints") or parsed.get("options"):
+                    return parsed
+                logger.warning(f"AI-Hints: Gemini model '{model}' returned no parseable hints/options.")
+            except urllib.error.HTTPError as e:
+                logger.error(f"AI-Hints Error (Gemini, model {model}): {e} - {self._read_http_error(e)}")
+            except Exception as e:
+                logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
+        return {"hints": [], "options": []}
 
     def _parse_json_result(self, content: str) -> Dict[str, List[str]]:
         content = (content or "").strip()
@@ -340,6 +398,10 @@ class AIClient:
 
     def _get_model(self, provider: str) -> str:
         model = ((self.config.get("models") or {}).get(provider, "") or DEFAULT_MODELS.get(provider, "")).strip()
+        return self._normalize_model(provider, model)
+
+    def _normalize_model(self, provider: str, model: str) -> str:
+        model = (model or "").strip()
         if provider == "gemini" and model.startswith("models/"):
             model = model.split("/", 1)[1]
 
@@ -350,6 +412,36 @@ class AIClient:
             )
             return replacement
         return model
+
+    def _models_for_provider(self, provider: str, primary_model: str = "", extra_fallbacks: List[str] = None) -> List[str]:
+        configured_fallbacks = self._model_list((self.config.get("model_fallbacks") or {}).get(provider, []))
+        candidates = [
+            primary_model or self._get_model(provider),
+            *self._model_list(extra_fallbacks),
+            *configured_fallbacks,
+            *MODEL_FALLBACKS.get(provider, []),
+        ]
+
+        models = []
+        seen = set()
+        for candidate in candidates:
+            model = self._normalize_model(provider, candidate)
+            if not model or model in seen:
+                continue
+            seen.add(model)
+            models.append(model)
+        return models
+
+    def _model_list(self, value: Any) -> List[str]:
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            return value
+        return []
+
+    def _log_model_attempt(self, provider: str, model: str, models: List[str]) -> None:
+        if models and model != models[0]:
+            logger.info(f"Trying fallback model for {provider}: {model}")
 
     def _json_headers(self, api_key: str = "") -> Dict[str, str]:
         headers = {

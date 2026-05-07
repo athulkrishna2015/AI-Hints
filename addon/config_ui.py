@@ -4,7 +4,7 @@ from aqt import mw
 from aqt.qt import *
 from aqt.utils import showInfo, tooltip
 from .logger import logger, get_logger
-from .ai_client import DEFAULT_MODELS, LEGACY_MODEL_REPLACEMENTS, PROVIDER_ORDER
+from .ai_client import DEFAULT_MODELS, LEGACY_MODEL_REPLACEMENTS, MODEL_FALLBACKS, PROVIDER_ORDER
 import logging
 
 # Resolve the top-level addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
@@ -588,6 +588,13 @@ class ConfigDialog(QDialog):
         for provider, model in list(models.items()):
             models[provider] = LEGACY_MODEL_REPLACEMENTS.get((provider, model), model)
         config["models"] = models
+
+        model_fallbacks = {
+            provider: list(fallbacks)
+            for provider, fallbacks in MODEL_FALLBACKS.items()
+        }
+        model_fallbacks.update(config.get("model_fallbacks", {}) or {})
+        config["model_fallbacks"] = model_fallbacks
 
         local = {
             "enabled": False,

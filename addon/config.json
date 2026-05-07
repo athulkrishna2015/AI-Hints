@@ -35,6 +35,33 @@
         "sambanova": "Meta-Llama-3.1-8B-Instruct",
         "cerebras": "llama3.1-8b"
     },
+    "model_fallbacks": {
+        "gemini": [
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash"
+        ],
+        "groq": [
+            "llama-3.1-8b-instant",
+            "llama-3.3-70b-versatile"
+        ],
+        "openrouter": [
+            "meta-llama/llama-3.1-8b-instruct",
+            "meta-llama/llama-3.1-8b-instruct:free"
+        ],
+        "together": [
+            "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+        ],
+        "sambanova": [
+            "Meta-Llama-3.1-8B-Instruct",
+            "Meta-Llama-3.3-70B-Instruct"
+        ],
+        "cerebras": [
+            "llama3.1-8b",
+            "llama-3.3-70b"
+        ]
+    },
     "target_fields": [
         "Extras",
         "Back",

@@ -8,6 +8,7 @@ AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate
 
 - **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, and any OpenAI-compatible local API (like Ollama or LM Studio).
 - **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next configured provider.
+- **Model Fallbacks**: If a configured model is unavailable or returns unusable output, the add-on can try fallback models for the same provider before moving on.
 - **Current-Card Hints**: Generated data is scoped to the current card, so cloze deletion and Image Occlusion siblings can each have their own hints/options.
 - **Alt-Click Reveal**: Alt-click the current cloze deletion or Image Occlusion mask to reveal only that card's hints/options. Ctrl-click and editable review fields are left alone.
 - **Speed Focus Mode Friendly**: Clicking AI-Hints buttons or Alt-click revealing hints restarts the Speed Focus Mode timer when that add-on is installed.
@@ -74,6 +75,10 @@ You can also use the **Raw JSON Editor** in the Advanced tab if you prefer editi
         "gemini": "gemini-2.5-flash",
         "groq": "llama-3.1-8b-instant",
         "openrouter": "meta-llama/llama-3.1-8b-instruct"
+    },
+    "model_fallbacks": {
+        "gemini": ["gemini-2.5-flash-lite", "gemini-2.0-flash"],
+        "groq": ["llama-3.3-70b-versatile"]
     },
     "local_endpoint": {
         "enabled": false,
