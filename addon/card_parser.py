@@ -150,7 +150,7 @@ class CardParser:
     def find_hints_block(self, note, card=None) -> Optional[str]:
         """Searches all fields of the note for an AI hints block matching the card."""
         pattern = re.compile(
-            rf'<div\b(?=[^>]*class=["\']([^"\']*(?:{self.json_class}|{self.container_class})[^"\']*)["\'])[^>]*>.*?</div>',
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>.*?</div>',
             flags=re.DOTALL | re.IGNORECASE,
         )
         for f_val in note.values():
@@ -165,7 +165,7 @@ class CardParser:
     def clear_hints_from_note(self, note, card=None) -> bool:
         """Removes AI hints blocks matching the card from all fields."""
         pattern = re.compile(
-            rf'<div\b(?=[^>]*class=["\']([^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'])[^>]*>.*?</div>',
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>.*?</div>',
             flags=re.DOTALL | re.IGNORECASE,
         )
         cleared = False
@@ -189,7 +189,7 @@ class CardParser:
 
     def _replace_or_append_block(self, current_val: str, content_block: str, card=None) -> str:
         pattern = re.compile(
-            rf'<div\b(?=[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'])[^>]*>.*?</div>',
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>.*?</div>',
             flags=re.DOTALL | re.IGNORECASE,
         )
         matches = list(pattern.finditer(current_val))

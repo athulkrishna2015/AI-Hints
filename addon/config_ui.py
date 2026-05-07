@@ -306,6 +306,10 @@ class ConfigDialog(QDialog):
         filter_layout.addWidget(self.log_level_cb)
         filter_layout.addStretch()
         
+        self.auto_clear_cb = QCheckBox("Clear on startup")
+        self.auto_clear_cb.setToolTip("Automatically clear the log file every time Anki starts.")
+        filter_layout.addWidget(self.auto_clear_cb)
+
         refresh_btn = QPushButton("Refresh")
         refresh_btn.clicked.connect(self.load_log)
         filter_layout.addWidget(refresh_btn)
@@ -434,6 +438,7 @@ class ConfigDialog(QDialog):
         self.show_on_card_cb.setChecked(c.get("show_on_card", True))
         self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", True))
         self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
+        self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
         
         keys = c.get("api_keys", {}) or {}
         for p, edit in self.api_key_edits.items():
@@ -575,6 +580,7 @@ class ConfigDialog(QDialog):
             new_config["show_on_card"] = self.show_on_card_cb.isChecked()
             new_config["show_in_bottom_bar"] = self.show_in_bottom_bar_cb.isChecked()
             new_config["show_in_popup"] = self.show_in_popup_cb.isChecked()
+            new_config["auto_clear_logs"] = self.auto_clear_cb.isChecked()
             
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {
@@ -636,6 +642,7 @@ class ConfigDialog(QDialog):
         config.setdefault("show_on_card", True)
         config.setdefault("show_in_bottom_bar", True)
         config.setdefault("show_in_popup", False)
+        config.setdefault("auto_clear_logs", True)
         return config
 
 _config_dialog_instance = None

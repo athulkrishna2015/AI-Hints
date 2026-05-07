@@ -16,6 +16,18 @@ def get_logger():
 
 logger = get_logger()
 
+def clear_log_file():
+    """Wipes the log file content."""
+    addon_dir = os.path.dirname(__file__)
+    log_file = os.path.join(addon_dir, "ai_hints.log")
+    try:
+        if os.path.exists(log_file):
+            with open(log_file, "w", encoding="utf-8") as f:
+                f.write("")
+            logger.info("Log file cleared on startup.")
+    except Exception as e:
+        print(f"AI-Hints: Failed to clear log file: {e}")
+
 def info(msg, parent=None):
     from aqt.utils import showInfo
     logger.info(f"Notification: {msg}")

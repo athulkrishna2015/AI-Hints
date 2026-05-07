@@ -76,6 +76,7 @@
     "show_options_button": true,
     "show_on_card": true,
     "show_in_bottom_bar": true,
+    "auto_clear_logs": true,
     "custom_providers": {},
     "note_type_fields": {
         "Cloze": ["Text"],

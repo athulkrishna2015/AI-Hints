@@ -161,6 +161,43 @@ try:
         print(f"FAILED: CardParser incorrect JSON formatting: {set_value}")
         sys.exit(1)
 
+    print("Testing find_hints_block and clear_hints_from_note regex fixes...")
+    # Test multiple classes and single quotes
+    multi_class_html = '<div class="foo ai-hints-json bar" data-ai-hints-card-id="456">payload</div>'
+    mock_note_json.values.return_value = [multi_class_html]
+    if json_parser.find_hints_block(mock_note_json, mock_card_json) == multi_class_html:
+        print("SUCCESS: find_hints_block matches multi-class div.")
+    else:
+        print("FAILED: find_hints_block failed on multi-class div.")
+        sys.exit(1)
+
+    single_quote_html = "<div class='ai-hints-container' data-ai-hints-card-id='456'>payload</div>"
+    mock_note_json.values.return_value = [single_quote_html]
+    if json_parser.find_hints_block(mock_note_json, mock_card_json) == single_quote_html:
+        print("SUCCESS: find_hints_block matches single quote div.")
+    else:
+        print("FAILED: find_hints_block failed on single quote div.")
+        sys.exit(1)
+
+    # Test clear_hints_from_note
+    mock_note_json.keys.return_value = ["Back"]
+    note_data = {"Back": f"Prefix {multi_class_html} Suffix"}
+    mock_note_json.__getitem__.side_effect = note_data.__getitem__
+    
+    if json_parser.clear_hints_from_note(mock_note_json, mock_card_json):
+        # The method sets the value back using note[f_name] = new_val
+        # which calls __setitem__
+        set_call = mock_note_json.__setitem__.call_args
+        if set_call and set_call[0][0] == "Back" and set_call[0][1] == "Prefix  Suffix":
+            print("SUCCESS: clear_hints_from_note removed block.")
+        else:
+            actual = set_call[0][1] if set_call else "None"
+            print(f"FAILED: clear_hints_from_note incorrect result: {actual}")
+            sys.exit(1)
+    else:
+        print("FAILED: clear_hints_from_note returned False.")
+        sys.exit(1)
+
     print("Testing current cloze targeting...")
     cloze_parser = CardParser(target_fields=["Extra"], note_type_fields={"Cloze": ["Text"]}, storage_mode="json")
     mock_cloze_note = MagicMock()
