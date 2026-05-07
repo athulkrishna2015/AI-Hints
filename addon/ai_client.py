@@ -7,13 +7,13 @@ class AIClient:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
 
-    def generate_options(self, front: str, back: str) -> List[str]:
+    def generate_options(self, front: str, back: str) -> Dict[str, List[str]]:
         provider = self.config.get("ai_provider", "openai")
         system_prompt = self.config.get("system_prompt", "")
         count = self.config.get("options_count", 4)
         
         # Append specific count instruction
-        system_prompt += f" Precisely generate exactly {count} options."
+        system_prompt += f" Precisely generate exactly {count} options and 2-3 helpful hints."
         
         prompt = f"Front: {front}\nBack: {back}" if back else f"Content: {front}"
         
@@ -29,7 +29,7 @@ class AIClient:
             # Covers openai, deepseek, groq, nvidia, grok, openrouter, local, mistral
             return self._call_openai_compatible(provider, system_prompt, prompt)
 
-    def _call_custom_provider(self, provider_name: str, system_prompt: str, prompt: str) -> List[str]:
+    def _call_custom_provider(self, provider_name: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         custom_cfg = self.config.get("custom_providers", {}).get(provider_name, {})
         url = custom_cfg.get("url", "")
         api_key = custom_cfg.get("api_key", "")
@@ -58,14 +58,14 @@ class AIClient:
                 if "choices" in result:
                     content = result["choices"][0]["message"]["content"]
                 else:
-                    # Generic fallback if the provider has a different top-level key
+                    # Generic fallback
                     content = str(result)
-                return self._parse_json_list(content)
+                return self._parse_json_result(content)
         except Exception as e:
             print(f"AI-Hints Error (Custom Provider {provider_name}): {e}")
-            return []
+            return {"hints": [], "options": []}
 
-    def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str) -> List[str]:
+    def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         api_key = self.config.get("api_keys", {}).get(provider, "")
         model = self.config.get("models", {}).get(provider, "")
         
@@ -112,12 +112,12 @@ class AIClient:
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read().decode("utf-8"))
                 content = result["choices"][0]["message"]["content"]
-                return self._parse_json_list(content)
+                return self._parse_json_result(content)
         except Exception as e:
             print(f"AI-Hints Error ({provider}): {e}")
-            return []
+            return {"hints": [], "options": []}
 
-    def _call_anthropic(self, system_prompt: str, prompt: str) -> List[str]:
+    def _call_anthropic(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         api_key = self.config.get("api_keys", {}).get("anthropic", "")
         model = self.config.get("models", {}).get("anthropic", "")
         url = "https://api.anthropic.com/v1/messages"
@@ -140,12 +140,12 @@ class AIClient:
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read().decode("utf-8"))
                 content = result["content"][0]["text"]
-                return self._parse_json_list(content)
+                return self._parse_json_result(content)
         except Exception as e:
             print(f"AI-Hints Error (Anthropic): {e}")
-            return []
+            return {"hints": [], "options": []}
 
-    def _call_gemini(self, system_prompt: str, prompt: str) -> List[str]:
+    def _call_gemini(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
         api_key = self.config.get("api_keys", {}).get("gemini", "")
         model = self.config.get("models", {}).get("gemini", "")
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
@@ -163,13 +163,12 @@ class AIClient:
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read().decode("utf-8"))
                 content = result["candidates"][0]["content"]["parts"][0]["text"]
-                return self._parse_json_list(content)
+                return self._parse_json_result(content)
         except Exception as e:
             print(f"AI-Hints Error (Gemini): {e}")
-            return []
+            return {"hints": [], "options": []}
 
-    def _parse_json_list(self, content: str) -> List[str]:
-        # AI might return markdown code blocks, try to clean them
+    def _parse_json_result(self, content: str) -> Dict[str, List[str]]:
         content = content.strip()
         if content.startswith("```json"):
             content = content[7:]
@@ -181,14 +180,13 @@ class AIClient:
         
         try:
             parsed = json.loads(content)
-            if isinstance(parsed, list):
-                return parsed
-            elif isinstance(parsed, dict):
-                # Look for a list inside the dict
-                for val in parsed.values():
-                    if isinstance(val, list):
-                        return val
-            return []
+            if isinstance(parsed, dict):
+                return {
+                    "hints": parsed.get("hints", []),
+                    "options": parsed.get("options", [])
+                }
+            elif isinstance(parsed, list):
+                return {"hints": [], "options": parsed}
+            return {"hints": [], "options": []}
         except:
-            # Fallback: simple string splitting if JSON fails
-            return []
+            return {"hints": [], "options": []}

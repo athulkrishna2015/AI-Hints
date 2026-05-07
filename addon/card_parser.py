@@ -1,5 +1,6 @@
 import re
-from typing import List, Optional, Tuple
+import json
+from typing import List, Optional, Tuple, Dict
 from aqt import mw
 
 class CardParser:
@@ -48,17 +49,16 @@ class CardParser:
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
-    def update_note_with_hints(self, note, options: List[str]) -> bool:
+    def update_note_with_hints(self, note, data: Dict[str, List[str]]) -> bool:
         """Appends or replaces the AI hints block in the target field."""
-        if not options:
+        if not data or (not data.get("hints") and not data.get("options")):
             return False
 
         # Build content block based on mode
-        import json
         if self.storage_mode == "json":
-            content_block = f'<div class="{self.json_class}" style="display:none">{json.dumps(options)}</div>'
+            content_block = f'<div class="{self.json_class}" style="display:none">{json.dumps(data)}</div>'
         else:
-            content_block = self._build_html_block(options)
+            content_block = self._build_html_block(data)
         
         # Find target field
         field_name = self._find_target_field(note)
@@ -89,14 +89,24 @@ class CardParser:
                 return target
         return None
 
-    def _build_html_block(self, options: List[str]) -> str:
-        items_html = "".join([f"<li>{opt}</li>" for opt in options])
+    def _build_html_block(self, data: Dict[str, List[str]]) -> str:
+        hints = data.get("hints", [])
+        options = data.get("options", [])
+        
+        hints_html = ""
+        if hints:
+            items = "".join([f"<li>{h}</li>" for h in hints])
+            hints_html = f'<b>AI Hints:</b><ul class="ai-hints-hint-list">{items}</ul>'
+            
+        options_html = ""
+        if options:
+            items = "".join([f"<li>{o}</li>" for o in options])
+            options_html = f'<b>AI Options:</b><ul class="ai-hints-list">{items}</ul>'
+            
         return f"""
 <div class="{self.container_class}">
     <hr>
-    <b>AI Generated Options:</b>
-    <ul class="ai-hints-list">
-        {items_html}
-    </ul>
+    {hints_html}
+    {options_html}
 </div>
 """

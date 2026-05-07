@@ -68,14 +68,14 @@ try:
     def mock_run_in_background(task, on_done):
         class MockFuture:
             def result(self):
-                return ["Test Option 1", "Test Option 2"]
+                return {"hints": ["Hint 1"], "options": ["Option 1", "Option 2"]}
         on_done(MockFuture())
         
     mock_mw.taskman.run_in_background = mock_run_in_background
     
     # This should not raise TypeError anymore
     generate_hints()
-    print("SUCCESS: generate_hints() handles Future results correctly.")
+    print("SUCCESS: generate_hints() handles Dict results correctly.")
 
     # 5. Test JSON storage mode
     print("Testing JSON storage mode...")
@@ -87,11 +87,11 @@ try:
     mock_note_json.__getitem__.return_value = "original"
     mock_note_json.model.return_value = {"name": "Basic"}
     
-    json_parser.update_note_with_hints(mock_note_json, ["A", "B"])
+    json_parser.update_note_with_hints(mock_note_json, {"hints": ["H"], "options": ["O"]})
     
     # Check if JSON was correctly set
     set_value = mock_note_json.__setitem__.call_args[0][1]
-    if 'class="ai-hints-json"' in set_value and '["A", "B"]' in set_value:
+    if 'class="ai-hints-json"' in set_value and '"hints": ["H"]' in set_value:
         print("SUCCESS: CardParser correctly formats JSON storage mode.")
     else:
         print(f"FAILED: CardParser incorrect JSON formatting: {set_value}")
@@ -106,7 +106,7 @@ try:
     
     # We can't easily test the network call, but we can check if it tries to use the right prompt
     # Let's mock _call_openai_compatible to see what system_prompt it receives
-    client._call_openai_compatible = MagicMock(return_value=[])
+    client._call_openai_compatible = MagicMock(return_value={"hints": [], "options": []})
     client.generate_options("F", "B")
     
     received_system_prompt = client._call_openai_compatible.call_args[0][1]
