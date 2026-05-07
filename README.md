@@ -20,7 +20,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Smart Shuffling**: Options are shuffled every time you review the card to prevent pattern memorization.
 - **Storage Modes**: Choose between **visible HTML** (visible on all devices) or **invisible JSON** (cleaner look, requires add-on to render).
 - **Configurable Options**: Set exactly how many MCQ options the AI should generate, including the correct answer (default is 4).
-- **MathJax-Aware Rendering**: AI-Hints preserves and repairs common LaTeX/MathJax output, including escaped JSON backslashes, inline/display delimiters, bare variables such as `lambda_L`, and malformed nested delimiters returned by models.
+- **MathJax-Aware Rendering**: AI-Hints prioritizes standard LaTeX/MathJax delimiters. It strictly uses `\( ... \)` for inline math and `\[ ... \]` for block math, explicitly avoiding `$ ... $` or `$$ ... $$` to ensure compatibility with all Anki platforms. It preserves and repairs common LaTeX/MathJax output, including escaped JSON backslashes and bare variables such as `lambda_L`.
 - **Field Customization**: Specify exactly which fields to send to the AI for each note type. Optimized for Cloze cards by default.
 - **Persistent Storage**: Generated hints are saved directly in your card's fields (e.g., "Extras" or "Back"), so they work on AnkiMobile and AnkiDroid too.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.

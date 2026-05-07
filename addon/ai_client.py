@@ -120,9 +120,11 @@ class AIClient:
             f"Generate exactly {count} options total and 2-3 helpful hints. "
             "Include the correct answer as one of the options. "
             f"The remaining {max(count - 1, 0)} options should be plausible incorrect distractors. "
-            "IMPORTANT: You MUST use standard LaTeX/MathJax delimiters \\( ... \\) for ALL math/variables. "
-            "NEVER omit backslashes for LaTeX commands (use \\\\exp, \\\\lambda, \\\\frac, \\\\left, \\\\right, etc.). "
-            "Example: \\( B(x) = B_0 \\\\exp\\\\left(-\\\\frac{x}{\\\\lambda_L}\\\\right) \\)."
+            "For Cloze deletions (marked with 'Current cloze deletion'), the options MUST ONLY contain the replacement text for that deletion, not full sentences or surrounding context. "
+            # Use single backslashes in examples to avoid confusing models into over-escaping (e.g., \\lambda)
+            "IMPORTANT: You MUST use standard LaTeX/MathJax delimiters \\( ... \\) for inline math and \\[ ... \\] for block math. "
+            "DO NOT use $ ... $ or $$ ... $$ delimiters. "
+            "Example: \\( B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) \\)."
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
 
