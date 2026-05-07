@@ -19,9 +19,19 @@ AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate
 - **Smart Shuffling**: Options are shuffled every time you review the card to prevent pattern memorization.
 - **Storage Modes**: Choose between **visible HTML** (visible on all devices) or **invisible JSON** (cleaner look, requires add-on to render).
 - **Configurable Options**: Set exactly how many MCQ options the AI should generate, including the correct answer (default is 4).
+- **MathJax-Aware Rendering**: AI-Hints preserves and repairs common LaTeX/MathJax output, including escaped JSON backslashes, inline/display delimiters, bare variables such as `lambda_L`, and malformed nested delimiters returned by models.
 - **Field Customization**: Specify exactly which fields to send to the AI for each note type. Optimized for Cloze cards by default.
 - **Persistent Storage**: Generated hints are saved directly in your card's fields (e.g., "Extras" or "Back"), so they work on AnkiMobile and AnkiDroid too.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
+
+## Release Notes
+
+### 1.0.0
+
+- Improved MathJax handling for AI-generated hints and options.
+- Repairs common malformed model output such as missing LaTeX command slashes, mixed delimiters like `( ... \)`, and nested delimiters inside larger formulas.
+- Preserves valid `\( ... \)`, `\[ ... \]`, and `<anki-mathjax>` content without wrapping entire prose sentences as math.
+- Keeps visible HTML storage escaped while still allowing Anki MathJax tags.
 
 ## Configuration
 
