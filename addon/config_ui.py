@@ -6,6 +6,9 @@ from aqt.utils import showInfo, tooltip
 from .logger import logger, get_logger
 import logging
 
+# Resolve the top-level addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
+ADDON_PACKAGE = __name__.split(".")[0]
+
 class CustomProviderDialog(QDialog):
     def __init__(self, parent, name="", data=None):
         super().__init__(parent)
@@ -50,7 +53,7 @@ class ConfigDialog(QDialog):
         self.setWindowTitle("AI-Hints Configuration")
         self.setMinimumSize(600, 700)
         self.addon_dir = os.path.dirname(__file__)
-        self.config = mw.addonManager.getConfig(__name__)
+        self.config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         self.custom_providers_data = self.config.get("custom_providers", {})
         
         self.setup_ui()
@@ -499,7 +502,7 @@ class ConfigDialog(QDialog):
                 new_config["note_type_fields"] = json.loads(self.note_fields_edit.toPlainText())
             
             new_config["custom_providers"] = self.custom_providers_data
-            mw.addonManager.writeConfig(__name__, new_config)
+            mw.addonManager.writeConfig(ADDON_PACKAGE, new_config)
             self.accept()
         except Exception as e:
             showInfo(f"Error saving configuration: {e}")
@@ -509,4 +512,8 @@ def on_config_dialog(parent=None):
     ConfigDialog(parent).exec()
 
 def init_config_ui():
-    mw.addonManager.setConfigAction(__name__, on_config_dialog)
+    mw.addonManager.setConfigAction(ADDON_PACKAGE, on_config_dialog)
+    
+    # Add Tools menu entry so the window can be opened any time
+    action = mw.form.menuTools.addAction("AI-Hints Config")
+    action.triggered.connect(lambda: on_config_dialog(mw))
