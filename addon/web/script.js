@@ -140,6 +140,16 @@
         return isMaskShape && cardHasImageOcclusion;
     }
 
+    function renderMathjax() {
+        if (typeof MathJax !== 'undefined' && typeof MathJax.typesetPromise === 'function') {
+            MathJax.typesetPromise().catch(function(err) {
+                console.warn('AI-Hints: MathJax typeset failed', err);
+            });
+        } else if (typeof MathJax !== 'undefined' && typeof MathJax.Hub !== 'undefined') {
+            MathJax.Hub.Queue(["Typeset", MathJax.Hub]);
+        }
+    }
+
     function revealAIHints() {
         const container = selectCurrentBlock('.ai-hints-container');
         if (!container) return false;
@@ -173,11 +183,12 @@
         }
         if (revealed) {
             restartSpeedFocusTimer();
+            renderMathjax();
         }
         return revealed;
     }
 
-    function setupAIHints() {
+    function setupAIHints(manualData) {
         const current = currentCard();
         if (!current.id && current.ord == null) {
             return;
@@ -199,10 +210,16 @@
         let container = selectCurrentBlock('.ai-hints-container');
         const jsonBlock = selectCurrentBlock('.ai-hints-json');
 
-        if (jsonBlock && !container) {
+        if ((jsonBlock || manualData) && !container) {
             try {
-                const rawData = (jsonBlock.textContent || jsonBlock.innerText || '').trim();
-                const data = JSON.parse(rawData);
+                let data;
+                if (manualData) {
+                    data = manualData;
+                } else {
+                    const rawData = (jsonBlock.textContent || jsonBlock.innerText || '').trim();
+                    data = JSON.parse(rawData);
+                }
+
                 container = document.createElement('div');
                 container.className = 'ai-hints-container';
 
@@ -215,8 +232,13 @@
                 if (optionsSection) {
                     container.appendChild(optionsSection);
                 }
-                jsonBlock.parentNode.insertBefore(container, jsonBlock.nextSibling);
-                copyCardAttrs(jsonBlock, container);
+
+                if (jsonBlock) {
+                    jsonBlock.parentNode.insertBefore(container, jsonBlock.nextSibling);
+                    copyCardAttrs(jsonBlock, container);
+                } else {
+                    cardBody.appendChild(container);
+                }
             } catch (e) {
                 console.error("AI-Hints: Failed to parse JSON options", e);
             }
@@ -241,7 +263,7 @@
 
         if (container) {
             // Only show if it matches the current card
-            if (matchesCurrentCard(container)) {
+            if (manualData || matchesCurrentCard(container)) {
                 container.style.display = 'block';
                 hideOtherContainers(container);
                 optionsList = container.querySelector('.ai-hints-list');
@@ -276,45 +298,80 @@
             sendCommand('ai_hints_generate');
         };
 
-        // Show Options Button
-        if (showOptionsCfg) {
-            const optBtn = document.createElement('button');
-            optBtn.innerText = 'Show Options';
-            optBtn.className = 'ai-hints-btn';
-            optBtn.dataset.aiHintsAction = 'toggle-options';
-            optBtn.onclick = function() {
-                if (optionsList) {
-                    restartSpeedFocusTimer();
-                    const isHidden = optionsList.classList.contains('ai-hints-hidden');
-                    optionsList.classList.toggle('ai-hints-hidden');
-                    optBtn.innerText = isHidden ? 'Hide Options' : 'Show Options';
-                } else {
-                    triggerGenerate(optBtn);
+        const hasAnyData = Boolean(container || jsonBlock || manualData);
+
+        if (!hasAnyData) {
+            // Only show Generate button if no data exists
+            const mainGenBtn = document.createElement('button');
+            mainGenBtn.innerText = 'Generate AI Hints';
+            mainGenBtn.className = 'ai-hints-btn';
+            mainGenBtn.onclick = function() {
+                triggerGenerate(mainGenBtn);
+            };
+            btnContainer.appendChild(mainGenBtn);
+        } else {
+            // Show toggle and utility buttons only if data exists
+            if (showOptionsCfg) {
+                const optBtn = document.createElement('button');
+                optBtn.innerText = 'Show Options';
+                optBtn.className = 'ai-hints-btn';
+                optBtn.dataset.aiHintsAction = 'toggle-options';
+                optBtn.onclick = function() {
+                    if (optionsList) {
+                        restartSpeedFocusTimer();
+                        const isHidden = optionsList.classList.contains('ai-hints-hidden');
+                        optionsList.classList.toggle('ai-hints-hidden');
+                        optBtn.innerText = isHidden ? 'Hide Options' : 'Show Options';
+                        if (isHidden) {
+                            renderMathjax();
+                        }
+                    }
+                };
+                btnContainer.appendChild(optBtn);
+            }
+
+            if (showHintsCfg) {
+                const hintBtn = document.createElement('button');
+                hintBtn.innerText = 'Show Hints';
+                hintBtn.className = 'ai-hints-btn';
+                hintBtn.dataset.aiHintsAction = 'toggle-hints';
+                hintBtn.onclick = function() {
+                    if (hintsList) {
+                        restartSpeedFocusTimer();
+                        const isHidden = hintsList.classList.contains('ai-hints-hidden');
+                        hintsList.classList.toggle('ai-hints-hidden');
+                        hintBtn.innerText = isHidden ? 'Hide Hints' : 'Show Hints';
+                        if (isHidden) {
+                            renderMathjax();
+                        }
+                    }
+                };
+                btnContainer.appendChild(hintBtn);
+            }
+
+            // Secondary actions
+            const regenBtn = document.createElement('button');
+            regenBtn.innerText = 'Regenerate';
+            regenBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
+            regenBtn.onclick = function() {
+                triggerGenerate(regenBtn);
+            };
+            btnContainer.appendChild(regenBtn);
+
+            const clearBtn = document.createElement('button');
+            clearBtn.innerText = 'Clear';
+            clearBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
+            clearBtn.onclick = function() {
+                if (confirm('Clear AI hints for this card?')) {
+                    clearBtn.disabled = true;
+                    clearBtn.innerText = 'Clearing...';
+                    sendCommand('ai_hints_clear');
                 }
             };
-            btnContainer.appendChild(optBtn);
+            btnContainer.appendChild(clearBtn);
         }
 
-        // Show Hints Button
-        if (showHintsCfg) {
-            const hintBtn = document.createElement('button');
-            hintBtn.innerText = 'Show Hints';
-            hintBtn.className = 'ai-hints-btn';
-            hintBtn.dataset.aiHintsAction = 'toggle-hints';
-            hintBtn.onclick = function() {
-                if (hintsList) {
-                    restartSpeedFocusTimer();
-                    const isHidden = hintsList.classList.contains('ai-hints-hidden');
-                    hintsList.classList.toggle('ai-hints-hidden');
-                    hintBtn.innerText = isHidden ? 'Hide Hints' : 'Show Hints';
-                } else {
-                    triggerGenerate(hintBtn);
-                }
-            };
-            btnContainer.appendChild(hintBtn);
-        }
-
-        // Refresh Button
+        // Refresh Button (Always useful)
         const refreshBtn = document.createElement('button');
         refreshBtn.innerText = 'Refresh';
         refreshBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
@@ -324,7 +381,6 @@
             refreshBtn.disabled = true;
             refreshBtn.innerText = 'Refreshing...';
             sendCommand('ai_hints_refresh');
-            // Auto-reset if refresh takes too long or fails to reload page
             setTimeout(function() {
                 if (refreshBtn) {
                     refreshBtn.disabled = false;
@@ -334,16 +390,11 @@
         };
         btnContainer.appendChild(refreshBtn);
 
-        // Regenerate Button
-        const regenBtn = document.createElement('button');
-        regenBtn.innerText = container ? 'Regenerate' : 'Generate';
-        regenBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
-        regenBtn.onclick = function() {
-            triggerGenerate(regenBtn);
-        };
-        btnContainer.appendChild(regenBtn);
-
         if (container && container.style.display !== 'none') {
+            // Ensure container is in the visible area (#qa) if it was injected outside (e.g. on front side)
+            if (cardBody && cardBody !== document.body && !cardBody.contains(container)) {
+                cardBody.appendChild(container);
+            }
             const separator = container.querySelector('hr');
             container.insertBefore(btnContainer, separator ? separator.nextSibling : container.firstChild);
         } else {
@@ -351,10 +402,18 @@
             cardBody.appendChild(btnContainer);
         }
 
-        if (uiCfg.auto_reveal) {
+        if (uiCfg.auto_reveal || manualData) {
             revealAIHints();
         }
+
+        if (container && container.style.display !== 'none') {
+            renderMathjax();
+        }
     }
+
+    window.aiHintsUpdateData = function(data) {
+        setupAIHints(data);
+    };
 
     window.aiHintsSetup = function(cardData) {
         window.aiHintsCurrentCard = cardData;

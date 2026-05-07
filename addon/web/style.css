@@ -41,3 +41,15 @@
 .ai-hints-hidden {
     display: none;
 }
+
+/* LaTeX / MathJax adjustments */
+.ai-hints-container .MathJax_Display, 
+.ai-hints-container .mjx-chtml.mjx-display {
+    margin: 0.5em 0 !important;
+    text-align: left !important;
+}
+
+.ai-hints-container ul li {
+    margin-bottom: 4px;
+}
+

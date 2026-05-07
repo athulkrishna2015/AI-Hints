@@ -162,6 +162,31 @@ class CardParser:
                     return block
         return None
 
+    def clear_hints_from_note(self, note, card=None) -> bool:
+        """Removes AI hints blocks matching the card from all fields."""
+        pattern = re.compile(
+            rf'<div\b(?=[^>]*class=["\']([^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'])[^>]*>.*?</div>',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        cleared = False
+        for f_name in note.keys():
+            current_val = note[f_name]
+            if not isinstance(current_val, str):
+                continue
+            
+            new_val = current_val
+            matches = list(pattern.finditer(current_val))
+            # Work backwards to avoid offset issues
+            for match in reversed(matches):
+                if self._block_matches_card(match.group(0), card):
+                    new_val = new_val[:match.start()] + new_val[match.end():]
+                    cleared = True
+            
+            if cleared:
+                note[f_name] = new_val
+        
+        return cleared
+
     def _replace_or_append_block(self, current_val: str, content_block: str, card=None) -> str:
         pattern = re.compile(
             rf'<div\b(?=[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'])[^>]*>.*?</div>',

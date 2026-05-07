@@ -34,8 +34,11 @@ def get_addon_dir():
     return os.path.dirname(__file__)
 
 def _card_context_payload(context):
-    reviewer = context if type(context).__name__ == "Reviewer" else getattr(context, "reviewer", None)
-    card = getattr(reviewer, "card", None) or getattr(mw.reviewer, "card", None)
+    card = getattr(context, "card", None)
+    if not card:
+        reviewer = context if type(context).__name__ == "Reviewer" else getattr(context, "reviewer", None)
+        card = getattr(reviewer, "card", None) or getattr(mw.reviewer, "card", None)
+    
     if not card:
         return {"id": "", "ord": None}
 
@@ -75,7 +78,11 @@ def on_webview_will_set_content(web_content, context):
         storage_mode=config.get("storage_mode", "json")
     )
 
-    card = getattr(context, "card", None) or getattr(mw.reviewer, "card", None)
+    card = getattr(context, "card", None)
+    if not card:
+        reviewer = context if type(context).__name__ == "Reviewer" else getattr(context, "reviewer", None)
+        card = getattr(reviewer, "card", None) or getattr(mw.reviewer, "card", None)
+
     hints_block = ""
     auto_reveal = False
     if card:
@@ -99,6 +106,9 @@ def on_webview_will_set_content(web_content, context):
     web_content.body += f"<script>window.aiHintsCurrentCard = {card_payload};</script>"
     web_content.body += f"<script>window.aiHintsUiConfig = {ui_payload};</script>"
     web_content.body += f"<script>{js}</script>"
+    
+    # Debug log for frontend
+    web_content.body += f"<script>console.log('AI-Hints: Content injected for card {card.id if card else 'unknown'} (auto_reveal={auto_reveal})');</script>"
 
 def _trigger_frontend_setup(card):
     if not card:
@@ -112,6 +122,9 @@ def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_generate":
         generate_hints()
         return (True, None)
+    if message == "ai_hints_clear":
+        clear_hints()
+        return (True, None)
     if message == "ai_hints_refresh":
         refresh_current_card()
         return (True, None)
@@ -122,6 +135,27 @@ def on_webview_did_receive_js_message(handled, message, context):
         show_bottom_bar_menu()
         return (True, None)
     return handled
+
+def clear_hints():
+    card = mw.reviewer.card
+    if not card:
+        return
+
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        config.get("target_fields", []),
+        config.get("note_type_fields", {}),
+        config.get("storage_mode", "json")
+    )
+    
+    note = card.note()
+    if parser.clear_hints_from_note(note, card):
+        note.flush()
+        logger.info("AI-Hints cleared for card %s", card.id)
+        tooltip("AI-Hints: Cleared.")
+        refresh_current_card()
+    else:
+        tooltip("AI-Hints: No cached data found to clear.")
 
 def update_bottom_bar_button(card=None):
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
@@ -421,8 +455,11 @@ def generate_hints():
                     card_id,
                 )
                 if is_current:
-                    tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
                     _just_generated_card_ids.add(card.id)
+                    # Push data directly to webview for instantaneous update
+                    mw.reviewer.web.eval(f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}); }}")
+                    
+                    tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
                     refresh_current_card()
                     
                     if config.get("show_in_popup", False):
