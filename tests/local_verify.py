@@ -1,5 +1,7 @@
 import sys
 import os
+import urllib.error
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -179,6 +181,107 @@ try:
         print("SUCCESS: refresh_current_card() reloads and redraws the current reviewer card.")
     else:
         print(f"FAILED: refresh_current_card() did not reload/redraw correctly: {refresh_calls} / {refreshed_card}")
+        sys.exit(1)
+
+    print("Testing browser context menu clears selected card hints...")
+    class FakeNote:
+        def __init__(self, fields):
+            self.fields = dict(fields)
+            self.flush_count = 0
+
+        def keys(self):
+            return list(self.fields.keys())
+
+        def values(self):
+            return list(self.fields.values())
+
+        def __getitem__(self, key):
+            return self.fields[key]
+
+        def __setitem__(self, key, value):
+            self.fields[key] = value
+
+        def flush(self):
+            self.flush_count += 1
+
+    shared_note = FakeNote({
+        "Back": (
+            'A <div class="ai-hints-json" data-ai-hints-card-id="701">one</div> '
+            'B <div class="ai-hints-json" data-ai-hints-card-id="702">two</div> C'
+        )
+    })
+    browser_cards = {
+        701: SimpleNamespace(id=701, ord=0, nid=9001, note=lambda: shared_note),
+        702: SimpleNamespace(id=702, ord=1, nid=9001, note=lambda: shared_note),
+    }
+    original_get_card = getattr(mock_mw.col, "get_card", None)
+    mock_mw.col.get_card = lambda cid: browser_cards.get(cid)
+    browser_refresh_calls = []
+    fake_browser = SimpleNamespace(
+        selectedCards=lambda: [701, 702],
+        onReset=lambda: browser_refresh_calls.append("reset"),
+    )
+    selected_count, changed_cards, changed_notes = reviewer_hooks.clear_ai_hints_from_browser_selection(fake_browser)
+    mock_mw.col.get_card = original_get_card
+    if (
+        selected_count == 2
+        and changed_cards == 2
+        and changed_notes == 1
+        and "ai-hints-json" not in shared_note.fields["Back"]
+        and shared_note.flush_count == 1
+        and browser_refresh_calls == ["reset"]
+    ):
+        print("SUCCESS: browser selected-card clear removes AI-Hints and refreshes once.")
+    else:
+        print(
+            "FAILED: browser selected-card clear result incorrect: "
+            f"{selected_count}, {changed_cards}, {changed_notes}, "
+            f"{shared_note.fields}, flush={shared_note.flush_count}, refresh={browser_refresh_calls}"
+        )
+        sys.exit(1)
+
+    print("Testing browser context menu action is added...")
+    class FakeSignal:
+        def __init__(self):
+            self.callback = None
+
+        def connect(self, callback):
+            self.callback = callback
+
+    class FakeAction:
+        def __init__(self, text):
+            self.text = text
+            self.enabled = None
+            self.triggered = FakeSignal()
+
+        def setEnabled(self, enabled):
+            self.enabled = enabled
+
+    class FakeMenu:
+        def __init__(self):
+            self.actions = []
+            self.separators = 0
+
+        def addSeparator(self):
+            self.separators += 1
+
+        def addAction(self, text):
+            action = FakeAction(text)
+            self.actions.append(action)
+            return action
+
+    fake_menu = FakeMenu()
+    reviewer_hooks.on_browser_context_menu(fake_browser, fake_menu)
+    if (
+        fake_menu.separators == 1
+        and fake_menu.actions
+        and fake_menu.actions[0].text == "Clear AI-Hints"
+        and fake_menu.actions[0].enabled is True
+        and fake_menu.actions[0].triggered.callback is not None
+    ):
+        print("SUCCESS: browser context menu includes Clear AI-Hints action.")
+    else:
+        print(f"FAILED: browser context menu action incorrect: {fake_menu.__dict__}")
         sys.exit(1)
 
     # 5. Test JSON storage mode
@@ -382,6 +485,28 @@ try:
         print("SUCCESS: AIClient falls back to another model after unusable output.")
     else:
         print(f"FAILED: AIClient model fallback failed: {attempted_models} / {fallback_result}")
+        sys.exit(1)
+
+    print("Testing Gemini quota skip to speed provider fallback...")
+    gemini_client = AIClient({
+        "ai_provider": "gemini",
+        "api_keys": {"gemini": "test-key"},
+        "models": {"gemini": "quota-model"},
+        "model_fallbacks": {"gemini": ["slow-fallback-model"]},
+    })
+    gemini_attempts = []
+
+    def fake_gemini_post_json(url, data, headers):
+        gemini_attempts.append(url)
+        body = b'{"error":{"status":"RESOURCE_EXHAUSTED","message":"Quota exceeded. See rate-limits."}}'
+        raise urllib.error.HTTPError(url, 429, "Too Many Requests", {}, BytesIO(body))
+
+    gemini_client._post_json = fake_gemini_post_json
+    gemini_result = gemini_client._call_gemini("system", "prompt")
+    if len(gemini_attempts) == 1 and gemini_result == {"hints": [], "options": []}:
+        print("SUCCESS: Gemini quota errors skip remaining Gemini models.")
+    else:
+        print(f"FAILED: Gemini quota skip incorrect: attempts={len(gemini_attempts)} result={gemini_result}")
         sys.exit(1)
 
 except Exception as e:

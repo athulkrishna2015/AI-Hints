@@ -222,6 +222,104 @@ def clear_hints():
     else:
         tooltip("AI-Hints: No cached data found to clear.")
 
+def _selected_browser_card_ids(browser):
+    selected_cards = getattr(browser, "selectedCards", None)
+    if not callable(selected_cards):
+        selected_cards = getattr(browser, "selected_cards", None)
+    if callable(selected_cards):
+        return list(selected_cards())
+
+    table = getattr(browser, "table", None)
+    get_selected = getattr(table, "get_selected_card_ids", None)
+    if callable(get_selected):
+        return list(get_selected())
+    return []
+
+def _get_card_from_collection(card_id):
+    collection = getattr(mw, "col", None)
+    if collection is None:
+        return None
+
+    get_card = getattr(collection, "get_card", None)
+    if not callable(get_card):
+        get_card = getattr(collection, "getCard", None)
+    if callable(get_card):
+        return get_card(card_id)
+    return None
+
+def clear_ai_hints_from_browser_selection(browser):
+    card_ids = _selected_browser_card_ids(browser)
+    if not card_ids:
+        tooltip("AI-Hints: Select one or more cards first.")
+        return 0, 0, 0
+
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        config.get("target_fields", []),
+        config.get("note_type_fields", {}),
+        config.get("storage_mode", "json")
+    )
+
+    notes_by_id = {}
+    changed_notes = {}
+    changed_cards = 0
+    missing_cards = 0
+
+    for card_id in card_ids:
+        try:
+            card = _get_card_from_collection(card_id)
+            if not card:
+                missing_cards += 1
+                continue
+
+            note_id = getattr(card, "nid", None)
+            if note_id is not None and note_id in notes_by_id:
+                note = notes_by_id[note_id]
+            else:
+                note = card.note()
+                if note_id is not None:
+                    notes_by_id[note_id] = note
+
+            if parser.clear_hints_from_note(note, card):
+                changed_cards += 1
+                changed_notes[note_id if note_id is not None else id(note)] = note
+                _forget_generated_hints(card)
+        except Exception as e:
+            missing_cards += 1
+            logger.error(f"Failed to clear AI-Hints for browser card {card_id}: {e}")
+
+    for note in changed_notes.values():
+        try:
+            note.flush()
+        except Exception as e:
+            logger.error(f"Failed to flush note after clearing AI-Hints from browser: {e}")
+
+    if changed_notes:
+        refresh_browser = getattr(browser, "onReset", None)
+        if callable(refresh_browser):
+            try:
+                refresh_browser()
+            except Exception as e:
+                logger.error(f"Failed to refresh browser after clearing AI-Hints: {e}")
+
+    if changed_cards:
+        tooltip(
+            f"AI-Hints: Cleared cached data from {changed_cards} "
+            f"selected card{'s' if changed_cards != 1 else ''}."
+        )
+    elif missing_cards:
+        tooltip("AI-Hints: No cached data found on the selected cards.")
+    else:
+        tooltip("AI-Hints: No cached data found on the selected cards.")
+
+    return len(card_ids), changed_cards, len(changed_notes)
+
+def on_browser_context_menu(browser, menu):
+    menu.addSeparator()
+    action = menu.addAction("Clear AI-Hints")
+    action.setEnabled(bool(_selected_browser_card_ids(browser)))
+    action.triggered.connect(lambda _checked=False, b=browser: clear_ai_hints_from_browser_selection(b))
+
 def update_bottom_bar_button(card=None):
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     reviewer = getattr(mw, "reviewer", None)
@@ -590,6 +688,7 @@ def init_hooks():
         return
     gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
     gui_hooks.webview_did_receive_js_message.append(on_webview_did_receive_js_message)
+    gui_hooks.browser_will_show_context_menu.append(on_browser_context_menu)
     
     # Bottom bar button
     gui_hooks.reviewer_did_show_question.append(update_bottom_bar_button)

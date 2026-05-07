@@ -9,6 +9,7 @@ from .logger import logger
 
 REQUEST_TIMEOUT_SECONDS = 60
 USER_AGENT = "Anki-AI-Hints/1.0"
+GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 
 PROVIDER_ORDER = [
     "gemini",
@@ -409,10 +410,26 @@ class AIClient:
                     return parsed
                 logger.warning(f"AI-Hints: Gemini model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
-                logger.error(f"AI-Hints Error (Gemini, model {model}): {e} - {self._read_http_error(e)}")
+                body = self._read_http_error(e)
+                logger.error(f"AI-Hints Error (Gemini, model {model}): {e} - {body}")
+                if self._should_skip_remaining_gemini_models(e, body):
+                    logger.warning(
+                        "AI-Hints: Gemini quota/rate limit hit; skipping remaining Gemini models and trying another provider."
+                    )
+                    break
             except Exception as e:
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
         return {"hints": [], "options": []}
+
+    def _should_skip_remaining_gemini_models(self, error: urllib.error.HTTPError, body: str) -> bool:
+        if getattr(error, "code", None) not in GEMINI_PROVIDER_EXHAUSTED_STATUSES:
+            return False
+        body_text = body or ""
+        return (
+            "RESOURCE_EXHAUSTED" in body_text
+            or "Quota exceeded" in body_text
+            or "rate-limits" in body_text
+        )
 
     def _parse_json_result(self, content: str) -> Dict[str, List[str]]:
         content = (content or "").strip()

@@ -166,7 +166,7 @@
         }
     }
 
-    function revealAIHints() {
+    function revealAIHints(mode) {
         const container = selectCurrentBlock('.ai-hints-container');
         if (!container) return false;
 
@@ -179,7 +179,9 @@
         const showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
 
         let revealed = false;
-        if (hintsList && showHintsCfg && hintsList.classList.contains('ai-hints-hidden')) {
+        const revealHints = mode !== 'options';
+        const revealOptions = mode !== 'hints';
+        if (revealHints && hintsList && showHintsCfg && hintsList.classList.contains('ai-hints-hidden')) {
             hintsList.classList.remove('ai-hints-hidden');
             if (hintBtn) {
                 hintBtn.innerText = 'Hide Hints';
@@ -189,7 +191,7 @@
             }
             revealed = true;
         }
-        if (optionsList && showOptionsCfg && optionsList.classList.contains('ai-hints-hidden')) {
+        if (revealOptions && optionsList && showOptionsCfg && optionsList.classList.contains('ai-hints-hidden')) {
             optionsList.classList.remove('ai-hints-hidden');
             if (showBtn) {
                 showBtn.style.display = 'inline-block';
@@ -322,7 +324,7 @@
 
         const hasAnyData = Boolean(container || jsonBlock || manualData);
         const mainGenBtn = document.createElement('button');
-        mainGenBtn.innerText = 'Generate AI Hints';
+        mainGenBtn.innerText = hasAnyData ? 'Regenerate' : 'Generate AI Hints';
         mainGenBtn.className = 'ai-hints-btn';
         mainGenBtn.onclick = function() {
             triggerGenerate(mainGenBtn);
@@ -366,14 +368,6 @@
             }
         };
         btnContainer.appendChild(hintBtn);
-
-        const regenBtn = document.createElement('button');
-        regenBtn.innerText = 'Regenerate';
-        regenBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
-        regenBtn.onclick = function() {
-            triggerGenerate(regenBtn);
-        };
-        btnContainer.appendChild(regenBtn);
 
         const clearBtn = document.createElement('button');
         clearBtn.innerText = 'Clear';
@@ -422,7 +416,9 @@
             cardBody.appendChild(btnContainer);
         }
 
-        if (uiCfg.auto_reveal || manualData) {
+        if (manualData) {
+            revealAIHints('hints');
+        } else if (uiCfg.auto_reveal) {
             revealAIHints();
         }
 
