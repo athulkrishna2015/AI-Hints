@@ -3,7 +3,7 @@ import json
 from aqt import mw
 from aqt.qt import *
 from .logger import logger, get_logger, info, tooltip
-from .ai_client import DEFAULT_MODELS, LEGACY_MODEL_REPLACEMENTS, MODEL_FALLBACKS, PROVIDER_ORDER
+from .ai_client import DEFAULT_MODELS, LEGACY_MODEL_REPLACEMENTS, MODEL_FALLBACKS, PROVIDER_ORDER, MODEL_SUGGESTIONS, AIClient
 import logging
 
 # Resolve the top-level addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
@@ -191,13 +191,38 @@ class ConfigDialog(QDialog):
 
         model_group = QGroupBox("Model Names")
         model_layout = QFormLayout()
+        
+        # Add Fetch All button at the top of the model group
+        fetch_all_btn = QPushButton("Fetch All Available Models")
+        fetch_all_btn.setToolTip("Attempts to fetch latest models for all providers that have API keys.")
+        fetch_all_btn.clicked.connect(self.on_fetch_all_models)
+        model_layout.addRow(fetch_all_btn)
+
         for p in PROVIDER_ORDER:
             if p == "local":
                 continue
-            edit = QLineEdit()
-            edit.setPlaceholderText(DEFAULT_MODELS.get(p, ""))
+            
+            row_layout = QHBoxLayout()
+            edit = QComboBox()
+            edit.setEditable(True)
+            edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            suggestions = MODEL_SUGGESTIONS.get(p, [])
+            default = DEFAULT_MODELS.get(p, "")
+            # Ensure the current default is always a visible option
+            all_suggestions = suggestions[:]
+            if default and default not in all_suggestions:
+                all_suggestions.insert(0, default)
+            edit.addItems(all_suggestions)
             self.model_edits[p] = edit
-            model_layout.addRow(f"{p.capitalize()} model:", edit)
+            row_layout.addWidget(edit)
+            
+            fetch_btn = QPushButton("Fetch")
+            fetch_btn.setFixedWidth(50)
+            fetch_btn.setToolTip(f"Fetch latest models from {p.capitalize()} API (requires API key)")
+            fetch_btn.clicked.connect(lambda chk, prov=p, cb=edit: self.on_fetch_models(prov, cb))
+            row_layout.addWidget(fetch_btn)
+            
+            model_layout.addRow(f"{p.capitalize()} model:", row_layout)
         model_group.setLayout(model_layout)
         self.prov_layout.addRow(model_group)
         
@@ -223,6 +248,26 @@ class ConfigDialog(QDialog):
         
         custom_group.setLayout(custom_layout)
         self.prov_layout.addRow(custom_group)
+
+        # Provider Priority Group
+        priority_group = QGroupBox("Fallback Priority (Drag to Reorder)")
+        priority_layout = QVBoxLayout()
+        self.priority_list = QListWidget()
+        self.priority_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.priority_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        priority_layout.addWidget(self.priority_list)
+        
+        pbtn_layout = QHBoxLayout()
+        self.move_up_btn = QPushButton("Move Up")
+        self.move_up_btn.clicked.connect(lambda: self._move_list_item(self.priority_list, -1))
+        self.move_down_btn = QPushButton("Move Down")
+        self.move_down_btn.clicked.connect(lambda: self._move_list_item(self.priority_list, 1))
+        pbtn_layout.addWidget(self.move_up_btn)
+        pbtn_layout.addWidget(self.move_down_btn)
+        priority_layout.addLayout(pbtn_layout)
+        
+        priority_group.setLayout(priority_layout)
+        self.prov_layout.addRow(priority_group)
         
         prov_scroll.setWidget(prov_content)
         prov_main_layout.addWidget(prov_scroll)
@@ -427,9 +472,17 @@ class ConfigDialog(QDialog):
         tab.setLayout(layout)
         return tab
 
+    def _move_list_item(self, list_widget, delta):
+        curr = list_widget.currentRow()
+        if curr == -1: return
+        target = curr + delta
+        if 0 <= target < list_widget.count():
+            item = list_widget.takeItem(curr)
+            list_widget.insertItem(target, item)
+            list_widget.setCurrentRow(target)
+
     def load_config_into_ui(self):
         c = self.config
-        self.refresh_custom_list()
         self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
         self.options_count_sb.setValue(c.get("options_count", 4))
         self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
@@ -446,7 +499,11 @@ class ConfigDialog(QDialog):
 
         models = c.get("models", {}) or {}
         for p, edit in self.model_edits.items():
-            edit.setText(models.get(p, DEFAULT_MODELS.get(p, "")))
+            model_name = models.get(p, DEFAULT_MODELS.get(p, ""))
+            # Add to combobox if not present (e.g. custom user model)
+            if edit.findText(model_name) == -1:
+                edit.addItem(model_name)
+            edit.setCurrentText(model_name)
             
         local = c.get("local_endpoint", {}) or {}
         self.local_url_edit.setText(local.get("base_url", ""))
@@ -466,6 +523,8 @@ class ConfigDialog(QDialog):
             if self.nt_cb.count() > 0:
                 self.nt_cb.setCurrentIndex(0)
                 self.on_nt_changed()
+        
+        self.refresh_custom_list()
         
         self.note_fields_edit.setPlainText(json.dumps(self.note_type_fields_data, indent=4))
         self.raw_editor.setPlainText(json.dumps(c, indent=4))
@@ -522,9 +581,81 @@ class ConfigDialog(QDialog):
         current_selection = self.ai_provider_cb.currentText()
         self.ai_provider_cb.clear()
         providers = PROVIDER_ORDER
-        self.ai_provider_cb.addItems(providers + list(self.custom_providers_data.keys()))
+        custom_names = list(self.custom_providers_data.keys())
+        self.ai_provider_cb.addItems(providers + custom_names)
         if current_selection:
             self.ai_provider_cb.setCurrentText(current_selection)
+
+        # Update priority list
+        current_priority = []
+        for i in range(self.priority_list.count()):
+            current_priority.append(self.priority_list.item(i).text())
+        
+        # If priority list is empty (first load), use config or default
+        if not current_priority:
+            current_priority = self.config.get("provider_priority", [])
+            if not current_priority:
+                current_priority = PROVIDER_ORDER + custom_names
+        
+        # Ensure all available providers are in the list, and removed ones are gone
+        available = set(PROVIDER_ORDER + custom_names)
+        new_priority = [p for p in current_priority if p in available]
+        for p in PROVIDER_ORDER + custom_names:
+            if p not in new_priority:
+                new_priority.append(p)
+                
+        self.priority_list.clear()
+        self.priority_list.addItems(new_priority)
+
+    def on_fetch_all_models(self):
+        tooltip("Starting batch model fetch...")
+        for provider, combobox in self.model_edits.items():
+            # We reuse on_fetch_models but without individual tooltips to avoid spam
+            self.on_fetch_models(provider, combobox, silent=True)
+        tooltip("Finished fetching models for all configured providers.")
+
+    def on_fetch_models(self, provider, combobox, silent=False):
+        api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
+        if not api_key and provider != "local":
+            if not silent:
+                info(f"Please enter an API key for {provider.capitalize()} first.")
+            return
+
+        # Create a temporary config to use the API key from the UI
+        temp_config = self.config.copy()
+        if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+        temp_config["api_keys"][provider] = api_key
+        
+        client = AIClient(temp_config)
+        combobox.setEnabled(False)
+        if not silent:
+            tooltip(f"Fetching models for {provider.capitalize()}...")
+        
+        # In a real app we'd use a thread, but for simple GETs we'll do it inline for now
+        # to keep the code simpler. urllib will block briefly.
+        try:
+            models = client.fetch_models(provider)
+            if models:
+                current_text = combobox.currentText()
+                combobox.clear()
+                # Sort models and ensure current one is at top
+                models = sorted(list(set(models)))
+                if current_text and current_text not in models:
+                    models.insert(0, current_text)
+                combobox.addItems(models)
+                if current_text:
+                    combobox.setCurrentText(current_text)
+                if not silent:
+                    tooltip(f"Found {len(models)} models for {provider.capitalize()}")
+            else:
+                if not silent:
+                    info(f"Could not fetch models for {provider.capitalize()}. Check your API key and connection.")
+        except Exception as e:
+            logger.error(f"Fetch error: {e}")
+            if not silent:
+                info(f"Error fetching models: {e}")
+        finally:
+            combobox.setEnabled(True)
 
     def on_add_custom(self):
         dlg = CustomProviderDialog(self)
@@ -584,7 +715,7 @@ class ConfigDialog(QDialog):
             
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {
-                p: (edit.text().strip() or DEFAULT_MODELS.get(p, ""))
+                p: (edit.currentText().strip() or DEFAULT_MODELS.get(p, ""))
                 for p, edit in self.model_edits.items()
             }
             new_config["local_endpoint"] = {
@@ -601,6 +732,13 @@ class ConfigDialog(QDialog):
                 new_config["note_type_fields"] = json.loads(self.note_fields_edit.toPlainText())
             
             new_config["custom_providers"] = self.custom_providers_data
+            
+            # Save provider priority
+            priority = []
+            for i in range(self.priority_list.count()):
+                priority.append(self.priority_list.item(i).text())
+            new_config["provider_priority"] = priority
+
             mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(new_config))
             self.accept()
         except Exception as e:
@@ -632,6 +770,20 @@ class ConfigDialog(QDialog):
         if isinstance(raw_model_fallbacks, dict):
             model_fallbacks.update(raw_model_fallbacks)
         config["model_fallbacks"] = model_fallbacks
+
+        # Normalize provider priority
+        custom_providers = config.get("custom_providers", {}) or {}
+        custom_names = list(custom_providers.keys())
+        priority = config.get("provider_priority", [])
+        if not isinstance(priority, list):
+            priority = PROVIDER_ORDER + custom_names
+        
+        available = set(PROVIDER_ORDER + custom_names)
+        priority = [p for p in priority if p in available]
+        for p in PROVIDER_ORDER + custom_names:
+            if p not in priority:
+                priority.append(p)
+        config["provider_priority"] = priority
 
         local = {
             "enabled": False,

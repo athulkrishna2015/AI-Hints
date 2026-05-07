@@ -31,18 +31,74 @@ PROVIDER_ORDER = [
 DEFAULT_MODELS = {
     "openai":     "gpt-4o-mini",
     "anthropic":  "claude-3-5-haiku-20241022",
-    "gemini":     "gemini-3-flash-preview",
-    "groq":       "llama-3.1-8b-instant",
+    "gemini":     "gemini-2.0-flash-exp",
+    "groq":       "llama-3.3-70b-versatile",
     "deepseek":   "deepseek-chat",
     "grok":       "grok-3-mini",
     "mistral":    "mistral-small-latest",
-    "openrouter": "openrouter/auto",
+    "openrouter": "google/gemini-2.0-flash-exp:free",
     "nvidia":     "meta/llama-3.1-8b-instruct",
     "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
     "together":   "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.1-8B-Instruct",
     "cerebras":   "llama3.1-8b",
     "local":      "llama3",
+}
+
+# Popular model suggestions for the UI dropdowns
+MODEL_SUGGESTIONS = {
+    "openai": [
+        "gpt-4o-mini",
+        "gpt-4o",
+        "gpt-3.5-turbo",
+    ],
+    "anthropic": [
+        "claude-3-5-haiku-20241022",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-haiku-20240307",
+    ],
+    "gemini": [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+    ],
+    "groq": [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama-3.1-70b-versatile",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it",
+    ],
+    "openrouter": [
+        "google/gemini-2.0-flash-exp:free",
+        "meta-llama/llama-3.1-8b-instruct:free",
+        "mistralai/mistral-7b-instruct:free",
+        "openrouter/auto",
+    ],
+    "deepseek": [
+        "deepseek-chat",
+        "deepseek-coder",
+    ],
+    "mistral": [
+        "mistral-small-latest",
+        "mistral-medium-latest",
+        "mistral-large-latest",
+    ],
+    "together": [
+        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+        "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+        "mistralai/Mixtral-8x7B-Instruct-v0.1",
+    ],
+    "sambanova": [
+        "Meta-Llama-3.1-8B-Instruct",
+        "Meta-Llama-3.1-70B-Instruct",
+        "Meta-Llama-3.1-405B-Instruct",
+    ],
+    "cerebras": [
+        "llama3.1-8b",
+        "llama3.1-70b",
+    ],
 }
 
 LEGACY_MODEL_REPLACEMENTS = {
@@ -121,9 +177,10 @@ class AIClient:
             "Include the correct answer as one of the options. "
             f"The remaining {max(count - 1, 0)} options should be plausible incorrect distractors. "
             "For Cloze deletions (marked with 'Current cloze deletion'), the options MUST ONLY contain the replacement text for that deletion, not full sentences or surrounding context. "
-            # Use single backslashes in examples to avoid confusing models into over-escaping (e.g., \\lambda)
+            # Use double backslashes in Python strings to result in single backslashes in the AI prompt.
             "IMPORTANT: You MUST use standard LaTeX/MathJax delimiters \\( ... \\) for inline math and \\[ ... \\] for block math. "
             "DO NOT use $ ... $ or $$ ... $$ delimiters. "
+            "Do not wrap the entire LaTeX expression in redundant outer parentheses. "
             "Example: \\( B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) \\)."
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
@@ -161,6 +218,12 @@ class AIClient:
         if not isinstance(custom_provider_config, dict):
             custom_provider_config = {}
         custom_providers = list(custom_provider_config.keys())
+        
+        # Use custom priority list if configured, otherwise use default order
+        priority = self.config.get("provider_priority")
+        if not isinstance(priority, list):
+            priority = PROVIDER_ORDER + custom_providers
+            
         candidates = []
 
         if self._is_provider_ready(primary_provider, primary=True):
@@ -170,7 +233,7 @@ class AIClient:
                 f"AI-Hints: Primary provider '{primary_provider}' is not configured; checking fallbacks."
             )
 
-        for provider in PROVIDER_ORDER + custom_providers:
+        for provider in priority:
             if provider == primary_provider or provider in candidates:
                 continue
             if self._is_provider_ready(provider, primary=False):
@@ -630,6 +693,75 @@ class AIClient:
             headers["Authorization"] = f"Bearer {api_key}"
         return headers
 
+    def fetch_models(self, provider: str) -> List[str]:
+        """Fetch available models from the provider's API."""
+        api_key = self._api_key_for(provider)
+        if not api_key and provider != "local":
+            return []
+
+        try:
+            if provider == "openrouter":
+                url = "https://openrouter.ai/api/v1/models"
+                headers = self._json_headers(api_key)
+                result = self._get_json(url, headers)
+                return [m.get("id") for m in result.get("data", []) if m.get("id")]
+            
+            elif provider == "gemini":
+                url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+                result = self._get_json(url, {})
+                # Filter for models that support generateContent
+                models = []
+                for m in result.get("models", []):
+                    name = m.get("name", "")
+                    if "generateContent" in m.get("supportedGenerationMethods", []):
+                        if name.startswith("models/"):
+                            name = name[7:]
+                        models.append(name)
+                return models
+
+            elif provider == "groq":
+                url = "https://api.groq.com/openai/v1/models"
+                headers = self._json_headers(api_key)
+                result = self._get_json(url, headers)
+                return [m.get("id") for m in result.get("data", []) if m.get("id")]
+
+            elif provider == "local":
+                local_cfg = self.config.get("local_endpoint") or {}
+                base_url = str(local_cfg.get("base_url", "http://localhost:11434/v1")).rstrip("/")
+                url = f"{base_url}/models"
+                headers = self._json_headers(local_cfg.get("api_key", ""))
+                result = self._get_json(url, headers)
+                return [m.get("id") for m in result.get("data", []) if m.get("id")]
+
+            # Generic OpenAI-compatible providers
+            openai_style = ["openai", "deepseek", "mistral", "together", "nvidia", "sambanova", "cerebras", "grok"]
+            if provider in openai_style:
+                urls = {
+                    "openai": "https://api.openai.com/v1/models",
+                    "deepseek": "https://api.deepseek.com/models",
+                    "mistral": "https://api.mistral.ai/v1/models",
+                    "together": "https://api.together.xyz/v1/models",
+                    "nvidia": "https://integrate.api.nvidia.com/v1/models",
+                    "sambanova": "https://api.sambanova.ai/v1/models",
+                    "cerebras": "https://api.cerebras.ai/v1/models",
+                    "grok": "https://api.x.ai/v1/models",
+                }
+                url = urls.get(provider)
+                if url:
+                    headers = self._json_headers(api_key)
+                    result = self._get_json(url, headers)
+                    return [m.get("id") for m in result.get("data", []) if m.get("id")]
+
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to fetch models for {provider}: {e}")
+        
+        return []
+
+    def _get_json(self, url: str, headers: Dict[str, str]) -> Dict[str, Any]:
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return json.loads(response.read().decode("utf-8"))
+
     def _post_json(self, url: str, data: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
         body = json.dumps(self._drop_none(data)).encode("utf-8")
         req = urllib.request.Request(url, data=body, headers=headers, method="POST")
@@ -692,8 +824,26 @@ class AIClient:
                 continue
             text = str(item).strip()
             if text:
+                text = self._clean_ai_math_output(text)
                 normalized.append(text)
         return normalized
+
+    def _clean_ai_math_output(self, text: str) -> str:
+        if not text:
+            return ""
+        
+        # 1. Fix double backslashes for delimiters: \\( -> \(
+        # Many models over-escape in JSON context, especially after our repair logic.
+        text = text.replace('\\\\(', '\\(').replace('\\\\)', '\\)')
+        text = text.replace('\\\\[', '\\[').replace('\\\\]', '\\]')
+
+        # 2. Fix nested parentheses: \( ( ... ) \) -> \( ... \)
+        # This happens when the AI wraps the entire equation in redundant parentheses.
+        # We handle whitespace carefully.
+        text = re.sub(r'\\\(\s*\(\s*(.*?)\s*\)\s*\\\)', r'\(\1\)', text)
+        text = re.sub(r'\\\[\s*\(\s*(.*?)\s*\)\s*\\\]', r'\[\1\]', text)
+        
+        return text
 
     def _read_http_error(self, error: urllib.error.HTTPError) -> str:
         try:

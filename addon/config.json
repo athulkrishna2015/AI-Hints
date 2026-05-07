@@ -24,11 +24,11 @@
     "models": {
         "openai": "gpt-4o-mini",
         "anthropic": "claude-3-5-haiku-20241022",
-        "gemini": "gemini-3-flash-preview",
-        "openrouter": "openrouter/auto",
+        "gemini": "gemini-2.0-flash-exp",
+        "openrouter": "google/gemini-2.0-flash-exp:free",
         "grok": "grok-3-mini",
         "deepseek": "deepseek-chat",
-        "groq": "llama-3.1-8b-instant",
+        "groq": "llama-3.3-70b-versatile",
         "nvidia": "meta/llama-3.1-8b-instruct",
         "mistral": "mistral-small-latest",
         "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
@@ -81,7 +81,28 @@
     "auto_clear_logs": true,
     "custom_providers": {},
     "note_type_fields": {
-        "Cloze": ["Text"],
-        "Basic": ["Front", "Back"]
+        "Cloze": [
+            "Text"
+        ],
+        "Basic": [
+            "Front",
+            "Back"
+        ]
+    },
+    "provider_priority": [
+        "gemini",
+        "groq",
+        "openrouter",
+        "sambanova",
+        "cerebras",
+        "huggingface",
+        "openai",
+        "anthropic",
+        "deepseek",
+        "mistral",
+        "together",
+        "nvidia",
+        "grok",
+        "local"
+    ]
     }
-}
