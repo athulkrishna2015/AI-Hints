@@ -105,9 +105,11 @@ class ConfigDialog(QDialog):
         }
         
         self.api_key_edits = {}
-        providers = ["openai", "anthropic", "gemini", "deepseek", "groq", "grok", "mistral", "openrouter", "nvidia", "local"]
-        for p in providers:
-            if p == "local": continue
+        
+        free_providers = ["gemini", "groq", "openrouter", "mistral"]
+        free_group = QGroupBox("Free / Freemium Providers")
+        free_layout = QFormLayout()
+        for p in free_providers:
             edit = QLineEdit()
             edit.setEchoMode(QLineEdit.EchoMode.Password)
             self.api_key_edits[p] = edit
@@ -116,7 +118,25 @@ class ConfigDialog(QDialog):
             label_text = f"<a href='{url}' style='color: #008CBA; text-decoration: none;'>{p.capitalize()} API Key:</a>" if url else f"{p.capitalize()} API Key:"
             label = QLabel(label_text)
             label.setOpenExternalLinks(True)
-            self.prov_layout.addRow(label, edit)
+            free_layout.addRow(label, edit)
+        free_group.setLayout(free_layout)
+        self.prov_layout.addRow(free_group)
+        
+        paid_providers = ["openai", "anthropic", "deepseek", "nvidia", "grok"]
+        paid_group = QGroupBox("Paid Providers")
+        paid_layout = QFormLayout()
+        for p in paid_providers:
+            edit = QLineEdit()
+            edit.setEchoMode(QLineEdit.EchoMode.Password)
+            self.api_key_edits[p] = edit
+            
+            url = provider_urls.get(p)
+            label_text = f"<a href='{url}' style='color: #008CBA; text-decoration: none;'>{p.capitalize()} API Key:</a>" if url else f"{p.capitalize()} API Key:"
+            label = QLabel(label_text)
+            label.setOpenExternalLinks(True)
+            paid_layout.addRow(label, edit)
+        paid_group.setLayout(paid_layout)
+        self.prov_layout.addRow(paid_group)
             
         # Local Endpoint Group
         local_group = QGroupBox("Local AI / Ollama Settings")
@@ -346,7 +366,7 @@ class ConfigDialog(QDialog):
         
         current_selection = self.ai_provider_cb.currentText()
         self.ai_provider_cb.clear()
-        providers = ["openai", "anthropic", "gemini", "deepseek", "groq", "grok", "mistral", "openrouter", "nvidia", "local"]
+        providers = ["gemini", "groq", "openrouter", "mistral", "local", "openai", "anthropic", "deepseek", "nvidia", "grok"]
         self.ai_provider_cb.addItems(providers + list(self.custom_providers_data.keys()))
         if current_selection:
             self.ai_provider_cb.setCurrentText(current_selection)
