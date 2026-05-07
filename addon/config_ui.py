@@ -59,6 +59,22 @@ class ConfigDialog(QDialog):
         self.setup_ui()
         self.load_config_into_ui()
 
+        # Live Log Timer
+        self.log_timer = QTimer(self)
+        self.log_timer.timeout.connect(self.load_log)
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+
+    def on_tab_changed(self, index):
+        if self.tabs.tabText(index) == "Logs":
+            self.load_log()
+            self.log_timer.start(2000)  # Refresh every 2 seconds
+            if hasattr(self, "live_label"):
+                self.live_label.setVisible(True)
+        else:
+            self.log_timer.stop()
+            if hasattr(self, "live_label"):
+                self.live_label.setVisible(False)
+
     def setup_ui(self):
         layout = QVBoxLayout()
         self.tabs = QTabWidget()
@@ -105,13 +121,15 @@ class ConfigDialog(QDialog):
             "deepseek": "https://platform.deepseek.com/api_keys",
             "openrouter": "https://openrouter.ai/keys",
             "mistral": "https://console.mistral.ai/api-keys/",
+            "together": "https://api.together.xyz/settings/api-keys",
+            "huggingface": "https://huggingface.co/settings/tokens",
             "grok": "https://console.x.ai/",
             "nvidia": "https://build.nvidia.com/explore/discover"
         }
         
         self.api_key_edits = {}
         
-        free_providers = ["gemini", "groq", "openrouter", "mistral"]
+        free_providers = ["gemini", "groq", "openrouter", "together", "huggingface"]
         free_group = QGroupBox("Free / Freemium Providers")
         free_layout = QFormLayout()
         for p in free_providers:
@@ -127,7 +145,7 @@ class ConfigDialog(QDialog):
         free_group.setLayout(free_layout)
         self.prov_layout.addRow(free_group)
         
-        paid_providers = ["openai", "anthropic", "deepseek", "nvidia", "grok"]
+        paid_providers = ["openai", "anthropic", "deepseek", "mistral", "nvidia", "grok"]
         paid_group = QGroupBox("Paid Providers")
         paid_layout = QFormLayout()
         for p in paid_providers:
@@ -258,6 +276,11 @@ class ConfigDialog(QDialog):
         refresh_btn = QPushButton("Refresh")
         refresh_btn.clicked.connect(self.load_log)
         filter_layout.addWidget(refresh_btn)
+
+        self.live_label = QLabel("● Live")
+        self.live_label.setStyleSheet("color: green; font-weight: bold;")
+        self.live_label.setVisible(False)
+        filter_layout.addWidget(self.live_label)
         
         copy_btn = QPushButton("Copy")
         copy_btn.clicked.connect(lambda: (
@@ -443,7 +466,7 @@ class ConfigDialog(QDialog):
         
         current_selection = self.ai_provider_cb.currentText()
         self.ai_provider_cb.clear()
-        providers = ["gemini", "groq", "openrouter", "mistral", "local", "openai", "anthropic", "deepseek", "nvidia", "grok"]
+        providers = ["gemini", "groq", "openrouter", "together", "huggingface", "local", "openai", "anthropic", "deepseek", "mistral", "nvidia", "grok"]
         self.ai_provider_cb.addItems(providers + list(self.custom_providers_data.keys()))
         if current_selection:
             self.ai_provider_cb.setCurrentText(current_selection)

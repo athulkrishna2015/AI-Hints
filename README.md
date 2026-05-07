@@ -6,7 +6,9 @@ AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate
 
 ## Features
 
-- **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, and any OpenAI-compatible local API (like Ollama or LM Studio).
+- **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, and any OpenAI-compatible local API (like Ollama or LM Studio).
+- **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next configured provider.
+- **Live Log Viewer**: Debug issues in real-time with a built-in log viewer in the config dialog, featuring auto-refresh and a "Live" status indicator.
 - **Custom AI Support**: Define your own custom endpoints and headers.
 - **Universal Compatibility**: Works with Basic, Cloze, Image Occlusion, and custom note types.
 - **Smart Shuffling**: Options are shuffled every time you review the card to prevent pattern memorization.
@@ -38,6 +40,8 @@ To use this add-on, you need an API key from one of the supported providers:
 - **Groq**: [console.groq.com](https://console.groq.com/keys)
 - **DeepSeek**: [platform.deepseek.com](https://platform.deepseek.com/api_keys)
 - **OpenRouter**: [openrouter.ai](https://openrouter.ai/keys)
+- **Together AI**: [api.together.xyz](https://api.together.xyz/settings/api-keys)
+- **Hugging Face**: [huggingface.co](https://huggingface.co/settings/tokens)
 - **Mistral**: [console.mistral.ai](https://console.mistral.ai/api-keys/)
 - **Grok (xAI)**: [console.x.ai](https://console.x.ai/)
 - **NVIDIA**: [build.nvidia.com](https://build.nvidia.com/explore/discover)

@@ -14,11 +14,36 @@ mock_aqt.mw = mock_mw
 class MockQDialog: pass
 class MockQWidget: pass
 class MockQTabWidget: pass
+class MockQt:
+    class WindowType:
+        Window = 1
 
 mock_qt = MagicMock()
 mock_qt.QDialog = MockQDialog
 mock_qt.QWidget = MockQWidget
 mock_qt.QTabWidget = MockQTabWidget
+mock_qt.Qt = MockQt
+mock_qt.QTimer = MagicMock
+mock_qt.QVBoxLayout = MagicMock
+mock_qt.QHBoxLayout = MagicMock
+mock_qt.QFormLayout = MagicMock
+mock_qt.QTabWidget = MockQTabWidget
+mock_qt.QPushButton = MagicMock
+mock_qt.QLineEdit = MagicMock
+mock_qt.QTextEdit = MagicMock
+mock_qt.QPlainTextEdit = MagicMock
+mock_qt.QCheckBox = MagicMock
+mock_qt.QSpinBox = MagicMock
+mock_qt.QComboBox = MagicMock
+mock_qt.QScrollArea = MagicMock
+mock_qt.QGroupBox = MagicMock
+mock_qt.QListWidget = MagicMock
+mock_qt.QListWidgetItem = MagicMock
+mock_qt.QFontDatabase = MagicMock
+mock_qt.QApplication = MagicMock
+mock_qt.QDesktopServices = MagicMock
+mock_qt.QUrl = MagicMock
+mock_qt.QPixmap = MagicMock
 
 sys.modules['aqt'] = mock_aqt
 sys.modules['aqt.qt'] = mock_qt
