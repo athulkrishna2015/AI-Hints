@@ -1,7 +1,9 @@
 # AI-Hints Anki Add-on
 
 AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate helpful hints or multiple-choice options for your flashcards during review. It helps simulate real exam conditions by including the correct answer alongside plausible distractors even for open-ended cards.
+
 Install from [anki web ](https://ankiweb.net/shared/info/2119980872)
+
 github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkrishna2015/AI-Hints)
 ## Features
 
