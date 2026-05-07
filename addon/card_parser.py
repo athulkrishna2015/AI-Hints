@@ -75,10 +75,10 @@ class CardParser:
                 if f_name in note:
                     content_parts.append(note[f_name])
             content = " ".join(content_parts)
+            back = ""
             if "cloze" in model_name.lower():
                 content, back = self._focus_current_cloze(content, card)
-                return self._clean_html(content), self._clean_html(back)
-            return self._clean_html(content), ""
+            return self._clean_html(content), self._clean_html(back)
         
         # Fallback to default heuristic
         fields = note.items()
@@ -106,13 +106,14 @@ class CardParser:
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
-    def _focus_current_cloze(self, text: str, card=None) -> str:
-        """Mark the cloze deletion for the current card so the AI targets only it."""
+    def _focus_current_cloze(self, text: str, card=None) -> Tuple[str, str]:
+        """Mark the cloze deletion for the current card and extract all active answers."""
         cloze_number = self._card_ord(card)
         if cloze_number is None:
-            return text
+            return text, ""
         cloze_number += 1
 
+        answers = []
         def replace_cloze(match):
             number = int(match.group(1))
             answer = match.group(2)
@@ -120,12 +121,14 @@ class CardParser:
             if number != cloze_number:
                 return answer
 
+            answers.append(self._clean_html(answer))
             current = f"Current cloze deletion: {answer}"
             if hint:
                 current += f" (existing hint: {hint})"
             return current
 
-        return re.sub(r"\{\{c(\d+)::(.*?)(?:::([^{}]*?))?\}\}", replace_cloze, text, flags=re.DOTALL)
+        focused_text = re.sub(r"\{\{c(\d+)::(.*?)(?:::([^{}]*?))?\}\}", replace_cloze, text, flags=re.DOTALL)
+        return focused_text, ", ".join(answers)
 
     def update_note_with_hints(self, note, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None) -> bool:
         """Appends or replaces the AI hints block in the target field."""

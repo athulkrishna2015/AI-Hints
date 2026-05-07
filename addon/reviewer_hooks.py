@@ -134,6 +134,13 @@ def on_webview_will_set_content(web_content, context):
     auto_reveal = False
     if card:
         try:
+            # Force reload to ensure we don't have stale data (especially for new cards)
+            try:
+                card.load()
+                card.note().load()
+            except Exception:
+                pass
+
             hints_block = parser.find_hints_block(card.note(), card) or ""
             if not hints_block:
                 cached = _cached_hints_for_card(card)
@@ -143,9 +150,11 @@ def on_webview_will_set_content(web_content, context):
                         cached.get("toggles", {}),
                         card,
                     )
+            
             if card.id in _just_generated_card_ids:
                 auto_reveal = True
-                _just_generated_card_ids.discard(card.id)
+                # Don't discard yet; we want it to persist for the 'answer' side too.
+                # It will be cleared when the card actually changes.
         except Exception as e:
             logger.error(f"Failed to find hints block in on_webview_will_set_content: {e}")
 
@@ -169,6 +178,12 @@ def on_webview_will_set_content(web_content, context):
 def _trigger_frontend_setup(card):
     if not card:
         return
+    
+    # Clear auto-reveal state for OTHER cards when moving to a new one
+    to_remove = [cid for cid in _just_generated_card_ids if cid != card.id]
+    for cid in to_remove:
+        _just_generated_card_ids.discard(cid)
+
     card_data = {"id": str(card.id), "ord": int(card.ord)}
     mw.reviewer.web.eval(f"if (window.aiHintsSetup) {{ window.aiHintsSetup({json.dumps(card_data)}); }}")
 

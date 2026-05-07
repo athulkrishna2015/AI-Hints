@@ -721,6 +721,7 @@
         const revealOptions = mode !== 'hints';
         if (revealHints && hintsList && showHintsCfg && hintsList.classList.contains('ai-hints-hidden')) {
             hintsList.classList.remove('ai-hints-hidden');
+            hintsList.style.display = 'block';
             if (hintBtn) {
                 hintBtn.innerText = 'Hide Hints';
             }
@@ -731,6 +732,7 @@
         }
         if (revealOptions && optionsList && showOptionsCfg && optionsList.classList.contains('ai-hints-hidden')) {
             optionsList.classList.remove('ai-hints-hidden');
+            optionsList.style.display = 'block';
             if (showBtn) {
                 showBtn.style.display = 'inline-block';
                 showBtn.innerText = 'Hide Options';
@@ -843,10 +845,12 @@
                     }
                     items.forEach(item => optionsList.appendChild(item));
                     optionsList.classList.add('ai-hints-hidden');
+                    optionsList.style.display = 'none'; // Force hide
                 }
 
                 if (hintsList) {
                     hintsList.classList.add('ai-hints-hidden');
+                    hintsList.style.display = 'none'; // Force hide
                 }
             } else {
                 container.style.display = 'none';
@@ -881,6 +885,7 @@
             restartSpeedFocusTimer();
             const isHidden = optionsList.classList.contains('ai-hints-hidden');
             optionsList.classList.toggle('ai-hints-hidden');
+            optionsList.style.display = isHidden ? 'block' : 'none';
             optBtn.innerText = isHidden ? 'Hide Options' : 'Show Options';
             if (isHidden) {
                 renderMathjax(container);
@@ -900,6 +905,7 @@
             restartSpeedFocusTimer();
             const isHidden = hintsList.classList.contains('ai-hints-hidden');
             hintsList.classList.toggle('ai-hints-hidden');
+            hintsList.style.display = isHidden ? 'block' : 'none';
             hintBtn.innerText = isHidden ? 'Hide Hints' : 'Show Hints';
             if (isHidden) {
                 renderMathjax(container);

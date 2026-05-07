@@ -182,7 +182,10 @@ class AIClient:
             "3. AVOID SETS: Do not generate lists. Focus on individual facts.\n"
             "4. MATH DELIMITERS: You MUST use standard LaTeX/MathJax delimiters \\( ... \\) for inline and \\[ ... \\] for block math. "
             "Do not use $ or $$. Do not wrap LaTeX in redundant outer parentheses.\n"
-            "Example: \\( B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) \\)."
+            "5. MULTI-CLOZE HANDLING: If the content has multiple clozes with the same ID (e.g. two {{c1::...}} tags), "
+            "each option MUST contain a comma-separated list of values corresponding to each cloze in order. "
+            "Example: 'option_part_1, option_part_2' if the clozes are {{c1::val1}} and {{c1::val2}}.\n"
+            "Example math: \\( B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) \\)."
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
 
