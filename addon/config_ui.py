@@ -29,9 +29,20 @@ class ConfigDialog(QDialog):
             "<b>ai_provider:</b> openai, anthropic, gemini, deepseek, groq, local, etc.<br>"
             "<b>storage_mode:</b> 'html' (visible) or 'json' (hidden).<br>"
             "<b>options_count:</b> Number of options to generate (default: 4).<br>"
-            "<b>note_type_fields:</b> Define specific fields for each card type."
+            "<b>note_type_fields:</b> Define specific fields for each card type.<br><br>"
+            "<b>Get API Keys:</b> "
+            "<a href='https://platform.openai.com/api-keys'>OpenAI</a> | "
+            "<a href='https://console.anthropic.com/'>Anthropic</a> | "
+            "<a href='https://aistudio.google.com/app/apikey'>Gemini</a> | "
+            "<a href='https://console.groq.com/keys'>Groq</a> | "
+            "<a href='https://platform.deepseek.com/api_keys'>DeepSeek</a> | "
+            "<a href='https://openrouter.ai/keys'>OpenRouter</a> | "
+            "<a href='https://console.mistral.ai/api-keys/'>Mistral</a> | "
+            "<a href='https://console.x.ai/'>Grok</a> | "
+            "<a href='https://ollama.com/'>Ollama</a>"
         )
         help_text.setWordWrap(True)
+        help_text.setOpenExternalLinks(True)
         help_layout.addWidget(help_text)
         help_group.setLayout(help_layout)
         settings_layout.addWidget(help_group)

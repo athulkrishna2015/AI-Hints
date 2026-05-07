@@ -30,6 +30,21 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to set up your providers.
 - `note_type_fields`: A map of note type names to lists of fields that should be sent to the AI.
 - `system_prompt`: The base instructions for the AI.
 
+## Get Your API Keys
+
+To use this add-on, you need an API key from one of the supported providers:
+
+- **OpenAI**: [platform.openai.com](https://platform.openai.com/api-keys)
+- **Anthropic (Claude)**: [console.anthropic.com](https://console.anthropic.com/)
+- **Google Gemini**: [aistudio.google.com](https://aistudio.google.com/app/apikey)
+- **Groq**: [console.groq.com](https://console.groq.com/keys)
+- **DeepSeek**: [platform.deepseek.com](https://platform.deepseek.com/api_keys)
+- **OpenRouter**: [openrouter.ai](https://openrouter.ai/keys)
+- **Mistral**: [console.mistral.ai](https://console.mistral.ai/api-keys/)
+- **Grok (xAI)**: [console.x.ai](https://console.x.ai/)
+- **NVIDIA**: [build.nvidia.com](https://build.nvidia.com/explore/discover)
+- **Ollama (Local AI)**: [ollama.com](https://ollama.com/) (No API key required for local use)
+
 ### Example Config:
 ```json
 {
