@@ -29,7 +29,6 @@
                 // Inherit data attributes
                 container.setAttribute('data-show-hints', jsonBlock.getAttribute('data-show-hints'));
                 container.setAttribute('data-show-options', jsonBlock.getAttribute('data-show-options'));
-                container.setAttribute('data-combined', jsonBlock.getAttribute('data-combined'));
             } catch (e) {
                 console.error("AI-Hints: Failed to parse JSON options", e);
             }
@@ -41,7 +40,6 @@
             
             const showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
             const showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
-            const useCombined = container.getAttribute('data-combined') === 'true';
             
             // Shuffle options
             if (optionsList) {
@@ -62,45 +60,38 @@
             const btnContainer = document.createElement('div');
             btnContainer.style.marginTop = '10px';
 
-            if (useCombined && (hintsList || optionsList)) {
-                const combinedBtn = document.createElement('button');
-                combinedBtn.innerText = 'Show AI Help';
-                combinedBtn.className = 'ai-hints-btn';
-                combinedBtn.onclick = function() {
-                    let isHidden = true;
-                    if (hintsList) {
-                        hintsList.classList.toggle('ai-hints-hidden');
-                        isHidden = hintsList.classList.contains('ai-hints-hidden');
-                    }
-                    if (optionsList) {
-                        optionsList.classList.toggle('ai-hints-hidden');
-                        isHidden = optionsList.classList.contains('ai-hints-hidden');
-                    }
-                    combinedBtn.innerText = isHidden ? 'Show AI Help' : 'Hide AI Help';
+            let showBtn = null;
+            if (optionsList && showOptionsCfg) {
+                showBtn = document.createElement('button');
+                showBtn.innerText = 'Show Options';
+                showBtn.className = 'ai-hints-btn';
+                showBtn.onclick = function() {
+                    optionsList.classList.toggle('ai-hints-hidden');
+                    showBtn.innerText = optionsList.classList.contains('ai-hints-hidden') ? 'Show Options' : 'Hide Options';
                 };
-                btnContainer.appendChild(combinedBtn);
-            } else {
+                
+                // Initially hide if hints button exists
                 if (hintsList && showHintsCfg) {
-                    const hintBtn = document.createElement('button');
-                    hintBtn.innerText = 'Show Hints';
-                    hintBtn.className = 'ai-hints-btn';
-                    hintBtn.onclick = function() {
-                        hintsList.classList.toggle('ai-hints-hidden');
-                        hintBtn.innerText = hintsList.classList.contains('ai-hints-hidden') ? 'Show Hints' : 'Hide Hints';
-                    };
-                    btnContainer.appendChild(hintBtn);
+                    showBtn.style.display = 'none';
                 }
+                btnContainer.appendChild(showBtn);
+            }
 
-                if (optionsList && showOptionsCfg) {
-                    const showBtn = document.createElement('button');
-                    showBtn.innerText = 'Show Options';
-                    showBtn.className = 'ai-hints-btn';
-                    showBtn.onclick = function() {
-                        optionsList.classList.toggle('ai-hints-hidden');
-                        showBtn.innerText = optionsList.classList.contains('ai-hints-hidden') ? 'Show Options' : 'Hide Options';
-                    };
-                    btnContainer.appendChild(showBtn);
-                }
+            if (hintsList && showHintsCfg) {
+                const hintBtn = document.createElement('button');
+                hintBtn.innerText = 'Show Hints';
+                hintBtn.className = 'ai-hints-btn';
+                hintBtn.onclick = function() {
+                    const isHidden = hintsList.classList.contains('ai-hints-hidden');
+                    hintsList.classList.toggle('ai-hints-hidden');
+                    hintBtn.innerText = isHidden ? 'Hide Hints' : 'Show Hints';
+                    
+                    // Show options button when hints are shown
+                    if (isHidden && showBtn) {
+                        showBtn.style.display = 'inline-block';
+                    }
+                };
+                btnContainer.appendChild(hintBtn);
             }
 
             const regenBtn = document.createElement('button');

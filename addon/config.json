@@ -39,7 +39,6 @@
     "options_count": 4,
     "show_hints_button": true,
     "show_options_button": true,
-    "use_combined_button": false,
     "custom_providers": {},
     "note_type_fields": {
         "Cloze": ["Text"],

@@ -59,8 +59,7 @@ class CardParser:
         if toggles:
             toggles_attr = (
                 f'data-show-hints="{str(toggles.get("show_hints_button", True)).lower()}" '
-                f'data-show-options="{str(toggles.get("show_options_button", True)).lower()}" '
-                f'data-combined="{str(toggles.get("use_combined_button", False)).lower()}"'
+                f'data-show-options="{str(toggles.get("show_options_button", True)).lower()}"'
             )
 
         if self.storage_mode == "json":
