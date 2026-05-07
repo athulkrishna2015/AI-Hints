@@ -176,11 +176,12 @@ class AIClient:
             f"Generate exactly {count} options total and 2-3 helpful hints. "
             "Include the correct answer as one of the options. "
             f"The remaining {max(count - 1, 0)} options should be plausible incorrect distractors. "
-            "For Cloze deletions (marked with 'Current cloze deletion'), the options MUST ONLY contain the replacement text for that deletion, not full sentences or surrounding context. "
-            # Use double backslashes in Python strings to result in single backslashes in the AI prompt.
-            "IMPORTANT: You MUST use standard LaTeX/MathJax delimiters \\( ... \\) for inline math and \\[ ... \\] for block math. "
-            "DO NOT use $ ... $ or $$ ... $$ delimiters. "
-            "Do not wrap the entire LaTeX expression in redundant outer parentheses. "
+            "ADHERE TO SRS BEST PRACTICES (Wozniak's 20 Rules):\n"
+            "1. MINIMUM INFORMATION PRINCIPLE: Keep hints and options as short and specific as possible. Avoid wordy explanations.\n"
+            "2. CLOZE FOCUS: If 'Current cloze deletion' is provided, the options MUST ONLY contain the replacement text, not surrounding context.\n"
+            "3. AVOID SETS: Do not generate lists. Focus on individual facts.\n"
+            "4. MATH DELIMITERS: You MUST use standard LaTeX/MathJax delimiters \\( ... \\) for inline and \\[ ... \\] for block math. "
+            "Do not use $ or $$. Do not wrap LaTeX in redundant outer parentheses.\n"
             "Example: \\( B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) \\)."
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
