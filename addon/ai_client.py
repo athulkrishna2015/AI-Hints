@@ -98,8 +98,6 @@ MODEL_SUGGESTIONS = {
     ],
     "sambanova": [
         "Meta-Llama-3.3-70B-Instruct",
-        "Meta-Llama-3.1-8B-Instruct",
-        "Meta-Llama-3.1-70B-Instruct",
     ],
     "cerebras": [
         "llama-3.3-70b",
@@ -171,7 +169,6 @@ MODEL_FALLBACKS = {
     ],
     "sambanova": [
         "Meta-Llama-3.3-70B-Instruct",
-        "Meta-Llama-3.1-8B-Instruct",
     ],
     "cerebras": [
         "llama-3.3-70b",
