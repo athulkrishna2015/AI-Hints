@@ -331,10 +331,22 @@ class ConfigDialog(QDialog):
         self.tabs.setCurrentIndex(4)
         
         # --- Bottom Buttons ---
-        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        btn_box.accepted.connect(self.save_config)
-        btn_box.rejected.connect(self.reject)
-        layout.addWidget(btn_box)
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        self.save_btn = QPushButton("Save")
+        self.save_btn.clicked.connect(lambda: self.save_config(close=False))
+        btn_layout.addWidget(self.save_btn)
+        
+        self.save_exit_btn = QPushButton("Save and Exit")
+        self.save_exit_btn.clicked.connect(lambda: self.save_config(close=True))
+        btn_layout.addWidget(self.save_exit_btn)
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(self.cancel_btn)
+        
+        layout.addLayout(btn_layout)
         
         self.setLayout(layout)
 
@@ -705,12 +717,15 @@ class ConfigDialog(QDialog):
         del self.custom_providers_data[name]
         self.refresh_custom_list()
 
-    def save_config(self):
+    def save_config(self, close=True):
         try:
             if self.raw_toggle.isChecked():
                 raw_config = json.loads(self.raw_editor.toPlainText() or "{}")
                 mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(raw_config))
-                self.accept()
+                if close:
+                    self.accept()
+                else:
+                    tooltip("Configuration saved.")
                 return
 
             new_config = self.config.copy()
@@ -751,7 +766,10 @@ class ConfigDialog(QDialog):
             new_config["provider_priority"] = priority
 
             mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(new_config))
-            self.accept()
+            if close:
+                self.accept()
+            else:
+                tooltip("Configuration saved.")
         except Exception as e:
             info(f"Error saving configuration: {e}")
 
