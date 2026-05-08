@@ -40,7 +40,7 @@ DEFAULT_MODELS = {
     "nvidia":     "meta/llama-3.1-8b-instruct",
     "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
     "together":   "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-    "sambanova":  "Meta-Llama-3.1-8B-Instruct",
+    "sambanova":  "Meta-Llama-3.3-70B-Instruct",
     "cerebras":   "gpt-oss-120b",
     "local":      "llama3",
 }
@@ -92,9 +92,11 @@ MODEL_SUGGESTIONS = {
         "mistralai/Mixtral-8x7B-Instruct-v0.1",
     ],
     "sambanova": [
-        "Meta-Llama-3.1-8B-Instruct",
-        "Meta-Llama-3.1-70B-Instruct",
-        "Meta-Llama-3.1-405B-Instruct",
+        "Meta-Llama-3.3-70B-Instruct",
+        "DeepSeek-V3.1",
+        "gpt-oss-120b",
+        "MiniMax-M2.5",
+        "Llama-4-Maverick-17B-128E-Instruct",
     ],
     "cerebras": [
         "gpt-oss-120b",
@@ -153,8 +155,9 @@ MODEL_FALLBACKS = {
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     ],
     "sambanova": [
-        "Meta-Llama-3.1-8B-Instruct",
         "Meta-Llama-3.3-70B-Instruct",
+        "DeepSeek-V3.1",
+        "gpt-oss-120b",
     ],
     "cerebras": [
         "gpt-oss-120b",

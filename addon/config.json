@@ -33,7 +33,7 @@
         "mistral": "mistral-small-latest",
         "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
         "together": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-        "sambanova": "Meta-Llama-3.1-8B-Instruct",
+        "sambanova": "Meta-Llama-3.3-70B-Instruct",
         "cerebras": "gpt-oss-120b"
     },
     "model_fallbacks": {
