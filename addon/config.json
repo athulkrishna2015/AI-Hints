@@ -31,7 +31,7 @@
         "groq": "llama-3.3-70b-versatile",
         "nvidia": "meta/llama-3.1-8b-instruct",
         "mistral": "mistral-small-latest",
-        "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
+        "huggingface": "openai/gpt-oss-120b",
         "together": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
         "sambanova": "Meta-Llama-3.3-70B-Instruct",
         "cerebras": "gpt-oss-120b"

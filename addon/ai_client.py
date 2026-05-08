@@ -38,7 +38,7 @@ DEFAULT_MODELS = {
     "mistral":    "mistral-small-latest",
     "openrouter": "google/gemini-2.0-flash-001",
     "nvidia":     "meta/llama-3.1-8b-instruct",
-    "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
+    "huggingface": "openai/gpt-oss-120b",
     "together":   "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.3-70B-Instruct",
     "cerebras":   "gpt-oss-120b",
@@ -104,7 +104,15 @@ MODEL_SUGGESTIONS = {
         "gpt-oss-120b",
         "zai-glm-4.7",
         "qwen-3-235b-a22b-instruct-2507",
-        "llama3.1-8b",
+    ],
+    "huggingface": [
+        "openai/gpt-oss-120b:fastest",
+        "deepseek-ai/DeepSeek-R1:fastest",
+        "deepseek-ai/DeepSeek-V3:fastest",
+        "meta-llama/Llama-3.3-70B-Instruct:fastest",
+        "Qwen/Qwen2.5-72B-Instruct:fastest",
+        "openai/gpt-oss-120b:cheapest",
+        "black-forest-labs/FLUX.1-dev",
     ],
 }
 
@@ -144,7 +152,9 @@ MODEL_FALLBACKS = {
         "grok-3-mini",
     ],
     "huggingface": [
-        "meta-llama/Llama-3.1-8B-Instruct",
+        "openai/gpt-oss-120b:fastest",
+        "deepseek-ai/DeepSeek-V3:fastest",
+        "meta-llama/Llama-3.3-70B-Instruct:fastest",
     ],
     "nvidia": [
         "meta/llama-3.1-8b-instruct",
@@ -405,7 +415,7 @@ class AIClient:
                     {"role": "user", "content": prompt}
                 ],
             }
-            if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "together", "sambanova", "cerebras", "nvidia"]:
+            if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "together", "sambanova", "cerebras", "nvidia", "huggingface"]:
                 data["response_format"] = {"type": "json_object"}
 
             try:
