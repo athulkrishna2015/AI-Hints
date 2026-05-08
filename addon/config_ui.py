@@ -98,6 +98,50 @@ class CustomProviderDialog(QDialog):
             info("Headers must be valid JSON.")
             return
         self.accept()
+class ProviderRowWidget(QWidget):
+    def __init__(self, provider, parent_dialog):
+        super().__init__()
+        self.provider = provider
+        self.parent_dialog = parent_dialog
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 2, 0, 2)
+        
+        # Label
+        self.label = QLabel(f"{provider.capitalize()} model:")
+        self.label.setMinimumWidth(150)
+        layout.addWidget(self.label)
+        
+        # Combobox
+        self.edit = QComboBox()
+        self.edit.setEditable(True)
+        self.edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        suggestions = MODEL_SUGGESTIONS.get(provider, [])
+        default = DEFAULT_MODELS.get(provider, "")
+        all_suggestions = suggestions[:]
+        if default and default not in all_suggestions:
+            all_suggestions.insert(0, default)
+        self.edit.addItems(all_suggestions)
+        layout.addWidget(self.edit)
+        
+        # Fetch button
+        self.fetch_btn = QPushButton("Fetch")
+        self.fetch_btn.setFixedWidth(50)
+        self.fetch_btn.setToolTip(f"Fetch latest models from {provider.capitalize()} API (requires API key)")
+        self.fetch_btn.clicked.connect(lambda: self.parent_dialog.on_fetch_models(self.provider, self.edit))
+        layout.addWidget(self.fetch_btn)
+        
+        # Up button
+        self.up_btn = QPushButton("🔼")
+        self.up_btn.setFixedWidth(30)
+        self.up_btn.clicked.connect(lambda: self.parent_dialog.move_provider_row(self, -1))
+        layout.addWidget(self.up_btn)
+        
+        # Down button
+        self.down_btn = QPushButton("🔽")
+        self.down_btn.setFixedWidth(30)
+        self.down_btn.clicked.connect(lambda: self.parent_dialog.move_provider_row(self, 1))
+        layout.addWidget(self.down_btn)
 
 class ConfigDialog(QDialog):
     def __init__(self, parent):
@@ -255,8 +299,8 @@ class ConfigDialog(QDialog):
         local_group.setLayout(local_layout)
         self.prov_layout.addRow(local_group)
 
-        model_group = QGroupBox("Model Names")
-        model_layout = QFormLayout()
+        model_group = QGroupBox("Model Names & Fallback Priority")
+        model_main_layout = QVBoxLayout()
         
         # Add Fetch All and Restore Default buttons
         model_btns_layout = QHBoxLayout()
@@ -271,34 +315,12 @@ class ConfigDialog(QDialog):
         restore_models_btn.clicked.connect(self.on_restore_models_only)
         model_btns_layout.addWidget(restore_models_btn)
         
-        model_layout.addRow(model_btns_layout)
-
-        for p in PROVIDER_ORDER:
-            if p == "local":
-                continue
-            
-            row_layout = QHBoxLayout()
-            edit = QComboBox()
-            edit.setEditable(True)
-            edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            suggestions = MODEL_SUGGESTIONS.get(p, [])
-            default = DEFAULT_MODELS.get(p, "")
-            # Ensure the current default is always a visible option
-            all_suggestions = suggestions[:]
-            if default and default not in all_suggestions:
-                all_suggestions.insert(0, default)
-            edit.addItems(all_suggestions)
-            self.model_edits[p] = edit
-            row_layout.addWidget(edit)
-            
-            fetch_btn = QPushButton("Fetch")
-            fetch_btn.setFixedWidth(50)
-            fetch_btn.setToolTip(f"Fetch latest models from {p.capitalize()} API (requires API key)")
-            fetch_btn.clicked.connect(lambda chk, prov=p, cb=edit: self.on_fetch_models(prov, cb))
-            row_layout.addWidget(fetch_btn)
-            
-            model_layout.addRow(f"{p.capitalize()} model:", row_layout)
-        model_group.setLayout(model_layout)
+        model_main_layout.addLayout(model_btns_layout)
+        
+        self.models_layout = QVBoxLayout()
+        model_main_layout.addLayout(self.models_layout)
+        
+        model_group.setLayout(model_main_layout)
         self.prov_layout.addRow(model_group)
         
         # Custom Providers Group
@@ -323,26 +345,6 @@ class ConfigDialog(QDialog):
         
         custom_group.setLayout(custom_layout)
         self.prov_layout.addRow(custom_group)
-
-        # Provider Priority Group
-        priority_group = QGroupBox("Fallback Priority (Drag to Reorder)")
-        priority_layout = QVBoxLayout()
-        self.priority_list = QListWidget()
-        self.priority_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.priority_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        priority_layout.addWidget(self.priority_list)
-        
-        pbtn_layout = QHBoxLayout()
-        self.move_up_btn = QPushButton("Move Up")
-        self.move_up_btn.clicked.connect(lambda: self._move_list_item(self.priority_list, -1))
-        self.move_down_btn = QPushButton("Move Down")
-        self.move_down_btn.clicked.connect(lambda: self._move_list_item(self.priority_list, 1))
-        pbtn_layout.addWidget(self.move_up_btn)
-        pbtn_layout.addWidget(self.move_down_btn)
-        priority_layout.addLayout(pbtn_layout)
-        
-        priority_group.setLayout(priority_layout)
-        self.prov_layout.addRow(priority_group)
         
         prov_scroll.setWidget(prov_content)
         prov_main_layout.addWidget(prov_scroll)
@@ -581,15 +583,6 @@ class ConfigDialog(QDialog):
         tab.setLayout(layout)
         return tab
 
-    def _move_list_item(self, list_widget, delta):
-        curr = list_widget.currentRow()
-        if curr == -1: return
-        target = curr + delta
-        if 0 <= target < list_widget.count():
-            item = list_widget.takeItem(curr)
-            list_widget.insertItem(target, item)
-            list_widget.setCurrentRow(target)
-
     def load_config_into_ui(self):
         c = self.config
         self.refresh_custom_list()
@@ -696,26 +689,48 @@ class ConfigDialog(QDialog):
         if current_selection:
             self.ai_provider_cb.setCurrentText(current_selection)
 
-        # Update priority list
+        # Get current order from layout
         current_priority = []
-        for i in range(self.priority_list.count()):
-            current_priority.append(self.priority_list.item(i).text())
+        current_models_state = {}
+        if hasattr(self, 'models_layout') and self.models_layout is not None:
+            for i in range(self.models_layout.count()):
+                item = self.models_layout.itemAt(i)
+                if not item: continue
+                w = item.widget()
+                if isinstance(w, ProviderRowWidget):
+                    current_priority.append(w.provider)
+                    current_models_state[w.provider] = w.edit.currentText()
         
-        # If priority list is empty (first load), use config or default
         if not current_priority:
             current_priority = self.config.get("provider_priority", [])
             if not current_priority:
                 current_priority = PROVIDER_ORDER + custom_names
         
-        # Ensure all available providers are in the list, and removed ones are gone
         available = set(PROVIDER_ORDER + custom_names)
         new_priority = [p for p in current_priority if p in available]
         for p in PROVIDER_ORDER + custom_names:
             if p not in new_priority:
                 new_priority.append(p)
                 
-        self.priority_list.clear()
-        self.priority_list.addItems(new_priority)
+        # Rebuild models layout
+        if hasattr(self, 'models_layout') and self.models_layout is not None:
+            while self.models_layout.count():
+                item = self.models_layout.takeAt(0)
+                if item:
+                    w = item.widget()
+                    if w: w.deleteLater()
+            
+            self.model_edits = {}
+            for p in new_priority:
+                if p == "local":
+                    continue
+                w = ProviderRowWidget(p, self)
+                if p in current_models_state:
+                    w.edit.setCurrentText(current_models_state[p])
+                elif p in self.config.get("models", {}):
+                    w.edit.setCurrentText(self.config["models"][p])
+                self.model_edits[p] = w.edit
+                self.models_layout.addWidget(w)
 
     def on_fetch_all_models(self):
         tooltip("Starting batch model fetch...")
@@ -858,21 +873,31 @@ class ConfigDialog(QDialog):
         c = self.default_config
             
         models = c.get("models", {}) or {}
-        for p, edit in self.model_edits.items():
+        default_priority = c.get("provider_priority", PROVIDER_ORDER)
+        
+        while self.models_layout.count():
+            item = self.models_layout.takeAt(0)
+            if item:
+                w = item.widget()
+                if w: w.deleteLater()
+                
+        self.model_edits = {}
+        for p in default_priority:
+            if p == "local":
+                continue
+            w = ProviderRowWidget(p, self)
             model_name = models.get(p, DEFAULT_MODELS.get(p, ""))
-            if edit.findText(model_name) == -1:
-                edit.addItem(model_name)
-            edit.setCurrentText(model_name)
+            if w.edit.findText(model_name) == -1:
+                w.edit.addItem(model_name)
+            w.edit.setCurrentText(model_name)
+            self.model_edits[p] = w.edit
+            self.models_layout.addWidget(w)
             
         local = c.get("local_endpoint", {}) or {}
         self.local_url_edit.setText(local.get("base_url", ""))
         self.local_model_edit.setText(local.get("model", ""))
         self.local_fallback_cb.setChecked(local.get("enabled", False))
         
-        # Priority
-        default_priority = c.get("provider_priority", PROVIDER_ORDER)
-        self.priority_list.clear()
-        self.priority_list.addItems(default_priority)
         logger.info("Restored Provider defaults (models, priority; API keys preserved).")
         tooltip("Provider defaults restored.")
 
@@ -887,6 +912,14 @@ class ConfigDialog(QDialog):
         # Don't reset Raw Editor completely unless user specifically wants to
         logger.info("Restored Advanced defaults (System prompt, note fields).")
         tooltip("Advanced defaults restored.")
+
+    def move_provider_row(self, row_widget, delta):
+        curr_index = self.models_layout.indexOf(row_widget)
+        if curr_index == -1: return
+        target_index = curr_index + delta
+        if 0 <= target_index < self.models_layout.count():
+            self.models_layout.removeWidget(row_widget)
+            self.models_layout.insertWidget(target_index, row_widget)
 
     def save_config(self, close=True):
         try:
@@ -935,8 +968,12 @@ class ConfigDialog(QDialog):
             
             # Save provider priority
             priority = []
-            for i in range(self.priority_list.count()):
-                priority.append(self.priority_list.item(i).text())
+            for i in range(self.models_layout.count()):
+                item = self.models_layout.itemAt(i)
+                if not item: continue
+                w = item.widget()
+                if isinstance(w, ProviderRowWidget):
+                    priority.append(w.provider)
             new_config["provider_priority"] = priority
             
             # Log changes
