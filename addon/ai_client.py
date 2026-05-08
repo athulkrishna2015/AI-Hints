@@ -74,11 +74,12 @@ MODEL_SUGGESTIONS = {
     ],
     "openrouter": [
         "google/gemini-3.1-flash",
-        "google/gemini-3.1-pro",
+        "openai/o3-mini",
+        "anthropic/claude-3.7-sonnet",
+        "deepseek/deepseek-v4-pro",
+        "x-ai/grok-4",
+        "meta-llama/llama-4-maverick",
         "google/gemini-3-flash:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "deepseek/deepseek-chat",
-        "meta-llama/llama-3.1-8b-instruct:free",
         "openrouter/auto",
     ],
     "deepseek": [
@@ -98,11 +99,11 @@ MODEL_SUGGESTIONS = {
         "mistralai/Mixtral-8x7B-Instruct-v0.1",
     ],
     "sambanova": [
+        "DeepSeek-V3.2",
         "Meta-Llama-3.3-70B-Instruct",
-        "DeepSeek-V3.1",
-        "gpt-oss-120b",
-        "MiniMax-M2.5",
         "Llama-4-Maverick-17B-128E-Instruct",
+        "DeepSeek-V3.1",
+        "gemma-3-12b-it",
     ],
     "cerebras": [
         "gpt-oss-120b",
@@ -111,12 +112,11 @@ MODEL_SUGGESTIONS = {
     ],
     "huggingface": [
         "openai/gpt-oss-120b:fastest",
+        "deepseek-ai/DeepSeek-V4-Pro:fastest",
+        "meta-llama/Llama-4-Maverick-17B-128E-Instruct:fastest",
+        "Qwen/Qwen3-235B-A22B-Instruct-2507:fastest",
+        "google/gemma-4-31B-it:fastest",
         "deepseek-ai/DeepSeek-R1:fastest",
-        "deepseek-ai/DeepSeek-V3:fastest",
-        "meta-llama/Llama-3.3-70B-Instruct:fastest",
-        "Qwen/Qwen2.5-72B-Instruct:fastest",
-        "openai/gpt-oss-120b:cheapest",
-        "black-forest-labs/FLUX.1-dev",
     ],
 }
 
