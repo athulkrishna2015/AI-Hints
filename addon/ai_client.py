@@ -31,7 +31,7 @@ PROVIDER_ORDER = [
 DEFAULT_MODELS = {
     "openai":     "gpt-4o-mini",
     "anthropic":  "claude-3-5-haiku-20241022",
-    "gemini":     "gemini-3-flash-preview",
+    "gemini":     "gemini-2.0-flash",
     "groq":       "llama-3.3-70b-versatile",
     "deepseek":   "deepseek-chat",
     "grok":       "grok-3-mini",
@@ -58,8 +58,8 @@ MODEL_SUGGESTIONS = {
         "claude-3-haiku-20240307",
     ],
     "gemini": [
-        "gemini-3-flash-preview",
-        "gemini-3.1-flash-lite-preview",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite-preview-02-05",
         "gemini-1.5-flash",
         "gemini-1.5-pro",
     ],
@@ -108,10 +108,10 @@ MODEL_SUGGESTIONS = {
 
 LEGACY_MODEL_REPLACEMENTS = {
     ("anthropic", "claude-3-haiku-20240307"): "claude-3-5-haiku-20241022",
-    ("gemini", "gemini-1.5-flash"): "gemini-3-flash-preview",
-    ("gemini", "gemini-2.5-flash"): "gemini-3-flash-preview",
-    ("gemini", "models/gemini-1.5-flash"): "gemini-3-flash-preview",
-    ("gemini", "models/gemini-2.5-flash"): "gemini-3-flash-preview",
+    ("gemini", "gemini-1.5-flash"): "gemini-2.0-flash",
+    ("gemini", "gemini-3-flash-preview"): "gemini-2.0-flash",
+    ("gemini", "models/gemini-1.5-flash"): "gemini-2.0-flash",
+    ("gemini", "models/gemini-2.0-flash-exp"): "gemini-2.0-flash",
     ("groq", "llama3-8b-8192"): "llama-3.1-8b-instant",
     ("groq", "llama3-70b-8192"): "llama-3.3-70b-versatile",
     ("grok", "grok-1"): "grok-3-mini",
@@ -127,8 +127,8 @@ MODEL_FALLBACKS = {
         "claude-3-haiku-20240307",
     ],
     "gemini": [
-        "gemini-3-flash-preview",
-        "gemini-3.1-flash-lite-preview",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite-preview-02-05",
     ],
     "groq": [
         "llama-3.1-8b-instant",
