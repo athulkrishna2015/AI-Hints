@@ -33,10 +33,21 @@ class CardParser:
             values = data.get(key, [])
             if not isinstance(values, list):
                 values = [values]
+            
+            seen = set()
             for value in values:
                 text = self._normalize_math_text(str(value))
                 if self.mathjax_format == "tags":
                     text = self._convert_to_mathjax_tags(text)
+                
+                # Only dedupe options, hints can be similar
+                if key == "options":
+                    # Normalize whitespace for comparison
+                    cmp_text = " ".join(text.strip().casefold().split())
+                    if cmp_text in seen:
+                        continue
+                    seen.add(cmp_text)
+                
                 normalized[key].append(text)
         return normalized
 
