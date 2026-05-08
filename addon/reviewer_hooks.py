@@ -227,6 +227,7 @@ def clear_hints():
     
     note = card.note()
     if parser.clear_hints_from_note(note, card):
+        mw.checkpoint("Clear AI Hints")
         note.flush()
         _forget_generated_hints(card)
         logger.info("AI-Hints cleared for card %s", card.id)
@@ -312,6 +313,8 @@ def clear_ai_hints_from_browser_selection(browser):
             missing_cards += 1
             logger.error(f"Failed to clear AI-Hints for browser card {card_id}: {e}")
 
+    if changed_notes:
+        mw.checkpoint("Clear AI Hints")
     for note in changed_notes.values():
         try:
             note.flush()
@@ -509,14 +512,11 @@ def refresh_current_card():
             getattr(old_card, "timerStarted", None),
         )
 
-        get_card = getattr(getattr(mw, "col", None), "getCard", None)
-        if callable(get_card):
-            reviewer.card = get_card(old_card.id)
-        else:
-            try:
-                old_card.load()
-            except Exception:
-                pass
+        try:
+            old_card.load()
+            old_card.note().load()
+        except Exception:
+            pass
 
         if timer_started is not None and getattr(reviewer, "card", None):
             if hasattr(reviewer.card, "timer_started"):
@@ -683,6 +683,7 @@ def generate_hints():
                 "show_options_button": config.get("show_options_button", True)
             }
             if parser.update_note_with_hints(note, data, toggles, card):
+                mw.checkpoint("Generate AI Hints")
                 note.flush()
                 _remember_generated_hints(card, data, toggles)
                 logger.info(
