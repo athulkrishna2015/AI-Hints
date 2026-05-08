@@ -31,7 +31,7 @@ PROVIDER_ORDER = [
 DEFAULT_MODELS = {
     "openai":     "gpt-4o-mini",
     "anthropic":  "claude-3-5-haiku-20241022",
-    "gemini":     "gemini-2.0-flash",
+    "gemini":     "gemini-3.1-flash",
     "groq":       "llama-3.3-70b-versatile",
     "deepseek":   "deepseek-chat",
     "grok":       "grok-3-mini",
@@ -58,10 +58,12 @@ MODEL_SUGGESTIONS = {
         "claude-3-haiku-20240307",
     ],
     "gemini": [
+        "gemini-3.1-flash",
+        "gemini-3.1-pro",
+        "gemini-3.1-flash-lite",
+        "gemini-3-flash",
+        "gemini-3-deepthink",
         "gemini-2.0-flash",
-        "gemini-2.0-flash-lite-preview-02-05",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
     ],
     "groq": [
         "llama-3.3-70b-versatile",
@@ -71,8 +73,9 @@ MODEL_SUGGESTIONS = {
         "gemma2-9b-it",
     ],
     "openrouter": [
-        "google/gemini-2.0-flash-001",
-        "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "google/gemini-3.1-flash",
+        "google/gemini-3.1-pro",
+        "google/gemini-3-flash:free",
         "meta-llama/llama-3.3-70b-instruct:free",
         "deepseek/deepseek-chat",
         "meta-llama/llama-3.1-8b-instruct:free",
@@ -140,8 +143,9 @@ MODEL_FALLBACKS = {
         "claude-3-haiku-20240307",
     ],
     "gemini": [
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite-preview-02-05",
+        "gemini-3.1-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-3-flash",
     ],
     "groq": [
         "llama-3.1-8b-instant",
@@ -161,7 +165,8 @@ MODEL_FALLBACKS = {
         "meta/llama-3.1-8b-instruct",
     ],
     "openrouter": [
-        "google/gemini-2.0-flash-001",
+        "google/gemini-3.1-flash",
+        "google/gemini-3-flash:free",
         "meta-llama/llama-3.3-70b-instruct:free",
         "openrouter/auto",
     ],
