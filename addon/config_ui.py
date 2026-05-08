@@ -126,20 +126,20 @@ class ProviderRowWidget(QWidget):
         
         # Fetch button
         self.fetch_btn = QPushButton("Fetch")
-        self.fetch_btn.setFixedWidth(50)
+        self.fetch_btn.setFixedWidth(70)
         self.fetch_btn.setToolTip(f"Fetch latest models from {provider.capitalize()} API (requires API key)")
         self.fetch_btn.clicked.connect(lambda: self.parent_dialog.on_fetch_models(self.provider, self.edit))
         layout.addWidget(self.fetch_btn)
         
         # Up button
         self.up_btn = QPushButton("▲")
-        self.up_btn.setFixedWidth(30)
+        self.up_btn.setFixedWidth(45)
         self.up_btn.clicked.connect(lambda: self.parent_dialog.move_provider_row(self, -1))
         layout.addWidget(self.up_btn)
         
         # Down button
         self.down_btn = QPushButton("▼")
-        self.down_btn.setFixedWidth(30)
+        self.down_btn.setFixedWidth(45)
         self.down_btn.clicked.connect(lambda: self.parent_dialog.move_provider_row(self, 1))
         layout.addWidget(self.down_btn)
 
