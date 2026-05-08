@@ -865,7 +865,6 @@
             }
         }
 
-        const uiCfg = window.aiHintsUiConfig || {};
         const showOnCard = uiCfg.show_on_card !== false;
         
         if (!showOnCard && !container) {
