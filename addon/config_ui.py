@@ -54,6 +54,15 @@ class ConfigDialog(QDialog):
         self.setMinimumSize(600, 700)
         self.addon_dir = os.path.dirname(__file__)
         self.config = self._normalize_config(mw.addonManager.getConfig(ADDON_PACKAGE) or {})
+        
+        # Load default config for restoration
+        try:
+            with open(os.path.join(self.addon_dir, "config.json"), "r", encoding="utf-8") as f:
+                self.default_config = json.load(f)
+        except Exception as e:
+            logger.error(f"Could not load default config: {e}")
+            self.default_config = {}
+
         self.custom_providers_data = self.config.get("custom_providers", {}) or {}
         
         self.setup_ui()
@@ -112,6 +121,16 @@ class ConfigDialog(QDialog):
         gen_layout.addRow(self.show_in_popup_cb)
         
         self.general_tab.setLayout(gen_layout)
+        
+        # Restore button at bottom
+        gen_main_layout = QVBoxLayout()
+        gen_main_layout.addLayout(gen_layout)
+        gen_main_layout.addStretch()
+        gen_restore_btn = QPushButton("Restore General Defaults")
+        gen_restore_btn.clicked.connect(self.on_restore_general)
+        gen_main_layout.addWidget(gen_restore_btn)
+        self.general_tab.setLayout(gen_main_layout)
+        
         self.tabs.addTab(self.general_tab, "General")
         
         # --- Tab 2: AI Providers (API Keys) ---
@@ -271,6 +290,11 @@ class ConfigDialog(QDialog):
         
         prov_scroll.setWidget(prov_content)
         prov_main_layout.addWidget(prov_scroll)
+        
+        prov_restore_btn = QPushButton("Restore Provider Defaults")
+        prov_restore_btn.clicked.connect(self.on_restore_providers)
+        prov_main_layout.addWidget(prov_restore_btn)
+        
         self.providers_tab.setLayout(prov_main_layout)
         self.tabs.addTab(self.providers_tab, "AI Providers")
         
@@ -315,6 +339,12 @@ class ConfigDialog(QDialog):
         adv_layout.addWidget(self.raw_editor)
         
         self.advanced_tab.setLayout(adv_layout)
+        
+        adv_restore_btn = QPushButton("Restore Advanced Defaults")
+        adv_restore_btn.clicked.connect(self.on_restore_advanced)
+        adv_layout.addStretch()
+        adv_layout.addWidget(adv_restore_btn)
+        
         self.tabs.addTab(self.advanced_tab, "Advanced")
         
         # --- Tab 4: Support ---
@@ -716,6 +746,56 @@ class ConfigDialog(QDialog):
         name = item.text()
         del self.custom_providers_data[name]
         self.refresh_custom_list()
+        
+    def on_restore_general(self):
+        if not self.default_config: return
+        c = self.default_config
+        self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
+        self.options_count_sb.setValue(c.get("options_count", 4))
+        self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
+        self.show_hints_cb.setChecked(c.get("show_hints_button", True))
+        self.show_options_cb.setChecked(c.get("show_options_button", True))
+        self.show_on_card_cb.setChecked(c.get("show_on_card", True))
+        self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", True))
+        self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
+        tooltip("General defaults restored.")
+
+    def on_restore_providers(self):
+        if not self.default_config: return
+        c = self.default_config
+        keys = c.get("api_keys", {}) or {}
+        for p, edit in self.api_key_edits.items():
+            edit.setText(keys.get(p, ""))
+            
+        models = c.get("models", {}) or {}
+        for p, edit in self.model_edits.items():
+            model_name = models.get(p, DEFAULT_MODELS.get(p, ""))
+            if edit.findText(model_name) == -1:
+                edit.addItem(model_name)
+            edit.setCurrentText(model_name)
+            
+        local = c.get("local_endpoint", {}) or {}
+        self.local_url_edit.setText(local.get("base_url", ""))
+        self.local_model_edit.setText(local.get("model", ""))
+        self.local_api_key_edit.setText(local.get("api_key", ""))
+        self.local_fallback_cb.setChecked(local.get("enabled", False))
+        
+        # Priority
+        default_priority = c.get("provider_priority", PROVIDER_ORDER)
+        self.priority_list.clear()
+        self.priority_list.addItems(default_priority)
+        tooltip("Provider defaults restored.")
+
+    def on_restore_advanced(self):
+        if not self.default_config: return
+        c = self.default_config
+        self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
+        self.note_type_fields_data = c.get("note_type_fields", {}).copy()
+        self.on_nt_changed()
+        
+        self.note_fields_edit.setPlainText(json.dumps(self.note_type_fields_data, indent=4))
+        # Don't reset Raw Editor completely unless user specifically wants to
+        tooltip("Advanced defaults restored.")
 
     def save_config(self, close=True):
         try:
