@@ -1112,6 +1112,14 @@
     };
 
     window.aiHintsClearData = function() {
+        const current = currentCard();
+        const uiCfg = window.aiHintsUiConfig || {};
+        const reviewToken = uiCfg.review_token || '0';
+        const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
+        if (current.id) {
+            Persistence.saveData(cardKey, null);
+            Persistence.saveState(cardKey, null);
+        }
         document.querySelectorAll('.ai-hints-container[data-ai-hints-addon-id="2119980872"], .ai-hints-json[data-ai-hints-addon-id="2119980872"]').forEach(function(block) {
             if (matchesCurrentCard(block)) {
                 block.remove();
