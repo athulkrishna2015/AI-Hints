@@ -121,6 +121,8 @@ LEGACY_MODEL_REPLACEMENTS = {
     ("nvidia", "meta/llama3-8b-instruct"): "meta/llama-3.1-8b-instruct",
     ("openrouter", "meta-llama/llama-3-8b-instruct"): "meta-llama/llama-3.1-8b-instruct",
     ("together", "mistralai/Mixtral-8x7B-Instruct-v0.1"): "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+    ("sambanova", "Meta-Llama-3.1-8B-Instruct"): "Meta-Llama-3.3-70B-Instruct",
+    ("cerebras", "llama3.1-8b"): "gpt-oss-120b",
 }
 
 MODEL_FALLBACKS = {
@@ -164,7 +166,7 @@ MODEL_FALLBACKS = {
     "cerebras": [
         "gpt-oss-120b",
         "zai-glm-4.7",
-        "llama3.1-8b",
+        "qwen-3-235b-a22b-instruct-2507",
     ],
 }
 
