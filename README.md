@@ -31,6 +31,39 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Persistent Storage**: Generated hints are saved directly in your card's fields (e.g., "Extras" or "Back"), so they work on AnkiMobile and AnkiDroid too.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
 
+## Intelligence-Ranked Fallback Hierarchy
+
+The add-on features a multi-tiered, intelligence-driven fallback system. If your primary provider fails (due to rate limits, API key exhaustion, or network issues), the system automatically attempts fallback providers and models strictly ranked by absolute intelligence and reasoning capability.
+
+> [!NOTE]
+> The fallback system **only** queries providers where you have entered a valid API key (or enabled local endpoints). Any unconfigured providers are safely and silently skipped.
+
+### Default Provider Priority
+When checking fallbacks, providers are queried in the following descending order of reasoning capability:
+1. **Anthropic** (Claude 3.7/3.5 Sonnet)
+2. **OpenAI** (GPT-4o)
+3. **DeepSeek** (Reasoner/V3)
+4. **Grok (xAI)** (Grok 2)
+5. **Gemini** (Gemini 2.0 Pro/Flash)
+6. **OpenRouter** (Unified Router)
+7. **Hugging Face** (Serverless DeepSeek-V3 / Llama 3.3)
+8. **Together AI**
+9. **Groq**
+10. **SambaNova**
+11. **NVIDIA**
+12. **Mistral**
+13. **Cerebras**
+14. **Local AI** (Ollama/LM Studio)
+
+### Model Fallback Rankings
+For individual providers, if the default model fails, it retries using the smartest available models first:
+* **OpenRouter**: `anthropic/claude-3.5-sonnet` ➡️ `openai/gpt-4o` ➡️ `deepseek/deepseek-chat` ➡️ `meta-llama/llama-3.3-70b-instruct` ➡️ `meta-llama/llama-3.3-70b-instruct:free` ➡️ `google/gemini-2.0-flash-001`
+* **Gemini**: `gemini-2.0-pro-exp-02-05` ➡️ `gemini-1.5-pro` ➡️ `gemini-2.0-flash` ➡️ `gemini-1.5-flash`
+* **Anthropic**: `claude-3-7-sonnet-latest` ➡️ `claude-3-5-sonnet-latest` ➡️ `claude-3-5-haiku-latest`
+* **OpenAI**: `gpt-4o` ➡️ `o1-mini` ➡️ `gpt-4o-mini`
+
+---
+
 ## Configuration
 
 Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configuration window.
