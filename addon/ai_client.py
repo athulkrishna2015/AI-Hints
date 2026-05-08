@@ -31,7 +31,7 @@ PROVIDER_ORDER = [
 DEFAULT_MODELS = {
     "openai":     "gpt-4o-mini",
     "anthropic":  "claude-3-5-haiku-20241022",
-    "gemini":     "gemini-1.5-flash",
+    "gemini":     "gemini-3-flash-preview",
     "groq":       "llama-3.3-70b-versatile",
     "deepseek":   "deepseek-chat",
     "grok":       "grok-3-mini",

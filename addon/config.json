@@ -24,7 +24,7 @@
     "models": {
         "openai": "gpt-4o-mini",
         "anthropic": "claude-3-5-haiku-20241022",
-        "gemini": "gemini-1.5-flash",
+        "gemini": "gemini-3-flash-preview",
         "openrouter": "google/gemini-2.0-flash-exp:free",
         "grok": "grok-3-mini",
         "deepseek": "deepseek-chat",
