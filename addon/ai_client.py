@@ -134,18 +134,20 @@ LEGACY_MODEL_REPLACEMENTS = {
 
 MODEL_FALLBACKS = {
     "anthropic": [
-        "claude-3-5-haiku-latest",
+        "claude-3-7-sonnet-latest",
         "claude-3-5-sonnet-latest",
+        "claude-3-5-haiku-latest",
     ],
     "gemini": [
+        "gemini-2.0-pro-exp-02-05",
+        "gemini-1.5-pro",
         "gemini-2.0-flash",
         "gemini-1.5-flash",
-        "gemini-2.0-flash-lite-preview-02-05",
     ],
     "groq": [
         "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
         "mixtral-8x7b-32768",
+        "llama-3.1-8b-instant",
     ],
     "grok": [
         "grok-2-1212",
@@ -153,19 +155,22 @@ MODEL_FALLBACKS = {
     "huggingface": [
         "deepseek-ai/DeepSeek-V3",
         "meta-llama/Llama-3.3-70B-Instruct",
+        "Qwen/Qwen2.5-72B-Instruct",
     ],
     "nvidia": [
+        "meta/llama-3.3-70b-instruct",
         "meta/llama-3.1-8b-instruct",
     ],
     "openrouter": [
+        "deepseek/deepseek-chat",
+        "meta-llama/llama-3.3-70b-instruct",
         "google/gemini-2.0-flash-001",
-        "google/gemini-2.0-flash-exp:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
         "openrouter/auto",
     ],
     "together": [
-        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "deepseek-ai/DeepSeek-V3",
+        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
     ],
     "sambanova": [
         "Meta-Llama-3.3-70B-Instruct",
