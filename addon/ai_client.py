@@ -198,12 +198,16 @@ class AIClient:
             f"Generate exactly {count} options total and 2-3 helpful hints. "
             "Include the correct answer as one of the options. "
             f"The remaining {max(count - 1, 0)} options should be plausible incorrect distractors. "
+            "DEDUPLICATE: Ensure all options are mathematically and textually distinct. "
+            "Do not provide the same answer in different LaTeX formats or with different spacing.\n"
             "ADHERE TO SRS BEST PRACTICES (Wozniak's 20 Rules):\n"
             "1. MINIMUM INFORMATION PRINCIPLE: Keep hints and options as short and specific as possible. Avoid wordy explanations.\n"
             "2. CLOZE FOCUS: If 'Current cloze deletion' is provided, the options MUST ONLY contain the replacement text, not surrounding context.\n"
             "3. AVOID SETS: Do not generate lists. Focus on individual facts.\n"
-            "4. MATH DELIMITERS: Use standard LaTeX delimiters $ ... $ for inline math and $$ ... $$ for block math. "
-            "Do not use \\( or \\[. Do not wrap LaTeX in redundant outer parentheses.\n"
+            "4. MATH DELIMITERS: USE ONLY $ ... $ for inline math and $$ ... $$ for block math. "
+            "DO NOT use \\( or \\[. DO NOT WRAP $ inside \\( or other delimiters. "
+            "Do not wrap LaTeX in redundant outer parentheses. "
+            "Example inline: $x^2$. Example block: $$ y = mx + c $$.\n"
             "5. MULTI-CLOZE HANDLING: If the content has multiple clozes with the same ID (e.g. two {{c1::...}} tags), "
             "each option MUST contain a comma-separated list of values corresponding to each cloze in order. "
             "Example: 'option_part_1, option_part_2' if the clozes are {{c1::val1}} and {{c1::val2}}.\n"
@@ -640,7 +644,14 @@ class AIClient:
         return text.strip()
 
     def _option_key(self, text: str) -> str:
-        return " ".join(str(text).strip().casefold().split())
+        """Normalized key for deduplicating options, ignoring math delimiters and whitespace."""
+        text = str(text).strip().casefold()
+        # Normalize math delimiters for comparison
+        text = text.replace("\\(", "$").replace("\\)", "$")
+        text = text.replace("\\[", "$$").replace("\\]", "$$")
+        # Remove common delimiters for comparison
+        text = text.replace("$", "").replace(" ", "")
+        return text
 
     def _options_count(self) -> int:
         try:

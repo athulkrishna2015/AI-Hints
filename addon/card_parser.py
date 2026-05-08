@@ -23,32 +23,43 @@ class CardParser:
         """Repairs common AI math errors like missing backslashes or joined commands."""
         return fix_latex(text, output_format=self.mathjax_format)
 
-    def normalize_hint_data(self, data: Dict[str, List[str]]) -> Dict[str, List[str]]:
+    def normalize_hint_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize generated hint text before storage or direct reviewer injection."""
-        normalized = {"hints": [], "options": []}
         if not isinstance(data, dict):
-            return normalized
+            return {"hints": [], "options": []}
 
-        for key in ("hints", "options"):
-            values = data.get(key, [])
-            if not isinstance(values, list):
-                values = [values]
-            
-            seen = set()
-            for value in values:
-                text = self._normalize_math_text(str(value))
-                if self.mathjax_format == "tags":
-                    text = self._convert_to_mathjax_tags(text)
+        # Check if it's a hints/options object
+        if "hints" in data or "options" in data:
+            normalized = {"hints": [], "options": []}
+            for key in ("hints", "options"):
+                values = data.get(key, [])
+                if not isinstance(values, list):
+                    values = [values]
                 
-                # Only dedupe options, hints can be similar
-                if key == "options":
-                    # Normalize whitespace for comparison
-                    cmp_text = " ".join(text.strip().casefold().split())
-                    if cmp_text in seen:
-                        continue
-                    seen.add(cmp_text)
-                
-                normalized[key].append(text)
+                seen = set()
+                for value in values:
+                    text = self._normalize_math_text(str(value))
+                    if self.mathjax_format == "tags":
+                        text = self._convert_to_mathjax_tags(text)
+                    
+                    # Only dedupe options, hints can be similar
+                    if key == "options":
+                        # Normalize whitespace for comparison
+                        cmp_text = " ".join(text.strip().casefold().split())
+                        if cmp_text in seen:
+                            continue
+                        seen.add(cmp_text)
+                    
+                    normalized[key].append(text)
+            return normalized
+        
+        # Handle keyed structure (e.g. c1, c2)
+        normalized = {}
+        for k, v in data.items():
+            if isinstance(v, dict):
+                normalized[k] = self.normalize_hint_data(v)
+            else:
+                normalized[k] = v
         return normalized
 
     def _normalize_math_text(self, text: str) -> str:
@@ -148,7 +159,11 @@ class CardParser:
 
         data = self.normalize_hint_data(data)
 
-        content_block = self.build_hints_block(data, toggles, card)
+        # Determine the key for this card (e.g., 'c1' for cloze ord 0)
+        card_key = None
+        card_ord = self._card_ord(card)
+        if card_ord is not None:
+            card_key = f"c{card_ord + 1}"
         
         # Find target field
         field_name = self._find_target_field(note)
@@ -158,10 +173,65 @@ class CardParser:
 
         current_val = note[field_name]
         
-        new_val = self._replace_or_append_block(current_val, content_block, card)
+        if self.storage_mode == "json":
+            new_val = self._update_json_block_in_field(current_val, data, card_key, toggles, card)
+        else:
+            content_block = self.build_hints_block(data, toggles, card)
+            new_val = self._replace_or_append_block(current_val, content_block, card)
 
         note[field_name] = new_val
         return True
+
+    def _update_json_block_in_field(self, current_val: str, new_data: Dict[str, List[str]], card_key: Optional[str], toggles: Dict[str, bool], card=None) -> str:
+        pattern = re.compile(
+            rf'<div\b[^>]*class=["\'][^"\']*{self.json_class}[^"\']*["\'][^>]*>(.*?)</div>',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        
+        matches = list(pattern.finditer(current_val))
+        
+        # If no block exists, create a new one
+        if not matches:
+            payload = {card_key: new_data} if card_key else new_data
+            content_block = self.build_hints_block(payload, toggles, card if not card_key else None)
+            return current_val + "\n" + content_block
+
+        # If a block exists, try to merge
+        for match in matches:
+            block_html = match.group(0)
+            raw_payload = match.group(1)
+            try:
+                # Unescape and parse
+                parsed = json.loads(html.unescape(raw_payload))
+                
+                # If it's a legacy top-level block and we now have a card_key, we convert it.
+                if card_key:
+                    if "hints" in parsed and "options" in parsed and not isinstance(parsed.get("hints"), dict):
+                        # Convert legacy to keyed
+                        old_ord = self._data_attr(block_html, "data-ai-hints-card-ord")
+                        old_key = f"c{int(old_ord)+1}" if old_ord and old_ord.isdigit() else "c1"
+                        parsed = {old_key: {"hints": parsed["hints"], "options": parsed["options"]}}
+                    
+                    parsed[card_key] = new_data
+                else:
+                    if isinstance(parsed, dict) and "hints" in parsed:
+                         parsed.update(new_data)
+                    else:
+                        parsed = new_data
+                
+                # Build new block
+                new_payload = html.escape(json.dumps(parsed), quote=False)
+                new_attrs = self._build_attrs(toggles, card if not card_key else None)
+                new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
+                
+                return current_val[:match.start()] + new_block + current_val[match.end():]
+            except Exception:
+                continue
+
+        # Fallback: append new
+        payload = {card_key: new_data} if card_key else new_data
+        content_block = self.build_hints_block(payload, toggles, card if not card_key else None)
+        return current_val + "\n" + content_block
 
     def build_hints_block(self, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None) -> str:
         """Build the persisted/injected hints block for the configured storage mode."""
@@ -236,10 +306,13 @@ class CardParser:
     def clear_hints_from_note(self, note, card=None) -> bool:
         """Removes AI hints blocks matching the card from all fields."""
         pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>.*?</div>',
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
             flags=re.DOTALL | re.IGNORECASE,
         )
         cleared = False
+        card_ord = self._card_ord(card)
+        card_key = f"c{card_ord + 1}" if card_ord is not None else None
+
         for f_name in note.keys():
             current_val = note[f_name]
             if not isinstance(current_val, str):
@@ -250,7 +323,27 @@ class CardParser:
             matches = list(pattern.finditer(current_val))
             # Work backwards to avoid offset issues
             for match in reversed(matches):
-                if self._block_matches_card(match.group(0), card):
+                block_html = match.group(0)
+                
+                if self.json_class in block_html and card_key:
+                    # Try partial clear from keyed JSON
+                    try:
+                        raw_payload = match.group(1)
+                        parsed = json.loads(html.unescape(raw_payload))
+                        if isinstance(parsed, dict) and card_key in parsed:
+                            del parsed[card_key]
+                            if parsed:
+                                # Re-save updated JSON
+                                new_payload = html.escape(json.dumps(parsed), quote=False)
+                                new_block = block_html.replace(match.group(1), new_payload)
+                                new_val = new_val[:match.start()] + new_block + new_val[match.end():]
+                                field_cleared = True
+                                continue
+                            # Else if empty, fall through to full removal
+                    except Exception:
+                        pass
+
+                if self._block_matches_card(block_html, card):
                     new_val = new_val[:match.start()] + new_val[match.end():]
                     field_cleared = True
             
@@ -280,6 +373,9 @@ class CardParser:
         return current_val + "\n" + content_block
 
     def _block_matches_card(self, block: str, card=None) -> bool:
+        if card is None:
+            return not self._block_has_card_scope(block)
+
         card_id = self._card_attr(card, "id")
         card_ord = self._card_ord(card)
 
@@ -291,7 +387,8 @@ class CardParser:
         if card_ord is not None and block_ord:
             return str(card_ord) == block_ord
 
-        return not card_id and card_ord is None and not self._block_has_card_scope(block)
+        # If block has no specific scope, it matches all cards of the note
+        return not self._block_has_card_scope(block)
 
     def _block_has_card_scope(self, block: str) -> bool:
         return bool(

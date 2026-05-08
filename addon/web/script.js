@@ -825,6 +825,19 @@
                     data = JSON.parse(rawData);
                 }
 
+                // Handle keyed JSON (e.g., { "c1": { "hints": [...], "options": [...] } })
+                if (data && !data.hints && !data.options) {
+                    const current = currentCard();
+                    const cardKey = 'c' + ((current.ord || 0) + 1);
+                    if (data[cardKey]) {
+                        data = data[cardKey];
+                    } else {
+                        // If not found, it might be a legacy block that is just missing hints/options
+                        // or it might be keyed but not for this card.
+                        // We'll proceed; createListSection handles empty arrays.
+                    }
+                }
+
                 container = document.createElement('div');
                 container.className = 'ai-hints-container';
 
