@@ -230,6 +230,7 @@ def clear_hints():
     
     note = card.note()
     if parser.clear_hints_from_note(note, card):
+        mw.checkpoint("Clear AI Hints")
         note.flush()
         _forget_generated_hints(card)
         logger.info("AI-Hints cleared for card %s", card.id)
@@ -686,6 +687,7 @@ def generate_hints():
                 "show_options_button": config.get("show_options_button", True)
             }
             if parser.update_note_with_hints(note, data, toggles, card):
+                mw.checkpoint("Generate AI Hints")
                 note.flush()
                 _remember_generated_hints(card, data, toggles)
                 logger.info(
