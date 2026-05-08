@@ -813,7 +813,7 @@ class ConfigDialog(QDialog):
                 self.on_restore_general()
                 tooltip("General defaults restored.")
         elif tab_text == "AI Providers":
-            if askUser(f"⚠️ WARNING: This will immediately restore all API keys and model names in the 'AI Providers' tab to their default values.\n\nAny custom keys will be lost. Continue?"):
+            if askUser(f"⚠️ WARNING: This will immediately restore all model names and fallback priorities in the 'AI Providers' tab to their default values (your API keys will be preserved).\n\nContinue?"):
                 self.on_restore_providers()
                 tooltip("Provider defaults restored.")
         elif tab_text == "Advanced":
@@ -856,9 +856,6 @@ class ConfigDialog(QDialog):
     def on_restore_providers(self):
         if not self.default_config: return
         c = self.default_config
-        keys = c.get("api_keys", {}) or {}
-        for p, edit in self.api_key_edits.items():
-            edit.setText(keys.get(p, ""))
             
         models = c.get("models", {}) or {}
         for p, edit in self.model_edits.items():
@@ -870,14 +867,13 @@ class ConfigDialog(QDialog):
         local = c.get("local_endpoint", {}) or {}
         self.local_url_edit.setText(local.get("base_url", ""))
         self.local_model_edit.setText(local.get("model", ""))
-        self.local_api_key_edit.setText(local.get("api_key", ""))
         self.local_fallback_cb.setChecked(local.get("enabled", False))
         
         # Priority
         default_priority = c.get("provider_priority", PROVIDER_ORDER)
         self.priority_list.clear()
         self.priority_list.addItems(default_priority)
-        logger.info("Restored Provider defaults (API keys, models, priority).")
+        logger.info("Restored Provider defaults (models, priority; API keys preserved).")
         tooltip("Provider defaults restored.")
 
     def on_restore_advanced(self):
