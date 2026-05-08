@@ -995,7 +995,23 @@ class ConfigDialog(QDialog):
         
         custom_names = list(custom_providers.keys())
         priority = config.get("provider_priority", [])
-        if not isinstance(priority, list):
+        old_default = [
+            "gemini",
+            "groq",
+            "openrouter",
+            "sambanova",
+            "cerebras",
+            "huggingface",
+            "openai",
+            "anthropic",
+            "deepseek",
+            "mistral",
+            "together",
+            "nvidia",
+            "grok",
+            "local"
+        ]
+        if not isinstance(priority, list) or priority == old_default:
             priority = PROVIDER_ORDER + custom_names
         
         available = set(PROVIDER_ORDER + custom_names)
