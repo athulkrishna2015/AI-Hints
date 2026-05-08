@@ -213,6 +213,7 @@ class AIClient:
             "Example: 'option_part_1, option_part_2' if the clozes are {{c1::val1}} and {{c1::val2}}.\n"
             "6. NO VERBATIM: Do not repeat card content verbatim in hints. Provide context or related principles instead.\n"
             "7. NO CLOZE SYNTAX: DO NOT include Anki cloze deletion syntax (e.g., {{c1::answer}}) in your output; provide only the plain text content.\n"
+            "8. UNIFORM DELIMITERS: All generated options MUST use the exact same mathematical delimiter type (e.g., either ALL options use inline delimiters $ ... $ or ALL options use display delimiters $$ ... $$). Never mix inline and display math delimiters across different options in the same output, as this makes the correct answer stand out as an odd-one-out.\n"
             "Example math: $$ B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) $$."
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
