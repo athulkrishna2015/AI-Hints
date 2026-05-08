@@ -395,9 +395,9 @@ class ConfigDialog(QDialog):
         # --- Bottom Buttons ---
         btn_layout = QHBoxLayout()
         
-        self.restore_all_btn = QPushButton("Restore All Defaults")
-        self.restore_all_btn.clicked.connect(self.on_restore_all_defaults)
-        btn_layout.addWidget(self.restore_all_btn)
+        self.restore_btn = QPushButton("Restore Tab Defaults")
+        self.restore_btn.clicked.connect(self.on_restore_current_tab)
+        btn_layout.addWidget(self.restore_btn)
         
         btn_layout.addStretch()
         
@@ -784,20 +784,24 @@ class ConfigDialog(QDialog):
         del self.custom_providers_data[name]
         self.refresh_custom_list()
         
-    def on_restore_all_defaults(self):
+    def on_restore_current_tab(self):
         if not self.default_config: return
-        if not askUser("Are you sure you want to restore all settings to their default values?"):
-            return
-            
-        # Restore General
-        self.on_restore_general()
-        # Restore Providers
-        self.on_restore_providers()
-        # Restore Advanced
-        self.on_restore_advanced()
+        tab_text = self.tabs.tabText(self.tabs.currentIndex())
         
-        logger.info("Restored all configuration defaults.")
-        tooltip("All defaults restored.")
+        if tab_text == "General":
+            if askUser("Restore General settings to defaults?"):
+                self.on_restore_general()
+                tooltip("General defaults restored.")
+        elif tab_text == "AI Providers":
+            if askUser("Restore AI Provider settings to defaults?"):
+                self.on_restore_providers()
+                tooltip("Provider defaults restored.")
+        elif tab_text == "Advanced":
+            if askUser("Restore Advanced settings to defaults?"):
+                self.on_restore_advanced()
+                tooltip("Advanced defaults restored.")
+        else:
+            tooltip("No defaults to restore for this tab.")
 
     def on_restore_general(self):
         if not self.default_config: return
