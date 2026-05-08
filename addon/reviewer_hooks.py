@@ -14,6 +14,8 @@ _generated_hint_cache = {}
 _popup_dialog_instance = None
 MAX_HINT_CACHE_SIZE = 200
 
+_review_token = 0
+
 _css_cache = None
 _js_cache = None
 
@@ -169,7 +171,8 @@ def on_webview_will_set_content(web_content, context):
     ui_payload = json.dumps({
         "show_on_card": config.get("show_on_card", True),
         "auto_reveal": auto_reveal,
-        "mathjax_format": config.get("mathjax_format", "delimiters")
+        "mathjax_format": config.get("mathjax_format", "delimiters"),
+        "review_token": _review_token
     })
 
     web_content.head += f"<style>{css}</style>"
@@ -227,7 +230,6 @@ def clear_hints():
     
     note = card.note()
     if parser.clear_hints_from_note(note, card):
-        mw.checkpoint("Clear AI Hints")
         note.flush()
         _forget_generated_hints(card)
         logger.info("AI-Hints cleared for card %s", card.id)
@@ -313,8 +315,6 @@ def clear_ai_hints_from_browser_selection(browser):
             missing_cards += 1
             logger.error(f"Failed to clear AI-Hints for browser card {card_id}: {e}")
 
-    if changed_notes:
-        mw.checkpoint("Clear AI Hints")
     for note in changed_notes.values():
         try:
             note.flush()
@@ -683,7 +683,6 @@ def generate_hints():
                 "show_options_button": config.get("show_options_button", True)
             }
             if parser.update_note_with_hints(note, data, toggles, card):
-                mw.checkpoint("Generate AI Hints")
                 note.flush()
                 _remember_generated_hints(card, data, toggles)
                 logger.info(
@@ -733,7 +732,12 @@ def init_hooks():
     gui_hooks.reviewer_did_show_answer.append(update_bottom_bar_button)
     
     # Frontend setup trigger
-    gui_hooks.reviewer_did_show_question.append(_trigger_frontend_setup)
+    def on_show_question(card):
+        global _review_token
+        _review_token += 1
+        _trigger_frontend_setup(card)
+
+    gui_hooks.reviewer_did_show_question.append(on_show_question)
     gui_hooks.reviewer_did_show_answer.append(_trigger_frontend_setup)
     
     # Close popup on next card or when leaving reviewer

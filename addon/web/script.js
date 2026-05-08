@@ -786,7 +786,9 @@
             return;
         }
 
-        const cardKey = (current.id || '') + '_' + (current.ord || '0');
+        const uiCfg = window.aiHintsUiConfig || {};
+        const reviewToken = uiCfg.review_token || '0';
+        const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
         const cardBody = document.getElementById('qa') || document.body;
         
         // Hide all containers initially, then show the matched one
@@ -1087,7 +1089,9 @@
 
     window.aiHintsUpdateData = function(data) {
         const current = currentCard();
-        const cardKey = (current.id || '') + '_' + (current.ord || '0');
+        const uiCfg = window.aiHintsUiConfig || {};
+        const reviewToken = uiCfg.review_token || '0';
+        const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
         if (current.id) {
             Persistence.saveData(cardKey, data);
             // Reset state for new generation
