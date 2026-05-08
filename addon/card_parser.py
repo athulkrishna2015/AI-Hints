@@ -180,7 +180,7 @@ class CardParser:
         return None
 
     def _build_attrs(self, toggles: Dict[str, bool] = None, card=None) -> str:
-        attrs = []
+        attrs = [f'data-ai-hints-addon-id="2119980872"']
         if toggles:
             attrs.extend([
                 f'data-show-hints="{str(toggles.get("show_hints_button", True)).lower()}"',

@@ -1,4 +1,29 @@
 (function() {
+    const Persistence = {
+        saveState: function(cardId, state) {
+            try {
+                sessionStorage.setItem('ai_hints_state_' + cardId, JSON.stringify(state));
+            } catch (e) {}
+        },
+        getState: function(cardId) {
+            try {
+                const raw = sessionStorage.getItem('ai_hints_state_' + cardId);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) { return null; }
+        },
+        saveData: function(cardId, data) {
+            try {
+                sessionStorage.setItem('ai_hints_data_' + cardId, JSON.stringify(data));
+            } catch (e) {}
+        },
+        getData: function(cardId) {
+            try {
+                const raw = sessionStorage.getItem('ai_hints_data_' + cardId);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) { return null; }
+        }
+    };
+
     function sendCommand(command) {
         if (typeof pycmd === 'function') {
             pycmd(command);
@@ -705,8 +730,12 @@
     }
 
     function revealAIHints(mode) {
-        const container = selectCurrentBlock('.ai-hints-container');
+        const container = selectCurrentBlock('.ai-hints-container[data-ai-hints-addon-id="2119980872"]');
         if (!container) return false;
+
+        const current = currentCard();
+        const cardKey = (current.id || '') + '_' + (current.ord || '0');
+        const state = Persistence.getState(cardKey) || { hints: false, options: false };
 
         const hintsList = container.querySelector('.ai-hints-hint-list');
         const optionsList = container.querySelector('.ai-hints-list');
@@ -719,7 +748,8 @@
         let revealed = false;
         const revealHints = mode !== 'options';
         const revealOptions = mode !== 'hints';
-        if (revealHints && hintsList && showHintsCfg && hintsList.classList.contains('ai-hints-hidden')) {
+        
+        if (revealHints && hintsList && showHintsCfg) {
             hintsList.classList.remove('ai-hints-hidden');
             hintsList.style.display = 'block';
             if (hintBtn) {
@@ -728,18 +758,22 @@
             if (showBtn) {
                 showBtn.style.display = 'inline-block';
             }
+            state.hints = true;
             revealed = true;
         }
-        if (revealOptions && optionsList && showOptionsCfg && optionsList.classList.contains('ai-hints-hidden')) {
+        if (revealOptions && optionsList && showOptionsCfg) {
             optionsList.classList.remove('ai-hints-hidden');
             optionsList.style.display = 'block';
             if (showBtn) {
                 showBtn.style.display = 'inline-block';
                 showBtn.innerText = 'Hide Options';
             }
+            state.options = true;
             revealed = true;
         }
+        
         if (revealed) {
+            Persistence.saveState(cardKey, state);
             restartSpeedFocusTimer();
             renderMathjax(container);
         }
@@ -765,8 +799,16 @@
             el.remove();
         });
 
-        let container = selectCurrentBlock('.ai-hints-container');
-        const jsonBlock = selectCurrentBlock('.ai-hints-json');
+        let container = selectCurrentBlock('.ai-hints-container[data-ai-hints-addon-id="2119980872"]');
+        const jsonBlock = selectCurrentBlock('.ai-hints-json[data-ai-hints-addon-id="2119980872"]');
+
+        if (!manualData && !jsonBlock) {
+            // Check if we have data in session storage for this card
+            const cachedData = Persistence.getData(cardKey);
+            if (cachedData) {
+                manualData = cachedData;
+            }
+        }
 
         if (manualData && container) {
             container.remove();
@@ -836,6 +878,8 @@
                 showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
                 showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
                 
+                const state = Persistence.getState(cardKey) || { hints: false, options: false };
+
                 // Reset and shuffle options
                 if (optionsList) {
                     const items = Array.from(optionsList.children);
@@ -844,13 +888,24 @@
                         [items[i], items[j]] = [items[j], items[i]];
                     }
                     items.forEach(item => optionsList.appendChild(item));
-                    optionsList.classList.add('ai-hints-hidden');
-                    optionsList.style.display = 'none'; // Force hide
+                    
+                    if (state.options && showOptionsCfg) {
+                        optionsList.classList.remove('ai-hints-hidden');
+                        optionsList.style.display = 'block';
+                    } else {
+                        optionsList.classList.add('ai-hints-hidden');
+                        optionsList.style.display = 'none';
+                    }
                 }
 
                 if (hintsList) {
-                    hintsList.classList.add('ai-hints-hidden');
-                    hintsList.style.display = 'none'; // Force hide
+                    if (state.hints && showHintsCfg) {
+                        hintsList.classList.remove('ai-hints-hidden');
+                        hintsList.style.display = 'block';
+                    } else {
+                        hintsList.classList.add('ai-hints-hidden');
+                        hintsList.style.display = 'none';
+                    }
                 }
             } else {
                 container.style.display = 'none';
@@ -887,6 +942,11 @@
             optionsList.classList.toggle('ai-hints-hidden');
             optionsList.style.display = isHidden ? 'block' : 'none';
             optBtn.innerText = isHidden ? 'Hide Options' : 'Show Options';
+            
+            const state = Persistence.getState(cardKey) || { hints: false, options: false };
+            state.options = isHidden;
+            Persistence.saveState(cardKey, state);
+
             if (isHidden) {
                 renderMathjax(container);
             }
@@ -907,6 +967,11 @@
             hintsList.classList.toggle('ai-hints-hidden');
             hintsList.style.display = isHidden ? 'block' : 'none';
             hintBtn.innerText = isHidden ? 'Hide Hints' : 'Show Hints';
+
+            const state = Persistence.getState(cardKey) || { hints: false, options: false };
+            state.hints = isHidden;
+            Persistence.saveState(cardKey, state);
+
             if (isHidden) {
                 renderMathjax(container);
             }
@@ -965,7 +1030,7 @@
                 view.className = 'ai-hints-json-view';
                 
                 // Try to get data from jsonBlock or container
-                const targetJsonBlock = selectCurrentBlock('.ai-hints-json');
+                const targetJsonBlock = selectCurrentBlock('.ai-hints-json[data-ai-hints-addon-id="2119980872"]');
                 let raw = '';
                 if (manualData) {
                     raw = JSON.stringify(manualData, null, 2);
@@ -1008,11 +1073,18 @@
     }
 
     window.aiHintsUpdateData = function(data) {
+        const current = currentCard();
+        const cardKey = (current.id || '') + '_' + (current.ord || '0');
+        if (current.id) {
+            Persistence.saveData(cardKey, data);
+            // Reset state for new generation
+            Persistence.saveState(cardKey, { hints: true, options: false });
+        }
         setupAIHints(data);
     };
 
     window.aiHintsClearData = function() {
-        document.querySelectorAll('.ai-hints-container, .ai-hints-json').forEach(function(block) {
+        document.querySelectorAll('.ai-hints-container[data-ai-hints-addon-id="2119980872"], .ai-hints-json[data-ai-hints-addon-id="2119980872"]').forEach(function(block) {
             if (matchesCurrentCard(block)) {
                 block.remove();
             }

@@ -207,6 +207,8 @@ class AIClient:
             "5. MULTI-CLOZE HANDLING: If the content has multiple clozes with the same ID (e.g. two {{c1::...}} tags), "
             "each option MUST contain a comma-separated list of values corresponding to each cloze in order. "
             "Example: 'option_part_1, option_part_2' if the clozes are {{c1::val1}} and {{c1::val2}}.\n"
+            "6. NO VERBATIM: Do not repeat card content verbatim in hints. Provide context or related principles instead.\n"
+            "7. NO CLOZE SYNTAX: DO NOT include Anki cloze deletion syntax (e.g., {{c1::answer}}) in your output; provide only the plain text content.\n"
             "Example math: $$ B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) $$."
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
