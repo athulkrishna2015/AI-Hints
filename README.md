@@ -164,6 +164,9 @@ MIT
 ## Changelog
 
 ### 1.1.3
+- **Unified Model Names & Fallback Priority**: Consolidated both sections into a single, beautiful, and intuitive reorderable layout with solid unicode arrow buttons (`▲`/`▼`) for perfect, high-DPI scaling rendering.
+- **Advanced System Prompt**: Redesigned the baseline system prompt with clean Markdown headings and stricter formatting rules to enforce raw, markdown-free JSON and distractor uniformity.
+- **Webview Persistence Clear**: Fixed the "Clear AI-Hints cached data" action to completely wipe the card's webview persistent memory cache, instantly removing old hints from the screen.
 - **Review UX Stability**: Completely isolated database interactions from Anki's undo stack, restoring the original stable card-refreshing logic.
 
 ### 1.1.2
