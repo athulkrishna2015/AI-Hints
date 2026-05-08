@@ -1,6 +1,7 @@
 import os
 import json
 from aqt import mw
+from aqt.utils import askUser
 from aqt.qt import *
 from .logger import logger, get_logger, info, tooltip
 from .ai_client import DEFAULT_MODELS, LEGACY_MODEL_REPLACEMENTS, MODEL_FALLBACKS, PROVIDER_ORDER, MODEL_SUGGESTIONS, AIClient
@@ -172,16 +173,6 @@ class ConfigDialog(QDialog):
         gen_layout.addRow(self.show_in_popup_cb)
         
         self.general_tab.setLayout(gen_layout)
-        
-        # Restore button at bottom
-        gen_main_layout = QVBoxLayout()
-        gen_main_layout.addLayout(gen_layout)
-        gen_main_layout.addStretch()
-        gen_restore_btn = QPushButton("Restore General Defaults")
-        gen_restore_btn.clicked.connect(self.on_restore_general)
-        gen_main_layout.addWidget(gen_restore_btn)
-        self.general_tab.setLayout(gen_main_layout)
-        
         self.tabs.addTab(self.general_tab, "General")
         
         # --- Tab 2: AI Providers (API Keys) ---
@@ -342,10 +333,6 @@ class ConfigDialog(QDialog):
         prov_scroll.setWidget(prov_content)
         prov_main_layout.addWidget(prov_scroll)
         
-        prov_restore_btn = QPushButton("Restore Provider Defaults")
-        prov_restore_btn.clicked.connect(self.on_restore_providers)
-        prov_main_layout.addWidget(prov_restore_btn)
-        
         self.providers_tab.setLayout(prov_main_layout)
         self.tabs.addTab(self.providers_tab, "AI Providers")
         
@@ -390,12 +377,6 @@ class ConfigDialog(QDialog):
         adv_layout.addWidget(self.raw_editor)
         
         self.advanced_tab.setLayout(adv_layout)
-        
-        adv_restore_btn = QPushButton("Restore Advanced Defaults")
-        adv_restore_btn.clicked.connect(self.on_restore_advanced)
-        adv_layout.addStretch()
-        adv_layout.addWidget(adv_restore_btn)
-        
         self.tabs.addTab(self.advanced_tab, "Advanced")
         
         # --- Tab 4: Support ---
@@ -413,6 +394,11 @@ class ConfigDialog(QDialog):
         
         # --- Bottom Buttons ---
         btn_layout = QHBoxLayout()
+        
+        self.restore_all_btn = QPushButton("Restore All Defaults")
+        self.restore_all_btn.clicked.connect(self.on_restore_all_defaults)
+        btn_layout.addWidget(self.restore_all_btn)
+        
         btn_layout.addStretch()
         
         self.save_btn = QPushButton("Save")
@@ -798,6 +784,21 @@ class ConfigDialog(QDialog):
         del self.custom_providers_data[name]
         self.refresh_custom_list()
         
+    def on_restore_all_defaults(self):
+        if not self.default_config: return
+        if not askUser("Are you sure you want to restore all settings to their default values?"):
+            return
+            
+        # Restore General
+        self.on_restore_general()
+        # Restore Providers
+        self.on_restore_providers()
+        # Restore Advanced
+        self.on_restore_advanced()
+        
+        logger.info("Restored all configuration defaults.")
+        tooltip("All defaults restored.")
+
     def on_restore_general(self):
         if not self.default_config: return
         c = self.default_config
