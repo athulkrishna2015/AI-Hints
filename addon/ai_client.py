@@ -41,7 +41,7 @@ DEFAULT_MODELS = {
     "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
     "together":   "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.1-8B-Instruct",
-    "cerebras":   "llama3.1-8b",
+    "cerebras":   "gpt-oss-120b",
     "local":      "llama3",
 }
 
@@ -97,8 +97,10 @@ MODEL_SUGGESTIONS = {
         "Meta-Llama-3.1-405B-Instruct",
     ],
     "cerebras": [
+        "gpt-oss-120b",
+        "zai-glm-4.7",
+        "qwen-3-235b-a22b-instruct-2507",
         "llama3.1-8b",
-        "llama3.1-70b",
     ],
 }
 
@@ -155,8 +157,9 @@ MODEL_FALLBACKS = {
         "Meta-Llama-3.3-70B-Instruct",
     ],
     "cerebras": [
+        "gpt-oss-120b",
+        "zai-glm-4.7",
         "llama3.1-8b",
-        "llama-3.3-70b",
     ],
 }
 

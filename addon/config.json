@@ -34,7 +34,7 @@
         "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
         "together": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
         "sambanova": "Meta-Llama-3.1-8B-Instruct",
-        "cerebras": "llama3.1-8b"
+        "cerebras": "gpt-oss-120b"
     },
     "model_fallbacks": {
         "gemini": [
