@@ -160,6 +160,11 @@ class ConfigDialog(QDialog):
         self.show_hints_cb = QCheckBox("Show Hints Button")
         gen_layout.addRow(self.show_hints_cb)
         
+        self.mathjax_format_cb = QComboBox()
+        self.mathjax_format_cb.addItems(["delimiters", "inline"])
+        self.mathjax_format_cb.setToolTip("delimiters: \( ... \), \[ ... \]. inline: $ ... $, $$ ... $")
+        gen_layout.addRow("MathJax Format:", self.mathjax_format_cb)
+        
         self.show_options_cb = QCheckBox("Show Options Button (Sequential)")
         gen_layout.addRow(self.show_options_cb)
         
@@ -348,6 +353,11 @@ class ConfigDialog(QDialog):
         # --- Tab 3: Advanced ---
         self.advanced_tab = QWidget()
         adv_layout = QVBoxLayout()
+        
+        adv_layout.addWidget(QLabel("Target Fields (Where hints are saved, comma-separated):"))
+        self.target_fields_edit = QLineEdit()
+        self.target_fields_edit.setToolTip("Example: Extras, Back, Text")
+        adv_layout.addWidget(self.target_fields_edit)
         
         adv_layout.addWidget(QLabel("System Prompt:"))
         self.system_prompt_edit = QTextEdit()
@@ -582,9 +592,11 @@ class ConfigDialog(QDialog):
 
     def load_config_into_ui(self):
         c = self.config
+        self.refresh_custom_list()
         self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
         self.options_count_sb.setValue(c.get("options_count", 4))
         self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
+        self.mathjax_format_cb.setCurrentText(c.get("mathjax_format", "delimiters"))
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
         self.show_options_cb.setChecked(c.get("show_options_button", True))
         self.show_on_card_cb.setChecked(c.get("show_on_card", True))
@@ -612,6 +624,7 @@ class ConfigDialog(QDialog):
         
         self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
         
+        self.target_fields_edit.setText(", ".join(c.get("target_fields", [])))
         self.note_type_fields_data = c.get("note_type_fields", {})
         if hasattr(self, 'nt_cb'):
             self.nt_cb.blockSignals(True)
@@ -622,8 +635,6 @@ class ConfigDialog(QDialog):
             if self.nt_cb.count() > 0:
                 self.nt_cb.setCurrentIndex(0)
                 self.on_nt_changed()
-        
-        self.refresh_custom_list()
         
         self.note_fields_edit.setPlainText(json.dumps(self.note_type_fields_data, indent=4))
         self.raw_editor.setPlainText(json.dumps(c, indent=4))
@@ -897,6 +908,7 @@ class ConfigDialog(QDialog):
             new_config["ai_provider"] = self.ai_provider_cb.currentText()
             new_config["options_count"] = self.options_count_sb.value()
             new_config["storage_mode"] = self.storage_mode_cb.currentText()
+            new_config["mathjax_format"] = self.mathjax_format_cb.currentText()
             new_config["show_hints_button"] = self.show_hints_cb.isChecked()
             new_config["show_options_button"] = self.show_options_cb.isChecked()
             new_config["show_on_card"] = self.show_on_card_cb.isChecked()
@@ -916,6 +928,7 @@ class ConfigDialog(QDialog):
                 "api_key": self.local_api_key_edit.text().strip()
             }
             new_config["system_prompt"] = self.system_prompt_edit.toPlainText()
+            new_config["target_fields"] = [f.strip() for f in self.target_fields_edit.text().split(",") if f.strip()]
             
             if hasattr(self, 'nt_cb'):
                 new_config["note_type_fields"] = self.note_type_fields_data
@@ -980,7 +993,10 @@ class ConfigDialog(QDialog):
         config["model_fallbacks"] = model_fallbacks
 
         # Normalize provider priority
-        custom_providers = config.get("custom_providers", {}) or {}
+        custom_providers = config.get("custom_providers", {})
+        if not isinstance(custom_providers, dict):
+            custom_providers = {}
+        
         custom_names = list(custom_providers.keys())
         priority = config.get("provider_priority", [])
         if not isinstance(priority, list):

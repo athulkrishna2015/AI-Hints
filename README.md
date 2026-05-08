@@ -25,6 +25,8 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Configurable Options**: Set exactly how many MCQ options the AI should generate, including the correct answer (default is 4).
 - **MathJax-Aware Rendering**: AI-Hints prioritizes standard LaTeX/MathJax delimiters. It strictly uses `\( ... \)` for inline math and `\[ ... \]` for block math, explicitly avoiding `$ ... $` or `$$ ... $$` to ensure compatibility with all Anki platforms. It preserves and repairs common LaTeX/MathJax output, including escaped JSON backslashes and bare variables such as `lambda_L`.
 - **Field Customization**: Specify exactly which fields to send to the AI for each note type. Optimized for Cloze cards by default.
+- **Target Fields**: Configure a global fallback list of fields where the AI-Hints block should be stored.
+- **MathJax Format Control**: Switch between standard LaTeX delimiters `\( ... \)` and inline `$...$` depending on your preference.
 - **Persistent Storage**: Generated hints are saved directly in your card's fields (e.g., "Extras" or "Back"), so they work on AnkiMobile and AnkiDroid too.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
 
@@ -126,6 +128,13 @@ MIT
 
 
 ## Changelog
+
+### 1.1.1
+- **UI Performance Optimization**: Significant reduction in UI lag during deck navigation by implementing web asset caching and optimizing background task timeouts.
+- **Persistent Settings Fix**: Resolved a long-standing issue where the active AI provider would reset to default on every restart.
+- **New Configuration Options**: Added **MathJax Format** (delimiters vs. inline) and **Target Fields** (global fallback for hint storage) to the Advanced UI.
+- **Robust Math Repair**: Enhanced the LaTeX fixer to catch and repair common AI hallucinations like `\ninfty` (rendered as $\ni$ nfty) and "sum from... to infinity" in plain text.
+- **Model Maintenance**: Updated decommissioned model IDs for Groq and Cerebras to ensure zero-downtime fallback.
 
 ### 1.1.0
 - **Standardized LaTeX Pipeline**: Transitioned to dollar-based (`$`/`$$`) AI generation for maximum model reliability, with automatic normalization to Anki-compatible delimiters.

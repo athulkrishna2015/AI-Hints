@@ -14,6 +14,19 @@ _generated_hint_cache = {}
 _popup_dialog_instance = None
 MAX_HINT_CACHE_SIZE = 200
 
+_css_cache = None
+_js_cache = None
+
+def get_web_assets():
+    global _css_cache, _js_cache
+    if _css_cache is None or _js_cache is None:
+        addon_dir = os.path.dirname(__file__)
+        with open(os.path.join(addon_dir, "web", "style.css"), "r", encoding="utf-8") as f:
+            _css_cache = f.read()
+        with open(os.path.join(addon_dir, "web", "script.js"), "r", encoding="utf-8") as f:
+            _js_cache = f.read()
+    return _css_cache, _js_cache
+
 def show_api_error_dialog(provider=None, is_custom=False):
     msg = QMessageBox(mw)
     msg.setIcon(QMessageBox.Icon.Warning)
@@ -109,13 +122,7 @@ def on_webview_will_set_content(web_content, context):
     if not is_reviewer:
         return
 
-    addon_dir = get_addon_dir()
-    
-    # Read CSS and JS
-    with open(os.path.join(addon_dir, "web", "style.css"), "r", encoding="utf-8") as f:
-        css = f.read()
-    with open(os.path.join(addon_dir, "web", "script.js"), "r", encoding="utf-8") as f:
-        js = f.read()
+    css, js = get_web_assets()
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(

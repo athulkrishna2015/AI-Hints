@@ -1,31 +1,26 @@
-# CSV Import Plus - Developer Documentation
+# AI-Hints - Developer Documentation
 
-This repository contains the source code for the **CSV Import Plus** Anki add-on.
+This repository contains the source code for the **AI-Hints** Anki add-on.
 
 ## Quick Links
 
-- **Main Repository**: https://github.com/athulkrishna2015/csv-import-plus
-- **Install via AnkiWeb**: Add-on ID 196373966 (https://ankiweb.net/shared/info/196373966)
-- **Report an Issue**: https://github.com/athulkrishna2015/csv-import-plus/issues
-- **Latest Releases**: https://github.com/athulkrishna2015/csv-import-plus/releases
+- **Main Repository**: https://github.com/athulkrishna2015/AI-Hints
+- **Install via AnkiWeb**: https://ankiweb.net/shared/info/AI-Hints
+- **Report an Issue**: https://github.com/athulkrishna2015/AI-Hints/issues
 
 ---
 
 ## Project Structure
 
-- `addon/`: The core add-on code bundled into the `.ankiaddon` file.
-- `addon/Support/`: QR codes and assets for the Support tab.
-- `addon/__init__.py`: Add-on entry point.
-- `addon/anki_helpers.py`: Deck/model helpers.
-- `addon/detector.py`: CSV parsing and note-type detection.
-- `addon/dialog.py`: Main dialog logic.
-- `addon/importer.py`: Import paths (quick import + Anki import dialog).
-- `addon/main.py`: Menu hook and dialog launcher.
-- `addon/ui.py`: UI layout and widgets.
-- `addon/manifest.json`: Add-on manifest (name/package/version).
-- `addon/meta.json`: Runtime config stored by Anki.
-- `tests/`: Unit tests (detector/importer logic).
-- `make_ankiaddon.py`: Build script that auto-bumps version and creates the `.ankiaddon` package.
+- `addon/`: The core add-on code.
+- `addon/latex_fixer/`: Robust LaTeX/MathJax normalization logic.
+- `addon/ai_client.py`: Multi-provider AI client (Gemini, Groq, OpenRouter, etc.).
+- `addon/config_ui.py`: Configuration GUI with dynamic field selectors.
+- `addon/reviewer_hooks.py`: Logic for generating hints during review.
+- `tests/`: 
+  - `local_verify.py`: Comprehensive logic verification (Mocks Anki/Qt).
+  - `live_test.py`: Live AI generation test using keys from `meta.json`.
+- `make_ankiaddon.py`: Build script for the `.ankiaddon` package.
 - `bump.py`: Standalone script to increment the version.
 
 ---
@@ -64,9 +59,17 @@ python make_ankiaddon.py 2.7
 **Versioning rule:** versions follow `major.minor` or `major.minor.patch` (e.g., `2.7` or `2.7.1`).
 
 ### 3. Running Tests
-```shell
-python -m unittest discover tests
-```
+- **Logic Verification (Local)**:
+  Run the logic verification suite (no API keys required, mocks Anki/Qt):
+  ```shell
+  python3 tests/local_verify.py
+  ```
+
+- **Live Provider Test**:
+  Test your API keys and provider connectivity (requires `addon/meta.json` with keys):
+  ```shell
+  python3 tests/live_test.py
+  ```
 
 ### 4. Creating a Release on GitHub
 1. **Commit and Tag**:

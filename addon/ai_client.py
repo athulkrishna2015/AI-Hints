@@ -7,7 +7,7 @@ import urllib.parse
 from typing import List, Dict, Any
 from .logger import logger
 
-REQUEST_TIMEOUT_SECONDS = 60
+REQUEST_TIMEOUT_SECONDS = 20
 USER_AGENT = "Anki-AI-Hints/1.0"
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 
@@ -30,18 +30,18 @@ PROVIDER_ORDER = [
 
 DEFAULT_MODELS = {
     "openai":     "gpt-4o-mini",
-    "anthropic":  "claude-3-5-haiku-20241022",
-    "gemini":     "gemini-3.1-flash",
+    "anthropic":  "claude-3-5-haiku-latest",
+    "gemini":     "gemini-2.0-flash",
     "groq":       "llama-3.3-70b-versatile",
     "deepseek":   "deepseek-chat",
-    "grok":       "grok-3-mini",
+    "grok":       "grok-2-1212",
     "mistral":    "mistral-small-latest",
     "openrouter": "google/gemini-2.0-flash-001",
     "nvidia":     "meta/llama-3.1-8b-instruct",
-    "huggingface": "openai/gpt-oss-120b",
-    "together":   "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+    "huggingface": "deepseek-ai/DeepSeek-V3",
+    "together":   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.3-70B-Instruct",
-    "cerebras":   "gpt-oss-120b",
+    "cerebras":   "llama3.1-70b",
     "local":      "llama3",
 }
 
@@ -50,123 +50,119 @@ MODEL_SUGGESTIONS = {
     "openai": [
         "gpt-4o-mini",
         "gpt-4o",
-        "gpt-3.5-turbo",
+        "o1-mini",
+        "o3-mini",
     ],
     "anthropic": [
-        "claude-3-5-haiku-20241022",
-        "claude-3-5-sonnet-20241022",
-        "claude-3-haiku-20240307",
+        "claude-3-5-haiku-latest",
+        "claude-3-5-sonnet-latest",
+        "claude-3-7-sonnet-latest",
     ],
     "gemini": [
-        "gemini-3.1-flash",
-        "gemini-3.1-pro",
-        "gemini-3.1-flash-lite",
-        "gemini-3-flash",
-        "gemini-3-deepthink",
         "gemini-2.0-flash",
+        "gemini-2.0-flash-lite-preview-02-05",
+        "gemini-2.0-pro-exp-02-05",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
     ],
     "groq": [
         "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
         "llama-3.1-70b-versatile",
         "mixtral-8x7b-32768",
-        "gemma2-9b-it",
+        "deepseek-r1-distill-llama-70b",
     ],
     "openrouter": [
-        "google/gemini-3.1-flash",
-        "openai/o3-mini",
-        "anthropic/claude-3.7-sonnet",
-        "deepseek/deepseek-v4-pro",
-        "x-ai/grok-4",
-        "meta-llama/llama-4-maverick",
-        "google/gemini-3-flash:free",
-        "openrouter/auto",
+        "google/gemini-2.0-flash-001",
+        "openai/gpt-4o-mini",
+        "anthropic/claude-3.5-haiku",
+        "deepseek/deepseek-chat",
+        "meta-llama/llama-3.3-70b-instruct",
+        "google/gemini-2.0-flash-exp:free",
     ],
     "deepseek": [
         "deepseek-chat",
-        "deepseek-coder",
+        "deepseek-reasoner",
     ],
     "mistral": [
         "mistral-small-latest",
         "mistral-medium-latest",
         "mistral-large-latest",
+        "pixtral-12b-2409",
     ],
     "together": [
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-        "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
         "deepseek-ai/DeepSeek-V3",
         "mistralai/Mixtral-8x7B-Instruct-v0.1",
     ],
     "sambanova": [
-        "DeepSeek-V3.2",
         "Meta-Llama-3.3-70B-Instruct",
-        "Llama-4-Maverick-17B-128E-Instruct",
-        "DeepSeek-V3.1",
-        "gemma-3-12b-it",
+        "Meta-Llama-3.1-8B-Instruct",
+        "Meta-Llama-3.1-70B-Instruct",
+        "DeepSeek-R1-Distill-Llama-70B",
     ],
     "cerebras": [
-        "gpt-oss-120b",
-        "zai-glm-4.7",
-        "qwen-3-235b-a22b-instruct-2507",
+        "llama3.1-8b",
+        "llama3.1-70b",
     ],
     "huggingface": [
-        "openai/gpt-oss-120b:fastest",
-        "deepseek-ai/DeepSeek-V4-Pro:fastest",
-        "meta-llama/Llama-4-Maverick-17B-128E-Instruct:fastest",
-        "Qwen/Qwen3-235B-A22B-Instruct-2507:fastest",
-        "google/gemma-4-31B-it:fastest",
-        "deepseek-ai/DeepSeek-R1:fastest",
+        "deepseek-ai/DeepSeek-V3",
+        "meta-llama/Llama-3.3-70B-Instruct",
+        "Qwen/Qwen2.5-72B-Instruct",
     ],
 }
 
 LEGACY_MODEL_REPLACEMENTS = {
-    ("anthropic", "claude-3-haiku-20240307"): "claude-3-5-haiku-20241022",
+    ("anthropic", "claude-3-haiku-20240307"): "claude-3-5-haiku-latest",
     ("gemini", "gemini-1.5-flash"): "gemini-2.0-flash",
     ("gemini", "gemini-3-flash-preview"): "gemini-2.0-flash",
+    ("gemini", "gemini-3.1-flash"): "gemini-2.0-flash",
+    ("gemini", "gemini-3.1-flash-lite-preview"): "gemini-2.0-flash",
     ("gemini", "models/gemini-1.5-flash"): "gemini-2.0-flash",
     ("gemini", "models/gemini-2.0-flash-exp"): "gemini-2.0-flash",
     ("groq", "llama3-8b-8192"): "llama-3.1-8b-instant",
     ("groq", "llama3-70b-8192"): "llama-3.3-70b-versatile",
-    ("grok", "grok-1"): "grok-3-mini",
+    ("grok", "grok-1"): "grok-2-1212",
     ("huggingface", "meta-llama/Meta-Llama-3-8B-Instruct"): "meta-llama/Llama-3.1-8B-Instruct",
     ("nvidia", "meta/llama3-8b-instruct"): "meta/llama-3.1-8b-instruct",
     ("openrouter", "meta-llama/llama-3-8b-instruct"): "meta-llama/llama-3.1-8b-instruct",
+    ("openrouter", "google/gemini-3.1-flash"): "google/gemini-2.0-flash-001",
+    ("openrouter", "google/gemini-2.0-flash-exp:free"): "google/gemini-2.0-flash-001",
     ("together", "mistralai/Mixtral-8x7B-Instruct-v0.1"): "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
     ("sambanova", "Meta-Llama-3.1-8B-Instruct"): "Meta-Llama-3.3-70B-Instruct",
-    ("cerebras", "llama3.1-8b"): "gpt-oss-120b",
+    ("cerebras", "llama3.1-8b"): "llama-3.1-8b",
+    ("cerebras", "llama3.1-70b"): "llama-3.1-70b",
 }
 
 MODEL_FALLBACKS = {
     "anthropic": [
-        "claude-3-5-haiku-20241022",
-        "claude-3-haiku-20240307",
+        "claude-3-5-haiku-latest",
+        "claude-3-5-sonnet-latest",
     ],
     "gemini": [
-        "gemini-3.1-flash",
-        "gemini-3.1-flash-lite",
-        "gemini-3-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-2.0-flash-lite-preview-02-05",
     ],
     "groq": [
-        "llama-3.1-8b-instant",
         "llama-3.3-70b-versatile",
-        "openai/gpt-oss-20b",
-        "openai/gpt-oss-120b",
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768",
     ],
     "grok": [
-        "grok-3-mini",
+        "grok-2-1212",
     ],
     "huggingface": [
-        "openai/gpt-oss-120b:fastest",
-        "deepseek-ai/DeepSeek-V3:fastest",
-        "meta-llama/Llama-3.3-70B-Instruct:fastest",
+        "deepseek-ai/DeepSeek-V3",
+        "meta-llama/Llama-3.3-70B-Instruct",
     ],
     "nvidia": [
         "meta/llama-3.1-8b-instruct",
     ],
     "openrouter": [
-        "google/gemini-3.1-flash",
-        "google/gemini-3-flash:free",
+        "google/gemini-2.0-flash-001",
+        "google/gemini-2.0-flash-exp:free",
         "meta-llama/llama-3.3-70b-instruct:free",
         "openrouter/auto",
     ],
@@ -176,13 +172,12 @@ MODEL_FALLBACKS = {
     ],
     "sambanova": [
         "Meta-Llama-3.3-70B-Instruct",
-        "DeepSeek-V3.1",
-        "gpt-oss-120b",
+        "Meta-Llama-3.1-8B-Instruct",
     ],
     "cerebras": [
-        "gpt-oss-120b",
-        "zai-glm-4.7",
-        "qwen-3-235b-a22b-instruct-2507",
+        "llama-3.3-70b",
+        "llama-3.1-70b",
+        "llama-3.1-8b",
     ],
 }
 

@@ -6,8 +6,8 @@ try:
     from .latex_fixer import fix_latex, normalize_math_text
 except ImportError:
     # Fallback/debug info
-    fix_latex = lambda x: x
-    normalize_math_text = lambda x: x
+    fix_latex = lambda x, **kwargs: x
+    normalize_math_text = lambda x, **kwargs: x
 
 class CardParser:
 
