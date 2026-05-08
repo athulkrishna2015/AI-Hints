@@ -512,11 +512,14 @@ def refresh_current_card():
             getattr(old_card, "timerStarted", None),
         )
 
-        try:
-            old_card.load()
-            old_card.note().load()
-        except Exception:
-            pass
+        get_card = getattr(getattr(mw, "col", None), "getCard", None)
+        if callable(get_card):
+            reviewer.card = get_card(old_card.id)
+        else:
+            try:
+                old_card.load()
+            except Exception:
+                pass
 
         if timer_started is not None and getattr(reviewer, "card", None):
             if hasattr(reviewer.card, "timer_started"):
