@@ -8,8 +8,9 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 ## Features
 
 - **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, and any OpenAI-compatible local API (like Ollama or LM Studio).
-- **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next configured provider.
-- **Model Fallbacks**: If a configured model is unavailable or returns unusable output, the add-on can try fallback models for the same provider before moving on.
+- **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next provider. The fallback order is strictly ranked by absolute intelligence (smartest-first).
+- **Smart Key Guard**: The fallback system only queries providers where you have configured a valid API key (or enabled local endpoints). Any unconfigured providers are safely and silently skipped.
+- **Model Fallbacks**: Each provider has its own **intelligence-ranked fallback hierarchy** (smartest-first) to automatically retry next-best models before switching to a different provider.
 - **Multi-Cloze Support**: Optimized for cards with multiple cloze deletions of the same ID (e.g., `{{c1::A}} ... {{c1::B}}`). The AI now generates coordinated options (e.g., `A, B`) for these complex cards.
 - **Improved UI Stability**: Hints and options now consistently persist through the "Show Answer" transition and are only cleared when moving to a new card.
 - **Smart LaTeX Normalization**: Advanced math repair logic that handles nested delimiters, bare commands (like `sum` or `infty`), and multi-part mathematical expressions.
