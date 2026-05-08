@@ -12,19 +12,19 @@ USER_AGENT = "Anki-AI-Hints/1.0"
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 
 PROVIDER_ORDER = [
-    "gemini",
-    "groq",
-    "openrouter",
-    "sambanova",
-    "cerebras",
-    "huggingface",
-    "openai",
     "anthropic",
+    "openai",
     "deepseek",
-    "mistral",
-    "together",
-    "nvidia",
     "grok",
+    "gemini",
+    "openrouter",
+    "huggingface",
+    "together",
+    "groq",
+    "sambanova",
+    "nvidia",
+    "mistral",
+    "cerebras",
     "local",
 ]
 
@@ -157,14 +157,22 @@ MODEL_FALLBACKS = {
         "meta-llama/Llama-3.3-70B-Instruct",
         "Qwen/Qwen2.5-72B-Instruct",
     ],
+    "openai": [
+        "gpt-4o",
+        "o1-mini",
+        "gpt-4o-mini",
+    ],
     "nvidia": [
         "meta/llama-3.3-70b-instruct",
         "meta/llama-3.1-8b-instruct",
     ],
     "openrouter": [
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "meta-llama/llama-3.1-8b-instruct:free",
+        "anthropic/claude-3.5-sonnet",
+        "openai/gpt-4o",
         "deepseek/deepseek-chat",
+        "meta-llama/llama-3.3-70b-instruct",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-001",
         "openrouter/auto",
     ],
     "together": [
