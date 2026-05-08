@@ -253,11 +253,20 @@ class ConfigDialog(QDialog):
         model_group = QGroupBox("Model Names")
         model_layout = QFormLayout()
         
-        # Add Fetch All button at the top of the model group
+        # Add Fetch All and Restore Default buttons
+        model_btns_layout = QHBoxLayout()
+        
         fetch_all_btn = QPushButton("Fetch All Available Models")
         fetch_all_btn.setToolTip("Attempts to fetch latest models for all providers that have API keys.")
         fetch_all_btn.clicked.connect(self.on_fetch_all_models)
-        model_layout.addRow(fetch_all_btn)
+        model_btns_layout.addWidget(fetch_all_btn)
+        
+        restore_models_btn = QPushButton("Restore Default Models")
+        restore_models_btn.setToolTip("Restores model names to factory defaults.")
+        restore_models_btn.clicked.connect(self.on_restore_models_only)
+        model_btns_layout.addWidget(restore_models_btn)
+        
+        model_layout.addRow(model_btns_layout)
 
         for p in PROVIDER_ORDER:
             if p == "local":
@@ -802,6 +811,22 @@ class ConfigDialog(QDialog):
                 tooltip("Advanced defaults restored.")
         else:
             tooltip("No defaults to restore for this tab.")
+
+    def on_restore_models_only(self):
+        if not self.default_config: return
+        if not askUser("⚠️ WARNING: This will immediately restore all selected Model Names to their factory default values.\n\nContinue?"):
+            return
+            
+        c = self.default_config
+        models = c.get("models", {}) or {}
+        for p, edit in self.model_edits.items():
+            model_name = models.get(p, DEFAULT_MODELS.get(p, ""))
+            if edit.findText(model_name) == -1:
+                edit.addItem(model_name)
+            edit.setCurrentText(model_name)
+            
+        logger.info("Restored default model selections.")
+        tooltip("Default models restored.")
 
     def on_restore_general(self):
         if not self.default_config: return
