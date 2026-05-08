@@ -29,20 +29,20 @@ PROVIDER_ORDER = [
 ]
 
 DEFAULT_MODELS = {
-    "openai":     "gpt-4o-mini",
-    "anthropic":  "claude-3-5-haiku-latest",
-    "gemini":     "gemini-2.0-flash",
+    "openai":     "gpt-4o",
+    "anthropic":  "claude-3-7-sonnet-latest",
+    "gemini":     "gemini-2.0-pro-exp-02-05",
     "groq":       "llama-3.3-70b-versatile",
-    "deepseek":   "deepseek-chat",
+    "deepseek":   "deepseek-reasoner",
     "grok":       "grok-2-1212",
-    "mistral":    "mistral-small-latest",
-    "openrouter": "google/gemini-2.0-flash-001",
-    "nvidia":     "meta/llama-3.1-8b-instruct",
+    "mistral":    "mistral-large-latest",
+    "openrouter": "deepseek/deepseek-chat",
+    "nvidia":     "meta/llama-3.3-70b-instruct",
     "huggingface": "deepseek-ai/DeepSeek-V3",
     "together":   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.3-70B-Instruct",
     "cerebras":   "llama-3.3-70b",
-    "local":      "llama3",
+    "local":      "llama3.3",
 }
 
 # Popular model suggestions for the UI dropdowns
