@@ -758,6 +758,7 @@ class ConfigDialog(QDialog):
         self.show_on_card_cb.setChecked(c.get("show_on_card", True))
         self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", True))
         self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
+        logger.info("Restored General defaults.")
         tooltip("General defaults restored.")
 
     def on_restore_providers(self):
@@ -784,6 +785,7 @@ class ConfigDialog(QDialog):
         default_priority = c.get("provider_priority", PROVIDER_ORDER)
         self.priority_list.clear()
         self.priority_list.addItems(default_priority)
+        logger.info("Restored Provider defaults (API keys, models, priority).")
         tooltip("Provider defaults restored.")
 
     def on_restore_advanced(self):
@@ -795,6 +797,7 @@ class ConfigDialog(QDialog):
         
         self.note_fields_edit.setPlainText(json.dumps(self.note_type_fields_data, indent=4))
         # Don't reset Raw Editor completely unless user specifically wants to
+        logger.info("Restored Advanced defaults (System prompt, note fields).")
         tooltip("Advanced defaults restored.")
 
     def save_config(self, close=True):
@@ -802,6 +805,7 @@ class ConfigDialog(QDialog):
             if self.raw_toggle.isChecked():
                 raw_config = json.loads(self.raw_editor.toPlainText() or "{}")
                 mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(raw_config))
+                logger.info("Configuration saved via Raw JSON Editor.")
                 if close:
                     self.accept()
                 else:
@@ -844,8 +848,22 @@ class ConfigDialog(QDialog):
             for i in range(self.priority_list.count()):
                 priority.append(self.priority_list.item(i).text())
             new_config["provider_priority"] = priority
+            
+            # Log changes
+            changed = []
+            old_config = self.config
+            for k, v in new_config.items():
+                if k not in old_config or old_config[k] != v:
+                    changed.append(k)
+            
+            if changed:
+                logger.info(f"Configuration saved. Changes in: {', '.join(changed)}")
+            else:
+                logger.info("Configuration saved. No changes detected.")
 
             mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(new_config))
+            # Update current config to detect future changes
+            self.config = new_config
             if close:
                 self.accept()
             else:
