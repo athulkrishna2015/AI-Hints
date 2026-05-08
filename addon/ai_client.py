@@ -87,6 +87,7 @@ MODEL_SUGGESTIONS = {
         "mistral-medium-latest",
         "mistral-large-latest",
     ],
+    "together": [
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
         "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
