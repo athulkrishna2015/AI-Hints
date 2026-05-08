@@ -812,7 +812,8 @@
             }
         }
 
-        if (manualData && container) {
+        // Always remove existing container to force complete recreation and fresh option shuffling
+        if (container) {
             container.remove();
             container = null;
         }
