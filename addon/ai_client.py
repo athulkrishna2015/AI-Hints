@@ -36,7 +36,7 @@ DEFAULT_MODELS = {
     "deepseek":   "deepseek-reasoner",
     "grok":       "grok-2-1212",
     "mistral":    "mistral-large-latest",
-    "openrouter": "deepseek/deepseek-chat",
+    "openrouter": "meta-llama/llama-3.3-70b-instruct:free",
     "nvidia":     "meta/llama-3.3-70b-instruct",
     "huggingface": "deepseek-ai/DeepSeek-V3",
     "together":   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
@@ -162,9 +162,9 @@ MODEL_FALLBACKS = {
         "meta/llama-3.1-8b-instruct",
     ],
     "openrouter": [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "meta-llama/llama-3.1-8b-instruct:free",
         "deepseek/deepseek-chat",
-        "meta-llama/llama-3.3-70b-instruct",
-        "google/gemini-2.0-flash-001",
         "openrouter/auto",
     ],
     "together": [
