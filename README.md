@@ -129,6 +129,15 @@ MIT
 
 ## Changelog
 
+### 1.1.3
+- **Review UX Stability**: Completely isolated database interactions from Anki's undo stack, restoring the original stable card-refreshing logic.
+
+### 1.1.2
+- **Multi-Cloze Support**: Hints and options for each cloze deletion are now stored independently under distinct keys (`c1`, `c2`, etc.) inside a single unified JSON block to prevent data collisions.
+- **Improved Math Repair**: Refined `latex_fixer` to gracefully handle dangling LaTeX delimiters (like single trailing `$`) and improved math wrapping for complex expressions containing `\mathbf` or `\text{}`.
+- **Option Deduplication**: Enforced mathematically and conceptually unique option generation at both prompt and code level.
+- **Automatic Reveal Prevention**: Ensured hints and options strictly remain hidden on return visits and card navigation, requiring manual button press for review.
+
 ### 1.1.1
 - **UI Performance Optimization**: Significant reduction in UI lag during deck navigation by implementing web asset caching and optimizing background task timeouts.
 - **Persistent Settings Fix**: Resolved a long-standing issue where the active AI provider would reset to default on every restart.
