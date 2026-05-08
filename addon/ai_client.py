@@ -36,7 +36,7 @@ DEFAULT_MODELS = {
     "deepseek":   "deepseek-chat",
     "grok":       "grok-3-mini",
     "mistral":    "mistral-small-latest",
-    "openrouter": "google/gemini-2.0-flash-exp:free",
+    "openrouter": "google/gemini-2.0-flash-001",
     "nvidia":     "meta/llama-3.1-8b-instruct",
     "huggingface": "meta-llama/Llama-3.1-8B-Instruct",
     "together":   "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
@@ -71,9 +71,10 @@ MODEL_SUGGESTIONS = {
         "gemma2-9b-it",
     ],
     "openrouter": [
-        "google/gemini-2.0-flash-exp:free",
+        "google/gemini-2.0-flash-001",
+        "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
         "meta-llama/llama-3.1-8b-instruct:free",
-        "mistralai/mistral-7b-instruct:free",
         "openrouter/auto",
     ],
     "deepseek": [
@@ -141,8 +142,8 @@ MODEL_FALLBACKS = {
         "meta/llama-3.1-8b-instruct",
     ],
     "openrouter": [
-        "meta-llama/llama-3.1-8b-instruct",
-        "meta-llama/llama-3.1-8b-instruct:free",
+        "google/gemini-2.0-flash-001",
+        "meta-llama/llama-3.3-70b-instruct:free",
         "openrouter/auto",
     ],
     "together": [
@@ -365,7 +366,7 @@ class AIClient:
         # OpenRouter supports a 'models' array for automatic server-side fallbacks
         if provider == "openrouter" and len(models) > 1:
             data = {
-                "models": models,
+                "models": models[:3],
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
