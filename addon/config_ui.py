@@ -10,8 +10,9 @@ import logging
 ADDON_PACKAGE = __name__.split(".")[0]
 
 class CustomProviderDialog(QDialog):
-    def __init__(self, parent, name="", data=None):
+    def __init__(self, parent, name="", data=None, config=None):
         super().__init__(parent)
+        self.config = config or {}
         self.setWindowTitle("Custom Provider")
         layout = QFormLayout(self)
         
@@ -28,13 +29,63 @@ class CustomProviderDialog(QDialog):
         layout.addRow("Provider Name (ID):", self.name_edit)
         layout.addRow("Endpoint URL:", self.url_edit)
         layout.addRow("API Key:", self.key_edit)
-        layout.addRow("Model Name:", self.model_edit)
+        
+        model_row = QHBoxLayout()
+        self.model_edit = QLineEdit(data.get("model", "") if data else "")
+        model_row.addWidget(self.model_edit)
+        self.fetch_btn = QPushButton("Fetch")
+        self.fetch_btn.setFixedWidth(50)
+        self.fetch_btn.clicked.connect(self.on_fetch)
+        model_row.addWidget(self.fetch_btn)
+        layout.addRow("Model Name:", model_row)
+        
         layout.addRow("Headers (JSON):", self.headers_edit)
         
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(self.validate_and_accept)
         btns.rejected.connect(self.reject)
         layout.addRow(btns)
+
+    def on_fetch(self):
+        url = self.url_edit.text().strip()
+        api_key = self.key_edit.text().strip()
+        if not url:
+            info("Please enter an endpoint URL first.")
+            return
+            
+        try:
+            headers = json.loads(self.headers_edit.toPlainText() or "{}")
+        except:
+            headers = {}
+
+        # Create temp config for fetching
+        temp_config = self.config.copy()
+        temp_config["custom_providers"] = {
+            "TEMP": {
+                "url": url,
+                "api_key": api_key,
+                "headers": headers
+            }
+        }
+        
+        client = AIClient(temp_config)
+        self.fetch_btn.setEnabled(False)
+        tooltip("Fetching models...")
+        try:
+            models = client.fetch_models("TEMP")
+            if models:
+                # Use a menu for selection
+                menu = QMenu(self)
+                for m in sorted(models):
+                    action = menu.addAction(m)
+                    action.triggered.connect(lambda chk, val=m: self.model_edit.setText(val))
+                menu.exec(self.fetch_btn.mapToGlobal(QPoint(0, self.fetch_btn.height())))
+            else:
+                info("No models found or endpoint does not support /models.")
+        except Exception as e:
+            info(f"Fetch failed: {e}")
+        finally:
+            self.fetch_btn.setEnabled(True)
 
     def validate_and_accept(self):
         if not self.name_edit.text().strip():

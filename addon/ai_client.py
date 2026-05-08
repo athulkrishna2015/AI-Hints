@@ -764,6 +764,30 @@ class AIClient:
                     result = self._get_json(url, headers)
                     return [m.get("id") for m in result.get("data", []) if m.get("id")]
 
+            # Custom providers
+            custom_providers = self.config.get("custom_providers", {}) or {}
+            if provider in custom_providers:
+                custom_cfg = custom_providers[provider]
+                url = str(custom_cfg.get("url", "") or "").strip()
+                if url:
+                    # Attempt to guess the models endpoint from base chat url
+                    # If it ends in /chat/completions, try /models
+                    models_url = url
+                    if models_url.endswith("/chat/completions"):
+                        models_url = models_url.replace("/chat/completions", "/models")
+                    elif not models_url.endswith("/models"):
+                        # If it's just a base URL like .../v1, append /models
+                        models_url = models_url.rstrip("/") + "/models"
+                    
+                    api_key = str(custom_cfg.get("api_key", "") or "").strip()
+                    custom_headers = custom_cfg.get("headers", {})
+                    headers = self._json_headers(api_key)
+                    if isinstance(custom_headers, dict):
+                        headers.update(custom_headers)
+                    
+                    result = self._get_json(models_url, headers)
+                    return [m.get("id") for m in result.get("data", []) if m.get("id")]
+
         except Exception as e:
             logger.error(f"AI-Hints: Failed to fetch models for {provider}: {e}")
         
