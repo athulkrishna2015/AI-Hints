@@ -41,7 +41,7 @@ DEFAULT_MODELS = {
     "huggingface": "deepseek-ai/DeepSeek-V3",
     "together":   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.3-70B-Instruct",
-    "cerebras":   "llama3.1-70b",
+    "cerebras":   "llama-3.3-70b",
     "local":      "llama3",
 }
 
@@ -100,11 +100,10 @@ MODEL_SUGGESTIONS = {
         "Meta-Llama-3.3-70B-Instruct",
         "Meta-Llama-3.1-8B-Instruct",
         "Meta-Llama-3.1-70B-Instruct",
-        "DeepSeek-R1-Distill-Llama-70B",
     ],
     "cerebras": [
+        "llama-3.3-70b",
         "llama3.1-8b",
-        "llama3.1-70b",
     ],
     "huggingface": [
         "deepseek-ai/DeepSeek-V3",
@@ -132,7 +131,7 @@ LEGACY_MODEL_REPLACEMENTS = {
     ("together", "mistralai/Mixtral-8x7B-Instruct-v0.1"): "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
     ("sambanova", "Meta-Llama-3.1-8B-Instruct"): "Meta-Llama-3.3-70B-Instruct",
     ("cerebras", "llama3.1-8b"): "llama-3.1-8b",
-    ("cerebras", "llama3.1-70b"): "llama-3.1-70b",
+    ("cerebras", "llama3.1-70b"): "llama-3.3-70b",
 }
 
 MODEL_FALLBACKS = {
@@ -176,7 +175,6 @@ MODEL_FALLBACKS = {
     ],
     "cerebras": [
         "llama-3.3-70b",
-        "llama-3.1-70b",
         "llama-3.1-8b",
     ],
 }
