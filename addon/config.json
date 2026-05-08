@@ -1,5 +1,5 @@
 {
-    "ai_provider": "openai",
+    "ai_provider": "gemini",
     "api_keys": {
         "openai": "",
         "anthropic": "",
