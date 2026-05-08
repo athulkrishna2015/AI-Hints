@@ -21,7 +21,7 @@ class CardParser:
 
     def _fix_lazy_latex(self, text: str) -> str:
         """Repairs common AI math errors like missing backslashes or joined commands."""
-        return fix_latex(text)
+        return fix_latex(text, output_format=self.mathjax_format)
 
     def normalize_hint_data(self, data: Dict[str, List[str]]) -> Dict[str, List[str]]:
         """Normalize generated hint text before storage or direct reviewer injection."""
@@ -41,7 +41,7 @@ class CardParser:
         return normalized
 
     def _normalize_math_text(self, text: str) -> str:
-        return normalize_math_text(text)
+        return normalize_math_text(text, output_format=self.mathjax_format)
 
     def _fix_latex_span(self, span: str) -> str:
         # Note: We keep this for internal calls, but it's now just a pass-through to the library.
