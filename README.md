@@ -127,6 +127,12 @@ MIT
 
 ## Changelog
 
+### 1.1.0
+- **Standardized LaTeX Pipeline**: Transitioned to dollar-based (`$`/`$$`) AI generation for maximum model reliability, with automatic normalization to Anki-compatible delimiters.
+- **Enhanced MCQ Reliability**: Implemented a double-layered deduplication system (prompt-level + post-normalization code validation) to ensure all multiple-choice options are unique and conceptually distinct.
+- **LaTeX Fixer 2.0**: Massive overhaul of the internal `ai-latex-fixer` library, now achieving 100% pass rate on the regression test suite.
+- **Improved Spacing**: Refined logic for spacing around math blocks and punctuation to prevent layout jitters.
+
 ### 1.0.6
 - **Multi-Cloze Support**: Added specialized handling for cards containing multiple cloze deletions with the same ID.
 - **Stability Improvements**: Fixed an issue where hints would "disappear" after pressing "Show Answer" due to stale card rendering.
