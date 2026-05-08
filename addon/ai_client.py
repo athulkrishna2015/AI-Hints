@@ -74,6 +74,7 @@ MODEL_SUGGESTIONS = {
         "google/gemini-2.0-flash-001",
         "google/gemini-2.0-flash-lite-preview-02-05:free",
         "meta-llama/llama-3.3-70b-instruct:free",
+        "deepseek/deepseek-chat",
         "meta-llama/llama-3.1-8b-instruct:free",
         "openrouter/auto",
     ],
@@ -86,9 +87,10 @@ MODEL_SUGGESTIONS = {
         "mistral-medium-latest",
         "mistral-large-latest",
     ],
-    "together": [
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
         "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+        "deepseek-ai/DeepSeek-V3",
         "mistralai/Mixtral-8x7B-Instruct-v0.1",
     ],
     "sambanova": [
