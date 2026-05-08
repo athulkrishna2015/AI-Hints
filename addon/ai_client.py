@@ -180,12 +180,12 @@ class AIClient:
             "1. MINIMUM INFORMATION PRINCIPLE: Keep hints and options as short and specific as possible. Avoid wordy explanations.\n"
             "2. CLOZE FOCUS: If 'Current cloze deletion' is provided, the options MUST ONLY contain the replacement text, not surrounding context.\n"
             "3. AVOID SETS: Do not generate lists. Focus on individual facts.\n"
-            "4. MATH DELIMITERS: You MUST use standard LaTeX/MathJax delimiters \\( ... \\) for inline and \\[ ... \\] for block math. "
-            "Do not use $ or $$. Do not wrap LaTeX in redundant outer parentheses.\n"
+            "4. MATH DELIMITERS: Use standard LaTeX delimiters $ ... $ for inline math and $$ ... $$ for block math. "
+            "Do not use \\( or \\[. Do not wrap LaTeX in redundant outer parentheses.\n"
             "5. MULTI-CLOZE HANDLING: If the content has multiple clozes with the same ID (e.g. two {{c1::...}} tags), "
             "each option MUST contain a comma-separated list of values corresponding to each cloze in order. "
             "Example: 'option_part_1, option_part_2' if the clozes are {{c1::val1}} and {{c1::val2}}.\n"
-            "Example math: \\( B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) \\)."
+            "Example math: $$ B(x) = B_0 \\exp\\left(-\\frac{x}{\\lambda_L}\\right) $$."
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
 

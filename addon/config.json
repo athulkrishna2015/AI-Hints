@@ -70,7 +70,7 @@
         "Text",
         "Extra"
     ],
-    "system_prompt": "You are an expert in Effective Learning and Spaced Repetition (SRS). Based on the Anki card content, generate concise hints and multiple-choice options. ADHERE TO THE MINIMUM INFORMATION PRINCIPLE: keep text extremely short and specific. Include the correct answer as one of the options. Make distractors plausible and challenging. DO NOT use $ $ or $$ $$ for LaTeX; use \\( ... \\) or \\[ ... \\] instead. Format: {\"hints\": [\"hint1\", ...], \"options\": [\"correct answer\", \"distractor1\", ...]}",
+    "system_prompt": "You are an expert in Effective Learning and Spaced Repetition (SRS). Based on the Anki card content, generate concise hints and multiple-choice options. ADHERE TO THE MINIMUM INFORMATION PRINCIPLE: keep text extremely short and specific. Include the correct answer as one of the options. Make distractors plausible and challenging. Use $ ... $ for inline math and $$ ... $$ for block math. Format: {\"hints\": [\"hint1\", ...], \"options\": [\"correct answer\", \"distractor1\", ...]}",
     "storage_mode": "json",
     "mathjax_format": "delimiters",
     "options_count": 4,
