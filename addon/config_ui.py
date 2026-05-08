@@ -789,15 +789,15 @@ class ConfigDialog(QDialog):
         tab_text = self.tabs.tabText(self.tabs.currentIndex())
         
         if tab_text == "General":
-            if askUser("Restore General settings to defaults?"):
+            if askUser(f"⚠️ WARNING: This will immediately restore all settings in the 'General' tab to their default values.\n\nAny custom changes in this tab will be lost. Continue?"):
                 self.on_restore_general()
                 tooltip("General defaults restored.")
         elif tab_text == "AI Providers":
-            if askUser("Restore AI Provider settings to defaults?"):
+            if askUser(f"⚠️ WARNING: This will immediately restore all API keys and model names in the 'AI Providers' tab to their default values.\n\nAny custom keys will be lost. Continue?"):
                 self.on_restore_providers()
                 tooltip("Provider defaults restored.")
         elif tab_text == "Advanced":
-            if askUser("Restore Advanced settings to defaults?"):
+            if askUser(f"⚠️ WARNING: This will immediately restore the System Prompt and Note Type settings in the 'Advanced' tab to their default values.\n\nYour custom prompt and field mappings will be lost. Continue?"):
                 self.on_restore_advanced()
                 tooltip("Advanced defaults restored.")
         else:
