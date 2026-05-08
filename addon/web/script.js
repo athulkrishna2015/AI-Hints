@@ -791,9 +791,20 @@
         const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
         const cardBody = document.getElementById('qa') || document.body;
         
-        // Hide all containers initially, then show the matched one
+        // Clean up all old containers from previous cards to prevent data bleed
         document.querySelectorAll('.ai-hints-container').forEach(function(el) {
-            el.style.display = 'none';
+            const blockId = el.getAttribute('data-ai-hints-card-id') || el.dataset.aiHintsCardId;
+            const blockOrd = el.getAttribute('data-ai-hints-card-ord') || el.dataset.aiHintsCardOrd;
+            const currentId = current.id == null ? '' : String(current.id);
+            const currentOrd = current.ord == null ? '' : String(current.ord);
+            
+            if ((blockId && blockId !== currentId) || 
+                (blockOrd && blockOrd !== currentOrd) ||
+                !document.getElementById('qa')?.contains(el)) {
+                el.remove();
+            } else {
+                el.style.display = 'none';
+            }
         });
 
         // Cleanup: Remove any dynamic buttons/actions from previous cards
