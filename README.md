@@ -24,7 +24,9 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Smart Shuffling**: Options are shuffled every time you review the card to prevent pattern memorization.
 - **Storage Modes**: Choose between **visible HTML** (visible on all devices) or **invisible JSON** (cleaner look, requires add-on to render).
 - **Configurable Options**: Set exactly how many MCQ options the AI should generate, including the correct answer (default is 4).
-- **MathJax-Aware Rendering**: AI-Hints repairs common LaTeX/MathJax output, including escaped JSON backslashes and bare variables such as `lambda_L`. The default `delimiters` format stores inline math as `\( ... \)` and block math as `\[ ... \]`; the optional `inline` format stores `$ ... $` and `$$ ... $$`.
+- **Robust JSON Parsing**: Integrates the `json_repair` library to gracefully handle malformed AI output (missing quotes, trailing commas, or truncated responses) and recover valid hints.
+- **MathJax-Aware Rendering**: AI-Hints repairs common LaTeX/MathJax output, including escaped JSON backslashes and bare variables such as `lambda_L`.
+ The default `delimiters` format stores inline math as `\( ... \)` and block math as `\[ ... \]`; the optional `inline` format stores `$ ... $` and `$$ ... $$`.
 - **Field Customization**: Specify exactly which fields to send to the AI for each note type. Optimized for Cloze cards by default.
 - **Target Fields**: Configure a global fallback list of fields where the AI-Hints block should be stored.
 - **MathJax Format Control**: Switch between standard LaTeX delimiters `\( ... \)` and inline `$...$` depending on your preference.
@@ -164,6 +166,7 @@ MIT
 ## Changelog
 
 ### May 9, 2026
+- **Robust JSON Repair Integration**: Vendored the `json_repair` library to handle malformed AI responses, missing quotes, and truncated JSON blocks more gracefully.
 - **AI Hallucination Sanitizer**: Implemented a robust sanitization layer to strip trailing JSON and technical metadata (e.g. `{"hints": ...}`) that some AI models hallucinated into the content strings.
 - **Prefix Removal**: Added automatic stripping of common AI prefixes like `Answer:`, `Option:`, and `Distractor:` to keep cards clean.
 - **Improved Math Normalization**: Balanced the LaTeX repair logic to prevent over-normalization of plain Greek words like "Gamma" or "Delta" while maintaining robust math formatting.

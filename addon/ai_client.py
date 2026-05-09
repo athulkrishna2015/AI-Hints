@@ -7,6 +7,11 @@ import urllib.parse
 from typing import List, Dict, Any
 from .logger import logger
 
+try:
+    from .json_repair import loads as repair_loads
+except ImportError:
+    repair_loads = json.loads
+
 REQUEST_TIMEOUT_SECONDS = 20
 USER_AGENT = "Anki-AI-Hints/1.0"
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
@@ -539,45 +544,8 @@ class AIClient:
             or "rate-limits" in body_text
         )
 
-    def _repair_json_backslashes(self, content: str) -> str:
-        r"""
-        Fixes backslash loss in AI-generated JSON. Many models send single 
-        backslashes for LaTeX (e.g. \( \exp \)) which json.loads() strips.
-        We escape them unless they are part of a valid JSON escape (like \").
-        """
-        repaired = ""
-        i = 0
-        while i < len(content):
-            if content[i] == '\\':
-                if i + 1 < len(content):
-                    next_char = content[i+1]
-                    if next_char == '"':
-                        # Keep \" as is to preserve JSON structure
-                        repaired += '\\"'
-                        i += 2
-                    elif next_char == '\\':
-                        # Keep \\ as is (already escaped)
-                        repaired += '\\\\'
-                        i += 2
-                    elif next_char == 'u' and i + 5 < len(content) and all(c in '0123456789abcdefABCDEF' for c in content[i+2:i+6]):
-                        # Keep \uXXXX unicode escapes
-                        repaired += content[i:i+6]
-                        i += 6
-                    else:
-                        # Escape any other backslash (like \(, \exp, \frac, \n, etc.)
-                        # Most AIs mean literal backslashes for these in LaTeX context.
-                        repaired += '\\\\'
-                        i += 1
-                else:
-                    # Trailing backslash
-                    repaired += '\\\\'
-                    i += 1
-            else:
-                repaired += content[i]
-                i += 1
-        return repaired
-
     def _parse_json_result(self, content: str) -> Dict[str, List[str]]:
+
         content = (content or "").strip()
         if content.startswith("```json"):
             content = content[7:]
@@ -586,21 +554,20 @@ class AIClient:
         if content.endswith("```"):
             content = content[:-3]
         content = content.strip()
-        
-        # Repair backslashes before parsing
-        content = self._repair_json_backslashes(content)
-        
+
         try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError:
+            # Use json_repair for robust parsing of potentially malformed AI output
+            parsed = repair_loads(content)
+        except Exception:
+            # Fallback: attempt to find and parse the first JSON object
             start = content.find("{")
             end = content.rfind("}")
             if start == -1 or end == -1 or end <= start:
                 logger.warning("AI-Hints: Provider response did not contain JSON.")
                 return {"hints": [], "options": []}
             try:
-                parsed = json.loads(content[start:end + 1])
-            except json.JSONDecodeError:
+                parsed = repair_loads(content[start:end + 1])
+            except Exception:
                 logger.warning("AI-Hints: Provider response contained invalid JSON.")
                 return {"hints": [], "options": []}
 
@@ -611,7 +578,6 @@ class AIClient:
             "hints": self._normalize_string_list(parsed.get("hints", [])),
             "options": self._normalize_string_list(parsed.get("options", [])),
         }
-
     def _ensure_correct_answer_option(self, result: Dict[str, List[str]], answer: str) -> Dict[str, List[str]]:
         count = self._options_count()
         options = self._normalize_string_list(result.get("options", []))

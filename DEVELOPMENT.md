@@ -14,6 +14,7 @@ This repository contains the source code for the **AI-Hints** Anki add-on.
 
 - `addon/`: The core add-on code.
 - `addon/latex_fixer/`: Robust LaTeX/MathJax normalization logic.
+- `addon/json_repair/`: Lightweight library to fix malformed JSON from AI models.
 - `addon/ai_client.py`: Multi-provider AI client (Gemini, Groq, OpenRouter, etc.).
 - `addon/config_ui.py`: Configuration GUI with dynamic field selectors.
 - `addon/reviewer_hooks.py`: Logic for generating hints during review.
