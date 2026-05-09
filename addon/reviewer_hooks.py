@@ -230,9 +230,12 @@ def clear_hints():
     
     note = card.note()
     if parser.clear_hints_from_note(note, card):
-        mw.col.add_custom_undo_entry("Clear AI Hints")
-        mw.col.update_note(note)
-        mw.col.merge_undo_entries(1)
+        try:
+            mw.col.add_custom_undo_entry("Clear AI Hints")
+            mw.col.update_note(note)
+            mw.col.merge_undo_entries(1)
+        except Exception:
+            mw.col.update_note(note)
         _forget_generated_hints(card)
         logger.info("AI-Hints cleared for card %s", card.id)
         tooltip("AI-Hints: Cleared.")
@@ -684,9 +687,12 @@ def generate_hints():
                 "show_options_button": config.get("show_options_button", True)
             }
             if parser.update_note_with_hints(note, data, toggles, card):
-                mw.col.add_custom_undo_entry("Generate AI Hints")
-                mw.col.update_note(note)
-                mw.col.merge_undo_entries(1)
+                try:
+                    mw.col.add_custom_undo_entry("Generate AI Hints")
+                    mw.col.update_note(note)
+                    mw.col.merge_undo_entries(1)
+                except Exception:
+                    mw.col.update_note(note)
                 _remember_generated_hints(card, data, toggles)
                 logger.info(
                     "AI-Hints saved %d hints and %d options to note %s for card %s.",
