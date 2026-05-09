@@ -830,8 +830,8 @@
             }
         }
 
-        // Always remove existing container to force complete recreation and fresh option shuffling
-        if (container) {
+        // Only remove existing container to force complete recreation if we have JSON or manual data to rebuild it from
+        if (container && (jsonBlock || manualData)) {
             container.remove();
             container = null;
         }
