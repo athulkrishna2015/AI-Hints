@@ -738,7 +738,8 @@
         if (!container) return false;
 
         const current = currentCard();
-        const cardKey = (current.id || '') + '_' + (current.ord || '0');
+        const reviewToken = uiCfg.review_token || '0';
+        const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
         const state = Persistence.getState(cardKey) || { hints: false, options: false };
 
         const hintsList = container.querySelector('.ai-hints-hint-list');
@@ -974,7 +975,7 @@
         optBtn.innerText = 'Show Options';
         optBtn.className = 'ai-hints-btn';
         optBtn.dataset.aiHintsAction = 'toggle-options';
-        setButtonEnabled(optBtn, Boolean(showOptionsCfg && optionsList));
+        setButtonEnabled(optBtn, Boolean(optionsList && optionsList.children.length > 0));
         optBtn.onclick = function() {
             if (!optionsList) {
                 return;
@@ -999,7 +1000,7 @@
         hintBtn.innerText = 'Show Hints';
         hintBtn.className = 'ai-hints-btn';
         hintBtn.dataset.aiHintsAction = 'toggle-hints';
-        setButtonEnabled(hintBtn, Boolean(showHintsCfg && hintsList));
+        setButtonEnabled(hintBtn, Boolean(hintsList && hintsList.children.length > 0));
         hintBtn.onclick = function() {
             if (!hintsList) {
                 return;
