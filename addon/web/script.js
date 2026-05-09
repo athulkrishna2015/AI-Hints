@@ -1189,9 +1189,5 @@
         }, true);
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setupAIHints);
-    } else {
-        setupAIHints();
-    }
+
 })();
