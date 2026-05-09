@@ -793,7 +793,11 @@
         const uiCfg = window.aiHintsUiConfig || {};
         const reviewToken = uiCfg.review_token || '0';
         const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
-        const cardBody = document.getElementById('qa') || document.body;
+        const cardBody = document.getElementById('qa');
+        if (!cardBody) {
+            setTimeout(function() { setupAIHints(manualData); }, 50);
+            return;
+        }
         
         // Clean up all old containers, JSON blocks, and actions from previous cards to prevent data bleed
         document.querySelectorAll('.ai-hints-container, .ai-hints-json, .ai-hints-actions').forEach(function(el) {
