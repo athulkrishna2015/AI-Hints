@@ -1129,6 +1129,9 @@
     }
 
     window.aiHintsUpdateData = function(data) {
+        if (window.aiHintsUiConfig) {
+            window.aiHintsUiConfig.is_generating = false;
+        }
         const current = currentCard();
         const uiCfg = window.aiHintsUiConfig || {};
         const reviewToken = uiCfg.review_token || '0';
@@ -1142,6 +1145,9 @@
     };
 
     window.aiHintsClearData = function() {
+        if (window.aiHintsUiConfig) {
+            window.aiHintsUiConfig.is_generating = false;
+        }
         const current = currentCard();
         const uiCfg = window.aiHintsUiConfig || {};
         const reviewToken = uiCfg.review_token || '0';
