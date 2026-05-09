@@ -230,7 +230,9 @@ def clear_hints():
     
     note = card.note()
     if parser.clear_hints_from_note(note, card):
+        mw.col.add_custom_undo_entry("Clear AI Hints")
         mw.col.update_note(note)
+        mw.col.merge_undo_entries(1)
         _forget_generated_hints(card)
         logger.info("AI-Hints cleared for card %s", card.id)
         tooltip("AI-Hints: Cleared.")
@@ -656,21 +658,17 @@ def generate_hints():
     logger.info("AI-Hints generation started for card %s using provider: %s", card_id, provider)
     tooltip("AI-Hints: Generating...")
 
-    def on_done(future):
+    def on_done(data):
         try:
-            try:
-                data = future.result()
-            except Exception as e:
-                logger.error(f"AI-Hints Future Error: {e}")
-                data = {"hints": [], "options": []}
-
             # Check if the card is still the same one we started with
             is_current = mw.reviewer.card and mw.reviewer.card.id == card.id
+            if not is_current:
+                logger.info("AI-Hints: User moved to another card. Discarding generated data to prevent database and undo conflicts.")
+                return
 
             if not data or (not data.get("hints") and not data.get("options")):
-                if is_current:
-                    info("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
-                    refresh_current_card()
+                info("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
+                refresh_current_card()
                 return
 
             data = parser.normalize_hint_data(data)
@@ -686,7 +684,9 @@ def generate_hints():
                 "show_options_button": config.get("show_options_button", True)
             }
             if parser.update_note_with_hints(note, data, toggles, card):
+                mw.col.add_custom_undo_entry("Generate AI Hints")
                 mw.col.update_note(note)
+                mw.col.merge_undo_entries(1)
                 _remember_generated_hints(card, data, toggles)
                 logger.info(
                     "AI-Hints saved %d hints and %d options to note %s for card %s.",
@@ -695,32 +695,38 @@ def generate_hints():
                     getattr(note, "id", ""),
                     card_id,
                 )
-                if is_current:
-                    _just_generated_card_ids.add(card.id)
-                    tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
-                    try:
-                        mw.reviewer.web.eval(
-                            f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}); }}"
-                        )
-                    except Exception as e:
-                        logger.error(f"AI-Hints direct web update failed: {e}")
-                        refresh_current_card()
-                    
-                    if config.get("show_in_popup", False):
-                        global _popup_dialog_instance
-                        close_popup_if_open()
-                        html_content = parser._build_html_block(data)
-                        _popup_dialog_instance = ResultsPopup(mw, html_content)
-                        _popup_dialog_instance.show()
-            elif is_current:
+                _just_generated_card_ids.add(card.id)
+                tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
+                try:
+                    mw.reviewer.web.eval(
+                        f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}); }}"
+                    )
+                except Exception as e:
+                    logger.error(f"AI-Hints direct web update failed: {e}")
+                    refresh_current_card()
+                
+                if config.get("show_in_popup", False):
+                    global _popup_dialog_instance
+                    close_popup_if_open()
+                    html_content = parser._build_html_block(data)
+                    _popup_dialog_instance = ResultsPopup(mw, html_content)
+                    _popup_dialog_instance.show()
+            else:
                 info("AI-Hints: No hints or options were generated.")
         finally:
             _generating_card_ids.discard(card_id)
 
-    mw.taskman.run_in_background(
-        lambda: client.generate_options(front, back),
-        on_done
-    )
+    import threading
+
+    def run_async():
+        try:
+            res = client.generate_options(front, back)
+            mw.taskman.run_on_main(lambda: on_done(res))
+        except Exception as e:
+            logger.error(f"AI-Hints generation error: {e}")
+            mw.taskman.run_on_main(lambda: on_done({"hints": [], "options": []}))
+
+    threading.Thread(target=run_async, daemon=True).start()
 
 def init_hooks():
     global _hooks_registered
