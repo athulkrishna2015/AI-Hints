@@ -888,6 +888,7 @@
 
         const btnContainer = document.createElement('div');
         btnContainer.className = 'ai-hints-actions';
+        applyCurrentCardAttrs(btnContainer);
         btnContainer.style.marginTop = '10px';
         btnContainer.style.textAlign = 'center';
 

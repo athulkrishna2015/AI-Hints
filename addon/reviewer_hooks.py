@@ -195,7 +195,19 @@ def _trigger_frontend_setup(card):
         _just_generated_card_ids.discard(cid)
 
     card_data = {"id": str(card.id), "ord": int(card.ord)}
-    mw.reviewer.web.eval(f"if (window.aiHintsSetup) {{ window.aiHintsSetup({json.dumps(card_data)}); }}")
+    mw.reviewer.web.eval(f"""
+        (function() {{
+            var data = {json.dumps(card_data)};
+            function trySetup() {{
+                if (typeof window.aiHintsSetup === 'function') {{
+                    window.aiHintsSetup(data);
+                }} else {{
+                    setTimeout(trySetup, 50);
+                }}
+            }}
+            trySetup();
+        }})();
+    """)
 
 def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_generate":
