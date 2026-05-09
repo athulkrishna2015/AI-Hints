@@ -1,7 +1,7 @@
 import re
 import json
 import html
-from typing import List, Optional, Tuple, Dict
+from typing import Any, List, Optional, Tuple, Dict
 try:
     from .latex_fixer import fix_latex, normalize_math_text
 except ImportError:
@@ -21,7 +21,7 @@ class CardParser:
 
     def _fix_lazy_latex(self, text: str) -> str:
         """Repairs common AI math errors like missing backslashes or joined commands."""
-        return fix_latex(text, output_format=self.mathjax_format)
+        return fix_latex(text, output_format=self._latex_output_format())
 
     def normalize_hint_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize generated hint text before storage or direct reviewer injection."""
@@ -63,14 +63,22 @@ class CardParser:
         return normalized
 
     def _normalize_math_text(self, text: str) -> str:
-        return normalize_math_text(text, output_format=self.mathjax_format)
+        return normalize_math_text(text, output_format=self._latex_output_format())
+
+    def _latex_output_format(self) -> str:
+        if str(self.mathjax_format).lower() in {"inline", "dollar", "dollars"}:
+            return "dollars"
+        return "anki"
 
     def _fix_latex_span(self, span: str) -> str:
         # Note: We keep this for internal calls, but it's now just a pass-through to the library.
         # However, many methods in CardParser were private helpers for this.
         # Since they are no longer used by the main logic (which moved to the library),
         # we can remove them.
-        from latex_fixer.latex_fixer import _fix_latex_span
+        try:
+            from .latex_fixer.latex_fixer import _fix_latex_span
+        except ImportError:
+            return span
         return _fix_latex_span(span)
 
     def _convert_to_mathjax_tags(self, text: str) -> str:
@@ -78,7 +86,7 @@ class CardParser:
         if not isinstance(text, str):
             return text
 
-        text = self._normalize_math_text(text)
+        text = normalize_math_text(text, output_format="anki")
         
         # Replace \( ... \) and \[ ... \] with <anki-mathjax> ... </anki-mathjax>
         text = re.sub(r'\\\((.*?)\\\)', r'<anki-mathjax>\1</anki-mathjax>', text, flags=re.DOTALL)
@@ -92,15 +100,22 @@ class CardParser:
         
         if field_names:
             # Use specific fields from config
-            content_parts = []
+            selected_fields = []
             for f_name in field_names:
                 if f_name in note:
-                    content_parts.append(note[f_name])
-            content = " ".join(content_parts)
-            back = ""
+                    selected_fields.append((f_name, note[f_name]))
+            if not selected_fields:
+                return "", ""
+
             if "cloze" in model_name.lower():
+                content = " ".join(value for _, value in selected_fields)
+                back = ""
                 content, back = self._focus_current_cloze(content, card)
-            return self._clean_html(content), self._clean_html(back)
+                return self._clean_html(content), self._clean_html(back)
+
+            front = selected_fields[0][1]
+            back = "\n".join(value for _, value in selected_fields[1:])
+            return self._clean_html(front), self._clean_html(back)
         
         # Fallback to default heuristic
         fields = note.items()
@@ -118,12 +133,15 @@ class CardParser:
         
         return self._clean_html(front), self._clean_html(back)
 
-    def _clean_html(self, html: str) -> str:
+    def _clean_html(self, html_text: str) -> str:
         """Remove most HTML tags to reduce tokens and noise."""
+        if not isinstance(html_text, str):
+            html_text = str(html_text or "")
         # Remove scripts and styles
-        html = re.sub(r"<(script|style).*?>.*?</\1>", "", html, flags=re.DOTALL | re.IGNORECASE)
+        html_text = re.sub(r"<(script|style).*?>.*?</\1>", "", html_text, flags=re.DOTALL | re.IGNORECASE)
         # Remove all other tags but keep content
-        text = re.sub(r"<.*?>", " ", html)
+        text = re.sub(r"<.*?>", " ", html_text)
+        text = html.unescape(text)
         # Clean up whitespace
         text = re.sub(r"\s+", " ", text).strip()
         return text
@@ -169,9 +187,14 @@ class CardParser:
         field_name = self._find_target_field(note)
         if not field_name:
             # Fallback to last field if no target found
-            field_name = list(note.keys())[-1]
+            note_keys = list(note.keys())
+            if not note_keys:
+                return False
+            field_name = note_keys[-1]
 
         current_val = note[field_name]
+        if not isinstance(current_val, str):
+            current_val = str(current_val or "")
         
         if self.storage_mode == "json":
             new_val = self._update_json_block_in_field(current_val, data, card_key, toggles, card)
@@ -202,15 +225,22 @@ class CardParser:
             raw_payload = match.group(1)
             try:
                 # Unescape and parse
-                parsed = json.loads(html.unescape(raw_payload))
+                parsed = self._parse_json_payload(raw_payload)
+                if not isinstance(parsed, dict):
+                    parsed = {}
                 
                 # If it's a legacy top-level block and we now have a card_key, we convert it.
                 if card_key:
-                    if "hints" in parsed and "options" in parsed and not isinstance(parsed.get("hints"), dict):
+                    if ("hints" in parsed or "options" in parsed) and not self._is_keyed_payload(parsed):
                         # Convert legacy to keyed
                         old_ord = self._data_attr(block_html, "data-ai-hints-card-ord")
                         old_key = f"c{int(old_ord)+1}" if old_ord and old_ord.isdigit() else "c1"
-                        parsed = {old_key: {"hints": parsed["hints"], "options": parsed["options"]}}
+                        parsed = {
+                            old_key: {
+                                "hints": parsed.get("hints", []),
+                                "options": parsed.get("options", []),
+                            }
+                        }
                     
                     parsed[card_key] = new_data
                 else:
@@ -291,7 +321,7 @@ class CardParser:
     def find_hints_block(self, note, card=None) -> Optional[str]:
         """Searches all fields of the note for an AI hints block matching the card."""
         pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>.*?</div>',
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
             flags=re.DOTALL | re.IGNORECASE,
         )
         for f_val in note.values():
@@ -299,7 +329,7 @@ class CardParser:
                 continue
             for match in pattern.finditer(f_val):
                 block = match.group(0)
-                if self._block_matches_card(block, card):
+                if self._block_matches_card(block, card) and self._json_block_has_data_for_card(block, match.group(1), card):
                     return block
         return None
 
@@ -329,7 +359,7 @@ class CardParser:
                     # Try partial clear from keyed JSON
                     try:
                         raw_payload = match.group(1)
-                        parsed = json.loads(html.unescape(raw_payload))
+                        parsed = self._parse_json_payload(raw_payload)
                         if isinstance(parsed, dict) and card_key in parsed:
                             del parsed[card_key]
                             if parsed:
@@ -340,6 +370,8 @@ class CardParser:
                                 field_cleared = True
                                 continue
                             # Else if empty, fall through to full removal
+                        elif isinstance(parsed, dict) and self._is_keyed_payload(parsed):
+                            continue
                     except Exception:
                         pass
 
@@ -397,8 +429,35 @@ class CardParser:
         )
 
     def _data_attr(self, block: str, name: str) -> str:
-        match = re.search(rf'{name}=["\']([^"\']*)["\']', block)
+        match = re.search(rf'\b{re.escape(name)}\s*=\s*["\']([^"\']*)["\']', block, flags=re.IGNORECASE)
         return html.unescape(match.group(1)) if match else ""
+
+    def _parse_json_payload(self, raw_payload: str) -> Any:
+        return json.loads(html.unescape(raw_payload or ""))
+
+    def _is_keyed_payload(self, payload: Dict[str, Any]) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        if "hints" in payload or "options" in payload:
+            return False
+        return any(re.fullmatch(r"c\d+", str(key)) for key in payload.keys())
+
+    def _json_block_has_data_for_card(self, block: str, raw_payload: str, card=None) -> bool:
+        if self.json_class not in block:
+            return True
+
+        card_ord = self._card_ord(card)
+        if card_ord is None:
+            return True
+
+        try:
+            parsed = self._parse_json_payload(raw_payload)
+        except Exception:
+            return True
+
+        if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
+            return f"c{card_ord + 1}" in parsed
+        return True
 
     def _build_html_block(self, data: Dict[str, List[str]], attrs: str = "") -> str:
         hints = data.get("hints", [])

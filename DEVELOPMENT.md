@@ -5,7 +5,7 @@ This repository contains the source code for the **AI-Hints** Anki add-on.
 ## Quick Links
 
 - **Main Repository**: https://github.com/athulkrishna2015/AI-Hints
-- **Install via AnkiWeb**: https://ankiweb.net/shared/info/AI-Hints
+- **Install via AnkiWeb**: https://ankiweb.net/shared/info/2119980872
 - **Report an Issue**: https://github.com/athulkrishna2015/AI-Hints/issues
 
 ---
@@ -32,12 +32,12 @@ The fastest way to test changes is to symlink the `addon/` folder into your Anki
 
 **Linux/macOS:**
 ```shell
-ln -s "$(pwd)/addon" ~/.local/share/Anki2/addons21/csv_import_plus_dev
+ln -s "$(pwd)/addon" ~/.local/share/Anki2/addons21/ai_hints_dev
 ```
 
 **Windows (Admin PowerShell):**
 ```powershell
-New-Item -ItemType SymbolicLink -Path "$env:APPDATA\Anki2\addons21\csv_import_plus_dev" -Target "$pwd\addon"
+New-Item -ItemType SymbolicLink -Path "$env:APPDATA\Anki2\addons21\ai_hints_dev" -Target "$pwd\addon"
 ```
 
 ### 2. Building and Versioning
@@ -59,16 +59,22 @@ python make_ankiaddon.py 2.7
 **Versioning rule:** versions follow `major.minor` or `major.minor.patch` (e.g., `2.7` or `2.7.1`).
 
 ### 3. Running Tests
+- **Unit Test Suite**:
+  Run all local unit tests:
+  ```shell
+  python3 -B -m unittest discover -s tests -p "test_*.py"
+  ```
+
 - **Logic Verification (Local)**:
   Run the logic verification suite (no API keys required, mocks Anki/Qt):
   ```shell
-  python3 tests/local_verify.py
+  python3 -B tests/local_verify.py
   ```
 
 - **LaTeX Fixer Tests**:
   Verify LaTeX and MathJax formatting normalization:
   ```shell
-  python3 tests/test_latex_fixer.py
+  python3 -B tests/test_latex_fixer.py
   ```
 
 - **Live Provider Test**:

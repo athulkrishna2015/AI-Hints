@@ -4,8 +4,9 @@ import json
 import asyncio
 from unittest.mock import MagicMock
 
-# Setup absolute paths
-PROJECT_ROOT = '/mnt/0946E88701BE265B/portable/anki/addons/AI-Hints'
+# Setup paths
+sys.dont_write_bytecode = True
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ADDON_DIR = os.path.join(PROJECT_ROOT, 'addon')
 sys.path.insert(0, PROJECT_ROOT)
 

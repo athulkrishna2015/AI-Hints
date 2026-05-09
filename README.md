@@ -24,7 +24,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Smart Shuffling**: Options are shuffled every time you review the card to prevent pattern memorization.
 - **Storage Modes**: Choose between **visible HTML** (visible on all devices) or **invisible JSON** (cleaner look, requires add-on to render).
 - **Configurable Options**: Set exactly how many MCQ options the AI should generate, including the correct answer (default is 4).
-- **MathJax-Aware Rendering**: AI-Hints prioritizes standard LaTeX/MathJax delimiters. It strictly uses `\( ... \)` for inline math and `\[ ... \]` for block math, explicitly avoiding `$ ... $` or `$$ ... $$` to ensure compatibility with all Anki platforms. It preserves and repairs common LaTeX/MathJax output, including escaped JSON backslashes and bare variables such as `lambda_L`.
+- **MathJax-Aware Rendering**: AI-Hints repairs common LaTeX/MathJax output, including escaped JSON backslashes and bare variables such as `lambda_L`. The default `delimiters` format stores inline math as `\( ... \)` and block math as `\[ ... \]`; the optional `inline` format stores `$ ... $` and `$$ ... $$`.
 - **Field Customization**: Specify exactly which fields to send to the AI for each note type. Optimized for Cloze cards by default.
 - **Target Fields**: Configure a global fallback list of fields where the AI-Hints block should be stored.
 - **MathJax Format Control**: Switch between standard LaTeX delimiters `\( ... \)` and inline `$...$` depending on your preference.
@@ -164,6 +164,10 @@ MIT
 ## Changelog
 
 ### May 9, 2026
+- **Parser Stability Fixes**: Fixed standalone parser imports, restored the `inline` MathJax format, and preserved Basic-card front/back separation when note-type field mappings are configured.
+- **Sibling-Safe Cloze Storage**: Keyed JSON blocks now report and clear data only for the active cloze/card, preventing a missing sibling key from deleting another card's hints.
+- **Frontend Reveal Fixes**: Fixed auto-reveal/Alt-click reveal errors and ensured JSON-rendered hint containers keep the add-on identity attribute needed by reveal, clear, and refresh actions.
+- **Test Coverage Upgrade**: Converted the LaTeX regression script into real `unittest` assertions and added card parser tests for MathJax format mapping, keyed JSON merging, sibling-safe clearing, and HTML escaping.
 - **Front-Side Data Detection Fix**: Resolved a bug where hints and options were incorrectly hidden or disabled on the front side of cards due to aggressive DOM cleanup.
 - **Improved Block Selection**: Upgraded the frontend script to intelligently prioritize and preserve valid hints blocks even when they are temporarily outside the main Anki container.
 - **Asynchronous Daemon Threading**: Offloaded AI generation to standard daemon threads, entirely eliminating the blocking "Processing..." modal during card reviews.

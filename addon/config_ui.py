@@ -206,7 +206,7 @@ class ConfigDialog(QDialog):
         
         self.mathjax_format_cb = QComboBox()
         self.mathjax_format_cb.addItems(["delimiters", "inline"])
-        self.mathjax_format_cb.setToolTip("delimiters: \( ... \), \[ ... \]. inline: $ ... $, $$ ... $")
+        self.mathjax_format_cb.setToolTip(r"delimiters: \( ... \), \[ ... \]. inline: $ ... $, $$ ... $")
         gen_layout.addRow("MathJax Format:", self.mathjax_format_cb)
         
         self.show_options_cb = QCheckBox("Show Options Button (Sequential)")
@@ -875,11 +875,16 @@ class ConfigDialog(QDialog):
         self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
         self.options_count_sb.setValue(c.get("options_count", 4))
         self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
+        self.mathjax_format_cb.setCurrentText(c.get("mathjax_format", "delimiters"))
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
         self.show_options_cb.setChecked(c.get("show_options_button", True))
         self.show_on_card_cb.setChecked(c.get("show_on_card", True))
         self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", True))
         self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
+        self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
+        self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
+        self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", False))
+        self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
         logger.info("Restored General defaults.")
         tooltip("General defaults restored.")
 
@@ -919,6 +924,7 @@ class ConfigDialog(QDialog):
     def on_restore_advanced(self):
         if not self.default_config: return
         c = self.default_config
+        self.target_fields_edit.setText(", ".join(c.get("target_fields", [])))
         self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
         self.note_type_fields_data = c.get("note_type_fields", {}).copy()
         self.on_nt_changed()
@@ -1087,6 +1093,13 @@ class ConfigDialog(QDialog):
             local.update(raw_local)
         config["local_endpoint"] = local
 
+        config.setdefault("ai_provider", "openai")
+        config.setdefault("storage_mode", "json")
+        config.setdefault("mathjax_format", "delimiters")
+        config.setdefault("target_fields", [])
+        config.setdefault("system_prompt", "")
+        config.setdefault("show_hints_button", True)
+        config.setdefault("show_options_button", True)
         if not isinstance(config.get("custom_providers", {}), dict):
             config["custom_providers"] = {}
         else:

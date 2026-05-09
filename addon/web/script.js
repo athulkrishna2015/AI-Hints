@@ -107,7 +107,7 @@
     }
 
     function copyCardAttrs(source, target) {
-        ['showHints', 'showOptions', 'aiHintsCardId', 'aiHintsCardOrd'].forEach(function(key) {
+        ['aiHintsAddonId', 'showHints', 'showOptions', 'aiHintsCardId', 'aiHintsCardOrd'].forEach(function(key) {
             if (source.dataset[key] != null) {
                 target.dataset[key] = source.dataset[key];
             }
@@ -123,6 +123,10 @@
         if (current.ord != null) {
             target.dataset.aiHintsCardOrd = String(current.ord);
         }
+    }
+
+    function applyAddonAttrs(target) {
+        target.dataset.aiHintsAddonId = '2119980872';
     }
 
     function setButtonEnabled(button, enabled) {
@@ -752,6 +756,7 @@
         if (!container) return false;
 
         const current = currentCard();
+        const uiCfg = window.aiHintsUiConfig || {};
         const reviewToken = uiCfg.review_token || '0';
         const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
         const state = Persistence.getState(cardKey) || { hints: false, options: false };
@@ -761,7 +766,6 @@
         const hintBtn = document.querySelector('[data-ai-hints-action="toggle-hints"]');
         const showBtn = document.querySelector('[data-ai-hints-action="toggle-options"]');
         
-        const uiCfg = window.aiHintsUiConfig || {};
         const showHintsCfg = uiCfg.auto_show_hints || container.getAttribute('data-show-hints') !== 'false';
         const showOptionsCfg = uiCfg.auto_show_options || container.getAttribute('data-show-options') !== 'false';
 
@@ -818,6 +822,7 @@
         // 1. Identify best available blocks before cleanup
         let container = selectCurrentBlock('.ai-hints-container[data-ai-hints-addon-id="2119980872"]');
         let jsonBlock = selectCurrentBlock('.ai-hints-json[data-ai-hints-addon-id="2119980872"]');
+        let hasCurrentData = Boolean(container);
 
         // 2. Clean up old or non-matching blocks, but preserve our selected ones
         document.querySelectorAll('.ai-hints-container, .ai-hints-json, .ai-hints-actions').forEach(function(el) {
@@ -857,6 +862,7 @@
         if (container && (jsonBlock || manualData)) {
             container.remove();
             container = null;
+            hasCurrentData = false;
         }
 
         if ((jsonBlock || manualData) && !container) {
@@ -866,12 +872,7 @@
                     data = manualData;
                 } else {
                     const rawData = (jsonBlock.textContent || jsonBlock.innerText || '').trim();
-                    const unescapeHtml = function(str) {
-                        const temp = document.createElement('textarea');
-                        temp.innerHTML = str;
-                        return temp.value;
-                    };
-                    data = JSON.parse(unescapeHtml(rawData));
+                    data = JSON.parse(rawData);
                 }
 
                 // Handle keyed JSON (e.g., { "c1": { "hints": [...], "options": [...] } })
@@ -881,31 +882,33 @@
                     if (data[cardKey]) {
                         data = data[cardKey];
                     } else {
-                        // If not found, it might be a legacy block that is just missing hints/options
-                        // or it might be keyed but not for this card.
-                        // We'll proceed; createListSection handles empty arrays.
+                        data = null;
                     }
                 }
 
-                container = document.createElement('div');
-                container.className = 'ai-hints-container';
+                if (data && (Array.isArray(data.hints) || Array.isArray(data.options))) {
+                    container = document.createElement('div');
+                    container.className = 'ai-hints-container';
+                    applyAddonAttrs(container);
+                    hasCurrentData = true;
 
-                container.appendChild(document.createElement('hr'));
-                const hintsSection = createListSection('AI Hints:', 'ai-hints-hint-list', data.hints);
-                const optionsSection = createListSection('AI Options:', 'ai-hints-list', data.options);
-                if (hintsSection) {
-                    container.appendChild(hintsSection);
-                }
-                if (optionsSection) {
-                    container.appendChild(optionsSection);
-                }
+                    container.appendChild(document.createElement('hr'));
+                    const hintsSection = createListSection('AI Hints:', 'ai-hints-hint-list', data.hints);
+                    const optionsSection = createListSection('AI Options:', 'ai-hints-list', data.options);
+                    if (hintsSection) {
+                        container.appendChild(hintsSection);
+                    }
+                    if (optionsSection) {
+                        container.appendChild(optionsSection);
+                    }
 
-                if (jsonBlock) {
-                    jsonBlock.parentNode.insertBefore(container, jsonBlock.nextSibling);
-                    copyCardAttrs(jsonBlock, container);
-                } else {
-                    applyCurrentCardAttrs(container);
-                    cardBody.appendChild(container);
+                    if (jsonBlock) {
+                        jsonBlock.parentNode.insertBefore(container, jsonBlock.nextSibling);
+                        copyCardAttrs(jsonBlock, container);
+                    } else {
+                        applyCurrentCardAttrs(container);
+                        cardBody.appendChild(container);
+                    }
                 }
             } catch (e) {
                 console.error("AI-Hints: Failed to parse JSON options", e);
@@ -932,6 +935,7 @@
         if (container) {
             // Only show if it matches the current card
             if (manualData || matchesCurrentCard(container)) {
+                hasCurrentData = true;
                 container.style.display = 'block';
                 hideOtherContainers(container);
                 optionsList = container.querySelector('.ai-hints-list');
@@ -982,7 +986,7 @@
             sendCommand('ai_hints_generate');
         };
 
-        const hasAnyData = Boolean(container || jsonBlock || manualData);
+        const hasAnyData = Boolean(hasCurrentData || manualData);
         const mainGenBtn = document.createElement('button');
         mainGenBtn.className = 'ai-hints-btn';
         

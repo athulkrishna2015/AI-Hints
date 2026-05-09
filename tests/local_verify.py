@@ -5,8 +5,9 @@ import re
 from unittest.mock import MagicMock
 from typing import Dict, List, Tuple
 
-# 1. Setup absolute paths
-PROJECT_ROOT = '/mnt/0946E88701BE265B/portable/anki/addons/AI-Hints'
+# 1. Setup paths
+sys.dont_write_bytecode = True
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ADDON_DIR = os.path.join(PROJECT_ROOT, 'addon')
 sys.path.insert(0, PROJECT_ROOT)
 
