@@ -171,6 +171,8 @@ def on_webview_will_set_content(web_content, context):
     ui_payload = json.dumps({
         "show_on_card": config.get("show_on_card", True),
         "auto_reveal": auto_reveal,
+        "auto_show_hints": config.get("auto_show_hints", False),
+        "auto_show_options": config.get("auto_show_options", False),
         "mathjax_format": config.get("mathjax_format", "delimiters"),
         "review_token": _review_token
     })
@@ -763,6 +765,25 @@ def init_hooks():
         global _review_token
         _review_token += 1
         _trigger_frontend_setup(card)
+        
+        # Auto generate for new cards if configured and no data exists
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        if config.get("auto_generate_new", False) and card:
+            parser = CardParser(
+                target_fields=config.get("target_fields", []),
+                note_type_fields=config.get("note_type_fields", {}),
+                storage_mode=config.get("storage_mode", "json"),
+                mathjax_format=config.get("mathjax_format", "delimiters")
+            )
+            try:
+                card.load()
+                card.note().load()
+                hints_block = parser.find_hints_block(card.note(), card) or ""
+                if not hints_block and not _cached_hints_for_card(card):
+                    logger.info(f"Auto-generating hints for new card {card.id}...")
+                    generate_hints()
+            except Exception as e:
+                logger.error(f"Failed to auto-generate for new card: {e}")
 
     gui_hooks.reviewer_did_show_question.append(on_show_question)
     gui_hooks.reviewer_did_show_answer.append(_trigger_frontend_setup)

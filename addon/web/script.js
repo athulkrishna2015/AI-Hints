@@ -1095,6 +1095,14 @@
             revealAIHints('hints');
         } else if (uiCfg.auto_reveal) {
             revealAIHints();
+        } else {
+            if (uiCfg.auto_show_hints && uiCfg.auto_show_options) {
+                revealAIHints();
+            } else if (uiCfg.auto_show_hints) {
+                revealAIHints('hints');
+            } else if (uiCfg.auto_show_options) {
+                revealAIHints('options');
+            }
         }
 
         if (container && container.style.display !== 'none') {

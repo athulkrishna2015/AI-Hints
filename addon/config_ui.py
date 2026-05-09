@@ -220,6 +220,18 @@ class ConfigDialog(QDialog):
 
         self.show_in_popup_cb = QCheckBox("Show Results in Popup Window")
         gen_layout.addRow(self.show_in_popup_cb)
+
+        self.auto_generate_new_cb = QCheckBox("Auto Generate and Show for New Cards")
+        self.auto_generate_new_cb.setToolTip("Automatically run AI generation for new/empty cards that do not have hints/options yet.")
+        gen_layout.addRow(self.auto_generate_new_cb)
+
+        self.auto_show_hints_cb = QCheckBox("Auto Show Hints on Card Load")
+        self.auto_show_hints_cb.setToolTip("Automatically expand and show hints when a card is loaded.")
+        gen_layout.addRow(self.auto_show_hints_cb)
+
+        self.auto_show_options_cb = QCheckBox("Auto Show Options on Card Load")
+        self.auto_show_options_cb.setToolTip("Automatically expand and show options when a card is loaded.")
+        gen_layout.addRow(self.auto_show_options_cb)
         
         self.general_tab.setLayout(gen_layout)
         self.tabs.addTab(self.general_tab, "General")
@@ -596,6 +608,9 @@ class ConfigDialog(QDialog):
         self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", True))
         self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
         self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
+        self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
+        self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", False))
+        self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
         
         keys = c.get("api_keys", {}) or {}
         for p, edit in self.api_key_edits.items():
@@ -944,6 +959,9 @@ class ConfigDialog(QDialog):
             new_config["show_in_bottom_bar"] = self.show_in_bottom_bar_cb.isChecked()
             new_config["show_in_popup"] = self.show_in_popup_cb.isChecked()
             new_config["auto_clear_logs"] = self.auto_clear_cb.isChecked()
+            new_config["auto_generate_new"] = self.auto_generate_new_cb.isChecked()
+            new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
+            new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
             
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {
@@ -1085,6 +1103,9 @@ class ConfigDialog(QDialog):
         config.setdefault("show_in_bottom_bar", True)
         config.setdefault("show_in_popup", False)
         config.setdefault("auto_clear_logs", True)
+        config.setdefault("auto_generate_new", False)
+        config.setdefault("auto_show_hints", False)
+        config.setdefault("auto_show_options", False)
         return config
 
 _config_dialog_instance = None
