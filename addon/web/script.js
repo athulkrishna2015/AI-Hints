@@ -795,25 +795,20 @@
         const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
         const cardBody = document.getElementById('qa') || document.body;
         
-        // Clean up all old containers from previous cards to prevent data bleed
-        document.querySelectorAll('.ai-hints-container').forEach(function(el) {
+        // Clean up all old containers, JSON blocks, and actions from previous cards to prevent data bleed
+        document.querySelectorAll('.ai-hints-container, .ai-hints-json, .ai-hints-actions').forEach(function(el) {
             const blockId = el.getAttribute('data-ai-hints-card-id') || el.dataset.aiHintsCardId;
             const blockOrd = el.getAttribute('data-ai-hints-card-ord') || el.dataset.aiHintsCardOrd;
             const currentId = current.id == null ? '' : String(current.id);
             const currentOrd = current.ord == null ? '' : String(current.ord);
             
-            if ((blockId && blockId !== currentId) || 
-                (blockOrd && blockOrd !== currentOrd) ||
-                !document.getElementById('qa')?.contains(el)) {
+            const isInsideQA = document.getElementById('qa')?.contains(el);
+            
+            if (!isInsideQA || (blockId && blockId !== currentId) || (blockOrd && blockOrd !== currentOrd)) {
                 el.remove();
-            } else {
+            } else if (el.classList.contains('ai-hints-container')) {
                 el.style.display = 'none';
             }
-        });
-
-        // Cleanup: Remove any dynamic buttons/actions from previous cards
-        document.querySelectorAll('.ai-hints-actions').forEach(function(el) {
-            el.remove();
         });
 
         let container = selectCurrentBlock('.ai-hints-container[data-ai-hints-addon-id="2119980872"]');
