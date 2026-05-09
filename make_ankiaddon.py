@@ -65,7 +65,7 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
     # Exclusions
     exclude_dirs = ['__pycache__', '.git', '.vscode', '.github', 'tests']
     exclude_exts = ['.ankiaddon', '.pyc', '.md', '.toml', '.lock', '.cff', '.png']
-    exclude_files = ['meta.json', 'ai_hints.log', '.gitignore', '.gitmodules', 'mypy.ini', 'LICENSE']
+    exclude_files = ['meta.json', 'ai_hints.log', '.gitignore', '.gitmodules', 'mypy.ini', 'LICENSE', '.git', 'README', 'README.md']
 
     print(f"Creating {final_name} from {ADDON_DIR}...")
 
@@ -78,7 +78,7 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
             for file in files:
                 file_path = Path(root) / file
                 # Skip excluded files/extensions
-                if file in exclude_files or file_path.suffix in exclude_exts:
+                if file in exclude_files or file_path.suffix.lower() in exclude_exts:
                     continue
                 
                 # Calculate the path relative to the 'addon/' folder 
