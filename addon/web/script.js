@@ -843,7 +843,12 @@
                     data = manualData;
                 } else {
                     const rawData = (jsonBlock.textContent || jsonBlock.innerText || '').trim();
-                    data = JSON.parse(rawData);
+                    const unescapeHtml = function(str) {
+                        const temp = document.createElement('textarea');
+                        temp.innerHTML = str;
+                        return temp.value;
+                    };
+                    data = JSON.parse(unescapeHtml(rawData));
                 }
 
                 // Handle keyed JSON (e.g., { "c1": { "hints": [...], "options": [...] } })
