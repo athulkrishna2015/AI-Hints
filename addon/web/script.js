@@ -71,13 +71,27 @@
             return null;
         }
 
+        const cardBody = document.getElementById('qa');
+
+        // Priority 1: Scoped match inside QA
+        const scopedInside = blocks.find(function(block) {
+            return cardBody && cardBody.contains(block) && hasCardScope(block) && matchesCurrentCard(block);
+        });
+        if (scopedInside) return scopedInside;
+
+        // Priority 2: Scoped match anywhere
         const scopedMatch = blocks.find(function(block) {
             return hasCardScope(block) && matchesCurrentCard(block);
         });
-        if (scopedMatch) {
-            return scopedMatch;
-        }
+        if (scopedMatch) return scopedMatch;
 
+        // Priority 3: Legacy match inside QA
+        const legacyInside = blocks.find(function(block) {
+            return cardBody && cardBody.contains(block) && !hasCardScope(block);
+        });
+        if (legacyInside) return legacyInside;
+
+        // Priority 4: Legacy match anywhere
         const legacyMatch = blocks.find(function(block) {
             return !hasCardScope(block);
         });
@@ -801,26 +815,35 @@
             return;
         }
         
-        // Clean up all old containers, JSON blocks, and actions from previous cards to prevent data bleed
+        // 1. Identify best available blocks before cleanup
+        let container = selectCurrentBlock('.ai-hints-container[data-ai-hints-addon-id="2119980872"]');
+        let jsonBlock = selectCurrentBlock('.ai-hints-json[data-ai-hints-addon-id="2119980872"]');
+
+        // 2. Clean up old or non-matching blocks, but preserve our selected ones
         document.querySelectorAll('.ai-hints-container, .ai-hints-json, .ai-hints-actions').forEach(function(el) {
-            const blockId = el.getAttribute('data-ai-hints-card-id') || el.dataset.aiHintsCardId;
-            const blockOrd = el.getAttribute('data-ai-hints-card-ord') || el.dataset.aiHintsCardOrd;
-            const currentId = current.id == null ? '' : String(current.id);
-            const currentOrd = current.ord == null ? '' : String(current.ord);
-            
-            const isInsideQA = document.getElementById('qa')?.contains(el);
+            if (el === container || el === jsonBlock) {
+                return;
+            }
             
             if (el.classList.contains('ai-hints-actions')) {
                 el.remove();
-            } else if (!isInsideQA || (blockId && blockId !== currentId) || (blockOrd && blockOrd !== currentOrd)) {
+                return;
+            }
+
+            // Remove if it definitely doesn't match the current card
+            if (!matchesCurrentCard(el)) {
                 el.remove();
-            } else if (el.classList.contains('ai-hints-container')) {
-                el.style.display = 'none';
+            } else if (document.getElementById('qa')?.contains(el)) {
+                // If it matches but we already found a better one (e.g. this is a duplicate in QA)
+                el.remove();
+            } else {
+                // It's outside QA and matches, but we already have a better one selected?
+                // If we already have a selected block, we can remove this extra one.
+                if (container || jsonBlock) {
+                     el.remove();
+                }
             }
         });
-
-        let container = selectCurrentBlock('.ai-hints-container[data-ai-hints-addon-id="2119980872"]');
-        const jsonBlock = selectCurrentBlock('.ai-hints-json[data-ai-hints-addon-id="2119980872"]');
 
         if (!manualData && !jsonBlock) {
             // Check if we have data in session storage for this card

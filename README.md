@@ -164,16 +164,16 @@ MIT
 ## Changelog
 
 ### May 9, 2026
+- **Front-Side Data Detection Fix**: Resolved a bug where hints and options were incorrectly hidden or disabled on the front side of cards due to aggressive DOM cleanup.
+- **Improved Block Selection**: Upgraded the frontend script to intelligently prioritize and preserve valid hints blocks even when they are temporarily outside the main Anki container.
 - **Asynchronous Daemon Threading**: Offloaded AI generation to standard daemon threads, entirely eliminating the blocking "Processing..." modal during card reviews.
 - **FSRS-Safe Card Validity Guard**: Added strict checks to discard background updates for previous cards, fully preventing out-of-order database writes and FSRS Helper undo crashes.
 - **Custom Descriptive Undo Entry Names**: Integrated custom labels (**"Generate AI Hints"** and **"Clear AI Hints"**) directly in Anki's native **Edit > Undo** menu.
-- **Bulletproof Undo Merging**: Wrapped undo operations in try-except fallbacks to prevent errors if Anki's Rust backend optimizes away duplicate field updates.
 - **Real-Time Undo Screen Synchronization**: Hooked into Anki's native `gui_hooks.state_did_undo` to wipe local memory and sessionStorage caches, instantly refreshing the screen on **Ctrl+Z**.
 - **Data Bleed Prevention**: Upgraded global web asset cleanup to aggressively purge old `.ai-hints-json` elements outside the `#qa` container.
 - **Seamless Flash-Free Button Rendering**: Removed early automatic execution on load, allowing buttons to render seamlessly and instantly once Anki's asynchronous layout settles.
-- **Unified Model Names & Fallback Priority**: Consolidated both sections into a single, beautiful, and intuitive reorderable layout with solid unicode arrow buttons (`▲`/`▼`) for perfect, high-DPI scaling rendering.
-- **Advanced System Prompt**: Redesigned the baseline system prompt with clean Markdown headings and stricter formatting rules to enforce raw, markdown-free JSON and distractor uniformity.
-- **Webview Persistence Clear**: Fixed the "Clear AI-Hints cached data" action to completely wipe the card's webview persistent memory cache, instantly removing old hints from the screen.
+- **Unified Model Names & Fallback Priority**: Consolidated both sections into a single intuitive reorderable layout with unicode arrow buttons (`▲`/`▼`).
+- **Webview Persistence Clear**: Fixed the "Clear AI-Hints cached data" action to completely wipe the card's webview persistent memory cache.
 
 ### May 8, 2026
 - **Multi-Cloze Support**: Hints and options for each cloze deletion are now stored independently under distinct keys (`c1`, `c2`, etc.) inside a single unified JSON block to prevent data collisions.
