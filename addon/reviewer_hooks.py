@@ -759,4 +759,17 @@ def init_hooks():
     gui_hooks.reviewer_did_show_question.append(lambda _card: close_popup_if_open())
     gui_hooks.reviewer_will_end.append(close_popup_if_open)
     
+    # Sync UI and caches on undo operations
+    def on_undo(changes):
+        if mw.reviewer and mw.reviewer.card:
+            card = mw.reviewer.card
+            _forget_generated_hints(card)
+            try:
+                mw.reviewer.web.eval("if (window.aiHintsClearData) { window.aiHintsClearData(); }")
+            except Exception:
+                pass
+            refresh_current_card()
+
+    gui_hooks.state_did_undo.append(on_undo)
+    
     _hooks_registered = True
