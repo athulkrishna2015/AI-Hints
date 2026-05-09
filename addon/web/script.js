@@ -1103,10 +1103,15 @@
             cardBody.appendChild(btnContainer);
         }
 
-        if (manualData) {
-            revealAIHints('hints');
-        } else if (uiCfg.auto_reveal) {
-            revealAIHints();
+        if (uiCfg.auto_reveal || manualData) {
+            if (uiCfg.auto_show_hints && uiCfg.auto_show_options) {
+                revealAIHints();
+            } else if (uiCfg.auto_show_options) {
+                revealAIHints('options');
+            } else {
+                // Default to showing hints if manual generation finished
+                revealAIHints('hints');
+            }
         } else {
             if (uiCfg.auto_show_hints && uiCfg.auto_show_options) {
                 revealAIHints();
