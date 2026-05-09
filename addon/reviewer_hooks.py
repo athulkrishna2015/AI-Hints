@@ -109,8 +109,6 @@ def _cached_hints_for_card(card):
     return _generated_hint_cache.get(key)
 
 def on_webview_will_set_content(web_content, context):
-    global _current_card_has_data
-    _current_card_has_data = False
     if type(context).__name__ == "ReviewerBottomBar":
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         if config.get("show_in_bottom_bar", False):
@@ -126,6 +124,9 @@ def on_webview_will_set_content(web_content, context):
     
     if not is_reviewer:
         return
+
+    global _current_card_has_data
+    _current_card_has_data = False
 
     css, js = get_web_assets()
 
