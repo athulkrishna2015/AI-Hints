@@ -809,7 +809,9 @@
             
             const isInsideQA = document.getElementById('qa')?.contains(el);
             
-            if (!isInsideQA || (blockId && blockId !== currentId) || (blockOrd && blockOrd !== currentOrd)) {
+            if (el.classList.contains('ai-hints-actions')) {
+                el.remove();
+            } else if (!isInsideQA || (blockId && blockId !== currentId) || (blockOrd && blockOrd !== currentOrd)) {
                 el.remove();
             } else if (el.classList.contains('ai-hints-container')) {
                 el.style.display = 'none';
@@ -946,17 +948,26 @@
         const triggerGenerate = function(btn) {
             restartSpeedFocusTimer();
             btn.disabled = true;
-            btn.innerText = 'Generating...';
+            btn.innerHTML = '✨ Generating...';
+            btn.classList.add('ai-hints-btn-generating');
             sendCommand('ai_hints_generate');
         };
 
         const hasAnyData = Boolean(container || jsonBlock || manualData);
         const mainGenBtn = document.createElement('button');
-        mainGenBtn.innerText = hasAnyData ? 'Regenerate' : 'Generate AI Hints';
         mainGenBtn.className = 'ai-hints-btn';
-        mainGenBtn.onclick = function() {
-            triggerGenerate(mainGenBtn);
-        };
+        
+        const isGenerating = uiCfg.is_generating || false;
+        if (isGenerating) {
+            mainGenBtn.innerHTML = '✨ Generating...';
+            mainGenBtn.disabled = true;
+            mainGenBtn.classList.add('ai-hints-btn-generating');
+        } else {
+            mainGenBtn.innerText = hasAnyData ? 'Regenerate' : 'Generate AI Hints';
+            mainGenBtn.onclick = function() {
+                triggerGenerate(mainGenBtn);
+            };
+        }
         btnContainer.appendChild(mainGenBtn);
 
         const optBtn = document.createElement('button');
