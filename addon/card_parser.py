@@ -38,7 +38,11 @@ class CardParser:
                 
                 seen = set()
                 for value in values:
-                    text = self._normalize_math_text(str(value))
+                    text = str(value).strip()
+                    # Strip hallucinations before any math normalization
+                    text = self._strip_ai_hallucinations(text)
+                    
+                    text = self._normalize_math_text(text)
                     if self.mathjax_format == "tags":
                         text = self._convert_to_mathjax_tags(text)
                     
@@ -61,6 +65,26 @@ class CardParser:
             else:
                 normalized[k] = v
         return normalized
+
+    def _strip_ai_hallucinations(self, text: str) -> str:
+        if not text:
+            return ""
+        
+        # 1. Strip trailing JSON or technical metadata hallucinations
+        # We look for a trailing { ... } that contains technical keys.
+        # We use \\* to match any number of backslashes before the quote (escaped JSON).
+        text = re.sub(r'\s*\{[\s\S]*\\*"(?:hints|options|c\d+)\\*"\s*:[\s\S]*\}\s*$', '', text)
+        
+        # 2. Strip "Answer: " or "Option: " prefixes if AI included them
+        # We ensure it's a prefix by using ^ and check for optional space after colon
+        text = re.sub(r'^(?:Answer|Option|Hint|Choice|Distractor)\s*:\s*', '', text, flags=re.IGNORECASE)
+        
+        # 3. Strip surrounding quotes if the AI wrapped the entire string in them
+        text = text.strip()
+        if len(text) >= 2 and text[0] == text[-1] and text[0] in '"\'':
+            text = text[1:-1]
+            
+        return text.strip()
 
     def _normalize_math_text(self, text: str) -> str:
         return normalize_math_text(text, output_format=self._latex_output_format())

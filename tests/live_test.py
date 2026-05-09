@@ -45,8 +45,8 @@ async def run_live_tests():
     
     test_note = {
         "fields": {
-            "Text": "The Meissner effect is the expulsion of a magnetic field from a superconductor during its transition to the superconducting state.",
-            "Back": "Occurs when cooled below the critical temperature."
+            "Text": "What is the formula for the area of a circle?",
+            "Back": "A = \\pi r^2"
         },
         "modelName": "Basic"
     }

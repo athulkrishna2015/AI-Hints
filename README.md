@@ -164,10 +164,9 @@ MIT
 ## Changelog
 
 ### May 9, 2026
-- **Parser Stability Fixes**: Fixed standalone parser imports, restored the `inline` MathJax format, and preserved Basic-card front/back separation when note-type field mappings are configured.
-- **Sibling-Safe Cloze Storage**: Keyed JSON blocks now report and clear data only for the active cloze/card, preventing a missing sibling key from deleting another card's hints.
-- **Frontend Reveal Fixes**: Fixed auto-reveal/Alt-click reveal errors and ensured JSON-rendered hint containers keep the add-on identity attribute needed by reveal, clear, and refresh actions.
-- **Test Coverage Upgrade**: Converted the LaTeX regression script into real `unittest` assertions and added card parser tests for MathJax format mapping, keyed JSON merging, sibling-safe clearing, and HTML escaping.
+- **AI Hallucination Sanitizer**: Implemented a robust sanitization layer to strip trailing JSON and technical metadata (e.g. `{"hints": ...}`) that some AI models hallucinated into the content strings.
+- **Prefix Removal**: Added automatic stripping of common AI prefixes like `Answer:`, `Option:`, and `Distractor:` to keep cards clean.
+- **Improved Math Normalization**: Balanced the LaTeX repair logic to prevent over-normalization of plain Greek words like "Gamma" or "Delta" while maintaining robust math formatting.
 - **Front-Side Data Detection Fix**: Resolved a bug where hints and options were incorrectly hidden or disabled on the front side of cards due to aggressive DOM cleanup.
 - **Improved Block Selection**: Upgraded the frontend script to intelligently prioritize and preserve valid hints blocks even when they are temporarily outside the main Anki container.
 - **Asynchronous Daemon Threading**: Offloaded AI generation to standard daemon threads, entirely eliminating the blocking "Processing..." modal during card reviews.
@@ -178,6 +177,10 @@ MIT
 - **Seamless Flash-Free Button Rendering**: Removed early automatic execution on load, allowing buttons to render seamlessly and instantly once Anki's asynchronous layout settles.
 - **Unified Model Names & Fallback Priority**: Consolidated both sections into a single intuitive reorderable layout with unicode arrow buttons (`▲`/`▼`).
 - **Webview Persistence Clear**: Fixed the "Clear AI-Hints cached data" action to completely wipe the card's webview persistent memory cache.
+- **Parser Stability Fixes**: Fixed standalone parser imports, restored the `inline` MathJax format, and preserved Basic-card front/back separation when note-type field mappings are configured.
+- **Sibling-Safe Cloze Storage**: Keyed JSON blocks now report and clear data only for the active cloze/card, preventing a missing sibling key from deleting another card's hints.
+- **Frontend Reveal Fixes**: Fixed auto-reveal/Alt-click reveal errors and ensured JSON-rendered hint containers keep the add-on identity attribute needed by reveal, clear, and refresh actions.
+- **Test Coverage Upgrade**: Converted the LaTeX regression script into real `unittest` assertions and added card parser tests for MathJax format mapping, keyed JSON merging, sibling-safe clearing, and HTML escaping.
 
 ### May 8, 2026
 - **Multi-Cloze Support**: Hints and options for each cloze deletion are now stored independently under distinct keys (`c1`, `c2`, etc.) inside a single unified JSON block to prevent data collisions.

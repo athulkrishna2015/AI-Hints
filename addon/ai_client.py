@@ -202,24 +202,27 @@ class AIClient:
         system_prompt = (
             f"{system_prompt}\n\n" if system_prompt else ""
         ) + (
+            "CRITICAL: You are an Anki flashcard assistant. Your sole purpose is to generate multiple-choice options and hints.\n\n"
             "OUTPUT FORMAT:\n"
             "- Return strictly valid, raw JSON with exactly two keys: \"hints\" (array of strings) and \"options\" (array of strings).\n"
-            "- DO NOT wrap the JSON in markdown formatting (no ```json codeblocks).\n"
-            f"- Generate exactly {count} options total, and 2-3 helpful hints.\n"
-            "- The 'options' array MUST include the exact correct answer.\n"
+            "- DO NOT include any text outside the JSON block. No preambles, no postambles, no markdown ```json wrappers.\n"
+            "- DO NOT include technical keys, JSON structures, or metadata (like 'c1', 'hints') inside the actual string values.\n"
+            f"- Generate exactly {count} options total and 2-3 helpful hints.\n"
+            "- The 'options' array MUST include the exact correct answer provided in 'Back / correct answer'.\n"
             f"- The remaining {max(count - 1, 0)} options must be highly plausible, challenging distractors targeting common misconceptions.\n\n"
             "CONTENT RULES:\n"
-            "1. DEDUPLICATE: All options must be mathematically and textually distinct. Never provide the same answer in different formats.\n"
-            "2. UNIFORMITY: Distractors MUST perfectly match the format, grammar, length, and style of the correct answer so it does not stand out.\n"
-            "3. CLOZE FOCUS: If 'Current cloze deletion' is provided, options MUST ONLY contain the exact missing text, completely omitting surrounding context.\n"
-            "4. MULTI-CLOZE HANDLING: For multiple clozes with the same ID, each option MUST be a comma-separated list of values corresponding to each cloze in order.\n"
-            "5. NO VERBATIM HINTS: Hints must provide underlying principles, mnemonics, or contextual clues. Do NOT repeat the card content verbatim.\n"
-            "6. CONCISE: Keep hints short, specific, and focused. Avoid wordy explanations.\n\n"
+            "1. NO REPETITION: Do NOT repeat the question, front text, or the prompt itself in the hints or options.\n"
+            "2. DEDUPLICATE: All options must be mathematically and textually distinct. Never provide the same value in different formats.\n"
+            "3. UNIFORMITY: Distractors MUST perfectly match the format, grammar, length, and style of the correct answer.\n"
+            "4. CLOZE FOCUS: If 'Current cloze deletion' is provided, options MUST ONLY contain the exact missing text. Omit all surrounding context.\n"
+            "5. MULTI-CLOZE HANDLING: For multiple clozes with the same ID, each option MUST be a comma-separated list of values (e.g., 'val1, val2') corresponding to each cloze in order.\n"
+            "6. NO VERBATIM HINTS: Hints must provide underlying principles, mnemonics, or contextual clues. Never repeat card content verbatim.\n"
+            "7. CONCISE: Keep hints short, specific, and focused. Avoid wordy explanations.\n\n"
             "FORMATTING & LATEX RULES:\n"
-            "1. NO CLOZE SYNTAX: DO NOT output Anki cloze syntax (e.g., {{c1::...}}). Provide only the plain text answer.\n"
+            "1. NO CLOZE SYNTAX: DO NOT output Anki cloze syntax (e.g., {{c1::...}}). Provide only plain text or math.\n"
             "2. MATH DELIMITERS: USE ONLY $ ... $ for inline math and $$ ... $$ for block math. DO NOT use \\( or \\[. DO NOT wrap $ inside other delimiters.\n"
-            "3. UNIFORM MATH: All options MUST use the exact same mathematical delimiter type. Never mix inline and block math across options.\n"
-            "4. JSON ESCAPING: Properly escape all quotation marks and backslashes so the output parses perfectly as JSON.\n"
+            "3. UNIFORM MATH: All options MUST use the exact same mathematical delimiter type. Do not mix $ and $$ across options.\n"
+            "4. JSON ESCAPING: Properly escape all quotation marks and backslashes (\\\\) so the output parses perfectly as JSON.\n"
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
 
@@ -902,12 +905,21 @@ class AIClient:
         if not text:
             return ""
         
-        # 1. Fix double backslashes for delimiters: \\( -> \(
+        # 1. Strip trailing JSON or technical metadata hallucinations
+        # (e.g. "Answer: C {"hints": [...], "options": [...]} ")
+        # We look for a trailing { ... } that contains technical keys.
+        # We use \\* to match any number of backslashes before the quote (escaped JSON).
+        text = re.sub(r'\s*\{[\s\S]*\\*"(?:hints|options|c\d+)\\*"\s*:[\s\S]*\}\s*$', '', text)
+        
+        # 2. Strip "Answer: " or "Option: " prefixes if AI included them
+        text = re.sub(r'^(?:Answer|Option|Hint|Choice)\s*:\s*', '', text, flags=re.IGNORECASE)
+
+        # 3. Fix double backslashes for delimiters: \\( -> \(
         # Many models over-escape in JSON context, especially after our repair logic.
         text = text.replace('\\\\(', '\\(').replace('\\\\)', '\\)')
         text = text.replace('\\\\[', '\\[').replace('\\\\]', '\\]')
 
-        # 2. Fix nested parentheses: \( ( ... ) \) -> \( ... \)
+        # 4. Fix nested parentheses: \( ( ... ) \) -> \( ... \)
         # This happens when the AI wraps the entire equation in redundant parentheses.
         # We handle whitespace carefully.
         text = re.sub(r'\\\(\s*\(\s*(.*?)\s*\)\s*\\\)', r'\(\1\)', text)
