@@ -13,6 +13,7 @@ _just_generated_card_ids = set()
 _generated_hint_cache = {}
 _popup_dialog_instance = None
 MAX_HINT_CACHE_SIZE = 200
+_current_card_has_data = False
 
 _review_token = 0
 
@@ -108,6 +109,8 @@ def _cached_hints_for_card(card):
     return _generated_hint_cache.get(key)
 
 def on_webview_will_set_content(web_content, context):
+    global _current_card_has_data
+    _current_card_has_data = False
     if type(context).__name__ == "ReviewerBottomBar":
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         if config.get("show_in_bottom_bar", False):
@@ -159,6 +162,9 @@ def on_webview_will_set_content(web_content, context):
                         cached.get("toggles", {}),
                         card,
                     )
+            
+            if hints_block:
+                _current_card_has_data = True
             
             if card.id in _just_generated_card_ids:
                 auto_reveal = True
@@ -769,21 +775,9 @@ def init_hooks():
         # Auto generate for new cards if configured and no data exists
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         if config.get("auto_generate_new", False) and card:
-            parser = CardParser(
-                target_fields=config.get("target_fields", []),
-                note_type_fields=config.get("note_type_fields", {}),
-                storage_mode=config.get("storage_mode", "json"),
-                mathjax_format=config.get("mathjax_format", "delimiters")
-            )
-            try:
-                card.load()
-                card.note().load()
-                hints_block = parser.find_hints_block(card.note(), card) or ""
-                if not hints_block and not _cached_hints_for_card(card):
-                    logger.info(f"Auto-generating hints for new card {card.id}...")
-                    generate_hints()
-            except Exception as e:
-                logger.error(f"Failed to auto-generate for new card: {e}")
+            if not _current_card_has_data:
+                logger.info(f"Auto-generating hints for new card {card.id}...")
+                generate_hints()
 
     gui_hooks.reviewer_did_show_question.append(on_show_question)
     gui_hooks.reviewer_did_show_answer.append(_trigger_frontend_setup)

@@ -746,8 +746,9 @@
         const hintBtn = document.querySelector('[data-ai-hints-action="toggle-hints"]');
         const showBtn = document.querySelector('[data-ai-hints-action="toggle-options"]');
         
-        const showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
-        const showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
+        const uiCfg = window.aiHintsUiConfig || {};
+        const showHintsCfg = uiCfg.auto_show_hints || container.getAttribute('data-show-hints') !== 'false';
+        const showOptionsCfg = uiCfg.auto_show_options || container.getAttribute('data-show-options') !== 'false';
 
         let revealed = false;
         const revealHints = mode !== 'options';
@@ -905,8 +906,8 @@
                 optionsList = container.querySelector('.ai-hints-list');
                 hintsList = container.querySelector('.ai-hints-hint-list');
                 
-                showHintsCfg = container.getAttribute('data-show-hints') !== 'false';
-                showOptionsCfg = container.getAttribute('data-show-options') !== 'false';
+                showHintsCfg = uiCfg.auto_show_hints || container.getAttribute('data-show-hints') !== 'false';
+                showOptionsCfg = uiCfg.auto_show_options || container.getAttribute('data-show-options') !== 'false';
                 
                 const state = Persistence.getState(cardKey) || { hints: false, options: false };
 
