@@ -1,22 +1,26 @@
 (function() {
     const Persistence = {
         saveState: function(cardId, state) {
+            if (!cardId || cardId.startsWith('_')) return;
             try {
                 sessionStorage.setItem('ai_hints_state_' + cardId, JSON.stringify(state));
             } catch (e) {}
         },
         getState: function(cardId) {
+            if (!cardId || cardId.startsWith('_')) return null;
             try {
                 const raw = sessionStorage.getItem('ai_hints_state_' + cardId);
                 return raw ? JSON.parse(raw) : null;
             } catch (e) { return null; }
         },
         saveData: function(cardId, data) {
+            if (!cardId || cardId.startsWith('_')) return;
             try {
                 sessionStorage.setItem('ai_hints_data_' + cardId, JSON.stringify(data));
             } catch (e) {}
         },
         getData: function(cardId) {
+            if (!cardId || cardId.startsWith('_')) return null;
             try {
                 const raw = sessionStorage.getItem('ai_hints_data_' + cardId);
                 return raw ? JSON.parse(raw) : null;

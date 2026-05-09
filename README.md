@@ -163,57 +163,23 @@ MIT
 
 ## Changelog
 
-### 1.1.3
+### May 9, 2026
 - **Unified Model Names & Fallback Priority**: Consolidated both sections into a single, beautiful, and intuitive reorderable layout with solid unicode arrow buttons (`▲`/`▼`) for perfect, high-DPI scaling rendering.
 - **Advanced System Prompt**: Redesigned the baseline system prompt with clean Markdown headings and stricter formatting rules to enforce raw, markdown-free JSON and distractor uniformity.
 - **Webview Persistence Clear**: Fixed the "Clear AI-Hints cached data" action to completely wipe the card's webview persistent memory cache, instantly removing old hints from the screen.
 - **Review UX Stability**: Completely isolated database interactions from Anki's undo stack, restoring the original stable card-refreshing logic.
 
-### 1.1.2
+### May 8, 2026
 - **Multi-Cloze Support**: Hints and options for each cloze deletion are now stored independently under distinct keys (`c1`, `c2`, etc.) inside a single unified JSON block to prevent data collisions.
-- **Improved Math Repair**: Refined `latex_fixer` to gracefully handle dangling LaTeX delimiters (like single trailing `$`) and improved math wrapping for complex expressions containing `\mathbf` or `\text{}`.
+- **Improved Math Repair**: Refined `latex_fixer` to gracefully handle dangling LaTeX delimiters (like single trailing `$`) and improved math wrapping for complex expressions.
 - **Option Deduplication**: Enforced mathematically and conceptually unique option generation at both prompt and code level.
 - **Automatic Reveal Prevention**: Ensured hints and options strictly remain hidden on return visits and card navigation, requiring manual button press for review.
-
-### 1.1.1
 - **UI Performance Optimization**: Significant reduction in UI lag during deck navigation by implementing web asset caching and optimizing background task timeouts.
 - **Persistent Settings Fix**: Resolved a long-standing issue where the active AI provider would reset to default on every restart.
-- **New Configuration Options**: Added **MathJax Format** (delimiters vs. inline) and **Target Fields** (global fallback for hint storage) to the Advanced UI.
-- **Robust Math Repair**: Enhanced the LaTeX fixer to catch and repair common AI hallucinations like `\ninfty` (rendered as $\ni$ nfty) and "sum from... to infinity" in plain text.
-- **Model Maintenance**: Updated decommissioned model IDs for Groq and Cerebras to ensure zero-downtime fallback.
-
-### 1.1.0
 - **Standardized LaTeX Pipeline**: Transitioned to dollar-based (`$`/`$$`) AI generation for maximum model reliability, with automatic normalization to Anki-compatible delimiters.
-- **Enhanced MCQ Reliability**: Implemented a double-layered deduplication system (prompt-level + post-normalization code validation) to ensure all multiple-choice options are unique and conceptually distinct.
-- **LaTeX Fixer 2.0**: Massive overhaul of the internal `ai-latex-fixer` library, now achieving 100% pass rate on the regression test suite.
-- **Improved Spacing**: Refined logic for spacing around math blocks and punctuation to prevent layout jitters.
 
-### 1.0.6
-- **Multi-Cloze Support**: Added specialized handling for cards containing multiple cloze deletions with the same ID.
-- **Stability Improvements**: Fixed an issue where hints would "disappear" after pressing "Show Answer" due to stale card rendering.
-- **Enhanced LaTeX Fixer**: Improved the `ai-latex-fixer` library to handle nested delimiters (e.g., `\(\infty\)` inside larger blocks) and better standardize multi-part math strings.
-- **Aggressive Hiding**: Ensured hints and options stay strictly hidden on existing cards until manually revealed or just generated.
-
-### 1.0.5
-- **Bug Fixes**: Improved handling of nested LaTeX delimiters and double-escaped backslashes in AI responses.
-- **Performance**: Optimized card parsing for complex Cloze notes.
-
-### 1.0.4
-- **Enhanced Logging**: Logs now show the specific model name being queried for every request.
-- **Advanced Log Filtering**: Added a real-time search box to the Logs tab to filter entries by keyword (e.g., model name, provider, or error).
-- **Bug Fixes**: Improved handling of nested LaTeX delimiters and double-escaped backslashes in AI responses.
-
-### 1.0.3
-- **Dynamic Model Discovery**: Added "Fetch" and "Fetch All" buttons to retrieve the latest models directly from AI provider APIs.
-- **Customizable Fallback Priority**: New drag-and-drop list to set the preferred order for provider fallbacks.
-- **UI Upgrade**: Replaced model name text fields with editable dropdowns containing popular model suggestions.
-- **Smarter Defaults**: Updated default models to `gemini-2.0-flash-exp` (Gemini), `llama-3.3-70b-versatile` (Groq), and `google/gemini-2.0-flash-exp:free` (OpenRouter).
-
-### 1.0.2
-- **LaTeX Instruction Refinement**: Updated system prompts to strictly require `\(` and `\[` delimiters and explicitly forbid `$` signs.
-- **MathJax-Aware Rendering**: Improved preservation and repair of common LaTeX output patterns.
-
-### 1.0.0
+### May 7, 2026
 - **Initial Release**: Multi-provider support with automatic fallback and persistent hint storage.
+- **Dynamic Model Discovery**: Added "Fetch" and "Fetch All" buttons to retrieve the latest models directly from AI provider APIs.
 - **MathJax Support**: Core logic for handling LaTeX/MathJax in AI-generated hints and options.
-- **Live Log Viewer**: Real-time debugging interface in the configuration dialog.
+- **Live Log Viewer**: Real-time debugging interface with search keywords and active model name logging.
