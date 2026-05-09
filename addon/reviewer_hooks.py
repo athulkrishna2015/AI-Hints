@@ -183,6 +183,14 @@ def on_webview_will_set_content(web_content, context):
         "review_token": _review_token
     })
 
+    if config.get("auto_show_hints", False) or config.get("auto_show_options", False):
+        logger.info(
+            "Auto-show active for card %s (hints=%s, options=%s)",
+            card.id if card else "unknown",
+            config.get("auto_show_hints", False),
+            config.get("auto_show_options", False)
+        )
+
     web_content.head += f"<style>{css}</style>"
     if hints_block:
         web_content.body += hints_block
