@@ -871,8 +871,11 @@ def init_hooks():
         # Auto generate for new cards if configured and no data exists
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         if config.get("auto_generate_new", False) and card:
-            if not card_has_hints(card):
-                logger.info(f"Auto-generating hints for new card {card.id}...")
+            needs_generation = not card_has_hints(card)
+            force_regen = config.get("auto_regenerate_all", False)
+            
+            if needs_generation or force_regen:
+                logger.info(f"AI-Hints: Auto-generating hints for card {card.id} (force_regen={force_regen}).")
                 generate_hints(is_manual=False, card=card)
 
     gui_hooks.reviewer_did_show_question.append(on_show_question)

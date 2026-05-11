@@ -248,6 +248,14 @@ class ConfigDialog(QDialog):
         self.auto_generate_new_cb.setToolTip("Automatically run AI generation for new/empty cards that do not have hints/options yet.")
         show_layout.addRow(self.auto_generate_new_cb)
 
+        self.auto_regenerate_all_cb = QCheckBox("└─ Force Regenerate Even if Data Exists")
+        self.auto_regenerate_all_cb.setToolTip("Always overwrite hints, even for cards that already have data. Requires primary Auto-Generate to be active.")
+        self.auto_regenerate_all_cb.setStyleSheet("margin-left: 15px;")
+        show_layout.addRow(self.auto_regenerate_all_cb)
+
+        # Couple the availability to primary checkbox
+        self.auto_generate_new_cb.toggled.connect(self.auto_regenerate_all_cb.setEnabled)
+
         show_layout.addRow(QLabel("<b>On Card Load:</b>"))
         self.auto_show_hints_cb = QCheckBox("Auto Show Hints")
         self.auto_show_hints_cb.setToolTip("Automatically expand and show hints when a card is loaded.")
@@ -691,6 +699,8 @@ class ConfigDialog(QDialog):
         self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
         self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
         self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
+        self.auto_regenerate_all_cb.setChecked(c.get("auto_regenerate_all", False))
+        self.auto_regenerate_all_cb.setEnabled(self.auto_generate_new_cb.isChecked())
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", False))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
@@ -973,6 +983,8 @@ class ConfigDialog(QDialog):
         self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
         self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
         self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
+        self.auto_regenerate_all_cb.setChecked(c.get("auto_regenerate_all", False))
+        self.auto_regenerate_all_cb.setEnabled(self.auto_generate_new_cb.isChecked())
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", False))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
@@ -1059,6 +1071,7 @@ class ConfigDialog(QDialog):
             new_config["show_in_popup"] = self.show_in_popup_cb.isChecked()
             new_config["auto_clear_logs"] = self.auto_clear_cb.isChecked()
             new_config["auto_generate_new"] = self.auto_generate_new_cb.isChecked()
+            new_config["auto_regenerate_all"] = self.auto_regenerate_all_cb.isChecked()
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
             new_config["manual_show_hints"] = self.manual_show_hints_cb.isChecked()
@@ -1216,6 +1229,7 @@ class ConfigDialog(QDialog):
         config.setdefault("show_in_popup", False)
         config.setdefault("auto_clear_logs", True)
         config.setdefault("auto_generate_new", False)
+        config.setdefault("auto_regenerate_all", False)
         config.setdefault("auto_show_hints", False)
         config.setdefault("auto_show_options", False)
         config.setdefault("manual_show_hints", True)
