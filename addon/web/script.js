@@ -1180,6 +1180,26 @@
         }
     }
 
+    window.aiHintsSetGenerating = function(isGenerating) {
+        if (window.aiHintsUiConfig) {
+            window.aiHintsUiConfig.is_generating = isGenerating;
+        }
+        // Instead of a full setupAIHints, just target the button for speed
+        const btn = document.querySelector('[data-ai-hints-action="generate"]');
+        if (btn) {
+            if (isGenerating) {
+                btn.innerHTML = '✨ Generating...';
+                btn.disabled = true;
+                btn.classList.add('ai-hints-btn-generating');
+            } else {
+                // If stopping, setupAIHints will be called anyway by UpdateData
+                // but we can do a quick reset here if needed.
+                btn.classList.remove('ai-hints-btn-generating');
+                btn.disabled = false;
+            }
+        }
+    };
+
     window.aiHintsUpdateData = function(data) {
         if (window.aiHintsUiConfig) {
             window.aiHintsUiConfig.is_generating = false;
@@ -1190,8 +1210,11 @@
         const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
         if (current.id) {
             Persistence.saveData(cardKey, data);
-            // Reset state for new generation
-            Persistence.saveState(cardKey, { hints: true, options: false });
+            // Reset state based on config, not hardcoded true
+            Persistence.saveState(cardKey, { 
+                hints: uiCfg.auto_show_hints || false, 
+                options: uiCfg.auto_show_options || false 
+            });
         }
         setupAIHints(data);
     };

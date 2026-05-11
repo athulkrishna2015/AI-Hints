@@ -690,13 +690,20 @@ def generate_hints():
 
     front, back = parser.get_note_content(card.note(), card)
     logger.info("AI-Hints generation started for card %s using provider: %s", card_id, provider)
-    tooltip("AI-Hints: Generating...")
+    
+    # Trigger animation in frontend
+    mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(true); }")
 
     def on_done(data):
         try:
-            # Check if the card is still the same one we started with
-            is_current = mw.reviewer.card and mw.reviewer.card.id == card.id
-            if not is_current:
+            if not mw.col:
+                return
+
+            # Only discard if the user moved to a DIFFERENT card.
+            # If mw.reviewer.card is None, it likely means Anki is closing or the user left the reviewer;
+            # in these cases, we still want to save the generated hints.
+            current_reviewer_card = getattr(mw.reviewer, "card", None)
+            if current_reviewer_card and current_reviewer_card.id != card.id:
                 logger.info("AI-Hints: User moved to another card. Discarding generated data to prevent database and undo conflicts.")
                 return
 
@@ -718,12 +725,24 @@ def generate_hints():
                 "show_options_button": config.get("show_options_button", True)
             }
             if parser.update_note_with_hints(note, data, toggles, card):
+                # Save to database
+                mw.col.update_note(note)
+                
+                # Optional: try to force a disk write/autosave
+                try:
+                    if hasattr(mw.col, "autosave"):
+                        mw.col.autosave()
+                except:
+                    pass
+
+                # Add undo entry if possible
                 try:
                     mw.col.add_custom_undo_entry("Generate AI Hints")
-                    mw.col.update_note(note)
+                    # No need to call update_note again, it's already done
                     mw.col.merge_undo_entries(1)
                 except Exception:
-                    mw.col.update_note(note)
+                    pass
+
                 _remember_generated_hints(card, data, toggles)
                 logger.info(
                     "AI-Hints saved %d hints and %d options to note %s for card %s.",
@@ -734,13 +753,16 @@ def generate_hints():
                 )
                 _just_generated_card_ids.add(card.id)
                 tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
-                try:
-                    mw.reviewer.web.eval(
-                        f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}); }}"
-                    )
-                except Exception as e:
-                    logger.error(f"AI-Hints direct web update failed: {e}")
-                    refresh_current_card()
+                
+                # Update UI if we are still on the card
+                if current_reviewer_card and current_reviewer_card.id == card.id:
+                    try:
+                        mw.reviewer.web.eval(
+                            f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}); }}"
+                        )
+                    except Exception as e:
+                        logger.error(f"AI-Hints direct web update failed: {e}")
+                        refresh_current_card()
                 
                 if config.get("show_in_popup", False):
                     global _popup_dialog_instance
@@ -765,6 +787,27 @@ def generate_hints():
 
     threading.Thread(target=run_async, daemon=True).start()
 
+def card_has_hints(card):
+    if not card:
+        return False
+    
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        target_fields=config.get("target_fields", []),
+        note_type_fields=config.get("note_type_fields", {}),
+        storage_mode=config.get("storage_mode", "json"),
+        mathjax_format=config.get("mathjax_format", "delimiters")
+    )
+    
+    try:
+        # Check cache first
+        if _cached_hints_for_card(card):
+            return True
+        # Check note
+        return bool(parser.find_hints_block(card.note(), card))
+    except Exception:
+        return False
+
 def init_hooks():
     global _hooks_registered
     if _hooks_registered:
@@ -786,7 +829,7 @@ def init_hooks():
         # Auto generate for new cards if configured and no data exists
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         if config.get("auto_generate_new", False) and card:
-            if not _current_card_has_data:
+            if not card_has_hints(card):
                 logger.info(f"Auto-generating hints for new card {card.id}...")
                 generate_hints()
 
@@ -806,7 +849,9 @@ def init_hooks():
                 mw.reviewer.web.eval("if (window.aiHintsClearData) { window.aiHintsClearData(); }")
             except Exception:
                 pass
-            refresh_current_card()
+            # Anki already refreshes the card face on undo; 
+            # calling refresh_current_card here can cause 'UndoEmpty' warnings 
+            # and redundant auto-generation loops.
 
     gui_hooks.state_did_undo.append(on_undo)
     
