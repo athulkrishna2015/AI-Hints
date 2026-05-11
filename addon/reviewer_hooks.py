@@ -22,6 +22,19 @@ _last_undo_time = 0
 _css_cache = None
 _js_cache = None
 
+# Addon version loaded once at import time
+_ADDON_VERSION: str = ""
+try:
+    _addon_dir = os.path.dirname(__file__)
+    with open(os.path.join(_addon_dir, "VERSION"), "r", encoding="utf-8") as _vf:
+        _ADDON_VERSION = _vf.read().strip()
+except Exception:
+    pass
+
+def get_addon_version() -> str:
+    """Return the addon version string (e.g. '1.4.2')."""
+    return _ADDON_VERSION
+
 def get_web_assets():
     global _css_cache, _js_cache
     if _css_cache is None or _js_cache is None:
@@ -237,12 +250,59 @@ def _trigger_frontend_setup(card):
         _just_generated_card_ids.discard(cid)
 
     card_data = {"id": str(card.id), "ord": int(card.ord)}
+
+    # Pass hint data directly so the frontend can render it even if the
+    # DOM injection in on_webview_will_set_content was skipped or the
+    # JSON block is missing for any reason.
+    hint_data = None
+    try:
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        parser = CardParser(
+            target_fields=config.get("target_fields", []),
+            note_type_fields=config.get("note_type_fields", {}),
+            storage_mode=config.get("storage_mode", "json"),
+            mathjax_format=config.get("mathjax_format", "delimiters"),
+            fix_latex=config.get("fix_latex", False)
+        )
+        # Try memory cache first (fast)
+        cached = _cached_hints_for_card(card)
+        if cached:
+            hint_data = cached.get("data")
+        else:
+            # Fall back to reading from the note field
+            try:
+                note = card.note()
+                block_html = parser.find_hints_block(note, card)
+                if block_html:
+                    import re, html as _html
+                    m = re.search(
+                        r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
+                        block_html, re.DOTALL | re.IGNORECASE
+                    )
+                    if m:
+                        import json as _json
+                        raw = _html.unescape(m.group(1) or "")
+                        parsed = _json.loads(raw)
+                        # Unwrap keyed payload for this card
+                        card_ord = getattr(card, "ord", None)
+                        if card_ord is not None:
+                            card_key = f"c{card_ord + 1}"
+                            if isinstance(parsed, dict) and card_key in parsed and "hints" not in parsed:
+                                parsed = parsed[card_key]
+                        hint_data = parsed
+            except Exception as e:
+                logger.debug(f"AI-Hints: Could not read note hints in _trigger_frontend_setup: {e}")
+    except Exception as e:
+        logger.debug(f"AI-Hints: _trigger_frontend_setup hint lookup failed: {e}")
+
+    hint_data_json = json.dumps(hint_data)  # null if no data
     mw.reviewer.web.eval(f"""
         (function() {{
             var data = {json.dumps(card_data)};
+            var hintData = {hint_data_json};
             function trySetup() {{
                 if (typeof window.aiHintsSetup === 'function') {{
-                    window.aiHintsSetup(data);
+                    window.aiHintsSetup(data, hintData);
                 }} else {{
                     setTimeout(trySetup, 50);
                 }}
@@ -754,6 +814,10 @@ def generate_hints(is_manual=True, card=None):
                 return
 
             data = parser.normalize_hint_data(data)
+            # Stamp the current addon version so we can track when hints were
+            # generated and trigger version-gated regeneration in the future.
+            if _ADDON_VERSION:
+                data["_version"] = _ADDON_VERSION
             logger.info(
                 "AI-Hints response for card %s: %s",
                 card_id,
@@ -869,6 +933,64 @@ def card_has_hints(card):
     except Exception:
         return False
 
+def _card_saved_version(card) -> str:
+    """Return the addon version string stored inside the card's JSON block.
+    Returns an empty string if no version was recorded (i.e. generated before
+    version tracking was introduced).
+    """
+    if not card:
+        return ""
+    # Check in-memory cache first
+    cached = _cached_hints_for_card(card)
+    if cached:
+        data = cached.get("data") or {}
+        ver = data.get("_version", "")
+        if ver:
+            return str(ver)
+    try:
+        import re
+        import html as _html
+        note = card.note()
+        for field_val in getattr(note, "fields", []):
+            if not isinstance(field_val, str):
+                continue
+            m = re.search(
+                r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
+                field_val, re.DOTALL | re.IGNORECASE
+            )
+            if m:
+                raw = _html.unescape(m.group(1) or "")
+                try:
+                    parsed = json.loads(raw)
+                    # Handle keyed payload (cloze)
+                    card_ord = getattr(card, "ord", None)
+                    if card_ord is not None:
+                        card_key = f"c{card_ord + 1}"
+                        if isinstance(parsed, dict) and card_key in parsed:
+                            parsed = parsed[card_key]
+                    return str(parsed.get("_version", ""))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return ""
+
+def _version_less_than(v1: str, v2: str) -> bool:
+    """Return True if version string v1 is strictly less than v2.
+    Compares as tuples of integers (major, minor, patch).
+    An empty or unparseable version is treated as 0.0.0.
+    """
+    def _parse(v: str):
+        try:
+            parts = [int(x) for x in str(v).strip().lstrip("v").split(".")]
+            # Pad to 3 components
+            while len(parts) < 3:
+                parts.append(0)
+            return tuple(parts[:3])
+        except Exception:
+            return (0, 0, 0)
+    return _parse(v1) < _parse(v2)
+
 def init_hooks():
     global _hooks_registered
     if _hooks_registered:
@@ -897,9 +1019,26 @@ def init_hooks():
 
             needs_generation = not card_has_hints(card)
             force_regen = config.get("auto_regenerate_all", False)
-            
-            if needs_generation or force_regen:
-                logger.info(f"AI-Hints: Auto-generating hints for card {card.id} (force_regen={force_regen}).")
+
+            # Version-gated regeneration: regenerate if the version stored on
+            # the card is older than the configured minimum version.
+            regen_old = False
+            if (
+                not force_regen
+                and config.get("auto_regenerate_if_old_version", False)
+                and card_has_hints(card)
+            ):
+                min_ver = config.get("auto_regenerate_min_version", "").strip()
+                saved_ver = _card_saved_version(card)
+                if min_ver and _version_less_than(saved_ver, min_ver):
+                    regen_old = True
+                    logger.info(
+                        "AI-Hints: Card %s saved version '%s' < min '%s'; queuing regeneration.",
+                        card.id, saved_ver, min_ver
+                    )
+
+            if needs_generation or force_regen or regen_old:
+                logger.info(f"AI-Hints: Auto-generating hints for card {card.id} (force_regen={force_regen}, regen_old={regen_old}).")
                 generate_hints(is_manual=False, card=card)
 
     gui_hooks.reviewer_did_show_question.append(on_show_question)

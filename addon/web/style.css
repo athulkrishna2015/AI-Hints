@@ -97,3 +97,18 @@
 .nightMode .ai-hints-btn-generating {
     color: #e0b0ff !important;
 }
+
+/* Correct option highlight (shown on answer/back side only) */
+.ai-hints-list li.ai-hints-correct {
+    border-left: 3px solid #27ae60;
+    padding-left: 6px;
+    margin-left: -9px;
+    background-color: rgba(39, 174, 96, 0.08);
+    border-radius: 3px;
+    font-weight: 600;
+}
+
+.nightMode .ai-hints-list li.ai-hints-correct {
+    border-left-color: #2ecc71;
+    background-color: rgba(46, 204, 113, 0.12);
+}

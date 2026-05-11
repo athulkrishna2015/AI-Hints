@@ -29,6 +29,18 @@ class CardParser:
         if not isinstance(data, dict):
             return {"hints": [], "options": []}
 
+        # Handle new format with separate correct_answer and distractors.
+        # We keep correct_answer so it survives into JSON storage; it is NOT
+        # rendered in the UI (the frontend only reads "hints" and "options").
+        correct_answer_raw = None
+        if "correct_answer" in data and "distractors" in data:
+            ans = data.get("correct_answer", "")
+            dist = data.get("distractors", [])
+            if not isinstance(dist, list):
+                dist = [dist]
+            data["options"] = [ans] + dist
+            correct_answer_raw = ans  # remember before merging
+
         # Check if it's a hints/options object
         if "hints" in data or "options" in data:
             normalized = {"hints": [], "options": []}
@@ -49,6 +61,8 @@ class CardParser:
                     
                     # Only dedupe options, hints can be similar
                     if key == "options":
+                        if not text:
+                            continue
                         # Normalize whitespace for comparison
                         cmp_text = " ".join(text.strip().casefold().split())
                         if cmp_text in seen:
@@ -56,6 +70,26 @@ class CardParser:
                         seen.add(cmp_text)
                     
                     normalized[key].append(text)
+
+            # Persist the correct answer in the JSON payload (storage-only,
+            # not rendered by the frontend) so it can be used later for
+            # answer-checking, analytics, or export.
+            if correct_answer_raw is not None:
+                ca = str(correct_answer_raw).strip()
+                ca = self._strip_ai_hallucinations(ca)
+                ca = self._normalize_math_text(ca)
+                if self.mathjax_format == "tags":
+                    ca = self._convert_to_mathjax_tags(ca)
+                normalized["correct_answer"] = ca
+            elif "correct_answer" in data:
+                # Already in options-only format but caller included correct_answer key
+                ca = str(data["correct_answer"]).strip()
+                ca = self._strip_ai_hallucinations(ca)
+                ca = self._normalize_math_text(ca)
+                if self.mathjax_format == "tags":
+                    ca = self._convert_to_mathjax_tags(ca)
+                normalized["correct_answer"] = ca
+
             return normalized
         
         # Handle keyed structure (e.g. c1, c2)
@@ -66,6 +100,7 @@ class CardParser:
             else:
                 normalized[k] = v
         return normalized
+
 
     def _strip_ai_hallucinations(self, text: str) -> str:
         if not text:
@@ -260,12 +295,13 @@ class CardParser:
                         # Convert legacy to keyed
                         old_ord = self._data_attr(block_html, "data-ai-hints-card-ord")
                         old_key = f"c{int(old_ord)+1}" if old_ord and old_ord.isdigit() else "c1"
-                        parsed = {
-                            old_key: {
-                                "hints": parsed.get("hints", []),
-                                "options": parsed.get("options", []),
-                            }
+                        legacy_entry: Dict[str, Any] = {
+                            "hints": parsed.get("hints", []),
+                            "options": parsed.get("options", []),
                         }
+                        if "correct_answer" in parsed:
+                            legacy_entry["correct_answer"] = parsed["correct_answer"]
+                        parsed = {old_key: legacy_entry}
                     
                     parsed[card_key] = new_data
                 else:

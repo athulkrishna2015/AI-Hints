@@ -660,7 +660,26 @@
         return Boolean(target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'));
     }
 
-    function createListSection(title, className, items) {
+    // Returns true when Anki is displaying the answer (back) side of a card.
+    // On the answer side Anki injects an element with id="answer" into the DOM.
+    function isAnswerSide() {
+        return !!document.getElementById('answer');
+    }
+
+    // Toggle the .ai-hints-correct class on whichever option matches the
+    // stored correct_answer, but only when showing the back of the card.
+    function updateCorrectHighlight(container) {
+        if (!container) return;
+        const items = container.querySelectorAll('.ai-hints-list li');
+        const onAnswer = isAnswerSide();
+        items.forEach(function(li) {
+            if (li.dataset.aiHintsIsCorrect === 'true') {
+                li.classList.toggle('ai-hints-correct', onAnswer);
+            }
+        });
+    }
+
+    function createListSection(title, className, items, correctAnswer) {
         if (!Array.isArray(items) || items.length === 0) {
             return null;
         }
@@ -671,11 +690,19 @@
         fragment.appendChild(heading);
         fragment.appendChild(document.createElement('br'));
 
+        // Normalise correct_answer once for comparison (strip whitespace).
+        const normCorrect = correctAnswer ? String(correctAnswer).trim() : '';
+
         const list = document.createElement('ul');
         list.className = className;
         items.forEach(function(item) {
             const li = document.createElement('li');
             appendRenderedContent(li, normalizeMathContent(item));
+            // Mark which item is the correct answer so it can be highlighted
+            // on the back side without altering the displayed text.
+            if (normCorrect && String(item).trim() === normCorrect) {
+                li.dataset.aiHintsIsCorrect = 'true';
+            }
             list.appendChild(li);
         });
         fragment.appendChild(list);
@@ -803,6 +830,7 @@
         if (revealed) {
             Persistence.saveState(cardKey, state);
             restartSpeedFocusTimer();
+            updateCorrectHighlight(container);
             renderMathjax(container);
         }
         return revealed;
@@ -899,7 +927,9 @@
 
                     container.appendChild(document.createElement('hr'));
                     const hintsSection = createListSection('AI Hints:', 'ai-hints-hint-list', data.hints);
-                    const optionsSection = createListSection('AI Options:', 'ai-hints-list', data.options);
+                    // Pass correct_answer so the matching option gets marked
+                    // with data-ai-hints-is-correct for back-side highlighting.
+                    const optionsSection = createListSection('AI Options:', 'ai-hints-list', data.options, data.correct_answer);
                     if (hintsSection) {
                         container.appendChild(hintsSection);
                     }
@@ -1032,6 +1062,8 @@
             Persistence.saveState(cardKey, state);
 
             if (isHidden) {
+                // Reveal: apply correct-answer highlight if on back side.
+                updateCorrectHighlight(container);
                 renderMathjax(container);
             }
             if (document.activeElement === optBtn) {
@@ -1189,6 +1221,8 @@
         }
 
         if (container && container.style.display !== 'none') {
+            // Apply/remove correct-answer highlight depending on card side.
+            updateCorrectHighlight(container);
             renderMathjax(container);
         }
     }
@@ -1291,9 +1325,19 @@
         setupAIHints();
     };
 
-    window.aiHintsSetup = function(cardData) {
+    window.aiHintsSetup = function(cardData, hintData) {
         window.aiHintsCurrentCard = cardData;
-        setupAIHints();
+        // hintData is pre-fetched from Python (note field / memory cache).
+        // Use it only when no JSON block is already present in the DOM so we
+        // don't duplicate data; it acts as a reliable fallback for cases where
+        // the DOM injection in on_webview_will_set_content was skipped.
+        var domBlock = selectCurrentBlock('.ai-hints-json[data-ai-hints-addon-id="2119980872"]');
+        var domContainer = selectCurrentBlock('.ai-hints-container[data-ai-hints-addon-id="2119980872"]');
+        if (hintData && !domBlock && !domContainer) {
+            setupAIHints(hintData, false);
+        } else {
+            setupAIHints();
+        }
     };
 
     // Single global listener
