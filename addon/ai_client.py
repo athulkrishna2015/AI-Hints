@@ -209,12 +209,11 @@ class AIClient:
         ) + (
             "CRITICAL: You are an Anki flashcard assistant. Your sole purpose is to generate multiple-choice options and hints.\n\n"
             "OUTPUT FORMAT:\n"
-            "- Return strictly valid, raw JSON with exactly two keys: \"hints\" (array of strings) and \"options\" (array of strings).\n"
-            "- DO NOT include any text outside the JSON block. No preambles, no postambles, no markdown ```json wrappers.\n"
-            "- DO NOT include technical keys, JSON structures, or metadata (like 'c1', 'hints') inside the actual string values.\n"
-            f"- Generate exactly {count} options total and 2-3 helpful hints.\n"
-            "- The 'options' array MUST include the exact correct answer provided in 'Back / correct answer'.\n"
-            f"- The remaining {max(count - 1, 0)} options must be highly plausible, challenging distractors targeting common misconceptions.\n\n"
+            "- Return strictly valid, raw JSON. DO NOT include any text outside the JSON block. No preambles, no markdown wrappers.\n"
+            "- DO NOT include technical keys, JSON structures, or metadata inside the actual string values.\n"
+            f"- Generate exactly {count} options/distractors total and 2-3 helpful hints.\n"
+            "- If your output JSON uses an 'options' array, it MUST include the exact correct answer provided. If it uses 'distractors', provide only incorrect ones.\n"
+            "- All incorrect options/distractors must be highly plausible, challenging, and target common misconceptions.\n\n"
             "CONTENT RULES:\n"
             "1. NO REPETITION: Do NOT repeat the question, front text, or the prompt itself in the hints or options.\n"
             "2. DEDUPLICATE: All options must be mathematically and textually distinct. Never provide the same value in different formats.\n"
@@ -241,7 +240,7 @@ class AIClient:
         for provider in all_potential:
             try:
                 result = self._call_provider(provider, system_prompt, prompt)
-                if result.get("hints") or result.get("options"):
+                if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
                     result = self._ensure_correct_answer_option(result, back)
                     if provider != primary_provider:
                         logger.info(f"AI-Hints: Fallback successful using provider: {provider}")
@@ -359,7 +358,7 @@ class AIClient:
                 result = self._post_json(url, data, headers)
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
-                if parsed.get("hints") or parsed.get("options"):
+                if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                     return parsed
                 logger.warning(f"AI-Hints: Custom provider {provider_name} model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -424,7 +423,7 @@ class AIClient:
                 result = self._post_json(url, data, headers)
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
-                if parsed.get("hints") or parsed.get("options"):
+                if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                     return parsed
                 logger.warning("AI-Hints: OpenRouter models array returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -449,7 +448,7 @@ class AIClient:
                 result = self._post_json(url, data, headers)
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
-                if parsed.get("hints") or parsed.get("options"):
+                if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                     return parsed
                 logger.warning(f"AI-Hints: {provider} model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -482,7 +481,7 @@ class AIClient:
                 result = self._post_json(url, data, headers)
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
-                if parsed.get("hints") or parsed.get("options"):
+                if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                     return parsed
                 logger.warning(f"AI-Hints: Anthropic model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -507,15 +506,7 @@ class AIClient:
                 "system_instruction": {"parts": [{"text": system_prompt}]},
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                 "generationConfig": {
-                    "responseMimeType": "application/json",
-                    "responseJsonSchema": {
-                        "type": "object",
-                        "properties": {
-                            "hints": {"type": "array", "items": {"type": "string"}},
-                            "options": {"type": "array", "items": {"type": "string"}},
-                        },
-                        "required": ["hints", "options"],
-                    },
+                    "responseMimeType": "application/json"
                 },
             }
 
@@ -524,7 +515,7 @@ class AIClient:
                 result = self._post_json(url, data, headers)
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
-                if parsed.get("hints") or parsed.get("options"):
+                if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                     return parsed
                 logger.warning(f"AI-Hints: Gemini model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -579,20 +570,41 @@ class AIClient:
         if not isinstance(parsed, dict):
             return {"hints": [], "options": []}
 
-        return {
+        result = {
             "hints": self._normalize_string_list(parsed.get("hints", [])),
             "options": self._normalize_string_list(parsed.get("options", [])),
         }
+        if "correct_answer" in parsed:
+            result["correct_answer"] = parsed["correct_answer"]
+        if "distractors" in parsed:
+            result["distractors"] = self._normalize_string_list(parsed["distractors"])
+        return result
     def _ensure_correct_answer_option(self, result: Dict[str, List[str]], answer: str) -> Dict[str, List[str]]:
         count = self._options_count()
         options = self._normalize_string_list(result.get("options", []))
-        answer_text = self._clean_answer_for_option(answer)
+        
+        # If the LLM returned options, we assume the first one is the correct answer 
+        # (as requested by the user's system prompt) OR we extract it from result.
+        correct_answer_from_llm = ""
+        if result.get("correct_answer"):
+            correct_answer_from_llm = str(result["correct_answer"]).strip()
+        elif options:
+            correct_answer_from_llm = options[0]
 
-        if not answer_text:
+        answer_text = self._clean_answer_for_option(answer)
+        
+        # If we have a reasonable LLM correct answer, use it over the raw Anki back field
+        # to avoid dumping huge explanations into the options.
+        if correct_answer_from_llm:
+            chosen_answer = correct_answer_from_llm
+        else:
+            chosen_answer = answer_text
+
+        if not chosen_answer:
             result["options"] = options[:count]
             return result
 
-        answer_key = self._option_key(answer_text)
+        answer_key = self._option_key(chosen_answer)
         deduped = []
         has_answer = False
         seen = set()
@@ -608,9 +620,10 @@ class AIClient:
         if not has_answer:
             if len(deduped) >= count:
                 deduped = deduped[:max(count - 1, 0)]
-            deduped.append(answer_text)
+            deduped.append(chosen_answer)
 
         result["options"] = deduped[:count]
+        result["correct_answer"] = chosen_answer
         return result
 
     def _clean_answer_for_option(self, answer: str) -> str:
