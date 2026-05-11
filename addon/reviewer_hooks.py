@@ -727,11 +727,7 @@ def generate_hints(is_manual=True, card=None):
                     except Exception:
                         pass
                 
-                # Avoid intrusive system popups on background errors or simple network drops
-                if is_manual and err_status != "Offline":
-                    info("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
-                
-                # CRITICAL: Do NOT refresh_current_card() here. It breaks DOM animations 
+                # Do NOT refresh_current_card() here. It breaks DOM animations 
                 # and previously caused recursion bugs by reading the lock before cleanup.
                 return
 
