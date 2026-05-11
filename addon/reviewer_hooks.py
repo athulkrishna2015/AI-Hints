@@ -209,6 +209,9 @@ def on_webview_will_set_content(web_content, context):
             logger.error(f"Failed to find hints blocks in on_webview_will_set_content: {e}")
 
     card_payload = json.dumps(_card_context_payload(context))
+    # Determine if we are currently displaying the back side (answer)
+    is_answer = getattr(mw.reviewer, "state", "") == "answer"
+
     ui_payload = json.dumps({
         "show_on_card": config.get("show_on_card", True),
         "auto_reveal": auto_reveal,
@@ -220,7 +223,8 @@ def on_webview_will_set_content(web_content, context):
         "fix_latex": config.get("fix_latex", False),
         "review_token": _review_token,
         "is_generating": card.id in _generating_card_ids if card else False,
-        "shortcuts": config.get("shortcuts", {})
+        "shortcuts": config.get("shortcuts", {}),
+        "is_answer_side": is_answer
     })
 
     if config.get("auto_show_hints", False) or config.get("auto_show_options", False):

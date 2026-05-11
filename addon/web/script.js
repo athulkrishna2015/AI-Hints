@@ -663,7 +663,15 @@
     // Returns true when Anki is displaying the answer (back) side of a card.
     // On the answer side Anki injects an element with id="answer" into the DOM.
     function isAnswerSide() {
-        return !!document.getElementById('answer');
+        // Check DOM element injected by standard Anki templates
+        if (document.getElementById('answer')) {
+            return true;
+        }
+        // Fallback: check if Python backend explicitly passed this state in config
+        if (window.aiHintsUiConfig && window.aiHintsUiConfig.is_answer_side === true) {
+            return true;
+        }
+        return false;
     }
 
     // Toggle the .ai-hints-correct class on whichever option matches the
@@ -690,17 +698,19 @@
         fragment.appendChild(heading);
         fragment.appendChild(document.createElement('br'));
 
-        // Normalise correct_answer once for comparison (strip whitespace).
-        const normCorrect = correctAnswer ? String(correctAnswer).trim() : '';
+        // Normalise correct_answer once using our math normalizer for comparison
+        const normCorrect = correctAnswer ? normalizeMathContent(correctAnswer).trim() : '';
 
         const list = document.createElement('ul');
         list.className = className;
         items.forEach(function(item) {
             const li = document.createElement('li');
-            appendRenderedContent(li, normalizeMathContent(item));
-            // Mark which item is the correct answer so it can be highlighted
-            // on the back side without altering the displayed text.
-            if (normCorrect && String(item).trim() === normCorrect) {
+            const normItem = normalizeMathContent(item);
+            appendRenderedContent(li, normItem);
+            
+            // Robust compare: normalize both sides first, ensuring slight LaTeX
+            // or spacing variations in generated JSON don't break the match.
+            if (normCorrect && normItem.trim() === normCorrect) {
                 li.dataset.aiHintsIsCorrect = 'true';
             }
             list.appendChild(li);

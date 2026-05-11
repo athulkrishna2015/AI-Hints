@@ -114,5 +114,6 @@
 
 .nightMode .ai-hints-list li.ai-hints-correct {
     border-left-color: #2ecc71;
-    background-color: rgba(46, 204, 113, 0.12);
+    background-color: rgba(46, 204, 113, 0.25);
+    color: #2ecc71;
 }
