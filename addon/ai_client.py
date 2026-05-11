@@ -539,6 +539,86 @@ class AIClient:
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
         return {"hints": [], "options": []}
 
+    def submit_gemini_batch(self, batch_requests: List[Dict]) -> Dict:
+        """
+        Submits a list of requests to the Gemini Batch API (Inline).
+        batch_requests: list of dicts with keys: 'key', 'system_prompt', 'user_prompt'
+        Returns the batch definition response (containing 'name') or raises Exception.
+        """
+        api_key = self._api_key_for("gemini")
+        models = self._models_for_provider("gemini")
+        if not models:
+            raise ValueError("No Gemini models configured.")
+        
+        model = models[0] # Use best available model
+        model_path = urllib.parse.quote(model, safe="")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_path}:batchGenerateContent"
+        
+        headers = self._json_headers()
+        headers["x-goog-api-key"] = api_key
+        
+        request_items = []
+        for item in batch_requests:
+            req_key = item["key"]
+            sys_p = item["system_prompt"]
+            u_p = item["user_prompt"]
+            
+            inner_req = {
+                "contents": [{"role": "user", "parts": [{"text": u_p}]}],
+                "generationConfig": {
+                    "responseMimeType": "application/json"
+                }
+            }
+            if sys_p:
+                inner_req["system_instruction"] = {"parts": [{"text": sys_p}]}
+            
+            # Keep thinking config in batch mode for max fidelity
+            lower_model = model.lower()
+            if "gemini-3" in lower_model or "gemini-2.5" in lower_model or "gemini-flash-latest" in lower_model:
+                 inner_req["generationConfig"]["thinkingConfig"] = {
+                    "includeThoughts": True,
+                    "thinkingBudget": 1024
+                }
+            
+            request_items.append({
+                "request": inner_req,
+                "metadata": {"key": req_key}
+            })
+            
+        payload = {
+            "batch": {
+                "display_name": f"ai-hints-mass-gen-{int(time.time())}",
+                "input_config": {
+                    "requests": {
+                        "requests": request_items
+                    }
+                }
+            }
+        }
+        
+        logger.info(f"Submitting Gemini Batch for {len(request_items)} items to model: {model}")
+        response = self._post_json(url, payload, headers)
+        # Response will contain {'name': 'batches/xxx', 'state': 'JOB_STATE_PENDING', ...}
+        return response
+
+    def get_gemini_batch_status(self, job_name: str) -> Dict:
+        """
+        Retrieve current status and potentially results for a running batch job.
+        job_name should be in format 'batches/XXXXXXXX'
+        """
+        api_key = self._api_key_for("gemini")
+        # Ensure job_name is correctly formatted
+        job_name = job_name.lstrip("/")
+        url = f"https://generativelanguage.googleapis.com/v1beta/{job_name}"
+        
+        headers = self._json_headers()
+        headers["x-goog-api-key"] = api_key
+        
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=30) as response:
+            raw = response.read().decode("utf-8")
+            return json.loads(raw)
+
     def _should_skip_remaining_gemini_models(self, error: urllib.error.HTTPError, body: str) -> bool:
         if getattr(error, "code", None) not in GEMINI_PROVIDER_EXHAUSTED_STATUSES:
             return False
