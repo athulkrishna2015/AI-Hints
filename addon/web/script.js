@@ -989,6 +989,7 @@
         const hasAnyData = Boolean(hasCurrentData || manualData);
         const mainGenBtn = document.createElement('button');
         mainGenBtn.className = 'ai-hints-btn';
+        mainGenBtn.dataset.aiHintsAction = 'generate';
         
         const isGenerating = uiCfg.is_generating || false;
         if (isGenerating) {
@@ -1056,6 +1057,7 @@
         const clearBtn = document.createElement('button');
         clearBtn.innerText = 'Clear';
         clearBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
+        clearBtn.dataset.aiHintsAction = 'clear';
         setButtonEnabled(clearBtn, hasAnyData);
         clearBtn.onclick = function() {
             if (!hasAnyData) {
@@ -1073,6 +1075,7 @@
         const refreshBtn = document.createElement('button');
         refreshBtn.innerText = 'Refresh';
         refreshBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
+        refreshBtn.dataset.aiHintsAction = 'refresh';
         refreshBtn.title = 'Refresh hints from card cache';
         refreshBtn.onclick = function() {
             restartSpeedFocusTimer();
@@ -1092,6 +1095,7 @@
         const jsonViewBtn = document.createElement('button');
         jsonViewBtn.innerText = 'Show JSON';
         jsonViewBtn.className = 'ai-hints-btn ai-hints-btn-secondary';
+        jsonViewBtn.dataset.aiHintsAction = 'show-json';
         jsonViewBtn.title = 'Show raw JSON data';
         setButtonEnabled(jsonViewBtn, hasAnyData);
         jsonViewBtn.onclick = function() {
@@ -1249,6 +1253,38 @@
             } else {
                 event.preventDefault();
                 event.stopPropagation();
+            }
+        }, true);
+    }
+    
+    if (!window.aiHintsKeyBound) {
+        window.aiHintsKeyBound = true;
+        document.addEventListener('keydown', function(e) {
+            if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+                return;
+            }
+            
+            if (isEditableTarget(document.activeElement)) {
+                return;
+            }
+
+            let action = null;
+            switch (e.key) {
+                case '1': action = 'generate'; break;
+                case '2': action = 'toggle-options'; break;
+                case '3': action = 'toggle-hints'; break;
+                case '4': action = 'clear'; break;
+                case '5': action = 'refresh'; break;
+                case '6': action = 'show-json'; break;
+            }
+
+            if (!action) return;
+
+            const btn = document.querySelector('[data-ai-hints-action="' + action + '"]');
+            if (btn && !btn.disabled && btn.style.display !== 'none' && getComputedStyle(btn).display !== 'none') {
+                e.preventDefault();
+                e.stopPropagation();
+                btn.click();
             }
         }, true);
     }
