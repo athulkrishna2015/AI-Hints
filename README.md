@@ -166,6 +166,7 @@ MIT
 ## Changelog
 
 ### May 11, 2026
+- **Forced Auto-Regeneration Toggle**: Introduced a new sub-setting allowing users to override existence checks, forcing the automated generator to push fresh updates to cards even if data is already stored.
 - **Contextual Error Diagnostics**: Configured the system to capture raw Python exception text and project short descriptive details transiently beneath the generating button upon failure for frictionless debugging.
 - **Muted Intrusive Notifications**: Decoupled runtime failures from standard `info()` popup dialogs completely, shifting all user alerts entirely into visual button and label-based feedback cycles.
 - **Network Resilience Enhancements**: Differentiated between connectivity outages and provider errors, suppressing intrusive info popups for background operations during network drops.
