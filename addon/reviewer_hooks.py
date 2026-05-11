@@ -717,12 +717,15 @@ def generate_hints(is_manual=True, card=None):
 
             if not data or (not data.get("hints") and not data.get("options")):
                 err_status = data.get("_ai_error_type") or "Failed"
+                err_msg = data.get("_ai_error_msg", "")
                 
                 # Safely update frontend to transition from animation -> feedback -> rest state
                 if current_reviewer_card and current_reviewer_card.id == card.id:
                     try:
+                        # Wrap error string safely for Javascript injection
+                        js_err_arg = json.dumps(err_msg)
                         mw.reviewer.web.eval(
-                            f"if (window.aiHintsSetGenerating) {{ window.aiHintsSetGenerating(false, '{err_status}'); }}"
+                            f"if (window.aiHintsSetGenerating) {{ window.aiHintsSetGenerating(false, '{err_status}', {js_err_arg}); }}"
                         )
                     except Exception:
                         pass
@@ -818,7 +821,8 @@ def generate_hints(is_manual=True, card=None):
             payload = {
                 "hints": [], 
                 "options": [], 
-                "_ai_error_type": "Offline" if is_network else "Failed"
+                "_ai_error_type": "Offline" if is_network else "Failed",
+                "_ai_error_msg": str(e)
             }
             mw.taskman.run_on_main(lambda: on_done(payload))
 

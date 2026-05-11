@@ -1192,11 +1192,17 @@
         }
     }
 
-    window.aiHintsSetGenerating = function(isGenerating, statusText) {
+    window.aiHintsSetGenerating = function(isGenerating, statusText, detailedMsg) {
         if (window.aiHintsUiConfig) {
             window.aiHintsUiConfig.is_generating = isGenerating;
         }
         
+        // Purge any existing transient error messages
+        const existingMsg = document.getElementById('ai-hints-temp-error');
+        if (existingMsg) {
+            existingMsg.parentNode.removeChild(existingMsg);
+        }
+
         const btn = document.querySelector('[data-ai-hints-action="generate"]');
         if (btn) {
             if (isGenerating) {
@@ -1204,20 +1210,32 @@
                 btn.disabled = true;
                 btn.classList.add('ai-hints-btn-generating');
             } else if (statusText) {
-                // Stop animating, show error status briefly, then reset
+                // Transition out of animation and show quick status
                 btn.classList.remove('ai-hints-btn-generating');
                 btn.disabled = true;
                 btn.innerHTML = (statusText === 'Offline') ? '⚠️ Offline' : '⚠️ ' + statusText;
                 
-                // Wait 3 seconds then fully rebuild via setupAIHints
+                // Append explicit detail string beneath container if present
+                if (detailedMsg && btn.parentNode) {
+                    const detailDiv = document.createElement('div');
+                    detailDiv.id = 'ai-hints-temp-error';
+                    detailDiv.style.fontSize = '0.75em';
+                    detailDiv.style.color = '#e74c3c'; // Soft Red
+                    detailDiv.style.marginTop = '6px';
+                    detailDiv.style.opacity = '0.85';
+                    detailDiv.style.fontStyle = 'italic';
+                    detailDiv.innerText = String(detailedMsg).substring(0, 250);
+                    btn.parentNode.appendChild(detailDiv);
+                }
+
+                // Wait 4 seconds to allow reading, then perform natural clean rebuild
                 setTimeout(function() {
                     if (window.aiHintsUiConfig) {
                         window.aiHintsUiConfig.is_generating = false;
                     }
                     setupAIHints();
-                }, 3000);
+                }, 4000);
             } else {
-                // Standard instant reset
                 btn.classList.remove('ai-hints-btn-generating');
                 btn.disabled = false;
                 setupAIHints();
