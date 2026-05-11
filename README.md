@@ -166,6 +166,8 @@ MIT
 ## Changelog
 
 ### May 11, 2026
+- **Contextual Error Diagnostics**: Configured the system to capture raw Python exception text and project short descriptive details transiently beneath the generating button upon failure for frictionless debugging.
+- **Muted Intrusive Notifications**: Decoupled runtime failures from standard `info()` popup dialogs completely, shifting all user alerts entirely into visual button and label-based feedback cycles.
 - **Network Resilience Enhancements**: Differentiated between connectivity outages and provider errors, suppressing intrusive info popups for background operations during network drops.
 - **Infinite Animation Stop-Fix**: Resolved a recursion lock where failing calls mistakenly performed full-card refreshes that prematurely triggered state locks before the cleanup tasks finished.
 - **Dynamic Offline Indicators**: Configured visual feedback on generation buttons to shift smoothly from animating to displaying temporary `⚠️ Offline` or `⚠️ Failed` statuses before fully restoring normality.
