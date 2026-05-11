@@ -166,6 +166,10 @@ MIT
 ## Changelog
 
 ### May 11, 2026
+- **Configurable Keyboard Shortcuts**: Introduced customizable hotkeys in a dedicated "Shortcuts" settings tab for immediate generation, toggle, refresh, and clear actions.
+- **Customizable Shortcut Modifiers**: Added flexibility to user workflow by permitting shortcut combinations to leverage user-selected modifiers (`Alt`, `Ctrl`, `Shift`, or `Meta`).
+- **Fine-Grained Auto-Show Controls**: Partitioned auto-reveal preferences into discrete triggers, allowing different visibility behaviors on initial "Card Load" versus "After Manual Generation".
+- **Refactored Config UI Layout**: Organized general settings into neatly categorized layout groups (`Button Visibility` and `Auto-Show & Generation`) for streamlined navigation.
 - **LaTeX Fixer Off By Default**: Disabled aggressive LaTeX repair logic by default to eliminate word collisions like "vector" becoming `\vec`.
 - **Full-Word Lookahead Matcher**: Implemented negative lookaheads in the command-regex library to ensure mathematical shorthand keywords (like `pi` or `vec`) are not applied inside standard English words.
 - **Modeless Config Window**: Decoupled configuration UI from the modal Manager dialogs and added direct parentage to the Main Widget, allowing users to explore decks while adjusting settings concurrently.
