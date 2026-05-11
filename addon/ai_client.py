@@ -65,12 +65,12 @@ MODEL_SUGGESTIONS = {
         "claude-3-7-sonnet-latest",
     ],
     "gemini": [
+        "gemini-3.1-flash-lite",
         "gemini-3-flash-preview",
         "gemini-3.1-flash-lite-preview",
+        "gemini-2.5-flash-lite",
         "gemini-2.0-flash",
-        "gemini-2.0-flash-lite-preview-02-05",
         "gemini-2.0-pro-exp-02-05",
-        "gemini-1.5-flash",
         "gemini-1.5-pro",
     ],
     "groq": [
@@ -145,8 +145,10 @@ MODEL_FALLBACKS = {
     ],
     "gemini": [
         "gemini-flash-latest",
-        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite",
         "gemini-3.1-flash-lite-preview",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash-lite",
         "gemini-2.0-pro-exp-02-05",
         "gemini-1.5-pro",
         "gemini-2.0-flash",
@@ -512,9 +514,12 @@ class AIClient:
                 },
             }
 
-            # Enable explicit thinking for improved quality on Gemini 3 and 2.5 models
+            # Enable explicit thinking for improved quality on Gemini 3 and 2.5 models (Flash/Pro only)
             lower_model = model.lower()
-            if "gemini-3" in lower_model or "gemini-2.5" in lower_model or "gemini-flash-latest" in lower_model:
+            supports_thinking = ("gemini-3" in lower_model or "gemini-2.5" in lower_model or "gemini-flash-latest" in lower_model)
+            is_lite = "lite" in lower_model
+            
+            if supports_thinking and not is_lite:
                 data["generationConfig"]["thinkingConfig"] = {
                     "includeThoughts": True,
                     "thinkingBudget": 1024
@@ -573,9 +578,12 @@ class AIClient:
             if sys_p:
                 inner_req["system_instruction"] = {"parts": [{"text": sys_p}]}
             
-            # Keep thinking config in batch mode for max fidelity
+            # Keep thinking config in batch mode for max fidelity (Flash/Pro only)
             lower_model = model.lower()
-            if "gemini-3" in lower_model or "gemini-2.5" in lower_model or "gemini-flash-latest" in lower_model:
+            supports_thinking = ("gemini-3" in lower_model or "gemini-2.5" in lower_model or "gemini-flash-latest" in lower_model)
+            is_lite = "lite" in lower_model
+
+            if supports_thinking and not is_lite:
                  inner_req["generationConfig"]["thinkingConfig"] = {
                     "includeThoughts": True,
                     "thinkingBudget": 1024
