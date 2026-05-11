@@ -693,6 +693,11 @@ class ConfigDialog(QDialog):
         s_layout = QFormLayout()
         
         self.batch_deck_cb = QComboBox()
+        self.batch_deck_cb.setEditable(True)
+        self.batch_deck_cb.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        if self.batch_deck_cb.completer():
+            self.batch_deck_cb.completer().setFilterMode(Qt.MatchFlag.MatchContains)
+            
         if mw.col:
             decks = sorted(mw.col.decks.all_names())
             self.batch_deck_cb.addItems(["(Select Deck)"] + decks)
