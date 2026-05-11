@@ -706,6 +706,37 @@ class ConfigDialog(QDialog):
         self.batch_skip_existing_cb = QCheckBox("Skip cards that already have AI Hints generated")
         self.batch_skip_existing_cb.setChecked(True)
         s_layout.addRow(self.batch_skip_existing_cb)
+
+        # Version-gated Batch Regeneration control
+        self.batch_regen_version_cb = QCheckBox("└─ Except if Generated Version < ")
+        self.batch_regen_version_cb.setStyleSheet("margin-left: 15px;")
+        self.batch_regen_version_cb.setToolTip("If checked, cards with hints will still be queued for batching if their stored version is older than the target.")
+        self.batch_regen_version_cb.setChecked(False)
+        
+        self.batch_regen_min_version_edit = QLineEdit()
+        self.batch_regen_min_version_edit.setPlaceholderText("e.g. 1.4.2")
+        self.batch_regen_min_version_edit.setFixedWidth(80)
+        
+        # Load initial default from current main config values
+        self.batch_regen_min_version_edit.setText(self.config.get("auto_regenerate_min_version", ""))
+
+        batch_version_row = QHBoxLayout()
+        batch_version_row.setContentsMargins(15, 0, 0, 0)
+        batch_version_row.addWidget(self.batch_regen_version_cb)
+        batch_version_row.addWidget(self.batch_regen_min_version_edit)
+        batch_version_row.addStretch()
+        s_layout.addRow(batch_version_row)
+        
+        # Enable/disable version edit based on checkbox
+        self.batch_regen_version_cb.toggled.connect(
+            lambda enabled: self.batch_regen_min_version_edit.setEnabled(enabled)
+        )
+        self.batch_regen_min_version_edit.setEnabled(False)
+        
+        # Only enable version logic if 'Skip Existing' is ON
+        self.batch_skip_existing_cb.toggled.connect(
+            lambda checked: self.batch_regen_version_cb.setEnabled(checked)
+        )
         
         run_btn = QPushButton("🚀 Initiate Gemini Batch Generation")
         run_btn.setMinimumHeight(40)
@@ -774,12 +805,27 @@ class ConfigDialog(QDialog):
                 
             # Filter existing
             if self.batch_skip_existing_cb.isChecked():
-                from .reviewer_hooks import card_has_hints, _get_card_from_collection
+                from .reviewer_hooks import card_has_hints, _get_card_from_collection, _card_saved_version, _version_less_than
                 final_ids = []
+                
+                use_ver_gate = self.batch_regen_version_cb.isChecked()
+                min_ver = self.batch_regen_min_version_edit.text().strip()
+                
                 for cid in cids:
                     c = _get_card_from_collection(cid)
-                    if c and not card_has_hints(c):
+                    if not c:
+                        continue
+                        
+                    has_hints = card_has_hints(c)
+                    
+                    if not has_hints:
+                        # Absolutely no hints yet, keep it
                         final_ids.append(cid)
+                    elif use_ver_gate and min_ver:
+                        # Has hints, but check if they are outdated
+                        saved_ver = _card_saved_version(c)
+                        if _version_less_than(saved_ver, min_ver):
+                            final_ids.append(cid)
             else:
                 final_ids = list(cids)
                 
@@ -1500,17 +1546,29 @@ _config_dialog_instance = None
 
 def on_config_dialog(parent=None):
     global _config_dialog_instance
-    # Always use mw as parent to stay decoupled from the potentially modal Add-ons management window
-    parent = mw
-    # Reuse existing window if already open
-    if _config_dialog_instance is not None and _config_dialog_instance.isVisible():
-        _config_dialog_instance.raise_()
-        _config_dialog_instance.activateWindow()
-        return
-    _config_dialog_instance = ConfigDialog(parent)
+    
+    # Detach completely to ensure users can minimize/use Main Anki freely
+    dialog_parent = None
+    
+    if _config_dialog_instance is not None:
+        try:
+            if _config_dialog_instance.isVisible():
+                 _config_dialog_instance.raise_()
+                 _config_dialog_instance.activateWindow()
+                 return
+        except RuntimeError:
+            _config_dialog_instance = None # Instance was deleted
+            
+    _config_dialog_instance = ConfigDialog(dialog_parent)
+    
+    # Modeless configuration ensuring total UI independence
     _config_dialog_instance.setWindowFlag(Qt.WindowType.Window, True)
     _config_dialog_instance.setWindowModality(Qt.WindowModality.NonModal)
-    _config_dialog_instance.show()
+    
+    # Defer show call to next event loop cycle.
+    # This crucial break prevents the calling modal Addon Manager 
+    # from locking out the newly spawned config widget.
+    QTimer.singleShot(50, _config_dialog_instance.show)
 
 def init_config_ui():
     mw.addonManager.setConfigAction(ADDON_PACKAGE, on_config_dialog)
