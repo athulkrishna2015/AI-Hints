@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from aqt import mw, gui_hooks
 from .ai_client import AIClient
 from .card_parser import CardParser
@@ -16,6 +17,7 @@ MAX_HINT_CACHE_SIZE = 200
 _current_card_has_data = False
 
 _review_token = 0
+_last_undo_time = 0
 
 _css_cache = None
 _js_cache = None
@@ -871,6 +873,11 @@ def init_hooks():
         # Auto generate for new cards if configured and no data exists
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         if config.get("auto_generate_new", False) and card:
+            # Skip auto-generation if we just undid something
+            if time.time() - _last_undo_time < 0.5:
+                logger.info("AI-Hints: Skipping auto-generation because of recent undo.")
+                return
+
             needs_generation = not card_has_hints(card)
             force_regen = config.get("auto_regenerate_all", False)
             
@@ -887,6 +894,9 @@ def init_hooks():
     
     # Sync UI and caches on undo operations
     def on_undo(changes):
+        global _last_undo_time
+        _last_undo_time = time.time()
+        
         if mw.reviewer and mw.reviewer.card:
             card = mw.reviewer.card
             _forget_generated_hints(card)
