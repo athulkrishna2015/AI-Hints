@@ -201,45 +201,61 @@ class ConfigDialog(QDialog):
         self.storage_mode_cb.setToolTip("JSON: Invisible (cleaner). HTML: Visible on all devices.")
         gen_layout.addRow("Storage Mode:", self.storage_mode_cb)
         
-        self.show_hints_cb = QCheckBox("Show Hints Button")
-        gen_layout.addRow(self.show_hints_cb)
-        
         self.mathjax_format_cb = QComboBox()
         self.mathjax_format_cb.addItems(["delimiters", "inline"])
         self.mathjax_format_cb.setToolTip(r"delimiters: \( ... \), \[ ... \]. inline: $ ... $, $$ ... $")
         gen_layout.addRow("MathJax Format:", self.mathjax_format_cb)
+
+        # --- Button Visibility Group ---
+        button_group = QGroupBox("Button Visibility")
+        button_layout = QFormLayout()
+        
+        self.show_hints_cb = QCheckBox("Show Hints Button")
+        button_layout.addRow(self.show_hints_cb)
         
         self.show_options_cb = QCheckBox("Show Options Button (Sequential)")
-        gen_layout.addRow(self.show_options_cb)
+        button_layout.addRow(self.show_options_cb)
         
         self.show_on_card_cb = QCheckBox("Show Generate Button on Review Card")
-        gen_layout.addRow(self.show_on_card_cb)
+        button_layout.addRow(self.show_on_card_cb)
         
         self.show_in_bottom_bar_cb = QCheckBox("Show Generate Button in Review Bar")
-        gen_layout.addRow(self.show_in_bottom_bar_cb)
+        button_layout.addRow(self.show_in_bottom_bar_cb)
 
         self.show_in_popup_cb = QCheckBox("Show Results in Popup Window")
-        gen_layout.addRow(self.show_in_popup_cb)
+        button_layout.addRow(self.show_in_popup_cb)
+        
+        button_group.setLayout(button_layout)
+        gen_layout.addRow(button_group)
+
+        # --- Auto-Show & Generation Group ---
+        show_group = QGroupBox("Auto-Show & Generation")
+        show_layout = QFormLayout()
 
         self.auto_generate_new_cb = QCheckBox("Auto Generate for New Cards")
         self.auto_generate_new_cb.setToolTip("Automatically run AI generation for new/empty cards that do not have hints/options yet.")
-        gen_layout.addRow(self.auto_generate_new_cb)
+        show_layout.addRow(self.auto_generate_new_cb)
 
-        self.auto_show_hints_cb = QCheckBox("Auto Show Hints on Card Load")
+        show_layout.addRow(QLabel("<b>On Card Load:</b>"))
+        self.auto_show_hints_cb = QCheckBox("Auto Show Hints")
         self.auto_show_hints_cb.setToolTip("Automatically expand and show hints when a card is loaded.")
-        gen_layout.addRow(self.auto_show_hints_cb)
+        show_layout.addRow(self.auto_show_hints_cb)
 
-        self.auto_show_options_cb = QCheckBox("Auto Show Options on Card Load")
+        self.auto_show_options_cb = QCheckBox("Auto Show Options")
         self.auto_show_options_cb.setToolTip("Automatically expand and show options when a card is loaded.")
-        gen_layout.addRow(self.auto_show_options_cb)
+        show_layout.addRow(self.auto_show_options_cb)
 
-        self.manual_show_hints_cb = QCheckBox("Auto Show Hints after Manual Generation")
+        show_layout.addRow(QLabel("<b>After Manual Generation:</b>"))
+        self.manual_show_hints_cb = QCheckBox("Auto Show Hints")
         self.manual_show_hints_cb.setToolTip("Automatically expand and show hints after clicking Generate/Regenerate.")
-        gen_layout.addRow(self.manual_show_hints_cb)
+        show_layout.addRow(self.manual_show_hints_cb)
 
-        self.manual_show_options_cb = QCheckBox("Auto Show Options after Manual Generation")
+        self.manual_show_options_cb = QCheckBox("Auto Show Options")
         self.manual_show_options_cb.setToolTip("Automatically expand and show options after clicking Generate/Regenerate.")
-        gen_layout.addRow(self.manual_show_options_cb)
+        show_layout.addRow(self.manual_show_options_cb)
+        
+        show_group.setLayout(show_layout)
+        gen_layout.addRow(show_group)
         
         self.general_tab.setLayout(gen_layout)
         self.tabs.addTab(self.general_tab, "General")
