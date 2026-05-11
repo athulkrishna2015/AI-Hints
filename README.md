@@ -165,6 +165,13 @@ MIT
 
 ## Changelog
 
+### May 11, 2026
+- **LaTeX Fixer Off By Default**: Disabled aggressive LaTeX repair logic by default to eliminate word collisions like "vector" becoming `\vec`.
+- **Full-Word Lookahead Matcher**: Implemented negative lookaheads in the command-regex library to ensure mathematical shorthand keywords (like `pi` or `vec`) are not applied inside standard English words.
+- **Modeless Config Window**: Decoupled configuration UI from the modal Manager dialogs and added direct parentage to the Main Widget, allowing users to explore decks while adjusting settings concurrently.
+- **Setting Information Tooltips**: Integrated exhaustive inline help text (`setToolTip`) across the configuration interface to guide new and existing users through feature functionality.
+- **Auto-Generation State Safety Fix**: Resolved a race condition ensuring automatic card hint generation receives direct context rather than lagging cached global object state.
+
 ### May 9, 2026
 - **Robust JSON Repair Integration**: Vendored the `json_repair` library to handle malformed AI responses, missing quotes, and truncated JSON blocks more gracefully.
 - **AI Hallucination Sanitizer**: Implemented a robust sanitization layer to strip trailing JSON and technical metadata (e.g. `{"hints": ...}`) that some AI models hallucinated into the content strings.
