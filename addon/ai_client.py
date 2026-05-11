@@ -536,11 +536,6 @@ class AIClient:
             except urllib.error.HTTPError as e:
                 body = self._read_http_error(e)
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e} - {body}")
-                if self._should_skip_remaining_gemini_models(e, body):
-                    logger.warning(
-                        "AI-Hints: Gemini quota/rate limit hit; skipping remaining Gemini models and trying another provider."
-                    )
-                    break
             except Exception as e:
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
         return {"hints": [], "options": []}
