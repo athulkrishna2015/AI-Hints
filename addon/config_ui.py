@@ -168,11 +168,19 @@ class ConfigDialog(QDialog):
         # Live Log Timer
         self.log_timer = QTimer(self)
         self.log_timer.timeout.connect(self.load_log)
+        
+        # Batch Status Timer
+        self.batch_timer = QTimer(self)
+        self.batch_timer.timeout.connect(self.update_batch_status_tab)
+        
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.on_tab_changed(self.tabs.currentIndex())
 
     def on_tab_changed(self, index):
-        if self.tabs.tabText(index) == "Logs":
+        tab_name = self.tabs.tabText(index)
+        
+        # Handle Log timer
+        if tab_name == "Logs":
             self.load_log()
             self.log_timer.start(1000)
             if hasattr(self, "live_label"):
@@ -181,6 +189,13 @@ class ConfigDialog(QDialog):
             self.log_timer.stop()
             if hasattr(self, "live_label"):
                 self.live_label.setVisible(False)
+                
+        # Handle Batch timer
+        if tab_name == "Batch Generation":
+            self.update_batch_status_tab()
+            self.batch_timer.start(5000) # Update batch list every 5 seconds when viewing
+        else:
+            self.batch_timer.stop()
 
     def setup_ui(self):
         layout = QVBoxLayout()
@@ -531,11 +546,15 @@ class ConfigDialog(QDialog):
         self.shortcuts_tab.setLayout(short_layout)
         self.tabs.addTab(self.shortcuts_tab, "Shortcuts")
         
-        # --- Tab 5: Support ---
+        # --- Tab 5: Batch ---
+        self.batch_tab = self._create_batch_tab()
+        self.tabs.addTab(self.batch_tab, "Batch Generation")
+        
+        # --- Tab 6: Support ---
         self.support_tab = self._create_support_tab()
         self.tabs.addTab(self.support_tab, "Support")
         
-        # --- Tab 6: Logs ---
+        # --- Tab 7: Logs ---
         self.log_tab = self._create_log_tab()
         self.tabs.addTab(self.log_tab, "Logs")
         
@@ -664,6 +683,177 @@ class ConfigDialog(QDialog):
             logger.info("Log cleared by user.")
         except Exception as e:
             info(f"Could not clear log: {e}")
+
+    def _create_batch_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        # -- 1. START GROUP --
+        start_group = QGroupBox("Start New Batch Generation")
+        s_layout = QFormLayout()
+        
+        self.batch_deck_cb = QComboBox()
+        if mw.col:
+            decks = sorted(mw.col.decks.all_names())
+            self.batch_deck_cb.addItems(["(Select Deck)"] + decks)
+        s_layout.addRow("Source Deck:", self.batch_deck_cb)
+        
+        self.batch_skip_existing_cb = QCheckBox("Skip cards that already have AI Hints generated")
+        self.batch_skip_existing_cb.setChecked(True)
+        s_layout.addRow(self.batch_skip_existing_cb)
+        
+        run_btn = QPushButton("🚀 Initiate Gemini Batch Generation")
+        run_btn.setMinimumHeight(40)
+        run_btn.setStyleSheet("font-weight: bold; background-color: #0d6efd; color: white; border-radius: 4px;")
+        run_btn.clicked.connect(self.on_start_config_batch)
+        s_layout.addRow(run_btn)
+        
+        start_group.setLayout(s_layout)
+        layout.addWidget(start_group)
+        
+        # -- 2. ACTIVE GROUP --
+        active_group = QGroupBox("Running & Pending Batches")
+        a_layout = QVBoxLayout()
+        
+        self.batch_list_view = QTextEdit()
+        self.batch_list_view.setReadOnly(True)
+        self.batch_list_view.setPlaceholderText("No active batches at the moment.")
+        self.batch_list_view.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        a_layout.addWidget(self.batch_list_view)
+        
+        btn_row = QHBoxLayout()
+        refresh_batch_btn = QPushButton("Refresh Now")
+        refresh_batch_btn.clicked.connect(self.update_batch_status_tab)
+        btn_row.addWidget(refresh_batch_btn)
+        btn_row.addStretch()
+        
+        a_layout.addLayout(btn_row)
+        active_group.setLayout(a_layout)
+        layout.addWidget(active_group)
+        
+        layout.addStretch()
+        
+        # Initialize content
+        QTimer.singleShot(100, self.update_batch_status_tab)
+        return tab
+
+    def update_batch_status_tab(self):
+        try:
+            from .batch_manager import batch_manager
+            summary = batch_manager.get_status_summary()
+            # Make summary look pretty in textarea
+            if not batch_manager.jobs:
+                 self.batch_list_view.setPlainText("Ready. No active background batches found.")
+            else:
+                 # Strip standard markdown wrappers for consistent plaintext display
+                 plain = summary.replace("### ", "").replace("🔹 **", "● ").replace("**", "")
+                 self.batch_list_view.setPlainText(plain)
+        except Exception:
+            pass
+
+    def on_start_config_batch(self):
+        deck_name = self.batch_deck_cb.currentText()
+        if deck_name == "(Select Deck)":
+             info("Please select a deck first.")
+             return
+             
+        if not askUser(f"Are you sure you want to generate batch hints for all eligible cards in deck '{deck_name}'?\n\nNote: Only Gemini provider is currently supported."):
+             return
+             
+        # Collect potential cards
+        try:
+            cids = mw.col.find_cards(f"deck:\"{deck_name}\"")
+            if not cids:
+                info(f"No cards found in deck '{deck_name}'.")
+                return
+                
+            # Filter existing
+            if self.batch_skip_existing_cb.isChecked():
+                from .reviewer_hooks import card_has_hints, _get_card_from_collection
+                final_ids = []
+                for cid in cids:
+                    c = _get_card_from_collection(cid)
+                    if c and not card_has_hints(c):
+                        final_ids.append(cid)
+            else:
+                final_ids = list(cids)
+                
+            if not final_ids:
+                info("No cards need hint generation (all selected have hints already).")
+                return
+                
+            # Chunk limit to 1000 for inline batch safety
+            chunked_ids = final_ids[:1000]
+            excess = len(final_ids) - 1000
+            
+            confirm_msg = f"Ready to queue {len(chunked_ids)} cards."
+            if excess > 0:
+                confirm_msg += f"\n\n(Note: {excess} remaining cards skipped due to 1,000-card max batch limits. You can batch them later.)"
+            
+            if not askUser(confirm_msg + "\n\nProceed with submission?"):
+                return
+                
+            # Kick off standard generation logic
+            config = self.config.copy()
+            # We use existing config variables loaded from GUI implicitly via self.config?
+            # Better yet, fetch fresh runtime state from AIClient instance
+            
+            from .ai_client import AIClient
+            from .card_parser import CardParser
+            from .reviewer_hooks import _get_card_from_collection
+            
+            client = AIClient(config)
+            if not client.has_any_ready_provider():
+                 info("Configure your Gemini API Key first!")
+                 return
+                 
+            parser = CardParser(
+                config.get("target_fields", []),
+                config.get("note_type_fields", {}),
+                config.get("storage_mode", "json")
+            )
+            
+            items = []
+            actual_cids = []
+            
+            for cid in chunked_ids:
+                try:
+                    card = _get_card_from_collection(cid)
+                    if not card: continue
+                    f, b = parser.get_note_content(card.note(), card)
+                    items.append({
+                        "key": str(cid),
+                        "system_prompt": config.get("system_prompt", ""),
+                        "user_prompt": f"FRONT:\n{f}\n\nBACK:\n{b}"
+                    })
+                    actual_cids.append(cid)
+                except: pass
+                
+            if not items:
+                info("Reading card content failed unexpectedly.")
+                return
+                
+            def _bg_run():
+                try:
+                    tooltip("Submitting batch...")
+                    resp = client.submit_gemini_batch(items)
+                    jname = resp.get("name")
+                    if jname:
+                        from .batch_manager import batch_manager
+                        batch_manager.register_job(jname, actual_cids)
+                        mw.taskman.run_on_main(lambda: info(f"✅ Submitted successfully: {jname}\nTracking resumed."))
+                        mw.taskman.run_on_main(self.update_batch_status_tab)
+                    else:
+                        mw.taskman.run_on_main(lambda: info("Submission failed. No job name returned."))
+                except Exception as e:
+                    mw.taskman.run_on_main(lambda msg=str(e): info(f"API Error:\n{msg}"))
+                    
+            import threading
+            threading.Thread(target=_bg_run, daemon=True).start()
+            
+        except Exception as e:
+            logger.error(f"Config UI Batch Start error: {e}")
+            info(f"Launch failed: {e}")
 
     def _create_support_tab(self):
         tab = QWidget()
