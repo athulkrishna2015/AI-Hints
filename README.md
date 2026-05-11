@@ -166,6 +166,9 @@ MIT
 ## Changelog
 
 ### May 11, 2026
+- **Network Resilience Enhancements**: Differentiated between connectivity outages and provider errors, suppressing intrusive info popups for background operations during network drops.
+- **Infinite Animation Stop-Fix**: Resolved a recursion lock where failing calls mistakenly performed full-card refreshes that prematurely triggered state locks before the cleanup tasks finished.
+- **Dynamic Offline Indicators**: Configured visual feedback on generation buttons to shift smoothly from animating to displaying temporary `⚠️ Offline` or `⚠️ Failed` statuses before fully restoring normality.
 - **Configurable Keyboard Shortcuts**: Introduced customizable hotkeys in a dedicated "Shortcuts" settings tab for immediate generation, toggle, refresh, and clear actions.
 - **Customizable Shortcut Modifiers**: Added flexibility to user workflow by permitting shortcut combinations to leverage user-selected modifiers (`Alt`, `Ctrl`, `Shift`, or `Meta`).
 - **Fine-Grained Auto-Show Controls**: Partitioned auto-reveal preferences into discrete triggers, allowing different visibility behaviors on initial "Card Load" versus "After Manual Generation".
