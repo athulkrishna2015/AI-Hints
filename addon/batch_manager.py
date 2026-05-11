@@ -39,6 +39,19 @@ class BatchManager:
         except Exception as e:
             logger.error(f"AI-Hints BatchManager failed save: {e}")
 
+    def get_status_summary(self) -> str:
+        if not self.jobs:
+            return "No active batch jobs are currently running or pending."
+        
+        lines = ["### Ongoing Batch Jobs:"]
+        now = time.time()
+        for name, details in self.jobs.items():
+            elapsed = int(now - details.get("created_at", now))
+            minutes = elapsed // 60
+            cards = len(details.get("card_ids", []))
+            lines.append(f"🔹 **{name}**: {cards} cards queued ({minutes} mins ago)")
+        return "\n".join(lines)
+
     def register_job(self, job_name: str, card_ids: List[int]):
         self.jobs[job_name] = {
             "created_at": int(time.time()),
