@@ -56,8 +56,13 @@ def get_addon_dir():
 def _card_context_payload(context):
     card = getattr(context, "card", None)
     if not card:
-        reviewer = context if type(context).__name__ == "Reviewer" else getattr(context, "reviewer", None)
-        card = getattr(reviewer, "card", None) or getattr(mw.reviewer, "card", None)
+        # Prefer mw.reviewer.card if context is likely the reviewer
+        is_reviewer = (
+            getattr(context, "name", None) == "reviewer" or 
+            type(context).__name__ == "Reviewer"
+        )
+        if is_reviewer:
+            card = getattr(mw.reviewer, "card", None)
     
     if not card:
         return {"id": "", "ord": None}
@@ -143,39 +148,51 @@ def on_webview_will_set_content(web_content, context):
 
     card = getattr(context, "card", None)
     if not card:
-        reviewer = context if type(context).__name__ == "Reviewer" else getattr(context, "reviewer", None)
-        card = getattr(reviewer, "card", None) or getattr(mw.reviewer, "card", None)
+        is_reviewer_context = (
+            getattr(context, "name", None) == "reviewer" or 
+            type(context).__name__ == "Reviewer"
+        )
+        if is_reviewer_context:
+            card = getattr(mw.reviewer, "card", None)
 
-    hints_block = ""
+    hints_blocks = []
     auto_reveal = False
     if card:
         try:
             # Force reload to ensure we don't have stale data (especially for new cards)
             try:
                 card.load()
-                card.note().load()
+                note = card.note()
+                try:
+                    note.load()
+                except:
+                    pass
             except Exception:
-                pass
+                note = None
 
-            hints_block = parser.find_hints_block(card.note(), card) or ""
-            if not hints_block:
+            if note:
+                # Inject ALL blocks found in the note. The frontend JS will select 
+                # the one matching the card ID once the ID is confirmed.
+                hints_blocks = parser.find_all_hints_blocks(note)
+            
+            # If no blocks in note, check cache
+            if not hints_blocks:
                 cached = _cached_hints_for_card(card)
                 if cached:
-                    hints_block = parser.build_hints_block(
+                    block = parser.build_hints_block(
                         cached.get("data", {}),
                         cached.get("toggles", {}),
                         card,
                     )
+                    hints_blocks = [block]
             
-            if hints_block:
+            if hints_blocks:
                 _current_card_has_data = True
             
             if card.id in _just_generated_card_ids:
                 auto_reveal = True
-                # Don't discard yet; we want it to persist for the 'answer' side too.
-                # It will be cleared when the card actually changes.
         except Exception as e:
-            logger.error(f"Failed to find hints block in on_webview_will_set_content: {e}")
+            logger.error(f"Failed to find hints blocks in on_webview_will_set_content: {e}")
 
     card_payload = json.dumps(_card_context_payload(context))
     ui_payload = json.dumps({
@@ -201,8 +218,8 @@ def on_webview_will_set_content(web_content, context):
         )
 
     web_content.head += f"<style>{css}</style>"
-    if hints_block:
-        web_content.body += hints_block
+    for block in hints_blocks:
+        web_content.body += block
     web_content.body += f"<script>window.aiHintsCurrentCard = {card_payload};</script>"
     web_content.body += f"<script>window.aiHintsUiConfig = {ui_payload};</script>"
     web_content.body += f"<script>{js}</script>"

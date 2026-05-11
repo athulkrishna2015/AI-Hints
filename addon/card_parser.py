@@ -349,7 +349,16 @@ class CardParser:
             rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
             flags=re.DOTALL | re.IGNORECASE,
         )
-        for f_val in note.values():
+        
+        # Anki Note objects have a .fields attribute (list of strings)
+        fields = getattr(note, "fields", [])
+        if not fields and hasattr(note, "values"):
+            try:
+                fields = list(note.values())
+            except Exception:
+                fields = []
+        
+        for f_val in fields:
             if not isinstance(f_val, str):
                 continue
             for match in pattern.finditer(f_val):
@@ -357,6 +366,28 @@ class CardParser:
                 if self._block_matches_card(block, card) and self._json_block_has_data_for_card(block, match.group(1), card):
                     return block
         return None
+
+    def find_all_hints_blocks(self, note) -> List[str]:
+        """Extracts all AI hints blocks from all fields of the note."""
+        pattern = re.compile(
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>.*?</div>',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        
+        blocks = []
+        fields = getattr(note, "fields", [])
+        if not fields and hasattr(note, "values"):
+            try:
+                fields = list(note.values())
+            except Exception:
+                fields = []
+
+        for f_val in fields:
+            if not isinstance(f_val, str):
+                continue
+            for match in pattern.finditer(f_val):
+                blocks.append(match.group(0))
+        return blocks
 
     def clear_hints_from_note(self, note, card=None) -> bool:
         """Removes AI hints blocks matching the card from all fields."""
