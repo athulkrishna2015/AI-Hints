@@ -984,6 +984,9 @@
             btn.innerHTML = '✨ Generating...';
             btn.classList.add('ai-hints-btn-generating');
             sendCommand('ai_hints_generate');
+            if (document.activeElement === btn) {
+                btn.blur();
+            }
         };
 
         const hasAnyData = Boolean(hasCurrentData || manualData);
@@ -1026,6 +1029,9 @@
             if (isHidden) {
                 renderMathjax(container);
             }
+            if (document.activeElement === optBtn) {
+                optBtn.blur();
+            }
         };
         btnContainer.appendChild(optBtn);
 
@@ -1051,6 +1057,9 @@
             if (isHidden) {
                 renderMathjax(container);
             }
+            if (document.activeElement === hintBtn) {
+                hintBtn.blur();
+            }
         };
         btnContainer.appendChild(hintBtn);
 
@@ -1067,6 +1076,9 @@
                 clearBtn.disabled = true;
                 clearBtn.innerText = 'Clearing...';
                 sendCommand('ai_hints_clear');
+            }
+            if (document.activeElement === clearBtn) {
+                clearBtn.blur();
             }
         };
         btnContainer.appendChild(clearBtn);
@@ -1088,6 +1100,9 @@
                     refreshBtn.innerText = 'Refresh';
                 }
             }, 2000);
+            if (document.activeElement === refreshBtn) {
+                refreshBtn.blur();
+            }
         };
         btnContainer.appendChild(refreshBtn);
 
@@ -1125,6 +1140,9 @@
                 container.appendChild(view);
                 jsonViewBtn.innerText = 'Hide JSON';
             }
+            if (document.activeElement === jsonViewBtn) {
+                jsonViewBtn.blur();
+            }
         };
         btnContainer.appendChild(jsonViewBtn);
 
@@ -1141,13 +1159,11 @@
         }
 
         if (uiCfg.auto_reveal || manualData) {
-            if (uiCfg.auto_show_hints && uiCfg.auto_show_options) {
-                revealAIHints();
-            } else if (uiCfg.auto_show_options) {
-                revealAIHints('options');
-            } else {
-                // Default to showing hints if manual generation finished
+            if (uiCfg.auto_show_hints) {
                 revealAIHints('hints');
+            }
+            if (uiCfg.auto_show_options) {
+                revealAIHints('options');
             }
         } else {
             if (uiCfg.auto_show_hints && uiCfg.auto_show_options) {
@@ -1257,9 +1273,13 @@
         }, true);
     }
     
-    if (!window.aiHintsKeyBound) {
-        window.aiHintsKeyBound = true;
-        document.addEventListener('keydown', function(e) {
+    // Robust keybinding that handles document changes if window persists
+    if (!window.aiHintsKeyBound || window.aiHintsKeyDocument !== document) {
+        if (window.aiHintsKeyHandler && window.aiHintsKeyDocument) {
+            window.aiHintsKeyDocument.removeEventListener('keydown', window.aiHintsKeyHandler, true);
+        }
+        
+        window.aiHintsKeyHandler = function(e) {
             if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
                 return;
             }
@@ -1268,25 +1288,38 @@
                 return;
             }
 
+            const uiCfg = window.aiHintsUiConfig || {};
+            const shortcuts = uiCfg.shortcuts || {};
             let action = null;
-            switch (e.key) {
-                case '1': action = 'generate'; break;
-                case '2': action = 'toggle-options'; break;
-                case '3': action = 'toggle-hints'; break;
-                case '4': action = 'clear'; break;
-                case '5': action = 'refresh'; break;
-                case '6': action = 'show-json'; break;
+            
+            // Use configured shortcuts
+            for (const key in shortcuts) {
+                if (e.key === shortcuts[key]) {
+                    action = key;
+                    break;
+                }
             }
 
             if (!action) return;
 
-            const btn = document.querySelector('[data-ai-hints-action="' + action + '"]');
+            // Always prevent default for our shortcuts to avoid Anki/system conflicts
+            e.preventDefault();
+            e.stopPropagation();
+
+            const actionsBlock = selectCurrentBlock('.ai-hints-actions');
+            if (!actionsBlock) return;
+
+            const btn = actionsBlock.querySelector('[data-ai-hints-action="' + action + '"]');
             if (btn && !btn.disabled && btn.style.display !== 'none' && getComputedStyle(btn).display !== 'none') {
-                e.preventDefault();
-                e.stopPropagation();
                 btn.click();
+                // Ensure window keeps focus and doesn't trap it on a potentially disabled button
+                window.focus();
             }
-        }, true);
+        };
+        
+        window.aiHintsKeyBound = true;
+        window.aiHintsKeyDocument = document;
+        document.addEventListener('keydown', window.aiHintsKeyHandler, true);
     }
 
 

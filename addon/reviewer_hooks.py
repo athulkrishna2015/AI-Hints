@@ -182,7 +182,8 @@ def on_webview_will_set_content(web_content, context):
         "auto_show_options": config.get("auto_show_options", False),
         "mathjax_format": config.get("mathjax_format", "delimiters"),
         "review_token": _review_token,
-        "is_generating": card.id in _generating_card_ids if card else False
+        "is_generating": card.id in _generating_card_ids if card else False,
+        "shortcuts": config.get("shortcuts", {})
     })
 
     if config.get("auto_show_hints", False) or config.get("auto_show_options", False):

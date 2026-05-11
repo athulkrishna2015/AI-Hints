@@ -104,5 +104,13 @@
         "mistral",
         "cerebras",
         "local"
-    ]
+    ],
+    "shortcuts": {
+        "generate": "1",
+        "toggle-options": "2",
+        "toggle-hints": "3",
+        "clear": "4",
+        "refresh": "5",
+        "show-json": "6"
+    }
 }

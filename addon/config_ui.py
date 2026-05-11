@@ -221,7 +221,7 @@ class ConfigDialog(QDialog):
         self.show_in_popup_cb = QCheckBox("Show Results in Popup Window")
         gen_layout.addRow(self.show_in_popup_cb)
 
-        self.auto_generate_new_cb = QCheckBox("Auto Generate and Show for New Cards")
+        self.auto_generate_new_cb = QCheckBox("Auto Generate for New Cards")
         self.auto_generate_new_cb.setToolTip("Automatically run AI generation for new/empty cards that do not have hints/options yet.")
         gen_layout.addRow(self.auto_generate_new_cb)
 
@@ -411,19 +411,41 @@ class ConfigDialog(QDialog):
         
         self.advanced_tab.setLayout(adv_layout)
         self.tabs.addTab(self.advanced_tab, "Advanced")
+
+        # --- Tab 4: Shortcuts ---
+        self.shortcuts_tab = QWidget()
+        short_layout = QFormLayout()
+        self.shortcut_edits = {}
+        shortcut_labels = {
+            "generate": "Generate / Regenerate (Alt+)",
+            "toggle-options": "Toggle Options (Alt+)",
+            "toggle-hints": "Toggle Hints (Alt+)",
+            "clear": "Clear (Alt+)",
+            "refresh": "Refresh (Alt+)",
+            "show-json": "Show JSON (Alt+)"
+        }
+        for key, label in shortcut_labels.items():
+            edit = QLineEdit()
+            edit.setPlaceholderText("e.g. 1")
+            edit.setFixedWidth(50)
+            self.shortcut_edits[key] = edit
+            short_layout.addRow(label, edit)
         
-        # --- Tab 4: Support ---
+        self.shortcuts_tab.setLayout(short_layout)
+        self.tabs.addTab(self.shortcuts_tab, "Shortcuts")
+        
+        # --- Tab 5: Support ---
         self.support_tab = self._create_support_tab()
         self.tabs.addTab(self.support_tab, "Support")
         
-        # --- Tab 5: Logs ---
+        # --- Tab 6: Logs ---
         self.log_tab = self._create_log_tab()
         self.tabs.addTab(self.log_tab, "Logs")
         
         layout.addWidget(self.tabs)
         
         # Set Logs tab as default
-        self.tabs.setCurrentIndex(4)
+        self.tabs.setCurrentIndex(5)
         
         # --- Bottom Buttons ---
         btn_layout = QHBoxLayout()
@@ -612,6 +634,10 @@ class ConfigDialog(QDialog):
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", False))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
         
+        shortcuts = c.get("shortcuts", {}) or {}
+        for key, edit in self.shortcut_edits.items():
+            edit.setText(shortcuts.get(key, ""))
+
         keys = c.get("api_keys", {}) or {}
         for p, edit in self.api_key_edits.items():
             edit.setText(keys.get(p, ""))
@@ -969,6 +995,8 @@ class ConfigDialog(QDialog):
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
             
+            new_config["shortcuts"] = {key: edit.text().strip() for key, edit in self.shortcut_edits.items()}
+            
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {
                 p: (edit.currentText().strip() or DEFAULT_MODELS.get(p, ""))
@@ -1119,6 +1147,22 @@ class ConfigDialog(QDialog):
         config.setdefault("auto_generate_new", False)
         config.setdefault("auto_show_hints", False)
         config.setdefault("auto_show_options", False)
+
+        # Normalize shortcuts
+        default_shortcuts = {
+            "generate": "1",
+            "toggle-options": "2",
+            "toggle-hints": "3",
+            "clear": "4",
+            "refresh": "5",
+            "show-json": "6"
+        }
+        shortcuts = dict(default_shortcuts)
+        raw_shortcuts = config.get("shortcuts", {}) or {}
+        if isinstance(raw_shortcuts, dict):
+            shortcuts.update(raw_shortcuts)
+        config["shortcuts"] = shortcuts
+
         return config
 
 _config_dialog_instance = None
