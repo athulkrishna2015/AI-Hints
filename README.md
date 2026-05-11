@@ -165,6 +165,13 @@ MIT
 
 ## Changelog
 
+### May 12, 2026
+- **Native Gemini Batch Generation**: Full support for async Batch API execution. Push up to 1,000 cards per batch and let it generate offline!
+- **Dedicated Batch Dashboard**: New "Batch Generation" tab in Config settings. Monitor pending jobs in real-time and trigger deck-wide queuing.
+- **High-Reliability Matching**: Enhanced backend-driven answer state flags to correctly highlight correct options, bypassing custom template flaws.
+- **Robust Latex Normalization**: Standardized options comparison logic so LaTeX variances like `$$` vs `\(` never cause highligh mismatches.
+- **Enhanced Dark Mode Colorway**: Boosted visibility for success metrics in dark mode by strengthening text overlays and standardizing high-contrast highlights.
+
 ### May 11, 2026
 - **Gemini 3 Native Integration**: Restored full compatibility for `gemini-3` preview models.
 - **Explicit Thinking Configuration**: Leverages new `thinkingConfig` to maximize logical reasoning fidelity.
