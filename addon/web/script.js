@@ -984,11 +984,24 @@
                 // Reset and shuffle options
                 if (optionsList) {
                     const items = Array.from(optionsList.children);
-                    for (let i = items.length - 1; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
-                        [items[i], items[j]] = [items[j], items[i]];
+                    
+                    // Maintain persistent shuffle order per card review
+                    if (!state.order || !Array.isArray(state.order) || state.order.length !== items.length) {
+                        const indices = Array.from({length: items.length}, (_, i) => i);
+                        for (let i = indices.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [indices[i], indices[j]] = [indices[j], indices[i]];
+                        }
+                        state.order = indices;
+                        Persistence.saveState(cardKey, state);
                     }
-                    items.forEach(item => optionsList.appendChild(item));
+                    
+                    // Apply saved layout
+                    state.order.forEach(idx => {
+                        if (items[idx]) {
+                            optionsList.appendChild(items[idx]);
+                        }
+                    });
                     
                     if (state.options && showOptionsCfg) {
                         optionsList.classList.remove('ai-hints-hidden');
@@ -1037,6 +1050,12 @@
         } else {
             mainGenBtn.innerText = hasAnyData ? 'Regenerate' : 'Generate AI Hints';
             mainGenBtn.onclick = function() {
+                // Clear shuffling state to allow new randomization for new content
+                const currentState = Persistence.getState(cardKey) || {};
+                if (currentState.order) {
+                    delete currentState.order;
+                    Persistence.saveState(cardKey, currentState);
+                }
                 triggerGenerate(mainGenBtn);
             };
         }
@@ -1127,6 +1146,13 @@
         refreshBtn.dataset.aiHintsAction = 'refresh';
         refreshBtn.title = 'Refresh hints from card cache';
         refreshBtn.onclick = function() {
+            // Explicitly reset shuffling sequence on manual refresh
+            const currentState = Persistence.getState(cardKey) || {};
+            if (currentState.order) {
+                delete currentState.order;
+                Persistence.saveState(cardKey, currentState);
+            }
+            
             restartSpeedFocusTimer();
             refreshBtn.disabled = true;
             refreshBtn.innerText = 'Refreshing...';
