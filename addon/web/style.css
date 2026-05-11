@@ -98,13 +98,17 @@
     color: #e0b0ff !important;
 }
 
+.ai-hints-list li {
+    border-left: 3px solid transparent;
+    padding-left: 6px;
+    margin-left: -9px; /* accommodate border/padding so bullet alignment is stable */
+    border-radius: 3px;
+}
+
 /* Correct option highlight (shown on answer/back side only) */
 .ai-hints-list li.ai-hints-correct {
-    border-left: 3px solid #27ae60;
-    padding-left: 6px;
-    margin-left: -9px;
+    border-left-color: #27ae60;
     background-color: rgba(39, 174, 96, 0.08);
-    border-radius: 3px;
     font-weight: 600;
 }
 
