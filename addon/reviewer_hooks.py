@@ -561,10 +561,6 @@ def on_browser_context_menu(browser, menu):
     act_batch.setEnabled(bool(_selected_browser_card_ids(browser)))
     act_batch.triggered.connect(lambda _checked=False, b=browser: generate_ai_hints_batch_from_browser(b))
     
-    # Action 3: View Pending Batches
-    act_view = menu.addAction("📋 View Active Batch Status")
-    from .batch_manager import batch_manager
-    act_view.triggered.connect(lambda _c=False: info(batch_manager.get_status_summary()))
 
 def update_bottom_bar_button(card=None):
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}

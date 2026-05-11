@@ -2,6 +2,7 @@ import os
 import json
 from aqt import mw
 from aqt.utils import askUser
+from aqt.deckchooser import DeckChooser
 from aqt.qt import *
 from .logger import logger, get_logger, info, tooltip
 from .ai_client import DEFAULT_MODELS, LEGACY_MODEL_REPLACEMENTS, MODEL_FALLBACKS, PROVIDER_ORDER, MODEL_SUGGESTIONS, AIClient
@@ -692,16 +693,10 @@ class ConfigDialog(QDialog):
         start_group = QGroupBox("Start New Batch Generation")
         s_layout = QFormLayout()
         
-        self.batch_deck_cb = QComboBox()
-        self.batch_deck_cb.setEditable(True)
-        self.batch_deck_cb.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        if self.batch_deck_cb.completer():
-            self.batch_deck_cb.completer().setFilterMode(Qt.MatchFlag.MatchContains)
-            
-        if mw.col:
-            decks = sorted(mw.col.decks.all_names())
-            self.batch_deck_cb.addItems(["(Select Deck)"] + decks)
-        s_layout.addRow("Source Deck:", self.batch_deck_cb)
+        # Use Anki's native DeckChooser widget for superior searching and hierarchy support
+        self.deck_container = QWidget()
+        self.batch_deck_chooser = DeckChooser(mw, self.deck_container, label=False)
+        s_layout.addRow("Source Deck:", self.deck_container)
         
         self.batch_skip_existing_cb = QCheckBox("Skip cards that already have AI Hints generated")
         self.batch_skip_existing_cb.setChecked(True)
@@ -788,8 +783,17 @@ class ConfigDialog(QDialog):
             pass
 
     def on_start_config_batch(self):
-        deck_name = self.batch_deck_cb.currentText()
-        if deck_name == "(Select Deck)":
+        # Safely retrieve selected deck name from native chooser (handles callable vs property versions)
+        if hasattr(self.batch_deck_chooser, "selected_deck_name"):
+            val = self.batch_deck_chooser.selected_deck_name
+            deck_name = val() if callable(val) else val
+        elif hasattr(self.batch_deck_chooser, "deckName"):
+            val = self.batch_deck_chooser.deckName
+            deck_name = val() if callable(val) else val
+        else:
+            deck_name = ""
+
+        if not deck_name:
              info("Please select a deck first.")
              return
              
