@@ -106,6 +106,7 @@
         "local"
     ],
     "shortcuts": {
+        "modifier": "alt",
         "generate": "1",
         "toggle-options": "2",
         "toggle-hints": "3",

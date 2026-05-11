@@ -1280,20 +1280,26 @@
         }
         
         window.aiHintsKeyHandler = function(e) {
-            if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
-                return;
-            }
+            const uiCfg = window.aiHintsUiConfig || {};
+            const shortcuts = uiCfg.shortcuts || {};
+            const mod = shortcuts.modifier || 'alt';
+            
+            // Modifier check
+            if (mod === 'alt' && (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)) return;
+            if (mod === 'ctrl' && (!e.ctrlKey || e.altKey || e.metaKey || e.shiftKey)) return;
+            if (mod === 'shift' && (!e.shiftKey || e.altKey || e.ctrlKey || e.metaKey)) return;
+            if (mod === 'meta' && (!e.metaKey || e.altKey || e.ctrlKey || e.shiftKey)) return;
+            if (mod === 'none' && (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)) return;
             
             if (isEditableTarget(document.activeElement)) {
                 return;
             }
 
-            const uiCfg = window.aiHintsUiConfig || {};
-            const shortcuts = uiCfg.shortcuts || {};
             let action = null;
             
             // Use configured shortcuts
             for (const key in shortcuts) {
+                if (key === 'modifier') continue;
                 if (e.key === shortcuts[key]) {
                     action = key;
                     break;

@@ -415,14 +415,20 @@ class ConfigDialog(QDialog):
         # --- Tab 4: Shortcuts ---
         self.shortcuts_tab = QWidget()
         short_layout = QFormLayout()
+        
+        self.modifier_cb = QComboBox()
+        self.modifier_cb.addItems(["alt", "ctrl", "shift", "meta", "none"])
+        self.modifier_cb.setToolTip("The modifier key to use with shortcuts. 'meta' is the Command key on Mac or Windows key on Windows. 'none' means no modifier.")
+        short_layout.addRow("Shortcut Modifier:", self.modifier_cb)
+        
         self.shortcut_edits = {}
         shortcut_labels = {
-            "generate": "Generate / Regenerate (Alt+)",
-            "toggle-options": "Toggle Options (Alt+)",
-            "toggle-hints": "Toggle Hints (Alt+)",
-            "clear": "Clear (Alt+)",
-            "refresh": "Refresh (Alt+)",
-            "show-json": "Show JSON (Alt+)"
+            "generate": "Generate / Regenerate:",
+            "toggle-options": "Toggle Options:",
+            "toggle-hints": "Toggle Hints:",
+            "clear": "Clear:",
+            "refresh": "Refresh:",
+            "show-json": "Show JSON:"
         }
         for key, label in shortcut_labels.items():
             edit = QLineEdit()
@@ -635,6 +641,7 @@ class ConfigDialog(QDialog):
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
         
         shortcuts = c.get("shortcuts", {}) or {}
+        self.modifier_cb.setCurrentText(shortcuts.get("modifier", "alt"))
         for key, edit in self.shortcut_edits.items():
             edit.setText(shortcuts.get(key, ""))
 
@@ -996,6 +1003,7 @@ class ConfigDialog(QDialog):
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
             
             new_config["shortcuts"] = {key: edit.text().strip() for key, edit in self.shortcut_edits.items()}
+            new_config["shortcuts"]["modifier"] = self.modifier_cb.currentText()
             
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {
@@ -1150,6 +1158,7 @@ class ConfigDialog(QDialog):
 
         # Normalize shortcuts
         default_shortcuts = {
+            "modifier": "alt",
             "generate": "1",
             "toggle-options": "2",
             "toggle-hints": "3",
