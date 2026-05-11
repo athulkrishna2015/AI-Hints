@@ -24,7 +24,7 @@
     "models": {
         "openai": "gpt-4o",
         "anthropic": "claude-3-7-sonnet-latest",
-        "gemini": "gemini-2.0-flash",
+        "gemini": "gemini-3-flash-preview",
         "openrouter": "deepseek/deepseek-chat",
         "grok": "grok-2-1212",
         "deepseek": "deepseek-reasoner",
@@ -38,8 +38,9 @@
     },
     "model_fallbacks": {
         "gemini": [
-            "gemini-2.0-flash",
-            "gemini-1.5-flash"
+            "gemini-3-flash-preview",
+            "gemini-3.1-flash-lite-preview",
+            "gemini-2.0-flash"
         ],
         "groq": [
             "llama-3.1-8b-instant",

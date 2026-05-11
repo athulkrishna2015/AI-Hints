@@ -36,7 +36,7 @@ PROVIDER_ORDER = [
 DEFAULT_MODELS = {
     "openai":     "gpt-4o",
     "anthropic":  "claude-3-7-sonnet-latest",
-    "gemini":     "gemini-2.0-flash",
+    "gemini":     "gemini-3-flash-preview",
     "groq":       "llama-3.3-70b-versatile",
     "deepseek":   "deepseek-reasoner",
     "grok":       "grok-2-1212",
@@ -64,6 +64,8 @@ MODEL_SUGGESTIONS = {
         "claude-3-7-sonnet-latest",
     ],
     "gemini": [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
         "gemini-2.0-flash",
         "gemini-2.0-flash-lite-preview-02-05",
         "gemini-2.0-pro-exp-02-05",
@@ -118,9 +120,6 @@ MODEL_SUGGESTIONS = {
 LEGACY_MODEL_REPLACEMENTS = {
     ("anthropic", "claude-3-haiku-20240307"): "claude-3-5-haiku-latest",
     ("gemini", "gemini-1.5-flash"): "gemini-2.0-flash",
-    ("gemini", "gemini-3-flash-preview"): "gemini-2.0-flash",
-    ("gemini", "gemini-3.1-flash"): "gemini-2.0-flash",
-    ("gemini", "gemini-3.1-flash-lite-preview"): "gemini-2.0-flash",
     ("gemini", "models/gemini-1.5-flash"): "gemini-2.0-flash",
     ("gemini", "models/gemini-2.0-flash-exp"): "gemini-2.0-flash",
     ("groq", "llama3-8b-8192"): "llama-3.1-8b-instant",
@@ -144,10 +143,11 @@ MODEL_FALLBACKS = {
         "claude-3-5-haiku-latest",
     ],
     "gemini": [
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite-preview",
         "gemini-2.0-pro-exp-02-05",
         "gemini-1.5-pro",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
     ],
     "groq": [
         "llama-3.3-70b-versatile",
@@ -510,6 +510,13 @@ class AIClient:
                 },
             }
 
+            # Enable explicit thinking for improved quality on Gemini 3 and 2.5 models
+            if "gemini-3" in model.lower() or "gemini-2.5" in model.lower():
+                data["generationConfig"]["thinkingConfig"] = {
+                    "includeThoughts": True,
+                    "thinkingBudget": 1024
+                }
+
             try:
                 self._log_model_attempt("gemini", model, models)
                 result = self._post_json(url, data, headers)
@@ -861,7 +868,12 @@ class AIClient:
         candidates = result.get("candidates")
         if candidates:
             parts = candidates[0].get("content", {}).get("parts", [])
-            text_parts = [part.get("text", "") for part in parts if isinstance(part, dict)]
+            # Filter out thought components if Gemini returned explicit thoughts
+            text_parts = [
+                part.get("text", "") 
+                for part in parts 
+                if isinstance(part, dict) and not part.get("thought")
+            ]
             if text_parts:
                 return "\n".join(text_parts)
 
