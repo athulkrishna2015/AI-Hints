@@ -143,6 +143,7 @@ MODEL_FALLBACKS = {
         "claude-3-5-haiku-latest",
     ],
     "gemini": [
+        "gemini-flash-latest",
         "gemini-3-flash-preview",
         "gemini-3.1-flash-lite-preview",
         "gemini-2.0-pro-exp-02-05",
@@ -511,7 +512,8 @@ class AIClient:
             }
 
             # Enable explicit thinking for improved quality on Gemini 3 and 2.5 models
-            if "gemini-3" in model.lower() or "gemini-2.5" in model.lower():
+            lower_model = model.lower()
+            if "gemini-3" in lower_model or "gemini-2.5" in lower_model or "gemini-flash-latest" in lower_model:
                 data["generationConfig"]["thinkingConfig"] = {
                     "includeThoughts": True,
                     "thinkingBudget": 1024
