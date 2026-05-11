@@ -165,12 +165,16 @@ MIT
 
 ## Changelog
 
-### May 12, 2026
+### May 12, 2026 (v1.5.0)
 - **Native Gemini Batch Generation**: Full support for async Batch API execution. Push up to 1,000 cards per batch and let it generate offline!
 - **Dedicated Batch Dashboard**: New "Batch Generation" tab in Config settings. Monitor pending jobs in real-time and trigger deck-wide queuing.
+- **Seamless Native Deck Selection**: Injected Anki's official `DeckChooser` widget directly into the configuration panel for guaranteed stable, ultra-fast hierarchical searching.
+- **Modeless UI Autonomy**: Severed parent links between the Config window and Add-on Manager; you can now freely study, minimize, and navigate Anki with config open.
+- **Dynamic Cross-Gemini Failover**: Restored intelligent failover redundancy; hitting specific limits on one Gemini model now naturally advances to available sibling backups.
+- **Batch Version-Gating**: Injected granular version controls into the batch generator, allowing automated mass-upgrades of legacy cards while skipping up-to-date assets.
 - **High-Reliability Matching**: Enhanced backend-driven answer state flags to correctly highlight correct options, bypassing custom template flaws.
-- **Robust Latex Normalization**: Standardized options comparison logic so LaTeX variances like `$$` vs `\(` never cause highligh mismatches.
-- **Enhanced Dark Mode Colorway**: Boosted visibility for success metrics in dark mode by strengthening text overlays and standardizing high-contrast highlights.
+- **Robust Latex Normalization**: Standardized options comparison logic so LaTeX variances like `$$` vs `\(` never cause highlight mismatches.
+- **Clean-State Startup Recovery**: Patched non-standard library imports guaranteeing 100% load health across high-strictness environments.
 
 ### May 11, 2026
 - **Gemini 3 Native Integration**: Restored full compatibility for `gemini-3` preview models.
