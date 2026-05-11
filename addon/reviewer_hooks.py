@@ -664,8 +664,9 @@ def close_popup_if_open():
         _popup_dialog_instance.close()
         _popup_dialog_instance = None
 
-def generate_hints(is_manual=True):
-    card = mw.reviewer.card
+def generate_hints(is_manual=True, card=None):
+    if card is None:
+        card = mw.reviewer.card
     if not card:
         return
 
@@ -839,7 +840,7 @@ def init_hooks():
         if config.get("auto_generate_new", False) and card:
             if not card_has_hints(card):
                 logger.info(f"Auto-generating hints for new card {card.id}...")
-                generate_hints(is_manual=False)
+                generate_hints(is_manual=False, card=card)
 
     gui_hooks.reviewer_did_show_question.append(on_show_question)
     gui_hooks.reviewer_did_show_answer.append(_trigger_frontend_setup)
