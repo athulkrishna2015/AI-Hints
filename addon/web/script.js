@@ -804,7 +804,7 @@
         return revealed;
     }
 
-    function setupAIHints(manualData) {
+    function setupAIHints(manualData, isManualUpdate) {
         const current = currentCard();
         if (!current.id && current.ord == null) {
             return;
@@ -815,7 +815,7 @@
         const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
         const cardBody = document.getElementById('qa');
         if (!cardBody) {
-            setTimeout(function() { setupAIHints(manualData); }, 50);
+            setTimeout(function() { setupAIHints(manualData, isManualUpdate); }, 50);
             return;
         }
         
@@ -1159,10 +1159,18 @@
         }
 
         if (uiCfg.auto_reveal || manualData) {
-            if (uiCfg.auto_show_hints) {
+            let showHints = uiCfg.auto_show_hints || false;
+            let showOptions = uiCfg.auto_show_options || false;
+            
+            if (isManualUpdate) {
+                showHints = uiCfg.manual_show_hints || false;
+                showOptions = uiCfg.manual_show_options || false;
+            }
+
+            if (showHints) {
                 revealAIHints('hints');
             }
-            if (uiCfg.auto_show_options) {
+            if (showOptions) {
                 revealAIHints('options');
             }
         } else {
@@ -1200,7 +1208,7 @@
         }
     };
 
-    window.aiHintsUpdateData = function(data) {
+    window.aiHintsUpdateData = function(data, isManualUpdate) {
         if (window.aiHintsUiConfig) {
             window.aiHintsUiConfig.is_generating = false;
         }
@@ -1210,13 +1218,21 @@
         const cardKey = (current.id || '') + '_' + (current.ord || '0') + '_' + reviewToken;
         if (current.id) {
             Persistence.saveData(cardKey, data);
-            // Reset state based on config, not hardcoded true
+            
+            let showHints = uiCfg.auto_show_hints || false;
+            let showOptions = uiCfg.auto_show_options || false;
+            
+            if (isManualUpdate) {
+                showHints = uiCfg.manual_show_hints || false;
+                showOptions = uiCfg.manual_show_options || false;
+            }
+
             Persistence.saveState(cardKey, { 
-                hints: uiCfg.auto_show_hints || false, 
-                options: uiCfg.auto_show_options || false 
+                hints: showHints, 
+                options: showOptions 
             });
         }
-        setupAIHints(data);
+        setupAIHints(data, isManualUpdate);
     };
 
     window.aiHintsClearData = function() {

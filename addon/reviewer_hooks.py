@@ -180,6 +180,8 @@ def on_webview_will_set_content(web_content, context):
         "auto_reveal": auto_reveal,
         "auto_show_hints": config.get("auto_show_hints", False),
         "auto_show_options": config.get("auto_show_options", False),
+        "manual_show_hints": config.get("manual_show_hints", True),
+        "manual_show_options": config.get("manual_show_options", False),
         "mathjax_format": config.get("mathjax_format", "delimiters"),
         "review_token": _review_token,
         "is_generating": card.id in _generating_card_ids if card else False,
@@ -658,7 +660,7 @@ def close_popup_if_open():
         _popup_dialog_instance.close()
         _popup_dialog_instance = None
 
-def generate_hints():
+def generate_hints(is_manual=True):
     card = mw.reviewer.card
     if not card:
         return
@@ -689,7 +691,7 @@ def generate_hints():
         return
 
     front, back = parser.get_note_content(card.note(), card)
-    logger.info("AI-Hints generation started for card %s using provider: %s", card_id, provider)
+    logger.info("AI-Hints generation started for card %s using provider: %s (manual=%s)", card_id, provider, is_manual)
     
     # Trigger animation in frontend
     mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(true); }")
@@ -758,7 +760,7 @@ def generate_hints():
                 if current_reviewer_card and current_reviewer_card.id == card.id:
                     try:
                         mw.reviewer.web.eval(
-                            f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}); }}"
+                            f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}, {'true' if is_manual else 'false'}); }}"
                         )
                     except Exception as e:
                         logger.error(f"AI-Hints direct web update failed: {e}")
@@ -831,7 +833,7 @@ def init_hooks():
         if config.get("auto_generate_new", False) and card:
             if not card_has_hints(card):
                 logger.info(f"Auto-generating hints for new card {card.id}...")
-                generate_hints()
+                generate_hints(is_manual=False)
 
     gui_hooks.reviewer_did_show_question.append(on_show_question)
     gui_hooks.reviewer_did_show_answer.append(_trigger_frontend_setup)

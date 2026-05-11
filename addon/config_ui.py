@@ -232,6 +232,14 @@ class ConfigDialog(QDialog):
         self.auto_show_options_cb = QCheckBox("Auto Show Options on Card Load")
         self.auto_show_options_cb.setToolTip("Automatically expand and show options when a card is loaded.")
         gen_layout.addRow(self.auto_show_options_cb)
+
+        self.manual_show_hints_cb = QCheckBox("Auto Show Hints after Manual Generation")
+        self.manual_show_hints_cb.setToolTip("Automatically expand and show hints after clicking Generate/Regenerate.")
+        gen_layout.addRow(self.manual_show_hints_cb)
+
+        self.manual_show_options_cb = QCheckBox("Auto Show Options after Manual Generation")
+        self.manual_show_options_cb.setToolTip("Automatically expand and show options after clicking Generate/Regenerate.")
+        gen_layout.addRow(self.manual_show_options_cb)
         
         self.general_tab.setLayout(gen_layout)
         self.tabs.addTab(self.general_tab, "General")
@@ -639,6 +647,8 @@ class ConfigDialog(QDialog):
         self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", False))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
+        self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
+        self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
         
         shortcuts = c.get("shortcuts", {}) or {}
         self.modifier_cb.setCurrentText(shortcuts.get("modifier", "alt"))
@@ -918,6 +928,8 @@ class ConfigDialog(QDialog):
         self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", False))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
+        self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
+        self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
         logger.info("Restored General defaults.")
         tooltip("General defaults restored.")
 
@@ -1001,6 +1013,8 @@ class ConfigDialog(QDialog):
             new_config["auto_generate_new"] = self.auto_generate_new_cb.isChecked()
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
+            new_config["manual_show_hints"] = self.manual_show_hints_cb.isChecked()
+            new_config["manual_show_options"] = self.manual_show_options_cb.isChecked()
             
             new_config["shortcuts"] = {key: edit.text().strip() for key, edit in self.shortcut_edits.items()}
             new_config["shortcuts"]["modifier"] = self.modifier_cb.currentText()
@@ -1155,6 +1169,8 @@ class ConfigDialog(QDialog):
         config.setdefault("auto_generate_new", False)
         config.setdefault("auto_show_hints", False)
         config.setdefault("auto_show_options", False)
+        config.setdefault("manual_show_hints", True)
+        config.setdefault("manual_show_options", False)
 
         # Normalize shortcuts
         default_shortcuts = {
