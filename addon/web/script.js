@@ -882,7 +882,8 @@
                 // Handle keyed JSON (e.g., { "c1": { "hints": [...], "options": [...] } })
                 if (data && !data.hints && !data.options) {
                     const current = currentCard();
-                    const cardKey = 'c' + ((current.ord || 0) + 1);
+                    const ordNum = parseInt(current.ord || 0, 10);
+                    const cardKey = 'c' + (ordNum + 1);
                     if (data[cardKey]) {
                         data = data[cardKey];
                     } else {
