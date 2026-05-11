@@ -1,64 +1,88 @@
 import json
-import urllib.request
-import urllib.error
-import ssl
+import sys
+import os
 
-def fetch_models(provider, url, api_key, auth_header="Authorization", auth_prefix="Bearer "):
-    print(f"--- Fetching {provider} ---")
-    headers = {auth_header: f"{auth_prefix}{api_key}"}
-    req = urllib.request.Request(url, headers=headers)
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    
-    try:
-        with urllib.request.urlopen(req, context=ctx, timeout=10) as response:
-            data = json.loads(response.read().decode())
-            if "data" in data:
-                models = [m.get("id") for m in data["data"] if m.get("id")]
-            elif isinstance(data, list):
-                models = [m.get("id") if isinstance(m, dict) else m for m in data]
-            else:
-                models = []
-            
-            # Filter and sort
-            models = sorted(list(set(models)))
-            print(f"Found {len(models)} models.")
-            return models
-    except Exception as e:
-        print(f"Error fetching {provider}: {e}")
-        return []
+# Add workspace to path so we can import addon modules
+sys.path.insert(0, "/mnt/0946E88701BE265B/portable/anki/addons/AI-Hints")
+
+# Mock the global `mw` and logging needed by ai_client
+from unittest.mock import MagicMock
+import logging
+import urllib.request
+
+# Define minimalistic sys modules to prevent import errors
+class MockLogger:
+    def info(self, *args): print("INFO:", *args)
+    def warning(self, *args): print("WARNING:", *args)
+    def error(self, *args): print("ERROR:", *args)
+    def debug(self, *args): print("DEBUG:", *args)
+
+sys.modules["aqt"] = MagicMock()
+sys.modules["aqt.utils"] = MagicMock()
+sys.modules["anki"] = MagicMock()
+
+# Import the client AFTER mocking
+try:
+    from addon.ai_client import AIClient
+except ImportError:
+    print("Could not import addon.ai_client. Retrying absolute.")
+    sys.path.insert(0, os.path.abspath("."))
+    from addon.ai_client import AIClient
 
 def main():
-    with open("addon/config.json", "r") as f:
-        config = json.load(f)
+    meta_path = "/mnt/0946E88701BE265B/portable/anki/addons/AI-Hints/addon/meta.json"
+    output_path = "/mnt/0946E88701BE265B/portable/anki/addons/AI-Hints/scratch/all_available_models.json"
     
+    print("Reading meta.json...")
+    with open(meta_path, 'r') as f:
+        meta = json.load(f)
+    
+    config = meta.get("config", {})
     api_keys = config.get("api_keys", {})
-    results = {}
+    print(f"Found {len([k for k,v in api_keys.items() if v])} configured providers.")
+
+    # Read existing models to preserve other providers' old data
+    final_results = {}
+    if os.path.exists(output_path):
+        with open(output_path, 'r') as f:
+            try:
+                final_results = json.load(f)
+            except:
+                pass
+
+    # Instantiate the client with extracted config
+    client = AIClient(config=config)
     
-    providers = {
-        "openai": "https://api.openai.com/v1/models",
-        "groq": "https://api.groq.com/openai/v1/models",
-        "openrouter": "https://openrouter.ai/api/v1/models",
-        "mistral": "https://api.mistral.ai/v1/models",
-        "together": "https://api.together.xyz/v1/models",
-        "sambanova": "https://api.sambanova.ai/v1/models",
-        "cerebras": "https://api.cerebras.ai/v1/models",
-        "nvidia": "https://integrate.api.nvidia.com/v1/models",
-        "deepseek": "https://api.deepseek.com/models",
-        "huggingface": "https://router.huggingface.co/v1/models"
-    }
-    
-    for p, url in providers.items():
-        key = api_keys.get(p)
-        if key:
-            models = fetch_models(p, url, key)
+    providers = [
+        "gemini", "groq", "openrouter", "huggingface", 
+        "together", "sambanova", "cerebras", "openai", 
+        "anthropic", "deepseek", "mistral", "nvidia", "grok"
+    ]
+
+    for provider in providers:
+        key = api_keys.get(provider, "").strip()
+        if not key:
+            print(f"Skipping {provider} - no API key.")
+            continue
+            
+        print(f"Fetching models for {provider}...")
+        try:
+            # Directly call fetch_models from our class
+            models = client.fetch_models(provider)
             if models:
-                results[p] = models
-    
-    with open("scratch/all_available_models.json", "w") as f:
-        json.dump(results, f, indent=4)
-    print("\nResults saved to artifacts/all_available_models.json")
+                models.sort()
+                print(f"  Success! Found {len(models)} models.")
+                final_results[provider] = models
+            else:
+                print(f"  No models returned for {provider}.")
+        except Exception as e:
+            print(f"  FAILED {provider}: {e}")
+
+    # Write out final combined result
+    print(f"Writing all results to {output_path}...")
+    with open(output_path, 'w') as f:
+        json.dump(final_results, f, indent=4)
+    print("Operation complete.")
 
 if __name__ == "__main__":
     main()

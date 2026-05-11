@@ -4,10 +4,8 @@ import time
 import threading
 from typing import List, Dict, Set, Any
 from aqt import mw
-from aqt.utils import tooltip, info
 from aqt.qt import QTimer
-
-from .logger import logger
+from .logger import logger, info, tooltip
 from .ai_client import AIClient
 from .card_parser import CardParser
 
