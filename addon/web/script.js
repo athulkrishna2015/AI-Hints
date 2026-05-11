@@ -1192,22 +1192,35 @@
         }
     }
 
-    window.aiHintsSetGenerating = function(isGenerating) {
+    window.aiHintsSetGenerating = function(isGenerating, statusText) {
         if (window.aiHintsUiConfig) {
             window.aiHintsUiConfig.is_generating = isGenerating;
         }
-        // Instead of a full setupAIHints, just target the button for speed
+        
         const btn = document.querySelector('[data-ai-hints-action="generate"]');
         if (btn) {
             if (isGenerating) {
                 btn.innerHTML = '✨ Generating...';
                 btn.disabled = true;
                 btn.classList.add('ai-hints-btn-generating');
+            } else if (statusText) {
+                // Stop animating, show error status briefly, then reset
+                btn.classList.remove('ai-hints-btn-generating');
+                btn.disabled = true;
+                btn.innerHTML = (statusText === 'Offline') ? '⚠️ Offline' : '⚠️ ' + statusText;
+                
+                // Wait 3 seconds then fully rebuild via setupAIHints
+                setTimeout(function() {
+                    if (window.aiHintsUiConfig) {
+                        window.aiHintsUiConfig.is_generating = false;
+                    }
+                    setupAIHints();
+                }, 3000);
             } else {
-                // If stopping, setupAIHints will be called anyway by UpdateData
-                // but we can do a quick reset here if needed.
+                // Standard instant reset
                 btn.classList.remove('ai-hints-btn-generating');
                 btn.disabled = false;
+                setupAIHints();
             }
         }
     };

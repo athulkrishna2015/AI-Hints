@@ -716,8 +716,23 @@ def generate_hints(is_manual=True, card=None):
                 return
 
             if not data or (not data.get("hints") and not data.get("options")):
-                info("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
-                refresh_current_card()
+                err_status = data.get("_ai_error_type") or "Failed"
+                
+                # Safely update frontend to transition from animation -> feedback -> rest state
+                if current_reviewer_card and current_reviewer_card.id == card.id:
+                    try:
+                        mw.reviewer.web.eval(
+                            f"if (window.aiHintsSetGenerating) {{ window.aiHintsSetGenerating(false, '{err_status}'); }}"
+                        )
+                    except Exception:
+                        pass
+                
+                # Avoid intrusive system popups on background errors or simple network drops
+                if is_manual and err_status != "Offline":
+                    info("AI-Hints: Failed to generate hints. Check your API key and provider settings.")
+                
+                # CRITICAL: Do NOT refresh_current_card() here. It breaks DOM animations 
+                # and previously caused recursion bugs by reading the lock before cleanup.
                 return
 
             data = parser.normalize_hint_data(data)
@@ -779,6 +794,10 @@ def generate_hints(is_manual=True, card=None):
                     _popup_dialog_instance = ResultsPopup(mw, html_content)
                     _popup_dialog_instance.show()
             else:
+                if current_reviewer_card and current_reviewer_card.id == card.id:
+                    try:
+                        mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false, 'Failed'); }")
+                    except Exception: pass
                 info("AI-Hints: No hints or options were generated.")
         finally:
             _generating_card_ids.discard(card_id)
@@ -786,12 +805,26 @@ def generate_hints(is_manual=True, card=None):
     import threading
 
     def run_async():
+        import socket
+        import urllib.error
         try:
             res = client.generate_options(front, back)
             mw.taskman.run_on_main(lambda: on_done(res))
         except Exception as e:
             logger.error(f"AI-Hints generation error: {e}")
-            mw.taskman.run_on_main(lambda: on_done({"hints": [], "options": []}))
+            
+            is_network = False
+            if isinstance(e, (socket.timeout, ConnectionError, TimeoutError)):
+                is_network = True
+            elif isinstance(e, urllib.error.URLError) and not isinstance(e, urllib.error.HTTPError):
+                is_network = True
+            
+            payload = {
+                "hints": [], 
+                "options": [], 
+                "_ai_error_type": "Offline" if is_network else "Failed"
+            }
+            mw.taskman.run_on_main(lambda: on_done(payload))
 
     threading.Thread(target=run_async, daemon=True).start()
 

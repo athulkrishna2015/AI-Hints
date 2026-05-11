@@ -236,6 +236,7 @@ class AIClient:
             logger.error("AI-Hints: No configured AI provider is ready.")
             return {"hints": [], "options": []}
         
+        last_exception = None
         # Try providers in sequence
         for provider in all_potential:
             try:
@@ -246,9 +247,13 @@ class AIClient:
                         logger.info(f"AI-Hints: Fallback successful using provider: {provider}")
                     return result
             except Exception as e:
+                last_exception = e
                 logger.error(f"Provider {provider} failed: {e}")
                 continue
                 
+        if last_exception:
+            raise last_exception
+            
         return {"hints": [], "options": []}
 
     def has_ready_provider(self, provider: str) -> bool:
