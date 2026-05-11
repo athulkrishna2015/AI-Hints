@@ -218,7 +218,7 @@ class AIClient:
             "1. NO REPETITION: Do NOT repeat the question, front text, or the prompt itself in the hints or options.\n"
             "2. DEDUPLICATE: All options must be mathematically and textually distinct. Never provide the same value in different formats.\n"
             "3. UNIFORMITY: Distractors MUST perfectly match the format, grammar, length, and style of the correct answer.\n"
-            "4. CLOZE FOCUS: If 'Current cloze deletion' is provided, options MUST ONLY contain the exact missing text. Omit all surrounding context.\n"
+            "4. CLOZE CONTEXT: If 'Current cloze deletion' is provided, options MUST be full meaningful words or equations, not just the missing fragment. For example, for '{{c1::anti}}ferromagnet', output 'antiferromagnet' (not 'anti'). For '\\(F = {{c1::ma}}\\)', output '\\(F = ma\\)' (not '\\(ma\\)').\n"
             "5. MULTI-CLOZE HANDLING: For multiple clozes with the same ID, each option MUST be a comma-separated list of values (e.g., 'val1, val2') corresponding to each cloze in order.\n"
             "6. NO VERBATIM HINTS: Hints must provide underlying principles, mnemonics, or contextual clues. Never repeat card content verbatim.\n"
             "7. CONCISE: Keep hints short, specific, and focused. Avoid wordy explanations.\n\n"
