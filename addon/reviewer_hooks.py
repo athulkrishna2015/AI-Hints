@@ -135,7 +135,8 @@ def on_webview_will_set_content(web_content, context):
         target_fields=config.get("target_fields", []),
         note_type_fields=config.get("note_type_fields", {}),
         storage_mode=config.get("storage_mode", "json"),
-        mathjax_format=config.get("mathjax_format", "delimiters")
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
     )
 
     card = getattr(context, "card", None)
@@ -183,6 +184,7 @@ def on_webview_will_set_content(web_content, context):
         "manual_show_hints": config.get("manual_show_hints", True),
         "manual_show_options": config.get("manual_show_options", False),
         "mathjax_format": config.get("mathjax_format", "delimiters"),
+        "fix_latex": config.get("fix_latex", False),
         "review_token": _review_token,
         "is_generating": card.id in _generating_card_ids if card else False,
         "shortcuts": config.get("shortcuts", {})
@@ -258,7 +260,8 @@ def clear_hints():
         config.get("target_fields", []),
         config.get("note_type_fields", {}),
         config.get("storage_mode", "json"),
-        mathjax_format=config.get("mathjax_format", "delimiters")
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
     )
     
     note = card.note()
@@ -322,7 +325,8 @@ def clear_ai_hints_from_browser_selection(browser):
         config.get("target_fields", []),
         config.get("note_type_fields", {}),
         config.get("storage_mode", "json"),
-        mathjax_format=config.get("mathjax_format", "delimiters")
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
     )
 
     notes_by_id = {}
@@ -681,7 +685,8 @@ def generate_hints(is_manual=True):
         config.get("target_fields", []),
         config.get("note_type_fields", {}),
         config.get("storage_mode", "json"),
-        mathjax_format=config.get("mathjax_format", "delimiters")
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
     )
     client = AIClient(config)
     if not client.has_any_ready_provider():
@@ -798,7 +803,8 @@ def card_has_hints(card):
         target_fields=config.get("target_fields", []),
         note_type_fields=config.get("note_type_fields", {}),
         storage_mode=config.get("storage_mode", "json"),
-        mathjax_format=config.get("mathjax_format", "delimiters")
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
     )
     
     try:

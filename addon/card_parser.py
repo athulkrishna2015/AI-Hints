@@ -11,17 +11,18 @@ except ImportError:
 
 class CardParser:
 
-    def __init__(self, target_fields: List[str], note_type_fields: Dict[str, List[str]] = None, storage_mode: str = "json", mathjax_format: str = "delimiters"):
+    def __init__(self, target_fields: List[str], note_type_fields: Dict[str, List[str]] = None, storage_mode: str = "json", mathjax_format: str = "delimiters", fix_latex: bool = False):
         self.target_fields = target_fields
         self.note_type_fields = note_type_fields or {}
         self.storage_mode = storage_mode
         self.mathjax_format = mathjax_format
+        self.fix_latex = fix_latex
         self.container_class = "ai-hints-container"
         self.json_class = "ai-hints-json"
 
     def _fix_lazy_latex(self, text: str) -> str:
         """Repairs common AI math errors like missing backslashes or joined commands."""
-        return fix_latex(text, output_format=self._latex_output_format())
+        return fix_latex(text, output_format=self._latex_output_format(), fix_latex=self.fix_latex)
 
     def normalize_hint_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize generated hint text before storage or direct reviewer injection."""
@@ -87,7 +88,7 @@ class CardParser:
         return text.strip()
 
     def _normalize_math_text(self, text: str) -> str:
-        return normalize_math_text(text, output_format=self._latex_output_format())
+        return normalize_math_text(text, output_format=self._latex_output_format(), fix_latex=self.fix_latex)
 
     def _latex_output_format(self) -> str:
         if str(self.mathjax_format).lower() in {"inline", "dollar", "dollars"}:
@@ -110,7 +111,7 @@ class CardParser:
         if not isinstance(text, str):
             return text
 
-        text = normalize_math_text(text, output_format="anki")
+        text = normalize_math_text(text, output_format="anki", fix_latex=self.fix_latex)
         
         # Replace \( ... \) and \[ ... \] with <anki-mathjax> ... </anki-mathjax>
         text = re.sub(r'\\\((.*?)\\\)', r'<anki-mathjax>\1</anki-mathjax>', text, flags=re.DOTALL)

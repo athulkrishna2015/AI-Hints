@@ -235,6 +235,9 @@
     }
 
     function fixLatexSpan(span) {
+        if (window.aiHintsUiConfig && window.aiHintsUiConfig.fix_latex === false) {
+            return span;
+        }
         let text = String(span || '');
         const commands = [
             'exp', 'lambda', 'frac', 'left', 'right', 'sin', 'cos', 'tan',
@@ -620,7 +623,8 @@
         content = content.replace(/\\\[([\s\S]*?)\\\]/g, function(match, inner) {
             return '\\[' + fixLatexSpan(inner) + '\\]';
         });
-        if (!/<anki-mathjax/i.test(content)) {
+        const doFix = !(window.aiHintsUiConfig && window.aiHintsUiConfig.fix_latex === false);
+        if (doFix && !/<anki-mathjax/i.test(content)) {
             if (shouldWrapStandaloneMath(content)) {
                 content = '\\(' + fixLatexSpan(content.trim()) + '\\)';
             } else {

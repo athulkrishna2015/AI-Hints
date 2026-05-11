@@ -55,7 +55,7 @@ class CardParserTests(unittest.TestCase):
         self.assertEqual(back, "Alpha")
 
     def test_inline_mathjax_format_uses_dollar_delimiters(self):
-        parser = CardParser(["Back"], mathjax_format="inline")
+        parser = CardParser(["Back"], mathjax_format="inline", fix_latex=True)
 
         data = parser.normalize_hint_data({"options": ["x_i"]})
 

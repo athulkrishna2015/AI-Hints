@@ -147,6 +147,7 @@ class ConfigDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("AI-Hints Configuration")
+        self.setModal(False)
         self.setMinimumSize(600, 700)
         self.addon_dir = os.path.dirname(__file__)
         self.config = self._normalize_config(mw.addonManager.getConfig(ADDON_PACKAGE) or {})
@@ -190,10 +191,12 @@ class ConfigDialog(QDialog):
         gen_layout = QFormLayout()
         
         self.ai_provider_cb = QComboBox()
+        self.ai_provider_cb.setToolTip("Select the main AI model provider for generating hints.")
         gen_layout.addRow("Active AI Provider:", self.ai_provider_cb)
         
         self.options_count_sb = QSpinBox()
         self.options_count_sb.setRange(1, 10)
+        self.options_count_sb.setToolTip("Set how many multiple-choice options (answers) the AI should generate per card.")
         gen_layout.addRow("Number of Options:", self.options_count_sb)
         
         self.storage_mode_cb = QComboBox()
@@ -205,24 +208,33 @@ class ConfigDialog(QDialog):
         self.mathjax_format_cb.addItems(["delimiters", "inline"])
         self.mathjax_format_cb.setToolTip(r"delimiters: \( ... \), \[ ... \]. inline: $ ... $, $$ ... $")
         gen_layout.addRow("MathJax Format:", self.mathjax_format_cb)
+        
+        self.fix_latex_cb = QCheckBox("Repair AI LaTeX Errors")
+        self.fix_latex_cb.setToolTip("Automatically fix common AI math errors like missing backslashes or missing delimiters.")
+        gen_layout.addRow(self.fix_latex_cb)
 
         # --- Button Visibility Group ---
         button_group = QGroupBox("Button Visibility")
         button_layout = QFormLayout()
         
         self.show_hints_cb = QCheckBox("Show Hints Button")
+        self.show_hints_cb.setToolTip("Render the foldable 'Hints' section container on the review screen.")
         button_layout.addRow(self.show_hints_cb)
         
         self.show_options_cb = QCheckBox("Show Options Button (Sequential)")
+        self.show_options_cb.setToolTip("Render the clickable 'Options' section container on the review screen.")
         button_layout.addRow(self.show_options_cb)
         
         self.show_on_card_cb = QCheckBox("Show Generate Button on Review Card")
+        self.show_on_card_cb.setToolTip("Embed generation controls (Generate, Regenerate, Clear) inline inside the card itself.")
         button_layout.addRow(self.show_on_card_cb)
         
         self.show_in_bottom_bar_cb = QCheckBox("Show Generate Button in Review Bar")
+        self.show_in_bottom_bar_cb.setToolTip("Place generation controls at the very bottom of the reviewer, next to answer buttons.")
         button_layout.addRow(self.show_in_bottom_bar_cb)
 
         self.show_in_popup_cb = QCheckBox("Show Results in Popup Window")
+        self.show_in_popup_cb.setToolTip("Open successful generations in a non-blocking popup window for review before storing.")
         button_layout.addRow(self.show_in_popup_cb)
         
         button_group.setLayout(button_layout)
@@ -324,10 +336,14 @@ class ConfigDialog(QDialog):
         local_group = QGroupBox("Local AI / Ollama Settings")
         local_layout = QFormLayout()
         self.local_url_edit = QLineEdit()
+        self.local_url_edit.setToolTip("Point to an OpenAI-compatible backend or Ollama instance (e.g., http://localhost:11434/v1).")
         self.local_model_edit = QLineEdit()
+        self.local_model_edit.setToolTip("Define the specific locally installed model tag to run inference with.")
         self.local_api_key_edit = QLineEdit()
         self.local_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.local_api_key_edit.setToolTip("Provide auth key if running a secured local relay (usually blank for localhost).")
         self.local_fallback_cb = QCheckBox("Use Local AI as fallback")
+        self.local_fallback_cb.setToolTip("Automatically attempt connection to the local instance below if all cloud endpoints time out or report failures.")
         local_layout.addRow(self.local_fallback_cb)
         local_layout.addRow("Base URL:", self.local_url_edit)
         local_layout.addRow("Model Name:", self.local_model_edit)
@@ -399,6 +415,7 @@ class ConfigDialog(QDialog):
         
         adv_layout.addWidget(QLabel("System Prompt:"))
         self.system_prompt_edit = QTextEdit()
+        self.system_prompt_edit.setToolTip("Customize the core AI persona instructions defining generation constraints, math syntaxes, and output layout.")
         adv_layout.addWidget(self.system_prompt_edit)
         
         adv_layout.addWidget(QLabel("Note Type Fields:"))
@@ -406,10 +423,12 @@ class ConfigDialog(QDialog):
         if mw.col is not None:
             self.nt_selector_layout = QVBoxLayout()
             self.nt_cb = QComboBox()
+            self.nt_cb.setToolTip("Switch active Note Type to edit allowed field scans.")
             self.nt_cb.currentIndexChanged.connect(self.on_nt_changed)
             self.nt_selector_layout.addWidget(self.nt_cb)
             
             self.fld_list = QListWidget()
+            self.fld_list.setToolTip("Check off specifically which fields in this note type contain textual question context the AI should ingest.")
             self.fld_list.itemChanged.connect(self.on_fld_changed)
             self.nt_selector_layout.addWidget(self.fld_list)
             
@@ -426,6 +445,7 @@ class ConfigDialog(QDialog):
         # Raw Editor Toggle
         self.raw_toggle = QPushButton("Show Raw JSON Editor")
         self.raw_toggle.setCheckable(True)
+        self.raw_toggle.setToolTip("Directly inspect and write the raw serialization JSON for fine-grained control.")
         adv_layout.addWidget(self.raw_toggle)
         
         self.raw_editor = QTextEdit()
@@ -454,10 +474,19 @@ class ConfigDialog(QDialog):
             "refresh": "Refresh:",
             "show-json": "Show JSON:"
         }
+        shortcut_tooltips = {
+            "generate": "Triggers automatic generation or regeneration of hints for the current card.",
+            "toggle-options": "Collapses or expands the multiple-choice options field.",
+            "toggle-hints": "Collapses or expands the written hints hint field.",
+            "clear": "Wipes the stored hints payload from the card metadata irrevocably.",
+            "refresh": "Forces the UI renderer to re-parse the current card data from scratch.",
+            "show-json": "Reveals debugging panel showing internal JSON storage data for the note."
+        }
         for key, label in shortcut_labels.items():
             edit = QLineEdit()
             edit.setPlaceholderText("e.g. 1")
             edit.setFixedWidth(50)
+            edit.setToolTip(shortcut_tooltips.get(key, ""))
             self.shortcut_edits[key] = edit
             short_layout.addRow(label, edit)
         
@@ -654,6 +683,7 @@ class ConfigDialog(QDialog):
         self.options_count_sb.setValue(c.get("options_count", 4))
         self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
         self.mathjax_format_cb.setCurrentText(c.get("mathjax_format", "delimiters"))
+        self.fix_latex_cb.setChecked(c.get("fix_latex", False))
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
         self.show_options_cb.setChecked(c.get("show_options_button", True))
         self.show_on_card_cb.setChecked(c.get("show_on_card", True))
@@ -935,6 +965,7 @@ class ConfigDialog(QDialog):
         self.options_count_sb.setValue(c.get("options_count", 4))
         self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
         self.mathjax_format_cb.setCurrentText(c.get("mathjax_format", "delimiters"))
+        self.fix_latex_cb.setChecked(c.get("fix_latex", False))
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
         self.show_options_cb.setChecked(c.get("show_options_button", True))
         self.show_on_card_cb.setChecked(c.get("show_on_card", True))
@@ -1020,6 +1051,7 @@ class ConfigDialog(QDialog):
             new_config["options_count"] = self.options_count_sb.value()
             new_config["storage_mode"] = self.storage_mode_cb.currentText()
             new_config["mathjax_format"] = self.mathjax_format_cb.currentText()
+            new_config["fix_latex"] = self.fix_latex_cb.isChecked()
             new_config["show_hints_button"] = self.show_hints_cb.isChecked()
             new_config["show_options_button"] = self.show_options_cb.isChecked()
             new_config["show_on_card"] = self.show_on_card_cb.isChecked()
@@ -1162,6 +1194,7 @@ class ConfigDialog(QDialog):
         config.setdefault("ai_provider", "openai")
         config.setdefault("storage_mode", "json")
         config.setdefault("mathjax_format", "delimiters")
+        config.setdefault("fix_latex", False)
         config.setdefault("target_fields", [])
         config.setdefault("system_prompt", "")
         config.setdefault("show_hints_button", True)
@@ -1210,7 +1243,8 @@ _config_dialog_instance = None
 
 def on_config_dialog(parent=None):
     global _config_dialog_instance
-    if parent is None: parent = mw
+    # Always use mw as parent to stay decoupled from the potentially modal Add-ons management window
+    parent = mw
     # Reuse existing window if already open
     if _config_dialog_instance is not None and _config_dialog_instance.isVisible():
         _config_dialog_instance.raise_()
@@ -1218,6 +1252,7 @@ def on_config_dialog(parent=None):
         return
     _config_dialog_instance = ConfigDialog(parent)
     _config_dialog_instance.setWindowFlag(Qt.WindowType.Window, True)
+    _config_dialog_instance.setWindowModality(Qt.WindowModality.NonModal)
     _config_dialog_instance.show()
 
 def init_config_ui():
