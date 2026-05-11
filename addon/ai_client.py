@@ -878,6 +878,10 @@ class AIClient:
                     result = self._get_json(url, headers)
                     return [m.get("id") for m in result.get("data", []) if m.get("id")]
 
+            elif provider == "huggingface":
+                # HF hub contains thousands of models; return our curated serverless recommendations directly
+                return MODEL_SUGGESTIONS.get("huggingface", [])
+
             # Custom providers
             custom_providers = self.config.get("custom_providers", {}) or {}
             if provider in custom_providers:
