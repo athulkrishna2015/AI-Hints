@@ -149,11 +149,11 @@ class BatchManager:
                 content = client._extract_content(resp_body)
                 data = client._parse_json_result(content)
                 if data.get("hints") or data.get("options") or data.get("distractors"):
-                     data = parser.normalize_hint_data(data)
-                     from .reviewer_hooks import _ADDON_VERSION # Safe late import
-                     if _ADDON_VERSION:
-                         data["_version"] = _ADDON_VERSION
-                     parsed_results[str(key)] = data
+                    data = parser.normalize_hint_data(data)
+                    from .reviewer_hooks import _ADDON_VERSION # Safe late import
+                    if _ADDON_VERSION:
+                        data["_version"] = _ADDON_VERSION
+                    parsed_results[str(key)] = data
             except Exception as e:
                 logger.error(f"AI-Hints: Failed to extract one response item in batch {job_name} (key={key}): {e}")
         

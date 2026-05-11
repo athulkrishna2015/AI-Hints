@@ -584,7 +584,7 @@ class AIClient:
             is_lite = "lite" in lower_model
 
             if supports_thinking and not is_lite:
-                 inner_req["generationConfig"]["thinkingConfig"] = {
+                inner_req["generationConfig"]["thinkingConfig"] = {
                     "includeThoughts": True,
                     "thinkingBudget": 1024
                 }
