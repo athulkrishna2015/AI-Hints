@@ -395,7 +395,7 @@ class ConfigDialog(QDialog):
         
         self.ag_dashboard_btn = QPushButton("🚀 Open Setup Dashboard")
         self.ag_dashboard_btn.setToolTip("Open the local web interface to configure Google accounts.")
-        self.ag_dashboard_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("http://localhost:3015/frontend/index.html")))
+        self.ag_dashboard_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("http://localhost:3000/frontend/index.html")))
         
         self.ag_fetch_btn = QPushButton("📥 Fetch Native Binary")
         self.ag_fetch_btn.setToolTip("Manually download the latest executable from GitHub if missing.")
@@ -1903,7 +1903,7 @@ class ConfigDialog(QDialog):
             new_config["models"]["antigravity"] = self.ag_model_edit.currentText().strip() or DEFAULT_MODELS.get("antigravity", "")
             new_config["antigravity_proxy"] = {
                 "enabled": self.ag_enable_cb.isChecked(),
-                "port": 3015
+                "port": 3000
             }
             new_config["local_endpoint"] = {
                 "enabled": self.local_fallback_cb.isChecked(),

@@ -108,7 +108,7 @@ class ProxyManager:
             os.chmod(self.executable, 0o755)
             
         env = os.environ.copy()
-        env["PORT"] = "3015"
+        env["PORT"] = "3000"
         
         try:
             # We use creationflags/preexec_fn to detach the process slightly 
@@ -142,7 +142,7 @@ class ProxyManager:
             import threading
             threading.Thread(target=_reader_thread, daemon=True).start()
             
-            logger.info(f"Antigravity Proxy daemon started (PID: {self.process.pid}) on port 3015.")
+            logger.info(f"Antigravity Proxy daemon started (PID: {self.process.pid}) on port 3000.")
         except Exception as e:
             logger.error(f"Failed to start Antigravity Proxy: {e}")
 

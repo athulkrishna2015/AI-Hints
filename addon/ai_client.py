@@ -424,7 +424,7 @@ class AIClient:
             ag_cfg = self.config.get("antigravity_proxy") or {}
             if not isinstance(ag_cfg, dict):
                 ag_cfg = {}
-            port = ag_cfg.get("port", 3015)
+            port = ag_cfg.get("port", 3000)
             base_url = f"http://localhost:{port}/v1"
             api_key = "antigravity"
             models = self._models_for_provider(provider, DEFAULT_MODELS["antigravity"])
@@ -902,7 +902,7 @@ class AIClient:
 
             elif provider == "antigravity":
                 ag_cfg = self.config.get("antigravity_proxy") or {}
-                port = ag_cfg.get("port", 3015)
+                port = ag_cfg.get("port", 3000)
                 url = f"http://localhost:{port}/v1/models"
                 headers = self._json_headers("antigravity")
                 result = self._get_json(url, headers)
