@@ -84,7 +84,6 @@ class ProxyManager:
                 try:
                     os.chmod(self.executable, 0o755)
                     # Add shell fallback just in case of rigid mount drivers (NTFS/FUSE)
-                    import subprocess
                     subprocess.run(["chmod", "+x", self.executable], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
                 except: pass
             return True
@@ -118,7 +117,6 @@ class ProxyManager:
                 try:
                     os.chmod(self.executable, 0o755)
                     # Force absolute authority shell call exactly like the user commands
-                    import subprocess
                     subprocess.run(["chmod", "+x", self.executable], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
                 except: pass
             
