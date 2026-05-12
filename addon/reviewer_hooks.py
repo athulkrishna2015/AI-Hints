@@ -307,7 +307,12 @@ def _trigger_frontend_setup(card):
             var hintData = {hint_data_json};
             function trySetup() {{
                 if (typeof window.aiHintsSetup === 'function') {{
-                    window.aiHintsSetup(data, hintData);
+                    // Hook into Anki's async render lifecycle to prevent our buttons from being wiped
+                    if (typeof onUpdateHook !== 'undefined') {{
+                        onUpdateHook.push(function() {{ window.aiHintsSetup(data, hintData); }});
+                    }}
+                    // Fallback to guarantee execution even if the hook already fired
+                    setTimeout(function() {{ window.aiHintsSetup(data, hintData); }}, 150);
                 }} else {{
                     setTimeout(trySetup, 50);
                 }}

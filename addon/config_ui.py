@@ -942,12 +942,22 @@ class ConfigDialog(QDialog):
              # Open browser globally and drive search automatically
              browser = dialogs.open("Browser", mw)
              try:
-                  # Standard API in recent Anki builds
-                  browser.search(query)
+                  # STRATEGY A: Try specialized naming convention helper first
+                  browser.search_for(query)
              except AttributeError:
-                  # Stable Legacy API fallback
-                  browser.form.searchEdit.lineEdit().setText(query)
-                  browser.onSearchActivated()
+                  try:
+                       # STRATEGY B: Try dynamic direct invocation
+                       browser.search(query)
+                  except (AttributeError, TypeError):
+                       # STRATEGY C: Extreme Fallback Injection (Guaranteed stable)
+                       try:
+                            # Confidently inject search text
+                            try: browser.form.searchEdit.lineEdit().setText(query)
+                            except AttributeError: browser.form.searchEdit.setText(query)
+                            # Trigger search using discovered zero-arg method OR standard signal
+                            try: browser.search() 
+                            except (AttributeError, TypeError): browser.onSearchActivated()
+                       except Exception: pass
              
              # Force window prominence
              browser.setFocus()

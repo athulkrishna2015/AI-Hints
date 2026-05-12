@@ -459,10 +459,9 @@ class BatchManager:
         logger.info(f"FINISHED local sequential queue. Total={self.local_queue_total}, Errors={self.local_queue_errors}")
         
         def _finished_notify():
-             info(f"✅ Sequential Background Generation Complete!\nTotal: {self.local_queue_total}\nFailed/Skipped: {self.local_queue_errors}")
-             # Auto-save deck
-             try: mw.col.autosave()
-             except: pass
+              # Auto-save deck silently upon completion
+              try: mw.col.autosave()
+              except: pass
 
         mw.taskman.run_on_main(_finished_notify)
 
