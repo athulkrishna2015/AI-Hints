@@ -1644,14 +1644,21 @@ class ConfigDialog(QDialog):
 
     def on_fetch_all_models(self):
         tooltip("Starting batch model fetch...")
+        # 1. Standard Loop
         for provider, combobox in self.model_edits.items():
-            # We reuse on_fetch_models but without individual tooltips to avoid spam
             self.on_fetch_models(provider, combobox, silent=True)
+        
+        # 2. Antigravity (Explicit)
+        self.on_fetch_models("antigravity", self.ag_model_edit, silent=True)
+        
+        # 3. Local (Explicit)
+        self.on_fetch_models("local", self.local_model_edit, silent=True)
+            
         tooltip("Finished fetching models for all configured providers.")
 
     def on_fetch_models(self, provider, combobox, silent=False):
         api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
-        if not api_key and provider != "local":
+        if not api_key and provider not in ["local", "antigravity"]:
             if not silent:
                 info(f"Please enter an API key for {provider.capitalize()} first.")
             return
