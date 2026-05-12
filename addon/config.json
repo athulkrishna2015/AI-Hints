@@ -159,5 +159,7 @@
     "antigravity_proxy": {
         "enabled": false,
         "port": 3000
-    }
+    },
+    "auto_show_hints": true,
+    "auto_show_options": false
 }
