@@ -185,7 +185,7 @@ class ProviderRowWidget(QWidget):
         # We also want to provide some smart suggestions for adding new ones
         suggestions = MODEL_SUGGESTIONS.get(self.provider, [])
         
-        dlg = FallbackOrderDialog(self, self.provider, current_fallbacks, suggestions)
+        dlg = FallbackOrderDialog(self.parent_dialog, self.provider, current_fallbacks, suggestions)
         if dlg.exec():
             new_fallbacks = dlg.get_ordered_list()
             self.parent_dialog.model_fallbacks_data[self.provider] = new_fallbacks
