@@ -59,6 +59,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.batch_timer = QTimer(self)
         self.batch_timer.timeout.connect(self.update_batch_status_tab)
         
+        # Provider Status Timer
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self.update_provider_status)
+        
         self.tabs.currentChanged.connect(self.on_tab_changed)
         # Defer initial tab handler so it runs AFTER the dialog is displayed.
         # Running it synchronously here would call load_log() (file I/O) on the
@@ -68,6 +72,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
     def on_tab_changed(self, index):
         tab_name = self.tabs.tabText(index)
         
+        # Handle Note Type Loading
+        if tab_name == "Advanced":
+            self._load_note_types_if_needed()
+
         # Handle Log timer
         if tab_name == "Logs":
             self.load_log()
@@ -86,7 +94,44 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         else:
             self.batch_timer.stop()
 
+        # Handle Provider Status timer
+        if tab_name == "AI Providers":
+            self.update_provider_status()
+            self.status_timer.start(3000) # Update status every 3 seconds
+        else:
+            self.status_timer.stop()
+
+    def _load_note_types_if_needed(self):
+        """Heavy operation: only call when Advanced tab is actually viewed."""
+        if not hasattr(self, 'nt_cb') or self.nt_cb.count() > 0:
+            return
+            
+        logger.debug("AI-Hints: Lazy-loading note types for Advanced tab.")
+        self.nt_cb.blockSignals(True)
+        self.nt_cb.clear()
+        
+        # This is the heavy collection scan
+        self.models_cache = {m['name']: m['flds'] for m in mw.col.models.all()}
+        self.nt_cb.addItems(list(self.models_cache.keys()))
+        
+        self.nt_cb.blockSignals(False)
+        if self.nt_cb.count() > 0:
+            self.nt_cb.setCurrentIndex(0)
+            self.on_nt_changed()
+
+    def update_provider_status(self):
+        """Refreshes the live status indicators for background daemons."""
+        if not hasattr(self, "ag_status_label"):
+            return
+
+        from ..proxy_manager import proxy_manager
+        if proxy_manager.is_running():
+            self.ag_status_label.setText("Status: <span style='color: #28a745; font-weight: bold;'>● Running</span>")
+        else:
+            self.ag_status_label.setText("Status: <span style='color: #dc3545; font-weight: bold;'>○ Stopped</span>")
+
     def setup_ui(self):
+
         layout = QVBoxLayout()
         self.tabs = QTabWidget()
         
@@ -209,15 +254,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         self.target_fields_edit.setText(", ".join(c.get("target_fields", [])))
         self.note_type_fields_data = c.get("note_type_fields", {})
-        if hasattr(self, 'nt_cb'):
-            self.nt_cb.blockSignals(True)
-            self.nt_cb.clear()
-            self.models_cache = {m['name']: m['flds'] for m in mw.col.models.all()}
-            self.nt_cb.addItems(list(self.models_cache.keys()))
-            self.nt_cb.blockSignals(False)
-            if self.nt_cb.count() > 0:
-                self.nt_cb.setCurrentIndex(0)
-                self.on_nt_changed()
         
         if hasattr(self, 'note_fields_edit'):
              self.note_fields_edit.setPlainText(json.dumps(self.note_type_fields_data, indent=4))
@@ -271,18 +307,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
     def refresh_custom_list(self):
         self.custom_list.clear()
         self.custom_list.addItems(self.custom_providers_data.keys())
-        
-        current_selection = self.ai_provider_cb.currentText()
-        self.ai_provider_cb.clear()
-        providers = PROVIDER_ORDER
-        custom_names = list(self.custom_providers_data.keys())
-        self.ai_provider_cb.addItems(providers + custom_names)
-        if current_selection:
-            try: self.ai_provider_cb.setCurrentText(current_selection)
-            except: pass
 
+        # 1. Determine priority order first
+        custom_names = list(self.custom_providers_data.keys())
         current_priority = []
         current_models_state = {}
+
         if hasattr(self, 'models_layout') and self.models_layout is not None:
             for i in range(self.models_layout.count()):
                 item = self.models_layout.itemAt(i)
@@ -291,25 +321,34 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 if isinstance(w, ProviderRowWidget):
                     current_priority.append(w.provider)
                     current_models_state[w.provider] = w.edit.currentText()
-        
+
         if not current_priority:
             current_priority = self.config.get("provider_priority", [])
             if not current_priority:
                 current_priority = PROVIDER_ORDER + custom_names
-        
+
         available = set(PROVIDER_ORDER + custom_names)
         new_priority = [p for p in current_priority if p in available]
         for p in PROVIDER_ORDER + custom_names:
             if p not in new_priority:
                 new_priority.append(p)
-                
+
+        # 2. Populate Active Provider Dropdown using the calculated priority
+        current_selection = self.ai_provider_cb.currentText()
+        self.ai_provider_cb.clear()
+        self.ai_provider_cb.addItems(new_priority)
+        if current_selection:
+            try: self.ai_provider_cb.setCurrentText(current_selection)
+            except: pass
+
+        # 3. Rebuild Providers Tab layout
         if hasattr(self, 'models_layout') and self.models_layout is not None:
             while self.models_layout.count():
                 item = self.models_layout.takeAt(0)
                 if item:
                     w = item.widget()
                     if w: w.deleteLater()
-            
+
             self.model_edits = {}
             for p in new_priority:
                 w = ProviderRowWidget(p, self)
@@ -319,7 +358,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     w.edit.setCurrentText(self.config["models"][p])
                 self.model_edits[p] = w.edit
                 self.models_layout.addWidget(w)
-
     def on_fetch_binary(self):
         try:
             from ..proxy_manager import proxy_manager
@@ -411,6 +449,74 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.on_fetch_models("antigravity", self.ag_model_edit, silent=True)
         self.on_fetch_models("local", self.local_model_edit, silent=True)
         tooltip("Finished fetching models for all configured providers.")
+
+    def on_test_model(self, provider, combobox):
+        """Runs a real-world test generation using the currently selected model."""
+        model_name = combobox.currentText().strip()
+        if not model_name:
+            info(f"Please select or enter a model name for {provider.capitalize()} first.")
+            return
+
+        api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
+        if not api_key and provider not in ["local", "antigravity"]:
+            info(f"Please enter an API key for {provider.capitalize()} first.")
+            return
+
+        # Prepare temporary config for the test
+        temp_config = self.config.copy()
+        if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+        temp_config["api_keys"][provider] = api_key
+        
+        if "models" not in temp_config: temp_config["models"] = {}
+        temp_config["models"][provider] = model_name
+
+        if provider == "local":
+            temp_config["local_endpoint"] = {
+                "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
+                "api_key": self.local_api_key_edit.text().strip(),
+                "model": model_name
+            }
+        
+        if provider == "antigravity":
+            temp_config["antigravity_proxy"] = {"enabled": True, "port": 3000}
+            # Note: We assume proxy is running for the test. 
+            # If not, the request will fail naturally.
+
+        client = AIClient(temp_config)
+        combobox.setEnabled(False)
+        tooltip(f"Testing {provider.capitalize()} model: {model_name}...")
+
+        def _run_test():
+            try:
+                # Use a simple test prompt
+                test_front = "What is the capital of France?"
+                test_back = "Paris"
+                
+                # We use generate_options directly to test the full pipeline
+                res = client.generate_options(test_front, test_back, override_provider=provider)
+                
+                def _done():
+                    combobox.setEnabled(True)
+                    if res and (res.get("hints") or res.get("options")):
+                        hints_count = len(res.get("hints", []))
+                        opts_count = len(res.get("options", []))
+                        info(f"✅ Success! {provider.capitalize()} is working.\n\n"
+                             f"Model: {model_name}\n"
+                             f"Result: Generated {hints_count} hints and {opts_count} options.")
+                    else:
+                        info(f"❌ Test Failed for {provider.capitalize()}.\n\n"
+                             f"The provider returned an empty response. Check your API key, "
+                             f"model name, and account balance.")
+                mw.taskman.run_on_main(_done)
+                
+            except Exception as e:
+                def _fail():
+                    combobox.setEnabled(True)
+                    info(f"❌ Test Error ({provider.capitalize()}):\n\n{str(e)}")
+                mw.taskman.run_on_main(_fail)
+
+        import threading
+        threading.Thread(target=_run_test, daemon=True).start()
 
     def on_fetch_models(self, provider, combobox, silent=False):
         api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""

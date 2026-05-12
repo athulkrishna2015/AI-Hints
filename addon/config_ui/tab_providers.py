@@ -80,6 +80,10 @@ class ProvidersTabMixin:
         self.ag_fetch_btn.setToolTip("Manually download the latest executable from GitHub if missing.")
         self.ag_fetch_btn.clicked.connect(self.on_fetch_binary)
         
+        self.ag_test_btn = QPushButton("🧪 Test Model")
+        self.ag_test_btn.setToolTip("Run a test generation via the local Antigravity Proxy.")
+        self.ag_test_btn.clicked.connect(lambda: self.on_test_model("antigravity", self.ag_model_edit))
+
         self.ag_delete_btn = QPushButton("🗑️ Delete Binary")
         self.ag_delete_btn.setToolTip("Removes the proxy and credential files from disk to free space.")
         self.ag_delete_btn.clicked.connect(self.on_delete_binary)
@@ -123,6 +127,9 @@ class ProvidersTabMixin:
         
         ag_layout.addRow(self.ag_enable_cb)
         
+        self.ag_status_label = QLabel("Status: <span style='color: grey;'>Checking...</span>")
+        ag_layout.addRow(self.ag_status_label)
+        
         btn_hbox = QHBoxLayout()
         btn_hbox.addWidget(self.ag_fetch_btn)
         btn_hbox.addWidget(self.ag_dashboard_btn)
@@ -156,8 +163,14 @@ class ProvidersTabMixin:
         self.local_fetch_btn.setToolTip("Fetch available models from the specified local Base URL")
         self.local_fetch_btn.clicked.connect(lambda: self.on_fetch_models("local", self.local_model_edit))
         
+        self.local_test_btn = QPushButton("Test")
+        self.local_test_btn.setFixedWidth(50)
+        self.local_test_btn.setToolTip("Run a test generation against your local AI endpoint.")
+        self.local_test_btn.clicked.connect(lambda: self.on_test_model("local", self.local_model_edit))
+
         self.local_model_layout.addWidget(self.local_model_edit)
         self.local_model_layout.addWidget(self.local_fetch_btn)
+        self.local_model_layout.addWidget(self.local_test_btn)
         
         self.local_api_key_edit = QLineEdit()
         self.local_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)

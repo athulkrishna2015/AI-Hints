@@ -8,15 +8,19 @@ except Exception:
 if mw is not None and getattr(mw, "addonManager", None) is not None:
     from .reviewer_hooks import init_hooks
     from .config_ui import init_config_ui
-    from .logger import clear_log_file
+    from aqt import gui_hooks
 
-    # Clear logs on startup if enabled
-    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-    if config.get("auto_clear_logs", True):
-        clear_log_file()
+    def on_profile_loaded():
+        from .logger import clear_log_file
+        from .proxy_manager import proxy_manager
+        
+        # Clear logs on startup if enabled
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        if config.get("auto_clear_logs", True):
+            clear_log_file()
 
-    from .proxy_manager import proxy_manager
-    proxy_manager.start(config)
+        proxy_manager.start(config)
 
+    gui_hooks.profile_did_open.append(on_profile_loaded)
     init_hooks()
     init_config_ui()

@@ -92,6 +92,10 @@ class ProxyManager:
             logger.error(f"Failed to download Antigravity Proxy: {e}")
             return False
 
+    def is_running(self):
+        """Check if the daemon process is active."""
+        return self.process is not None and self.process.poll() is None
+
     def start(self, config):
         """Launch the binary if enabled and not already running."""
         if not self.is_enabled(config):
@@ -108,14 +112,15 @@ class ProxyManager:
             
         logger.info("Starting Antigravity Proxy daemon...")
         
-        # Ensure executable permissions right before launch with extreme authority
+        # Ensure executable permissions right before launch ONLY if missing
         if sys.platform != "win32":
-            try:
-                os.chmod(self.executable, 0o755)
-                # Force absolute authority shell call exactly like the user commands
-                import subprocess
-                subprocess.run(["chmod", "+x", self.executable], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            except: pass
+            if not os.access(self.executable, os.X_OK):
+                try:
+                    os.chmod(self.executable, 0o755)
+                    # Force absolute authority shell call exactly like the user commands
+                    import subprocess
+                    subprocess.run(["chmod", "+x", self.executable], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                except: pass
             
         env = os.environ.copy()
         env["PORT"] = "3000"

@@ -115,20 +115,47 @@ class ProviderRowWidget(QWidget):
         self.edit = QComboBox()
         self.edit.setEditable(True)
         self.edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        suggestions = MODEL_SUGGESTIONS.get(provider, [])
+        
+        # Build priority-ordered suggestion list
+        # 1. Start with the default recommended model
         default = DEFAULT_MODELS.get(provider, "")
-        all_suggestions = suggestions[:]
-        if default and default not in all_suggestions:
-            all_suggestions.insert(0, default)
-        self.edit.addItems(all_suggestions)
+        
+        # 2. Add fallback models (these are explicitly ordered by quality in ai_client.py)
+        # We import them locally to avoid circular dependencies if any
+        from ..ai_client import MODEL_FALLBACKS, MODEL_SUGGESTIONS
+        fallbacks = MODEL_FALLBACKS.get(provider, [])
+        
+        # 3. Add other general suggestions
+        suggestions = MODEL_SUGGESTIONS.get(provider, [])
+        
+        all_items = []
+        seen = set()
+        
+        def _add_if_new(model_name):
+            if not model_name or model_name in seen: return
+            seen.add(model_name)
+            all_items.append(model_name)
+            
+        _add_if_new(default)
+        for m in fallbacks: _add_if_new(m)
+        for m in suggestions: _add_if_new(m)
+            
+        self.edit.addItems(all_items)
         layout.addWidget(self.edit)
         
         # Fetch button
         self.fetch_btn = QPushButton("Fetch")
-        self.fetch_btn.setFixedWidth(70)
+        self.fetch_btn.setFixedWidth(60)
         self.fetch_btn.setToolTip(f"Fetch latest models from {provider.capitalize()} API (requires API key)")
         self.fetch_btn.clicked.connect(lambda: self.parent_dialog.on_fetch_models(self.provider, self.edit))
         layout.addWidget(self.fetch_btn)
+        
+        # Test button
+        self.test_btn = QPushButton("Test")
+        self.test_btn.setFixedWidth(50)
+        self.test_btn.setToolTip(f"Run a test generation with the selected {provider.capitalize()} model")
+        self.test_btn.clicked.connect(lambda: self.parent_dialog.on_test_model(self.provider, self.edit))
+        layout.addWidget(self.test_btn)
         
         # Up button
         self.up_btn = QPushButton("▲")

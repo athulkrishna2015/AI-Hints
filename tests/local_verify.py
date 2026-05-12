@@ -66,7 +66,7 @@ def run_tests():
 
     print("Testing model normalization...")
     client = AIClient({})
-    if client._normalize_model("gemini", "gemini-3.1-flash") == "gemini-2.0-flash":
+    if client._normalize_model("gemini", "gemini-1.5-flash") == "gemini-2.0-flash":
         print("SUCCESS: Model normalization works.")
     else:
         print("FAILED: Model normalization failed.")
