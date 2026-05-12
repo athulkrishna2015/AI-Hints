@@ -181,7 +181,15 @@ MIT
 
 ## Changelog
 
-### May 12, 2026 (v2.0.0)
+### May 12, 2026 (v2.1.0)
+- **Persistent Model Blacklisting**: Model failures, rate limits, and quota exhaustion states now persist across Anki restarts via a local `blacklist.json` file.
+- **Enhanced Fallback UI**:
+  - Added a dedicated **[Fallbacks]** button for every AI provider in the configuration tab.
+  - Implemented a new priority manager dialog to manually reorder and prioritize fallback models.
+  - Integrated **[Test]** buttons directly inside the fallback selector to verify model connectivity before adding them to your list.
+- **Improved Failover Logic**: Removed the "Trying anyway" bypass to ensure blacklisted models are strictly skipped, allowing faster failover to working providers.
+- **Robust Rate-Limit Recovery**: Blacklist entries are now automatically cleared if a model succeeds during a manual test, allowing instant recovery without waiting for the cooldown timer.
+- **Clean Packaging**: Updated build exclusions to ensure local cache files (`blacklist.json`, `batch_state.json`) are never included in the distributed `.ankiaddon` package.
 - **Major Performance & UX Overhaul**: Comprehensive optimization of the addon's core lifecycle and configuration interface.
 - **Instant-Open Config UI**: Implemented lazy-loading for note types and fields, reducing configuration window opening time from seconds to milliseconds.
 - **Optimized Anki Startup**: Background tasks (proxy daemon startup, log clearing) are now deferred until after the profile is loaded, ensuring Anki reaches the main screen instantly.
