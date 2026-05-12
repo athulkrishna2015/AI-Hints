@@ -419,6 +419,14 @@ class ConfigDialog(QDialog):
         btn_hbox.addWidget(self.ag_fetch_btn)
         btn_hbox.addWidget(self.ag_dashboard_btn)
         ag_layout.addRow("", btn_hbox)
+        
+        self.ag_dl_progress = QProgressBar()
+        self.ag_dl_progress.setVisible(False)
+        self.ag_dl_status = QLabel("")
+        self.ag_dl_status.setVisible(False)
+        ag_layout.addRow(self.ag_dl_progress)
+        ag_layout.addRow(self.ag_dl_status)
+
         ag_group.setLayout(ag_layout)
         self.prov_layout.addRow(ag_group)
             
@@ -1470,48 +1478,31 @@ class ConfigDialog(QDialog):
         try:
             from .proxy_manager import proxy_manager
             
-            # Initialize Dialog
-            progress_dlg = QProgressDialog("Connecting to GitHub...", "Cancel", 0, 100, self)
-            progress_dlg.setWindowTitle("Downloading Native Proxy")
-            progress_dlg.setWindowModality(Qt.WindowModality.WindowModal)
-            progress_dlg.setMinimumDuration(0) # Show instantly
-            progress_dlg.setValue(0)
-            
-            cancelled = False
-            def check_cancel():
-                nonlocal cancelled
-                cancelled = True
-            progress_dlg.canceled.connect(check_cancel)
+            # Show and setup inline UI
+            self.ag_dl_progress.setRange(0, 100)
+            self.ag_dl_progress.setValue(0)
+            self.ag_dl_progress.setVisible(True)
+            self.ag_dl_status.setText("Connecting to GitHub...")
+            self.ag_dl_status.setVisible(True)
+            self.ag_fetch_btn.setEnabled(False) # Disable while downloading
             
             def _progress_hook(downloaded, total, elapsed):
-                if cancelled:
-                    # Raise a dummy exception inside URL retrieve loop to abort
-                    raise KeyboardInterrupt("Download cancelled by user")
-                
-                # Schedule GUI update on main thread
                 def _update_ui():
-                    if progress_dlg.wasCanceled():
-                        return
-                    
                     # Total formatting
                     total_mb = total / (1024*1024)
                     done_mb = downloaded / (1024*1024)
                     
-                    # Rate & ETA calculation
                     rate_mb_s = (done_mb / elapsed) if elapsed > 0 else 0
                     remaining_mb = max(0, total_mb - done_mb)
                     eta_s = (remaining_mb / rate_mb_s) if rate_mb_s > 0 else 0
-                    
                     pct = int((downloaded / total) * 100) if total > 0 else 0
                     
                     status_txt = (
-                        f"{done_mb:.1f}MB / {total_mb:.1f}MB "
-                        f"({pct}%) - {rate_mb_s:.2f} MB/s\n"
-                        f"ETA: {int(eta_s)}s"
+                        f"{done_mb:.1f}MB / {total_mb:.1f}MB ({pct}%) @ {rate_mb_s:.1f} MB/s - ETA: {int(eta_s)}s"
                     )
                     
-                    progress_dlg.setLabelText(status_txt)
-                    progress_dlg.setValue(pct)
+                    self.ag_dl_status.setText(status_txt)
+                    self.ag_dl_progress.setValue(pct)
                 
                 from aqt import mw
                 mw.taskman.run_on_main(_update_ui)
@@ -1520,30 +1511,26 @@ class ConfigDialog(QDialog):
                 success = False
                 err_msg = ""
                 try:
-                    # Call it with hook
                     success = proxy_manager.download_binary(progress_callback=_progress_hook)
                 except Exception as e:
-                    if "KeyboardInterrupt" in str(e) or "cancelled" in str(e).lower():
-                        err_msg = "User cancelled."
-                    else:
-                        err_msg = str(e)
+                    err_msg = str(e)
                 
                 def _done():
-                    # Close Dialog if open
-                    progress_dlg.close()
-                    
                     if success:
-                        from aqt.utils import showInfo
+                        # Update status message instead of showing extra popup
+                        self.ag_dl_progress.setVisible(False)
+                        self.ag_dl_status.setText("✅ Antigravity Proxy is fully updated & active.")
+                        
                         self.ag_dashboard_btn.setEnabled(True)
                         self.ag_enable_cb.setEnabled(True)
                         self.ag_enable_cb.setToolTip("Automatically run the bundled proxy in the background when Anki starts.")
                         self.ag_fetch_btn.setEnabled(False)
                         self.ag_fetch_btn.setToolTip("Binary is already downloaded locally.")
                         self.ag_dashboard_btn.setToolTip("Open the local web interface to configure Google accounts.")
-                        showInfo("Successfully downloaded the Antigravity Proxy binary!\n\nIt has been activated and will automatically manage its lifecycle now.")
-                    elif not cancelled:
-                        from aqt.utils import showWarning
-                        showWarning(f"Failed to download binary.\n\nError: {err_msg}")
+                    else:
+                        self.ag_dl_progress.setVisible(False)
+                        self.ag_dl_status.setText(f"❌ Failed: {err_msg}")
+                        self.ag_fetch_btn.setEnabled(True) # Re-enable so user can retry
                 from aqt import mw
                 mw.taskman.run_on_main(_done)
             
