@@ -667,6 +667,12 @@ class ConfigDialog(QDialog):
         self.log_level_cb.currentIndexChanged.connect(self.load_log)
         filter_layout.addWidget(self.log_level_cb)
         
+        filter_layout.addWidget(QLabel(" Source:"))
+        self.log_source_cb = QComboBox()
+        self.log_source_cb.addItems(["ALL", "Antigravity Proxy", "Batch Processing", "Standard Addon"])
+        self.log_source_cb.currentIndexChanged.connect(self.load_log)
+        filter_layout.addWidget(self.log_source_cb)
+        
         filter_layout.addWidget(QLabel(" Search:"))
         self.log_search_edit = QLineEdit()
         self.log_search_edit.setPlaceholderText("Filter text...")
@@ -724,6 +730,14 @@ class ConfigDialog(QDialog):
             
             if level_filter != "ALL":
                 lines = [l for l in lines if f" - {level_filter} - " in l]
+            
+            source_filter = self.log_source_cb.currentText()
+            if source_filter == "Antigravity Proxy":
+                lines = [l for l in lines if "[Proxy]" in l]
+            elif source_filter == "Batch Processing":
+                lines = [l for l in lines if "Batch" in l or "Queue" in l]
+            elif source_filter == "Standard Addon":
+                lines = [l for l in lines if "[Proxy]" not in l]
             
             if search_filter:
                 lines = [l for l in lines if search_filter in l.lower()]
