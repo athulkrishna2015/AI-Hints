@@ -68,7 +68,7 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
                            'antigravity-proxy-darwin-x64', 'antigravity-proxy-darwin-arm64',
                            'antigravity-accounts.json']
     exclude_exts = ['.ankiaddon', '.pyc', '.md', '.toml', '.lock', '.cff', '.png']
-    exclude_files = ['meta.json', 'ai_hints.log', '.gitignore', '.gitmodules', 'mypy.ini', 'LICENSE', '.git', 'README', 'README.md']
+    exclude_files = ['meta.json', 'ai_hints.log', 'batch_state.json', 'blacklist.json', '.gitignore', '.gitmodules', 'mypy.ini', 'LICENSE', '.git', 'README', 'README.md']
 
     print(f"Creating {final_name} from {ADDON_DIR}...")
 
