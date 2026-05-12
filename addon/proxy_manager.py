@@ -79,9 +79,14 @@ class ProxyManager:
 
             urllib.request.urlretrieve(remote_url, self.executable, reporthook=_reporthook)
             logger.info(f"Successfully downloaded proxy to {self.executable}")
-            # Ensure permissions right after download
+            # Ensure permissions right after download with absolute authority
             if sys.platform != "win32":
-                os.chmod(self.executable, 0o755)
+                try:
+                    os.chmod(self.executable, 0o755)
+                    # Add shell fallback just in case of rigid mount drivers (NTFS/FUSE)
+                    import subprocess
+                    subprocess.run(["chmod", "+x", self.executable], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                except: pass
             return True
         except Exception as e:
             logger.error(f"Failed to download Antigravity Proxy: {e}")
@@ -103,9 +108,14 @@ class ProxyManager:
             
         logger.info("Starting Antigravity Proxy daemon...")
         
-        # Ensure executable permissions in case of fallback
+        # Ensure executable permissions right before launch with extreme authority
         if sys.platform != "win32":
-            os.chmod(self.executable, 0o755)
+            try:
+                os.chmod(self.executable, 0o755)
+                # Force absolute authority shell call exactly like the user commands
+                import subprocess
+                subprocess.run(["chmod", "+x", self.executable], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+            except: pass
             
         env = os.environ.copy()
         env["PORT"] = "3000"
