@@ -385,14 +385,63 @@ class ConfigDialog(QDialog):
             paid_layout.addRow(label, edit)
         paid_group.setLayout(paid_layout)
         self.prov_layout.addRow(paid_group)
+        # Antigravity Proxy Group
+        ag_group = QGroupBox("Antigravity Cloud Proxy (Native Daemon)")
+        ag_layout = QFormLayout()
+        
+        self.ag_enable_cb = QCheckBox("Enable Background Proxy Daemon")
+        self.ag_enable_cb.setToolTip("Automatically run the bundled proxy in the background when Anki starts.")
+        
+        self.ag_dashboard_btn = QPushButton("🚀 Open Setup Dashboard")
+        self.ag_dashboard_btn.setToolTip("Open the local web interface to configure Google accounts.")
+        self.ag_dashboard_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("http://localhost:3015/frontend/index.html")))
+        
+        self.ag_fetch_btn = QPushButton("📥 Fetch Native Binary")
+        self.ag_fetch_btn.setToolTip("Manually download the latest executable from GitHub if missing.")
+        self.ag_fetch_btn.clicked.connect(self.on_fetch_binary)
+        
+        # Set button states based on binary presence
+        from .proxy_manager import proxy_manager
+        import os
+        has_bin = os.path.exists(proxy_manager.executable)
+        self.ag_dashboard_btn.setEnabled(has_bin)
+        self.ag_enable_cb.setEnabled(has_bin)
+        self.ag_fetch_btn.setEnabled(not has_bin)
+        if not has_bin:
+             self.ag_dashboard_btn.setToolTip("Download the binary first to enable dashboard access.")
+             self.ag_enable_cb.setToolTip("Download the binary first to enable this feature.")
+        else:
+             self.ag_fetch_btn.setToolTip("Binary is already downloaded locally.")
+        
+        ag_layout.addRow(self.ag_enable_cb)
+        
+        btn_hbox = QHBoxLayout()
+        btn_hbox.addWidget(self.ag_fetch_btn)
+        btn_hbox.addWidget(self.ag_dashboard_btn)
+        ag_layout.addRow("", btn_hbox)
+        ag_group.setLayout(ag_layout)
+        self.prov_layout.addRow(ag_group)
             
         # Local Endpoint Group
         local_group = QGroupBox("Local AI / Ollama Settings")
         local_layout = QFormLayout()
         self.local_url_edit = QLineEdit()
         self.local_url_edit.setToolTip("Point to an OpenAI-compatible backend or Ollama instance (e.g., http://localhost:11434/v1).")
-        self.local_model_edit = QLineEdit()
+        
+        self.local_model_layout = QHBoxLayout()
+        self.local_model_edit = QComboBox()
+        self.local_model_edit.setEditable(True)
+        self.local_model_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.local_model_edit.setToolTip("Define the specific locally installed model tag to run inference with.")
+        
+        self.local_fetch_btn = QPushButton("Fetch")
+        self.local_fetch_btn.setFixedWidth(70)
+        self.local_fetch_btn.setToolTip("Fetch available models from the specified local Base URL")
+        self.local_fetch_btn.clicked.connect(lambda: self.on_fetch_models("local", self.local_model_edit))
+        
+        self.local_model_layout.addWidget(self.local_model_edit)
+        self.local_model_layout.addWidget(self.local_fetch_btn)
+        
         self.local_api_key_edit = QLineEdit()
         self.local_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.local_api_key_edit.setToolTip("Provide auth key if running a secured local relay (usually blank for localhost).")
@@ -400,7 +449,7 @@ class ConfigDialog(QDialog):
         self.local_fallback_cb.setToolTip("Automatically attempt connection to the local instance below if all cloud endpoints time out or report failures.")
         local_layout.addRow(self.local_fallback_cb)
         local_layout.addRow("Base URL:", self.local_url_edit)
-        local_layout.addRow("Model Name:", self.local_model_edit)
+        local_layout.addRow("Model Name:", self.local_model_layout)
         local_layout.addRow("API Key (optional):", self.local_api_key_edit)
         local_group.setLayout(local_layout)
         self.prov_layout.addRow(local_group)
@@ -1288,9 +1337,15 @@ class ConfigDialog(QDialog):
                 edit.addItem(model_name)
             edit.setCurrentText(model_name)
             
+        ag_cfg = c.get("antigravity_proxy", {}) or {}
+        self.ag_enable_cb.setChecked(ag_cfg.get("enabled", False))
+            
         local = c.get("local_endpoint", {}) or {}
         self.local_url_edit.setText(local.get("base_url", ""))
-        self.local_model_edit.setText(local.get("model", ""))
+        model_name = local.get("model", "")
+        if self.local_model_edit.findText(model_name) == -1:
+            self.local_model_edit.addItem(model_name)
+        self.local_model_edit.setCurrentText(model_name)
         self.local_api_key_edit.setText(local.get("api_key", ""))
         self.local_fallback_cb.setChecked(local.get("enabled", False))
         
@@ -1411,6 +1466,94 @@ class ConfigDialog(QDialog):
                 self.model_edits[p] = w.edit
                 self.models_layout.addWidget(w)
 
+    def on_fetch_binary(self):
+        try:
+            from .proxy_manager import proxy_manager
+            
+            # Initialize Dialog
+            progress_dlg = QProgressDialog("Connecting to GitHub...", "Cancel", 0, 100, self)
+            progress_dlg.setWindowTitle("Downloading Native Proxy")
+            progress_dlg.setWindowModality(Qt.WindowModality.WindowModal)
+            progress_dlg.setMinimumDuration(0) # Show instantly
+            progress_dlg.setValue(0)
+            
+            cancelled = False
+            def check_cancel():
+                nonlocal cancelled
+                cancelled = True
+            progress_dlg.canceled.connect(check_cancel)
+            
+            def _progress_hook(downloaded, total, elapsed):
+                if cancelled:
+                    # Raise a dummy exception inside URL retrieve loop to abort
+                    raise KeyboardInterrupt("Download cancelled by user")
+                
+                # Schedule GUI update on main thread
+                def _update_ui():
+                    if progress_dlg.wasCanceled():
+                        return
+                    
+                    # Total formatting
+                    total_mb = total / (1024*1024)
+                    done_mb = downloaded / (1024*1024)
+                    
+                    # Rate & ETA calculation
+                    rate_mb_s = (done_mb / elapsed) if elapsed > 0 else 0
+                    remaining_mb = max(0, total_mb - done_mb)
+                    eta_s = (remaining_mb / rate_mb_s) if rate_mb_s > 0 else 0
+                    
+                    pct = int((downloaded / total) * 100) if total > 0 else 0
+                    
+                    status_txt = (
+                        f"{done_mb:.1f}MB / {total_mb:.1f}MB "
+                        f"({pct}%) - {rate_mb_s:.2f} MB/s\n"
+                        f"ETA: {int(eta_s)}s"
+                    )
+                    
+                    progress_dlg.setLabelText(status_txt)
+                    progress_dlg.setValue(pct)
+                
+                from aqt import mw
+                mw.taskman.run_on_main(_update_ui)
+
+            def _task():
+                success = False
+                err_msg = ""
+                try:
+                    # Call it with hook
+                    success = proxy_manager.download_binary(progress_callback=_progress_hook)
+                except Exception as e:
+                    if "KeyboardInterrupt" in str(e) or "cancelled" in str(e).lower():
+                        err_msg = "User cancelled."
+                    else:
+                        err_msg = str(e)
+                
+                def _done():
+                    # Close Dialog if open
+                    progress_dlg.close()
+                    
+                    if success:
+                        from aqt.utils import showInfo
+                        self.ag_dashboard_btn.setEnabled(True)
+                        self.ag_enable_cb.setEnabled(True)
+                        self.ag_enable_cb.setToolTip("Automatically run the bundled proxy in the background when Anki starts.")
+                        self.ag_fetch_btn.setEnabled(False)
+                        self.ag_fetch_btn.setToolTip("Binary is already downloaded locally.")
+                        self.ag_dashboard_btn.setToolTip("Open the local web interface to configure Google accounts.")
+                        showInfo("Successfully downloaded the Antigravity Proxy binary!\n\nIt has been activated and will automatically manage its lifecycle now.")
+                    elif not cancelled:
+                        from aqt.utils import showWarning
+                        showWarning(f"Failed to download binary.\n\nError: {err_msg}")
+                from aqt import mw
+                mw.taskman.run_on_main(_done)
+            
+            import threading
+            threading.Thread(target=_task, daemon=True).start()
+            
+        except Exception as e:
+            from aqt.utils import showWarning
+            showWarning(f"Setup failed: {e}")
+
     def on_fetch_all_models(self):
         tooltip("Starting batch model fetch...")
         for provider, combobox in self.model_edits.items():
@@ -1429,6 +1572,12 @@ class ConfigDialog(QDialog):
         temp_config = self.config.copy()
         if "api_keys" not in temp_config: temp_config["api_keys"] = {}
         temp_config["api_keys"][provider] = api_key
+        
+        if provider == "local":
+            temp_config["local_endpoint"] = {
+                "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
+                "api_key": self.local_api_key_edit.text().strip()
+            }
         
         client = AIClient(temp_config)
         combobox.setEnabled(False)
@@ -1591,7 +1740,10 @@ class ConfigDialog(QDialog):
             
         local = c.get("local_endpoint", {}) or {}
         self.local_url_edit.setText(local.get("base_url", ""))
-        self.local_model_edit.setText(local.get("model", ""))
+        model_name = local.get("model", "")
+        if self.local_model_edit.findText(model_name) == -1:
+            self.local_model_edit.addItem(model_name)
+        self.local_model_edit.setCurrentText(model_name)
         self.local_fallback_cb.setChecked(local.get("enabled", False))
         
         logger.info("Restored Provider defaults (models, priority; API keys preserved).")
@@ -1659,10 +1811,14 @@ class ConfigDialog(QDialog):
                 p: (edit.currentText().strip() or DEFAULT_MODELS.get(p, ""))
                 for p, edit in self.model_edits.items()
             }
+            new_config["antigravity_proxy"] = {
+                "enabled": self.ag_enable_cb.isChecked(),
+                "port": 3015
+            }
             new_config["local_endpoint"] = {
                 "enabled": self.local_fallback_cb.isChecked(),
                 "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
-                "model": self.local_model_edit.text().strip() or DEFAULT_MODELS["local"],
+                "model": self.local_model_edit.currentText().strip() or DEFAULT_MODELS["local"],
                 "api_key": self.local_api_key_edit.text().strip()
             }
             new_config["system_prompt"] = self.system_prompt_edit.toPlainText()
@@ -1698,6 +1854,13 @@ class ConfigDialog(QDialog):
                 logger.info("Configuration saved. No changes detected.")
 
             mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(new_config))
+            
+            # Hot-reload Proxy Daemon live based on saved state, preventing restart need
+            try:
+                from .proxy_manager import proxy_manager
+                proxy_manager.start(new_config)
+            except Exception as e:
+                logger.error(f"Failed to reload proxy daemon dynamically: {e}")
             # Update current config to detect future changes
             self.config = new_config
             if close:

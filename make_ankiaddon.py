@@ -63,7 +63,7 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
     zip_name, final_name = artifact_names(ADDON_NAME, build_version)
 
     # Exclusions
-    exclude_dirs = ['__pycache__', '.git', '.vscode', '.github', 'tests']
+    exclude_dirs = ['__pycache__', '.git', '.vscode', '.github', 'tests', 'bin']
     exclude_exts = ['.ankiaddon', '.pyc', '.md', '.toml', '.lock', '.cff', '.png']
     exclude_files = ['meta.json', 'ai_hints.log', '.gitignore', '.gitmodules', 'mypy.ini', 'LICENSE', '.git', 'README', 'README.md']
 

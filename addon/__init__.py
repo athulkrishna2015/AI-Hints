@@ -15,5 +15,8 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
     if config.get("auto_clear_logs", True):
         clear_log_file()
 
+    from .proxy_manager import proxy_manager
+    proxy_manager.start(config)
+
     init_hooks()
     init_config_ui()

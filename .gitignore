@@ -10,3 +10,5 @@ addon/batch_state.json
 .idea/
 .DS_Store
 scratch
+addon/bin/
+config.json

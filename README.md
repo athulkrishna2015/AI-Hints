@@ -7,7 +7,8 @@ Install from [anki web ](https://ankiweb.net/shared/info/2119980872)
 github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkrishna2015/AI-Hints)
 ## Features
 
-- **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, and any OpenAI-compatible local API (like Ollama or LM Studio).
+- **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, **Antigravity Proxy**, and any OpenAI-compatible local API (like Ollama or LM Studio).
+- **Native Antigravity Daemon**: Features seamless embedded integration of the [Antigravity Cloud Proxy](https://github.com/athulkrishna2015/antigravity-proxy). Automatically manages background executable lifecycle, offers one-click account setup dashboard, and provides direct gateway to premier LLMs completely locally.
 - **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next provider. The fallback order is strictly ranked by absolute intelligence (smartest-first).
 - **Smart Key Guard**: The fallback system only queries providers where you have configured a valid API key (or enabled local endpoints). Any unconfigured providers are safely and silently skipped.
 - **Model Fallbacks**: Each provider has its own **intelligence-ranked fallback hierarchy** (smartest-first) to automatically retry next-best models before switching to a different provider.
@@ -54,7 +55,7 @@ When checking fallbacks, providers are queried in the following descending order
 10. **SambaNova**
 11. **NVIDIA**
 12. **Mistral**
-13. **Cerebras**
+13. **Antigravity Proxy** (Embedded Cloud Relay)
 14. **Local AI** (Ollama/LM Studio)
 
 ### Model Fallback Rankings
@@ -91,6 +92,7 @@ To use this add-on, you need an API key from one of the supported providers.
 - **Cerebras**: [cloud.cerebras.ai](https://cloud.cerebras.ai/)
 - **Hugging Face**: [huggingface.co](https://huggingface.co/settings/tokens)
 - **OpenRouter**: [openrouter.ai](https://openrouter.ai/keys) (Offers many $0/token models)
+- **Antigravity Cloud Proxy**: [Embedded Plugin](https://github.com/athulkrishna2015/antigravity-proxy) (No credit card, internal account rotation)
 - **Ollama (Local AI)**: [ollama.com](https://ollama.com/) (No API key or internet required)
 
 ### Paid Providers
@@ -164,6 +166,14 @@ MIT
 
 
 ## Changelog
+
+### May 12, 2026 (v1.6.0)
+- **Native Antigravity Proxy Daemon**: Directly bundles the standalone Antigravity Cloud Proxy in optimized binary format. Eliminates `Bun` node dependencies completely for end-users.
+- **Zero-Config Lifecycle Manager**: Custom-built background process daemon seamlessly handles automatic launch, graceful cleanup on exit, and live port conflict mitigation.
+- **Smart Binary Auto-Downloader**: Implemented iterative binary caching. The addon dynamically downloads only the exact binary for the host OS (Windows / Mac M1 / Mac Intel / Linux) on first use, dramatically slashing installer zip bloat by 200MB+.
+- **Real-time Visual Downloader UX**: Features dynamic PyQt speed calculators, total file percentages, live estimated time indicators (ETA), and safe cancellation callbacks.
+- **Hot-Reload Live Saves**: Hooked the configuration writer to execute hot restarts. Enabling, disabling, or starting the proxy happens live immediately upon save—**Zero Anki restarts required.**
+- **Dedicated Launch Console**: Introduced the [🚀 Open Setup Dashboard] widget enabling instant account configuration directly inside your native browser.
 
 ### May 12, 2026 (v1.5.0)
 - **Native Gemini Batch Generation**: Full support for async Batch API execution. Push up to 1,000 cards per batch and let it generate offline!
