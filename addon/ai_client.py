@@ -18,6 +18,7 @@ USER_AGENT = "Anki-AI-Hints/1.0"
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 MODEL_COOLDOWN_SECONDS = 3600  # 1 hour
 FAILED_MODELS_CACHE: Dict[Tuple[str, str], float] = {}  # (provider, model) -> expiry_timestamp
+RATE_LIMIT_STREAK: Dict[Tuple[str, str], int] = {}    # (provider, model) -> consecutive_hits
 
 PROVIDER_ORDER = [
     "anthropic",
@@ -69,16 +70,20 @@ MODEL_SUGGESTIONS = {
         "claude-3-7-sonnet-latest",
     ],
     "gemini": [
-        "gemini-3-flash",
-        "gemini-3.1-flash-lite",
-        "gemini-2.5-flash",
+        "gemini-3.1-pro-preview",
+        "gemini-3-pro-preview",
         "gemini-2.5-pro",
-        "gemini-2-flash",
-        "gemini-2-flash-lite",
-        "gemini-3.1-pro",
-        "gemini-2.5-flash-lite",
-        "gemini-flash-latest",
         "gemini-pro-latest",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-flash-latest",
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash-lite",
+        "gemini-flash-lite-latest",
+        "gemma-4-31b-it",
     ],
     "groq": [
         "llama-3.3-70b-versatile",
@@ -140,8 +145,6 @@ LEGACY_MODEL_REPLACEMENTS = {
     ("gemini", "gemini-1.5-pro"): "gemini-pro-latest",
     ("gemini", "gemini-2.0-pro-exp-02-05"): "gemini-2.5-pro",
     ("gemini", "gemini-3.1-flash-lite-preview"): "gemini-3.1-flash-lite",
-    ("gemini", "gemini-3-flash-preview"): "gemini-3-flash",
-    ("gemini", "gemini-2.0-flash"): "gemini-2-flash",
     ("groq", "llama3-8b-8192"): "llama-3.1-8b-instant",
     ("groq", "llama3-70b-8192"): "llama-3.3-70b-versatile",
     ("grok", "grok-1"): "grok-2-1212",
@@ -163,16 +166,20 @@ MODEL_FALLBACKS = {
         "claude-3-5-haiku-latest",
     ],
     "gemini": [
-        "gemini-3-flash",
-        "gemini-3.1-flash-lite",
-        "gemini-2.5-flash",
+        "gemini-3.1-pro-preview",
+        "gemini-3-pro-preview",
         "gemini-2.5-pro",
-        "gemini-2-flash",
-        "gemini-2-flash-lite",
-        "gemini-3.1-pro",
-        "gemini-2.5-flash-lite",
-        "gemini-flash-latest",
         "gemini-pro-latest",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-flash-latest",
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash-lite",
+        "gemini-flash-lite-latest",
+        "gemma-4-31b-it",
     ],
     "groq": [
         "llama-3.3-70b-versatile",
@@ -402,13 +409,14 @@ class AIClient:
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
+                    self._on_model_success(provider_name, model)
                     return parsed
                 logger.warning(f"AI-Hints: Custom provider {provider_name} model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
                 body = self._read_http_error(e)
                 logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e} - {body}")
                 if e.code in [429, 500, 503]:
-                    delay = self._extract_retry_delay(provider_name, e, body)
+                    delay = self._extract_retry_delay(provider_name, model, e, body)
                     self._mark_model_failed(provider_name, model, delay)
             except Exception as e:
                 logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
@@ -505,13 +513,14 @@ class AIClient:
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
+                    self._on_model_success(provider, model)
                     return parsed
                 logger.warning(f"AI-Hints: {provider} model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
                 body = self._read_http_error(e)
                 logger.error(f"AI-Hints Error ({provider}, model {model}): {e} - {body}")
                 if e.code in [429, 500, 503]:
-                    delay = self._extract_retry_delay(provider, e, body)
+                    delay = self._extract_retry_delay(provider, model, e, body)
                     self._mark_model_failed(provider, model, delay)
             except Exception as e:
                 logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
@@ -543,13 +552,14 @@ class AIClient:
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
+                    self._on_model_success("anthropic", model)
                     return parsed
                 logger.warning(f"AI-Hints: Anthropic model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
                 body = self._read_http_error(e)
                 logger.error(f"AI-Hints Error (Anthropic, model {model}): {e} - {body}")
                 if e.code in [429, 500, 503]:
-                    delay = self._extract_retry_delay("anthropic", e, body)
+                    delay = self._extract_retry_delay("anthropic", model, e, body)
                     self._mark_model_failed("anthropic", model, delay)
             except Exception as e:
                 logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
@@ -576,12 +586,18 @@ class AIClient:
                 },
             }
 
-            # Enable explicit thinking for improved quality on Gemini 3 and 2.5 models (Flash/Pro only)
+            # Enable explicit thinking for improved quality on modern Gemini models (2.5+)
             lower_model = model.lower()
-            supports_thinking = ("gemini-3" in lower_model or "gemini-2.5" in lower_model or "gemini-flash-latest" in lower_model)
-            is_lite = "lite" in lower_model
+            # Thinking is supported on Flash/Pro 2.5+ and all Gemini 3+ models (including Lite versions)
+            supports_thinking = (
+                "gemini-3" in lower_model or 
+                "gemini-2.5" in lower_model or 
+                "gemini-flash-latest" in lower_model or 
+                "gemini-pro-latest" in lower_model or
+                "gemini-flash-lite-latest" in lower_model
+            )
             
-            if supports_thinking and not is_lite:
+            if supports_thinking:
                 data["generationConfig"]["thinkingConfig"] = {
                     "includeThoughts": True,
                     "thinkingBudget": 1024
@@ -593,15 +609,16 @@ class AIClient:
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
+                    self._on_model_success("gemini", model)
                     return parsed
                 logger.warning(f"AI-Hints: Gemini model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
                 body = self._read_http_error(e)
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e} - {body}")
-                
+
                 # Mark model as failed if it's a rate limit or server error
                 if e.code in [429, 500, 503]:
-                    delay = self._extract_retry_delay("gemini", e, body)
+                    delay = self._extract_retry_delay("gemini", model, e, body)
                     self._mark_model_failed("gemini", model, delay)
             except Exception as e:
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
@@ -641,12 +658,17 @@ class AIClient:
             if sys_p:
                 inner_req["system_instruction"] = {"parts": [{"text": sys_p}]}
             
-            # Keep thinking config in batch mode for max fidelity (Flash/Pro only)
+            # Keep thinking config in batch mode for max fidelity (modern models only)
             lower_model = model.lower()
-            supports_thinking = ("gemini-3" in lower_model or "gemini-2.5" in lower_model or "gemini-flash-latest" in lower_model)
-            is_lite = "lite" in lower_model
+            supports_thinking = (
+                "gemini-3" in lower_model or 
+                "gemini-2.5" in lower_model or 
+                "gemini-flash-latest" in lower_model or 
+                "gemini-pro-latest" in lower_model or
+                "gemini-flash-lite-latest" in lower_model
+            )
 
-            if supports_thinking and not is_lite:
+            if supports_thinking:
                 inner_req["generationConfig"]["thinkingConfig"] = {
                     "includeThoughts": True,
                     "thinkingBudget": 1024
@@ -696,16 +718,6 @@ class AIClient:
         with urllib.request.urlopen(req, timeout=30) as response:
             raw = response.read().decode("utf-8")
             return json.loads(raw)
-
-    def _should_skip_remaining_gemini_models(self, error: urllib.error.HTTPError, body: str) -> bool:
-        if getattr(error, "code", None) not in GEMINI_PROVIDER_EXHAUSTED_STATUSES:
-            return False
-        body_text = body or ""
-        return (
-            "RESOURCE_EXHAUSTED" in body_text
-            or "Quota exceeded" in body_text
-            or "rate-limits" in body_text
-        )
 
     def _parse_json_result(self, content: str) -> Dict[str, List[str]]:
 
@@ -857,9 +869,25 @@ class AIClient:
         
         # Format for log
         mins = int(delay_seconds // 60)
+        hours = mins // 60
+        mins = mins % 60
         secs = int(delay_seconds % 60)
-        time_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+        
+        if hours > 0:
+            time_str = f"{hours}h {mins}m"
+        elif mins > 0:
+            time_str = f"{mins}m {secs}s"
+        else:
+            time_str = f"{secs}s"
+            
         logger.info(f"AI-Hints: Blacklisting {provider}/{model} for {time_str} due to failure.")
+
+    def _on_model_success(self, provider: str, model: str):
+        """Resets the rate limit streak when a model successfully responds."""
+        key = (provider, model)
+        if key in RATE_LIMIT_STREAK:
+            logger.debug(f"AI-Hints: Resetting rate limit streak for {provider}/{model} after success.")
+            del RATE_LIMIT_STREAK[key]
 
     def _is_model_failed(self, provider: str, model: str) -> bool:
         """Returns True if the model is currently in its cooldown period."""
@@ -874,9 +902,22 @@ class AIClient:
             
         return True
 
-    def _extract_retry_delay(self, provider: str, error: urllib.error.HTTPError, body: str) -> float:
-        """Always returns the static cooldown constant as requested."""
-        return MODEL_COOLDOWN_SECONDS
+    def _extract_retry_delay(self, provider: str, model: str, error: urllib.error.HTTPError, body: str) -> float:
+        """
+        Calculates cooldown delay.
+        If it's a rate limit (429), the delay increases with each consecutive hit: 1h, 2h, 3h...
+        """
+        if getattr(error, "code", None) != 429:
+            return MODEL_COOLDOWN_SECONDS
+            
+        key = (provider, model)
+        streak = RATE_LIMIT_STREAK.get(key, 0) + 1
+        RATE_LIMIT_STREAK[key] = streak
+        
+        # delay = 1h * streak (1h, 2h, 3h...)
+        delay = MODEL_COOLDOWN_SECONDS * streak
+        logger.info(f"AI-Hints: Rate limit hit for {provider}/{model}. Streak: {streak}. New delay: {delay/3600:.1f} hours.")
+        return delay
 
     def _models_for_provider(self, provider: str, primary_model: str = "", extra_fallbacks: List[str] = None) -> List[str]:
         configured = self.config.get("model_fallbacks") or {}

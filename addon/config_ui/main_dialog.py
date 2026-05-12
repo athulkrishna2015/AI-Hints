@@ -830,20 +830,34 @@ _config_dialog_instance = None
 
 def on_config_dialog(parent=None):
     global _config_dialog_instance
-    dialog_parent = None
+    dialog_parent = parent or mw
     if _config_dialog_instance is not None:
         try:
             if _config_dialog_instance.isVisible():
                  _config_dialog_instance.raise_()
                  _config_dialog_instance.activateWindow()
                  return
-        except RuntimeError: _config_dialog_instance = None
+        except (RuntimeError, AttributeError): 
+            _config_dialog_instance = None
+
     _config_dialog_instance = ConfigDialog(dialog_parent)
     _config_dialog_instance.setWindowFlag(Qt.WindowType.Window, True)
     _config_dialog_instance.setWindowModality(Qt.WindowModality.NonModal)
     QTimer.singleShot(50, _config_dialog_instance.show)
 
+def _close_config_dialog_on_shutdown():
+    global _config_dialog_instance
+    if _config_dialog_instance:
+        try:
+            _config_dialog_instance.close()
+        except Exception:
+            pass
+        _config_dialog_instance = None
+
 def init_config_ui():
+    from aqt import gui_hooks
+    gui_hooks.profile_will_close.append(_close_config_dialog_on_shutdown)
+    
     mw.addonManager.setConfigAction(ADDON_PACKAGE, on_config_dialog)
     # Add Tools menu entry so the window can be opened any time
     action = mw.form.menuTools.addAction("AI-Hints Config")

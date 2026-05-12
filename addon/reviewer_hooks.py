@@ -1158,6 +1158,7 @@ def init_hooks():
     # Close popup on next card or when leaving reviewer
     gui_hooks.reviewer_did_show_question.append(lambda _card: close_popup_if_open())
     gui_hooks.reviewer_will_end.append(close_popup_if_open)
+    gui_hooks.profile_will_close.append(close_popup_if_open)
     
     # Sync UI and caches on undo operations
     def on_undo(changes):
