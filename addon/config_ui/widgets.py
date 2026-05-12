@@ -171,7 +171,6 @@ class ProviderRowWidget(QWidget):
         
         # Fallbacks button
         self.fallbacks_btn = QPushButton("Fallbacks")
-        self.fallbacks_btn.setFixedWidth(85)
         self.fallbacks_btn.setToolTip(f"Configure and prioritize fallback models for {provider.capitalize()}")
         self.fallbacks_btn.clicked.connect(self.on_fallbacks_clicked)
         layout.addWidget(self.fallbacks_btn)

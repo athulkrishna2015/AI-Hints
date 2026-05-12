@@ -1,5 +1,6 @@
 import json
 import time
+import os
 import re
 import html
 import urllib.request
@@ -13,6 +14,8 @@ try:
 except ImportError:
     repair_loads = json.loads
 
+ADDON_PATH = os.path.dirname(__file__)
+BLACKLIST_FILE = os.path.join(ADDON_PATH, "blacklist.json")
 REQUEST_TIMEOUT_SECONDS = 20
 USER_AGENT = "Anki-AI-Hints/1.0"
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
@@ -866,6 +869,7 @@ class AIClient:
             
         expiry = time.time() + delay_seconds
         FAILED_MODELS_CACHE[(provider, model)] = expiry
+        self._save_blacklist()
         
         # Format for log
         mins = int(delay_seconds // 60)
@@ -888,9 +892,17 @@ class AIClient:
         if key in RATE_LIMIT_STREAK:
             logger.debug(f"AI-Hints: Resetting rate limit streak for {provider}/{model} after success.")
             del RATE_LIMIT_STREAK[key]
+        
+        # If it was blacklisted, remove it
+        if key in FAILED_MODELS_CACHE:
+            del FAILED_MODELS_CACHE[key]
+            self._save_blacklist()
 
     def _is_model_failed(self, provider: str, model: str) -> bool:
         """Returns True if the model is currently in its cooldown period."""
+        if not FAILED_MODELS_CACHE:
+            self._load_blacklist()
+            
         expiry = FAILED_MODELS_CACHE.get((provider, model))
         if expiry is None:
             return False
@@ -898,9 +910,36 @@ class AIClient:
         if time.time() > expiry:
             # Cooldown expired, remove from cache
             del FAILED_MODELS_CACHE[(provider, model)]
+            self._save_blacklist()
             return False
             
         return True
+
+    def _save_blacklist(self):
+        """Persists the FAILED_MODELS_CACHE to disk."""
+        try:
+            # Convert tuple keys to strings for JSON
+            serializable = {f"{p}|{m}": e for (p, m), e in FAILED_MODELS_CACHE.items()}
+            with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
+                json.dump(serializable, f)
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to save blacklist: {e}")
+
+    def _load_blacklist(self):
+        """Loads the FAILED_MODELS_CACHE from disk."""
+        if not os.path.exists(BLACKLIST_FILE):
+            return
+        try:
+            with open(BLACKLIST_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            now = time.time()
+            for key, expiry in data.items():
+                if "|" in key and expiry > now:
+                    provider, model = key.split("|", 1)
+                    FAILED_MODELS_CACHE[(provider, model)] = expiry
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to load blacklist: {e}")
 
     def _extract_retry_delay(self, provider: str, model: str, error: urllib.error.HTTPError, body: str) -> float:
         """
@@ -946,12 +985,6 @@ class AIClient:
                 
             models.append(model)
             
-        # If ALL models were filtered out, we should probably let them through
-        # rather than giving up entirely, just in case.
-        if not models and seen:
-             logger.debug(f"AI-Hints: All models for {provider} are blacklisted. Trying anyway.")
-             models = sorted(list(seen))
-             
         return models
 
     def _model_list(self, value: Any) -> List[str]:

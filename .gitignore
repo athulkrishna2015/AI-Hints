@@ -6,6 +6,7 @@ meta.json
 addon/meta.json
 addon/ai_hints.log
 addon/batch_state.json
+addon/blacklist.json
 .vscode/
 .idea/
 .DS_Store
