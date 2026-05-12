@@ -117,12 +117,18 @@ class ProvidersTabMixin:
         self.ag_model_edit.addItems(all_suggestions)
         
         self.ag_model_fetch_btn = QPushButton("Fetch")
-        self.ag_model_fetch_btn.setFixedWidth(70)
+        self.ag_model_fetch_btn.setFixedWidth(85)
         self.ag_model_fetch_btn.setToolTip("Fetch currently available backend models directly from the local proxy server (Must be running).")
         self.ag_model_fetch_btn.clicked.connect(lambda: self.on_fetch_models("antigravity", self.ag_model_edit))
         
+        self.ag_model_test_btn = QPushButton("Test")
+        self.ag_model_test_btn.setFixedWidth(75)
+        self.ag_model_test_btn.setToolTip("Run a test generation via the local Antigravity Proxy.")
+        self.ag_model_test_btn.clicked.connect(lambda: self.on_test_model("antigravity", self.ag_model_edit))
+
         self.ag_model_layout.addWidget(self.ag_model_edit)
         self.ag_model_layout.addWidget(self.ag_model_fetch_btn)
+        self.ag_model_layout.addWidget(self.ag_model_test_btn)
         ag_layout.addRow("Active Model:", self.ag_model_layout)
         
         ag_layout.addRow(self.ag_enable_cb)
@@ -159,12 +165,12 @@ class ProvidersTabMixin:
         self.local_model_edit.setToolTip("Define the specific locally installed model tag to run inference with.")
         
         self.local_fetch_btn = QPushButton("Fetch")
-        self.local_fetch_btn.setFixedWidth(70)
+        self.local_fetch_btn.setFixedWidth(85)
         self.local_fetch_btn.setToolTip("Fetch available models from the specified local Base URL")
         self.local_fetch_btn.clicked.connect(lambda: self.on_fetch_models("local", self.local_model_edit))
         
         self.local_test_btn = QPushButton("Test")
-        self.local_test_btn.setFixedWidth(50)
+        self.local_test_btn.setFixedWidth(75)
         self.local_test_btn.setToolTip("Run a test generation against your local AI endpoint.")
         self.local_test_btn.clicked.connect(lambda: self.on_test_model("local", self.local_model_edit))
 

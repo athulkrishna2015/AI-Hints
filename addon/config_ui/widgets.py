@@ -145,14 +145,14 @@ class ProviderRowWidget(QWidget):
         
         # Fetch button
         self.fetch_btn = QPushButton("Fetch")
-        self.fetch_btn.setFixedWidth(60)
+        self.fetch_btn.setFixedWidth(85)
         self.fetch_btn.setToolTip(f"Fetch latest models from {provider.capitalize()} API (requires API key)")
         self.fetch_btn.clicked.connect(lambda: self.parent_dialog.on_fetch_models(self.provider, self.edit))
         layout.addWidget(self.fetch_btn)
         
         # Test button
         self.test_btn = QPushButton("Test")
-        self.test_btn.setFixedWidth(50)
+        self.test_btn.setFixedWidth(75)
         self.test_btn.setToolTip(f"Run a test generation with the selected {provider.capitalize()} model")
         self.test_btn.clicked.connect(lambda: self.parent_dialog.on_test_model(self.provider, self.edit))
         layout.addWidget(self.test_btn)
