@@ -674,6 +674,15 @@
         return false;
     }
 
+    function normalizeForMatching(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/[\u200B-\u200D\uFEFF]/g, '') // Zero-width chars
+            .replace(/\s+/g, ' ')                  // Collapse whitespace
+            .trim()
+            .toLowerCase();
+    }
+
     // Toggle the .ai-hints-correct class on whichever option matches the
     // stored correct_answer, but only when showing the back of the card.
     function updateCorrectHighlight(container) {
@@ -698,19 +707,19 @@
         fragment.appendChild(heading);
         fragment.appendChild(document.createElement('br'));
 
-        // Normalise correct_answer once using our math normalizer for comparison
-        const normCorrect = correctAnswer ? normalizeMathContent(correctAnswer).trim() : '';
+        // Normalise correct_answer once for comparison
+        const matchCorrect = normalizeForMatching(correctAnswer);
 
         const list = document.createElement('ul');
         list.className = className;
         items.forEach(function(item) {
             const li = document.createElement('li');
-            const normItem = normalizeMathContent(item);
-            appendRenderedContent(li, normItem);
+            const renderedContent = normalizeMathContent(item);
+            appendRenderedContent(li, renderedContent);
             
-            // Robust compare: normalize both sides first, ensuring slight LaTeX
-            // or spacing variations in generated JSON don't break the match.
-            if (normCorrect && normItem.trim() === normCorrect) {
+            // Robust compare: normalize both sides using the simple matcher
+            const matchItem = normalizeForMatching(item);
+            if (matchCorrect && matchItem === matchCorrect) {
                 li.dataset.aiHintsIsCorrect = 'true';
             }
             list.appendChild(li);

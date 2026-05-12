@@ -872,6 +872,8 @@ def generate_hints(is_manual=True, card=None):
         _generating_card_ids.discard(card_id)
         is_custom = provider in (config.get("custom_providers") or {})
         show_api_error_dialog(provider if provider else None, is_custom=is_custom)
+        # Stop animation in frontend
+        mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
         return
 
     front, back = parser.get_note_content(card.note(), card)
@@ -891,9 +893,13 @@ def generate_hints(is_manual=True, card=None):
             current_reviewer_card = getattr(mw.reviewer, "card", None)
             if current_reviewer_card and current_reviewer_card.id != card.id:
                 logger.info("AI-Hints: User moved to another card. Discarding generated data to prevent database and undo conflicts.")
+                # Still need to clear the generating flag in the frontend if it's currently active
+                mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
                 return
 
             if not data or (not data.get("hints") and not data.get("options")):
+                if data is None:
+                    data = {}
                 err_status = data.get("_ai_error_type") or "Failed"
                 err_msg = data.get("_ai_error_msg", "")
                 

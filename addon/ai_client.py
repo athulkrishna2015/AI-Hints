@@ -5,7 +5,7 @@ import html
 import urllib.request
 import urllib.error
 import urllib.parse
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from .logger import logger
 
 try:
@@ -16,6 +16,8 @@ except ImportError:
 REQUEST_TIMEOUT_SECONDS = 20
 USER_AGENT = "Anki-AI-Hints/1.0"
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
+MODEL_COOLDOWN_SECONDS = 3600  # 1 hour
+FAILED_MODELS_CACHE: Dict[Tuple[str, str], float] = {}  # (provider, model) -> expiry_timestamp
 
 PROVIDER_ORDER = [
     "anthropic",
@@ -154,15 +156,17 @@ MODEL_FALLBACKS = {
         "claude-3-5-haiku-latest",
     ],
     "gemini": [
+        "gemini-2.0-flash-lite",
+        "gemini-2.5-flash",
         "gemini-2.0-flash",
         "gemini-1.5-flash",
-        "gemini-flash-latest",
         "gemini-3.1-flash-lite",
         "gemini-3.1-flash-lite-preview",
-        "gemini-3-flash-preview",
-        "gemini-2.5-flash-lite",
+        "gemini-2.5-pro",
         "gemini-2.0-pro-exp-02-05",
         "gemini-1.5-pro",
+        "gemini-3-flash-preview",
+        "gemini-flash-latest",
     ],
     "groq": [
         "llama-3.3-70b-versatile",
@@ -393,9 +397,14 @@ class AIClient:
                     return parsed
                 logger.warning(f"AI-Hints: Custom provider {provider_name} model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
-                logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e} - {self._read_http_error(e)}")
+                body = self._read_http_error(e)
+                logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e} - {body}")
+                if e.code in [429, 500, 503]:
+                    delay = self._extract_retry_delay(provider_name, e, body)
+                    self._mark_model_failed(provider_name, model, delay)
             except Exception as e:
                 logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
+                self._mark_model_failed(provider_name, model)
         return {"hints": [], "options": []}
 
     def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
@@ -491,9 +500,14 @@ class AIClient:
                     return parsed
                 logger.warning(f"AI-Hints: {provider} model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
-                logger.error(f"AI-Hints Error ({provider}, model {model}): {e} - {self._read_http_error(e)}")
+                body = self._read_http_error(e)
+                logger.error(f"AI-Hints Error ({provider}, model {model}): {e} - {body}")
+                if e.code in [429, 500, 503]:
+                    delay = self._extract_retry_delay(provider, e, body)
+                    self._mark_model_failed(provider, model, delay)
             except Exception as e:
                 logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
+                self._mark_model_failed(provider, model)
         return {"hints": [], "options": []}
 
     def _call_anthropic(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
@@ -524,9 +538,14 @@ class AIClient:
                     return parsed
                 logger.warning(f"AI-Hints: Anthropic model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
-                logger.error(f"AI-Hints Error (Anthropic, model {model}): {e} - {self._read_http_error(e)}")
+                body = self._read_http_error(e)
+                logger.error(f"AI-Hints Error (Anthropic, model {model}): {e} - {body}")
+                if e.code in [429, 500, 503]:
+                    delay = self._extract_retry_delay("anthropic", e, body)
+                    self._mark_model_failed("anthropic", model, delay)
             except Exception as e:
                 logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
+                self._mark_model_failed("anthropic", model)
         return {"hints": [], "options": []}
 
     def _call_gemini(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
@@ -571,8 +590,14 @@ class AIClient:
             except urllib.error.HTTPError as e:
                 body = self._read_http_error(e)
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e} - {body}")
+                
+                # Mark model as failed if it's a rate limit or server error
+                if e.code in [429, 500, 503]:
+                    delay = self._extract_retry_delay("gemini", e, body)
+                    self._mark_model_failed("gemini", model, delay)
             except Exception as e:
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
+                self._mark_model_failed("gemini", model)
         return {"hints": [], "options": []}
 
     def submit_gemini_batch(self, batch_requests: List[Dict]) -> Dict:
@@ -814,6 +839,59 @@ class AIClient:
             return replacement
         return model
 
+    def _mark_model_failed(self, provider: str, model: str, delay_seconds: float = None):
+        """Records a model failure and sets a cooldown timer."""
+        if delay_seconds is None:
+            delay_seconds = MODEL_COOLDOWN_SECONDS
+            
+        expiry = time.time() + delay_seconds
+        FAILED_MODELS_CACHE[(provider, model)] = expiry
+        
+        # Format for log
+        mins = int(delay_seconds // 60)
+        secs = int(delay_seconds % 60)
+        time_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+        logger.info(f"AI-Hints: Blacklisting {provider}/{model} for {time_str} due to failure.")
+
+    def _is_model_failed(self, provider: str, model: str) -> bool:
+        """Returns True if the model is currently in its cooldown period."""
+        expiry = FAILED_MODELS_CACHE.get((provider, model))
+        if expiry is None:
+            return False
+        
+        if time.time() > expiry:
+            # Cooldown expired, remove from cache
+            del FAILED_MODELS_CACHE[(provider, model)]
+            return False
+            
+        return True
+
+    def _extract_retry_delay(self, provider: str, error: urllib.error.HTTPError, body: str) -> float:
+        """Attempts to find the exact retry delay from headers or body."""
+        # 1. Check standard header
+        retry_after = error.headers.get("Retry-After")
+        if retry_after and retry_after.isdigit():
+            return float(retry_after)
+
+        # 2. Provider-specific parsing
+        try:
+            if provider == "gemini":
+                data = json.loads(body)
+                for detail in data.get("error", {}).get("details", []):
+                    if detail.get("@type") == "type.googleapis.com/google.rpc.RetryInfo":
+                        delay_str = detail.get("retryDelay", "0s")
+                        if delay_str.endswith("s"):
+                            return float(delay_str[:-1])
+            
+            # 3. Message-based regex fallback (OpenAI/Groq often use strings)
+            # "Please try again in 12s" or "Please retry in 58.3s"
+            match = re.search(r"(?:try again in|retry in) ([\d\.]+)s", body, re.IGNORECASE)
+            if match:
+                return float(match.group(1))
+        except: pass
+
+        return MODEL_COOLDOWN_SECONDS
+
     def _models_for_provider(self, provider: str, primary_model: str = "", extra_fallbacks: List[str] = None) -> List[str]:
         configured = self.config.get("model_fallbacks") or {}
         if not isinstance(configured, dict):
@@ -833,7 +911,20 @@ class AIClient:
             if not model or model in seen:
                 continue
             seen.add(model)
+            
+            # Skip if model is blacklisted
+            if self._is_model_failed(provider, model):
+                logger.debug(f"AI-Hints: Skipping blacklisted model {provider}/{model}.")
+                continue
+                
             models.append(model)
+            
+        # If ALL models were filtered out, we should probably let them through
+        # rather than giving up entirely, just in case.
+        if not models and seen:
+             logger.debug(f"AI-Hints: All models for {provider} are blacklisted. Trying anyway.")
+             models = sorted(list(seen))
+             
         return models
 
     def _model_list(self, value: Any) -> List[str]:
