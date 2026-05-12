@@ -98,8 +98,8 @@ class ProxyManager:
             return
             
         if not os.path.exists(self.executable):
-            if not self.download_binary():
-                return
+            logger.warning("Antigravity Proxy binary is missing. Please click 'Fetch' in Add-on configuration to enable background daemon.")
+            return
             
         logger.info("Starting Antigravity Proxy daemon...")
         
