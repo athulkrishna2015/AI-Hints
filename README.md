@@ -14,7 +14,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Model Fallbacks**: Each provider has its own **intelligence-ranked fallback hierarchy** (smartest-first) to automatically retry next-best models before switching to a different provider.
 - **Multi-Cloze Support**: Optimized for cards with multiple cloze deletions of the same ID (e.g., `{{c1::A}} ... {{c1::B}}`). The AI now generates coordinated options (e.g., `A, B`) for these complex cards.
 - **Improved UI Stability**: Hints and options now consistently persist through the "Show Answer" transition and are only cleared when moving to a new card.
-- **Smart LaTeX Normalization**: Advanced math repair logic that handles nested delimiters, bare commands (like `sum` or `infty`), and multi-part mathematical expressions.
+- **Smart LaTeX Normalization**: Powered by the bundled [`ai-latex-fixer`](https://github.com/athulkrishna2015/ai-latex-fixer) library — a pure-Python engine that handles nested delimiters, missing backslashes, bare math tokens (e.g., `lambda` → `\lambda`), double-escaped backslashes from JSON, Anki `<anki-mathjax>` tags, and multi-part mathematical expressions.
 - **Current-Card Hints**: Generated data is scoped to the current card, so cloze deletion and Image Occlusion siblings can each have their own hints/options.
 - **Alt-Click Reveal**: Alt-click the current cloze deletion or Image Occlusion mask to reveal only that card's hints/options. Ctrl-click and editable review fields are left alone.
 - **Speed Focus Mode Friendly**: Clicking AI-Hints buttons or Alt-click revealing hints restarts the Speed Focus Mode timer when that add-on is installed.
@@ -26,6 +26,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Storage Modes**: Choose between **visible HTML** (visible on all devices) or **invisible JSON** (cleaner look, requires add-on to render).
 - **Configurable Options**: Set exactly how many MCQ options the AI should generate, including the correct answer (default is 4).
 - **Robust JSON Parsing**: Integrates the [`json_repair`](https://github.com/mangiucugna/json_repair) library to gracefully handle malformed AI output (missing quotes, trailing commas, or truncated responses) and recover valid hints.
+- **Draggable Fallback Priority**: Reorder your provider priority list directly in the UI — including Antigravity and Local endpoints — by dragging rows up and down.
 - **MathJax-Aware Rendering**: AI-Hints repairs common LaTeX/MathJax output, including escaped JSON backslashes and bare variables such as `lambda_L`.
  The default `delimiters` format stores inline math as `\( ... \)` and block math as `\[ ... \]`; the optional `inline` format stores `$ ... $` and `$$ ... $$`.
 - **Field Customization**: Specify exactly which fields to send to the AI for each note type. Optimized for Cloze cards by default.
@@ -150,6 +151,18 @@ You can also use the **Raw JSON Editor** in the Advanced tab if you prefer editi
 }
 ```
 
+## Open Source Components
+
+This add-on bundles the following open source libraries as Git submodules:
+
+| Library | Purpose | License |
+|---|---|---|
+| [`ai-latex-fixer`](https://github.com/athulkrishna2015/ai-latex-fixer) | Pure-Python LaTeX/MathJax repair engine for LLM output. Fixes missing backslashes, mixed delimiters, nested tags, double-escaped JSON, and bare math tokens. | MIT |
+| [`json_repair`](https://github.com/mangiucugna/json_repair) | Recovers and parses malformed JSON from AI responses (missing quotes, trailing commas, truncated output). | MIT |
+
+> [!NOTE]
+> `ai-latex-fixer` is included as a Git submodule at `addon/latex_fixer/`. When cloning for development, run `git submodule update --init` to pull it.
+
 ## Development
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions and technical details.
@@ -167,6 +180,14 @@ MIT
 
 
 ## Changelog
+
+### May 12, 2026 (v1.6.1)
+- **ai-latex-fixer Submodule**: Extracted the LaTeX normalization engine into a standalone, reusable open source library at [`ai-latex-fixer`](https://github.com/athulkrishna2015/ai-latex-fixer). Bundled as a Git submodule for clean versioning and independent development.
+- **Draggable Fallback Priority for All Providers**: Antigravity and Local endpoints can now be freely reordered within the Provider Priority drag list alongside standard cloud providers.
+- **Config Modularization**: Split the monolithic 2,150+ line config UI into 10 focused files using Python multiple-inheritance Mixin architecture for maintainability.
+- **Freeze Fix**: Resolved Anki freeze-on-config-open caused by synchronous log file I/O during dialog construction.
+- **Tools Menu Entry Restored**: Re-added `Tools → AI-Hints Config` menu shortcut that was accidentally dropped during refactoring.
+- **`bin/config.json` Now Tracked**: Fixed `.gitignore` to correctly track the proxy daemon's static config while still excluding binaries and account secrets.
 
 ### May 12, 2026 (v1.6.0)
 - **Native Antigravity Proxy Daemon**: Directly bundles the standalone Antigravity Cloud Proxy in optimized binary format. Eliminates `Bun` node dependencies completely for end-users.

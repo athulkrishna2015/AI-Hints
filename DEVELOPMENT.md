@@ -1,4 +1,4 @@
-# AI-Hints - Developer Documentation
+# AI-Hints — Developer Documentation
 
 This repository contains the source code for the **AI-Hints** Anki add-on.
 
@@ -7,30 +7,73 @@ This repository contains the source code for the **AI-Hints** Anki add-on.
 - **Main Repository**: https://github.com/athulkrishna2015/AI-Hints
 - **Install via AnkiWeb**: https://ankiweb.net/shared/info/2119980872
 - **Report an Issue**: https://github.com/athulkrishna2015/AI-Hints/issues
+- **LaTeX Fixer Submodule**: https://github.com/athulkrishna2015/ai-latex-fixer
+- **Antigravity Proxy Releases**: https://github.com/athulkrishna2015/AI-Hints/releases
 
 ---
 
 ## Project Structure
 
-- `addon/`: The core add-on code.
-- `addon/latex_fixer/`: Robust LaTeX/MathJax normalization logic.
-- `addon/json_repair/`: Lightweight library to fix malformed JSON from AI models.
-- `addon/ai_client.py`: Multi-provider AI client (Gemini, Groq, OpenRouter, etc.).
-- `addon/config_ui.py`: Configuration GUI with dynamic field selectors.
-- `addon/reviewer_hooks.py`: Logic for generating hints during review.
-- `tests/`: 
-  - `local_verify.py`: Comprehensive logic verification (Mocks Anki/Qt).
-  - `live_test.py`: Live AI generation test using keys from `meta.json`.
-- `make_ankiaddon.py`: Build script for the `.ankiaddon` package.
-- `bump.py`: Standalone script to increment the version.
-- `update_deps.py`: Utility script to refresh vendored dependencies from GitHub.
+```
+AI-Hints/
+├── addon/                        # Core add-on package (this is what Anki loads)
+│   ├── __init__.py               # Entry point: registers hooks, starts proxy
+│   ├── ai_client.py              # Multi-provider AI client + fallback engine
+│   ├── reviewer_hooks.py         # Review-time hint generation and UI injection
+│   ├── proxy_manager.py          # Antigravity Proxy lifecycle (start/stop/download)
+│   ├── batch_manager.py          # Batch generation queue and async job tracking
+│   ├── card_parser.py            # Card content extraction and cloze parsing
+│   ├── logger.py                 # Shared logging setup (file + Anki log)
+│   ├── config_ui/                # Configuration GUI (multi-file Mixin architecture)
+│   │   ├── __init__.py           # Exports ConfigDialog, on_config_dialog, ADDON_PACKAGE
+│   │   ├── main_dialog.py        # Core dialog shell: save, load, timers, tab routing
+│   │   ├── widgets.py            # ProviderRowWidget, CustomProviderDialog, ADDON_PACKAGE
+│   │   ├── tab_general.py        # Tab 1: General settings
+│   │   ├── tab_providers.py      # Tab 2: API keys, models, Antigravity, Local, priority
+│   │   ├── tab_advanced.py       # Tab 3: System prompt, note type fields, raw JSON
+│   │   ├── tab_shortcuts.py      # Tab 4: Keyboard shortcuts
+│   │   ├── tab_batch.py          # Tab 5: Batch generation controls
+│   │   ├── tab_support.py        # Tab 6: Support / about
+│   │   └── tab_logs.py           # Tab 7: Live log viewer
+│   ├── bin/                      # Runtime-only assets (not full source)
+│   │   ├── config.json           # ✅ Proxy daemon static configuration (tracked in git)
+│   │   ├── antigravity-proxy-*   # ❌ OS-specific binary (downloaded at runtime, gitignored)
+│   │   └── antigravity-accounts.json  # ❌ User's Google account tokens (gitignored, sensitive)
+│   ├── latex_fixer/              # Git submodule: ai-latex-fixer library
+│   ├── json_repair/              # Vendored: json_repair library
+│   └── config.json               # Default configuration (factory reset source)
+├── tests/
+│   ├── local_verify.py           # Logic verification (mocks Anki/Qt, no keys needed)
+│   ├── live_test.py              # Live AI generation test (requires meta.json with keys)
+│   ├── test_latex_fixer.py       # LaTeX normalization regression suite (9 tests)
+│   └── test_json_repair_integration.py
+├── scratch/                      # Temporary scripts and diagnostic outputs
+│   ├── fetch_all_models.py       # Pulls all available models from active providers
+│   └── all_available_models.json # Diagnostic output from fetch_all_models.py
+├── make_ankiaddon.py             # Packaging script → produces .ankiaddon file
+├── bump.py                       # Version auto-increment script
+└── update_deps.py                # Refreshes vendored dependencies from GitHub
+```
 
 ---
 
 ## Development Workflow
 
-### 1. Local Testing (Symlinking)
-The fastest way to test changes is to symlink the `addon/` folder into your Anki add-ons directory.
+### 1. Initial Setup (Clone + Submodules)
+
+When cloning for the first time, initialize the `ai-latex-fixer` Git submodule:
+
+```shell
+git clone https://github.com/athulkrishna2015/AI-Hints.git
+cd AI-Hints
+git submodule update --init
+```
+
+This populates `addon/latex_fixer/` from https://github.com/athulkrishna2015/ai-latex-fixer.
+
+### 2. Local Testing (Symlinking)
+
+The fastest way to test changes is to symlink the `addon/` folder directly into your Anki add-ons directory so Anki loads your live code on every restart.
 
 **Linux/macOS:**
 ```shell
@@ -42,89 +85,204 @@ ln -s "$(pwd)/addon" ~/.local/share/Anki2/addons21/ai_hints_dev
 New-Item -ItemType SymbolicLink -Path "$env:APPDATA\Anki2\addons21\ai_hints_dev" -Target "$pwd\addon"
 ```
 
-### 2. Vendored Dependencies
-AI-Hints vendors some third-party libraries to remain self-contained.
-- **json_repair**: Used for robust AI response parsing.
-- To update all vendored dependencies to their latest versions:
+> [!NOTE]
+> The symlink directory name `ai_hints_dev` is what Anki uses as the add-on package name (`ADDON_PACKAGE`). It must differ from the production name `AI_Hints` to avoid conflicts if both are installed.
+
+### 3. Vendored Dependencies
+
+AI-Hints vendors some third-party libraries directly in the `addon/` tree to stay self-contained (no pip install required for users).
+
+- **`json_repair`** (`addon/json_repair/`): Robust AI response JSON parser. Managed via `update_deps.py`.
+- **`latex_fixer`** (`addon/latex_fixer/`): LaTeX/MathJax normalization engine. Managed as a Git submodule.
+
+To update `json_repair` and any other vendored dependencies to their latest versions:
 ```shell
 python3 update_deps.py
 ```
-Always run tests after updating dependencies to check for breaking changes.
 
-### 3. Building and Versioning
-- Build locally (auto-bumps version):
+To update the `ai-latex-fixer` submodule to the latest commit:
 ```shell
-python make_ankiaddon.py
-```
-
-- Manually bump the version (auto-increment):
-```shell
-python bump.py
-```
-
-- Set an explicit version:
-```shell
-python make_ankiaddon.py 1.3.0
-```
-
-**Versioning rule:** versions follow `major.minor.patch` (e.g., `1.3.0`).
-
-### 4. Running Tests
-- **Unit Test Suite**:
-  Run all local unit tests:
-  ```shell
-  python3 -B -m unittest discover -s tests -p "test_*.py"
-  ```
-
-- **Logic Verification (Local)**:
-  Run the logic verification suite (no API keys required, mocks Anki/Qt):
-  ```shell
-  python3 -B tests/local_verify.py
-  ```
-
-- **JSON Repair Integration**:
-  Verify the robust parsing logic with malformed inputs:
-  ```shell
-  python3 tests/test_json_repair_integration.py
-  ```
-
-- **LaTeX Fixer Tests**:
-  Verify LaTeX and MathJax formatting normalization:
-  ```shell
-  python3 -B tests/test_latex_fixer.py
-  ```
-
-- **Live Provider Test**:
-  Test your API keys and provider connectivity (requires `addon/meta.json` with keys):
-  ```shell
-  python3 tests/live_test.py
-  ```
-
-### 5. Scratch Scripts & Diagnostics
-The `scratch/` directory is used for holding temporary scripts, API diagnostic runs, and raw JSON logs.
-- **Fetch All Models Script** (`scratch/fetch_all_models.py`):
-  Used to pull all available models and pricing endpoints directly from the active API providers to diagnose and test active models.
-  ```shell
-  python3 scratch/fetch_all_models.py
-  ```
-- **Diagnostics Output** (`scratch/all_available_models.json`):
-  Stores the diagnostic JSON output of all parsed and fetched models.
-
-### 6. Creating a Release on GitHub
-1. **Commit and Tag**:
-```bash
-git add .
-git commit -m "Bump version to v1.3.0"
-git tag v1.3.0
-git push origin master --tags
-```
-2. **Build and Upload to Releases**:
-Build the `.ankiaddon` package and upload it directly to the GitHub release assets:
-```shell
-python make_ankiaddon.py 1.3.0
+git submodule update --remote addon/latex_fixer
+git add addon/latex_fixer
+git commit -m "Update ai-latex-fixer submodule to latest"
 ```
 
 ---
 
+## Antigravity Proxy
+
+The **Antigravity Proxy** is a standalone binary daemon that acts as a local reverse proxy, routing requests through Google accounts to access Gemini models for free. It is an independent project released separately.
+
+### How It Works
+
+1. The daemon runs as a local HTTP server on **port 3000** (`http://localhost:3000`).
+2. AI-Hints sends requests to the proxy just like any other provider.
+3. The proxy rotates between configured Google accounts using a health-score system to avoid rate limits.
+4. All lifecycle (start, stop, restart) is managed automatically by `addon/proxy_manager.py` — users never touch the binary directly.
+
+### Binary Naming Convention
+
+Binaries follow the naming pattern:
+
+```
+antigravity-proxy-{platform}-{PROXY_VERSION}
+```
+
+Examples:
+- `antigravity-proxy-linux-proxy-v0.7.1`
+- `antigravity-proxy-windows.exe-proxy-v0.7.1`
+- `antigravity-proxy-darwin-arm64-proxy-v0.7.1`
+
+The version is embedded in the filename so that bumping `PROXY_VERSION` in `proxy_manager.py` automatically triggers a fresh download on the user's next Anki start (the old binary is pruned automatically).
+
+### Updating the Proxy Binary Version
+
+When a new Antigravity Proxy release is available:
+
+1. **Upload the new binaries** to a GitHub Release in this repo tagged with the new version (e.g., `proxy-v0.8.0`). The release must contain these assets:
+   - `antigravity-proxy-linux`
+   - `antigravity-proxy-windows.exe`
+   - `antigravity-proxy-darwin-x64`
+   - `antigravity-proxy-darwin-arm64`
+
+2. **Update the version constant** in `addon/proxy_manager.py`:
+   ```python
+   PROXY_VERSION = "proxy-v0.8.0"   # ← change this
+   ```
+
+3. That's it. On next Anki start, users with the old binary will automatically:
+   - Have the old binary deleted from `addon/bin/`
+   - Download the new binary for their OS from the GitHub release
+   - Have `chmod +x` applied automatically on Linux/macOS
+
+### Proxy Configuration (`addon/bin/config.json`)
+
+The file `addon/bin/config.json` is the **static runtime configuration** for the daemon (rotation strategy, scoring, retry logic, model routing, endpoints). It ships with the add-on and is **tracked in git**. Changes here affect the daemon's behavior for all users.
+
+> [!WARNING]
+> `addon/bin/antigravity-accounts.json` is **gitignored** — it contains user-specific Google account OAuth tokens and must never be committed.
+
+### Setup Dashboard
+
+Users configure their Google accounts via the proxy's own web frontend at:
+```
+http://localhost:3000/frontend/index.html
+```
+The "🚀 Open Setup Dashboard" button in the Providers tab opens this URL in the system browser.
+
+---
+
+## Config UI Architecture
+
+The configuration dialog uses a **Python Multiple-Inheritance Mixin** pattern. Each tab is implemented as a standalone `class XxxTabMixin:` in its own file. The main `ConfigDialog` in `main_dialog.py` inherits from all of them:
+
+```python
+class ConfigDialog(QDialog,
+                   GeneralTabMixin,
+                   ProvidersTabMixin,
+                   AdvancedTabMixin,
+                   ShortcutsTabMixin,
+                   BatchTabMixin,
+                   SupportTabMixin,
+                   LogTabMixin):
+```
+
+This means every mixin method shares the same `self` (including `self.config`, `self.tabs`, all widget refs) with no awkward cross-references or parameter passing. Adding a new tab means:
+1. Create `addon/config_ui/tab_xxx.py` with `class XxxTabMixin`
+2. Add it to the inheritance list in `main_dialog.py`
+3. Call `self._create_xxx_tab()` inside `setup_ui()`
+
+---
+
+## Building and Versioning
+
+### Build the `.ankiaddon` package
+
+```shell
+# Auto-bump patch version and build:
+python make_ankiaddon.py
+
+# Set an explicit version:
+python make_ankiaddon.py 1.6.1
+```
+
+This produces a timestamped file like `AI_Hints_v1.6.1_202605121420.ankiaddon`.
+
+**What gets included in the package:**
+- All Python source files under `addon/`
+- `addon/bin/config.json` (proxy static config)
+- `addon/latex_fixer/` (submodule source)
+- `addon/json_repair/` (vendored source)
+- `addon/config.json` (default config)
+
+**What is excluded:**
+- `addon/bin/antigravity-proxy-*` (binaries, downloaded at runtime)
+- `addon/bin/antigravity-accounts.json` (user secrets)
+- `__pycache__/`, `.pyc`, `.md`, `.png` files
+- `meta.json`, `ai_hints.log`, `tests/`
+
+### Manually bump the version
+
+```shell
+python bump.py
+```
+
+Follows `major.minor.patch` semver (e.g., `1.6.0` → `1.6.1`).
+
+---
+
+## Running Tests
+
+```shell
+# Full unit test suite:
+python3 -B -m unittest discover -s tests -p "test_*.py"
+
+# Logic verification (no API keys, mocks Anki/Qt):
+python3 -B tests/local_verify.py
+
+# LaTeX normalization regression tests:
+python3 -B tests/test_latex_fixer.py
+
+# JSON repair integration tests:
+python3 tests/test_json_repair_integration.py
+
+# Live provider test (requires addon/meta.json with real API keys):
+python3 tests/live_test.py
+```
+
+---
+
+## Creating a Release
+
+1. **Commit and tag:**
+   ```shell
+   git add .
+   git commit -m "Release v1.6.1"
+   git tag v1.6.1
+   git push origin master --tags
+   ```
+
+2. **Build the package:**
+   ```shell
+   python make_ankiaddon.py 1.6.1
+   ```
+
+3. **Upload to GitHub Releases:**
+   - Create a new GitHub Release for the tag `v1.6.1`
+   - Attach the `.ankiaddon` file as a release asset
+
+4. **Upload to AnkiWeb:**
+   - Log in to https://ankiweb.net/shared/upload
+   - Upload the `.ankiaddon` file to update the listing
+
+> [!IMPORTANT]
+> If this release also bumps the Antigravity Proxy binary, create a **separate** GitHub Release tagged `proxy-vX.Y.Z` and upload all 4 OS binaries to it (Linux, Windows, macOS x64, macOS arm64). Then update `PROXY_VERSION` in `proxy_manager.py` before building the `.ankiaddon`.
+
+---
+
 ## Code Standards
-We follow clean coding practices. Please ensure any modifications maintain compatibility with Anki's UI APIs and importer behavior.
+
+- Maintain compatibility with **Anki 25.x** (Qt 6, PyQt 6, Python 3.10+).
+- All Qt UI code must run on the **main thread**. Background work uses `threading.Thread` + `mw.taskman.run_on_main()`.
+- No blocking I/O inside `__init__` or tab constructors — defer with `QTimer.singleShot(0, ...)`.
+- Keep `ADDON_PACKAGE` derived from `__name__.split(".")[0]` (not hardcoded) to support both dev and production installs.

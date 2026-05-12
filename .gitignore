@@ -10,6 +10,7 @@ addon/batch_state.json
 .idea/
 .DS_Store
 scratch
-addon/bin/
+addon/bin/antigravity-proxy-*
+addon/bin/antigravity-accounts.json
 config.json
 antigravity-accounts.json

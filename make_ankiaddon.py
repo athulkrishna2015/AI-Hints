@@ -63,7 +63,10 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
     zip_name, final_name = artifact_names(ADDON_NAME, build_version)
 
     # Exclusions
-    exclude_dirs = ['__pycache__', '.git', '.vscode', '.github', 'tests', 'bin']
+    exclude_dirs = ['__pycache__', '.git', '.vscode', '.github', 'tests']
+    exclude_files_names = ['antigravity-proxy-linux', 'antigravity-proxy-windows.exe',
+                           'antigravity-proxy-darwin-x64', 'antigravity-proxy-darwin-arm64',
+                           'antigravity-accounts.json']
     exclude_exts = ['.ankiaddon', '.pyc', '.md', '.toml', '.lock', '.cff', '.png']
     exclude_files = ['meta.json', 'ai_hints.log', '.gitignore', '.gitmodules', 'mypy.ini', 'LICENSE', '.git', 'README', 'README.md']
 
@@ -77,8 +80,11 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
             
             for file in files:
                 file_path = Path(root) / file
-                # Skip excluded files/extensions
-                if file in exclude_files or file_path.suffix.lower() in exclude_exts:
+                # Skip excluded files/extensions/binary names
+                if file in exclude_files or file in exclude_files_names or file_path.suffix.lower() in exclude_exts:
+                    continue
+                # Skip binary executables by prefix (version-suffixed names like antigravity-proxy-linux-proxy-v0.7.1)
+                if any(file.startswith(n) for n in ['antigravity-proxy-linux', 'antigravity-proxy-windows', 'antigravity-proxy-darwin']):
                     continue
                 
                 # Calculate the path relative to the 'addon/' folder 
