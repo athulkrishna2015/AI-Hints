@@ -863,7 +863,7 @@ class AIClient:
     def fetch_models(self, provider: str) -> List[str]:
         """Fetch available models from the provider's API."""
         api_key = self._api_key_for(provider)
-        if not api_key and provider != "local":
+        if not api_key and provider not in ["local", "antigravity"]:
             return []
 
         try:
