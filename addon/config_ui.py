@@ -1546,11 +1546,18 @@ class ConfigDialog(QDialog):
                         
                         self.ag_dashboard_btn.setEnabled(True)
                         self.ag_enable_cb.setEnabled(True)
+                        self.ag_enable_cb.setChecked(True)
                         self.ag_enable_cb.setToolTip("Automatically run the bundled proxy in the background when Anki starts.")
                         self.ag_fetch_btn.setEnabled(False)
                         self.ag_fetch_btn.setToolTip("Binary is already downloaded locally.")
                         self.ag_dashboard_btn.setToolTip("Open the local web interface to configure Google accounts.")
                         self.ag_delete_btn.setEnabled(True)
+                        
+                        # Dynamically sync internal state and launch right now so dashboard is immediately usable
+                        if "antigravity_proxy" not in self.config or not isinstance(self.config["antigravity_proxy"], dict):
+                            self.config["antigravity_proxy"] = {}
+                        self.config["antigravity_proxy"]["enabled"] = True
+                        proxy_manager.start(self.config)
                     else:
                         self.ag_dl_progress.setVisible(False)
                         self.ag_dl_status.setText(f"❌ Failed: {err_msg}")
