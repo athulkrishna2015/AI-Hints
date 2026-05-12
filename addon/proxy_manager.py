@@ -100,11 +100,28 @@ class ProxyManager:
             self.process = subprocess.Popen(
                 [self.executable],
                 env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, # Merge stderr into stdout
                 cwd=self.bin_dir,
+                universal_newlines=True, # Read as text
+                bufsize=1, # Line buffered
                 **kwargs
             )
+            
+            # Spawn dynamic background reader to pipe process outputs into standard logs
+            def _reader_thread():
+                try:
+                    for line in iter(self.process.stdout.readline, ""):
+                        clean = line.strip()
+                        if clean:
+                            logger.info(f"[Proxy] {clean}")
+                    self.process.stdout.close()
+                except Exception as e:
+                    logger.debug(f"Proxy log stream closed: {e}")
+                    
+            import threading
+            threading.Thread(target=_reader_thread, daemon=True).start()
+            
             logger.info(f"Antigravity Proxy daemon started (PID: {self.process.pid}) on port 3015.")
         except Exception as e:
             logger.error(f"Failed to start Antigravity Proxy: {e}")
