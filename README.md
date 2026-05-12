@@ -181,6 +181,16 @@ MIT
 
 ## Changelog
 
+### May 12, 2026 (v2.0.0)
+- **Major Performance & UX Overhaul**: Comprehensive optimization of the addon's core lifecycle and configuration interface.
+- **Instant-Open Config UI**: Implemented lazy-loading for note types and fields, reducing configuration window opening time from seconds to milliseconds.
+- **Optimized Anki Startup**: Background tasks (proxy daemon startup, log clearing) are now deferred until after the profile is loaded, ensuring Anki reaches the main screen instantly.
+- **Interactive Model Testing**: Added "Test" buttons next to every AI provider. Instantly verify your API keys, connectivity, and generation quality with a real-world test prompt before saving.
+- **Live Proxy Status Indicator**: Added a real-time, color-coded status tracker (**● Running** / **○ Stopped**) for the Antigravity Proxy daemon in the configuration tab.
+- **Intelligent Dropdown Synchronization**: The "Active AI Provider" and individual "Model" dropdowns now strictly follow your custom priority order and the backend's intelligence-ranked fallback hierarchy.
+- **Python 3.14 Compatibility**: Fixed a startup crash caused by legacy hook names in the latest Python/Anki builds.
+- **Proxy Manager Stability**: Resolved an `UnboundLocalError` that could prevent the Antigravity daemon from starting on certain platforms.
+
 ### May 12, 2026 (v1.6.1)
 - **ai-latex-fixer Submodule**: Extracted the LaTeX normalization engine into a standalone, reusable open source library at [`ai-latex-fixer`](https://github.com/athulkrishna2015/ai-latex-fixer). Bundled as a Git submodule for clean versioning and independent development.
 - **Draggable Fallback Priority for All Providers**: Antigravity and Local endpoints can now be freely reordered within the Provider Priority drag list alongside standard cloud providers.
