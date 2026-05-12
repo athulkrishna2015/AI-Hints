@@ -38,9 +38,15 @@ class FallbackOrderDialog(QDialog):
         self.remove_btn = QPushButton("Remove")
         self.remove_btn.clicked.connect(self.remove_item)
         
+        self.list_test_btn = QPushButton("Test")
+        self.list_test_btn.setFixedWidth(70)
+        self.list_test_btn.setToolTip("Test the currently selected model in the list.")
+        self.list_test_btn.clicked.connect(self.on_test_from_list)
+        
         btn_layout.addWidget(self.up_btn)
         btn_layout.addWidget(self.down_btn)
         btn_layout.addWidget(self.remove_btn)
+        btn_layout.addWidget(self.list_test_btn)
         layout.addLayout(btn_layout)
         
         # Add new model section
@@ -53,13 +59,13 @@ class FallbackOrderDialog(QDialog):
         self.add_btn = QPushButton("Add Model")
         self.add_btn.clicked.connect(self.add_item)
         
-        self.fetch_btn = QPushButton("Fetch")
-        self.fetch_btn.setFixedWidth(70)
-        self.fetch_btn.setToolTip("Fetch latest available models from provider API.")
-        self.fetch_btn.clicked.connect(self.on_fetch_clicked)
+        self.test_btn = QPushButton("Test")
+        self.test_btn.setFixedWidth(70)
+        self.test_btn.setToolTip("Test the model name in the box before adding.")
+        self.test_btn.clicked.connect(self.on_test_clicked)
         
         add_layout.addWidget(self.add_edit, 1)
-        add_layout.addWidget(self.fetch_btn)
+        add_layout.addWidget(self.test_btn)
         add_layout.addWidget(self.add_btn)
         layout.addLayout(add_layout)
         
@@ -69,10 +75,27 @@ class FallbackOrderDialog(QDialog):
         dlg_btns.rejected.connect(self.reject)
         layout.addWidget(dlg_btns)
 
-    def on_fetch_clicked(self):
-        # We temporarily bridge the dropdown to the main dialog's fetcher
-        if hasattr(self.main_dialog, "on_fetch_models"):
-            self.main_dialog.on_fetch_models(self.provider, self.add_edit)
+    def on_test_clicked(self):
+        # Bridge to main dialog's tester
+        if hasattr(self.main_dialog, "on_test_model"):
+            self.main_dialog.on_test_model(self.provider, self.add_edit)
+
+    def on_test_from_list(self):
+        """Tests the model currently selected in the QListWidget."""
+        curr_item = self.list_widget.currentItem()
+        if not curr_item or not hasattr(self.main_dialog, "on_test_model"):
+            return
+            
+        # We need a combobox for on_test_model to work as it expects a widget with currentText()
+        temp_cb = QComboBox()
+        temp_cb.addItem(curr_item.text())
+        
+        # Temporarily disable the list test button while testing
+        self.list_test_btn.setEnabled(False)
+        self.main_dialog.on_test_model(self.provider, temp_cb)
+        
+        # Re-enable after a short delay (the test is async)
+        QTimer.singleShot(3000, lambda: self.list_test_btn.setEnabled(True))
 
     def move_item(self, delta):
         curr_row = self.list_widget.currentRow()
