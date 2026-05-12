@@ -202,8 +202,8 @@ class AIClient:
     def __init__(self, config: Dict[str, Any]):
         self.config = config or {}
 
-    def generate_options(self, front: str, back: str) -> Dict[str, List[str]]:
-        primary_provider = self.config.get("ai_provider", "openai")
+    def generate_options(self, front: str, back: str, override_provider: str = None) -> Dict[str, List[str]]:
+        primary_provider = override_provider or self.config.get("ai_provider", "openai")
         system_prompt = (self.config.get("system_prompt", "") or "").strip()
         count = self._options_count()
         
@@ -601,9 +601,15 @@ class AIClient:
         }
         
         logger.info(f"Submitting Gemini Batch for {len(request_items)} items to model: {model}")
-        response = self._post_json(url, payload, headers)
-        # Response will contain {'name': 'batches/xxx', 'state': 'JOB_STATE_PENDING', ...}
-        return response
+        try:
+            response = self._post_json(url, payload, headers)
+            return response
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            if "FAILED_PRECONDITION" in err_body:
+                 raise Exception("🔒 Access Denied: Your Gemini API key appears to be on the FREE TIER.\n\nNative Batch Generation is a Paid-Only feature. Please link a billing method in Google AI Studio to enable it, OR switch to the 'Sequential Local Queue' mode in your Batch tab for free support.")
+            # Re-raise cleanly with status code
+            raise Exception(f"Google API Error ({e.code}): {err_body}")
 
     def get_gemini_batch_status(self, job_name: str) -> Dict:
         """

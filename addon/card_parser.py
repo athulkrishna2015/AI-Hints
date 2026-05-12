@@ -230,10 +230,16 @@ class CardParser:
         focused_text = re.sub(r"\{\{c(\d+)::(.*?)(?:::([^{}]*?))?\}\}", replace_cloze, text, flags=re.DOTALL)
         return focused_text, ", ".join(answers)
 
-    def update_note_with_hints(self, note, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None) -> bool:
+    def update_note_with_hints(self, note, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None, skip_if_exists: bool = False) -> bool:
         """Appends or replaces the AI hints block in the target field."""
         if not data or (not data.get("hints") and not data.get("options")):
             return False
+
+        # Safety check: Abort if data exists and we were instructed not to overwrite
+        if skip_if_exists:
+            existing = self.find_hints_block(note, card)
+            if existing:
+                return False
 
         data = self.normalize_hint_data(data)
 

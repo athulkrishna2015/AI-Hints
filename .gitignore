@@ -5,6 +5,7 @@ __pycache__/
 meta.json
 addon/meta.json
 addon/ai_hints.log
+addon/batch_state.json
 .vscode/
 .idea/
 .DS_Store
