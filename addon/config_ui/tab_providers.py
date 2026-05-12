@@ -6,6 +6,10 @@ from .widgets import ProviderRowWidget
 class FallbackOrderDialog(QDialog):
     def __init__(self, parent, provider, current_list, suggestions):
         super().__init__(parent)
+        # parent is typically the main ConfigDialog (which contains on_fetch_models)
+        self.main_dialog = parent
+        self.provider = provider
+        
         self.setWindowTitle(f"Fallback Priority: {provider.capitalize()}")
         self.setMinimumWidth(400)
         self.setMinimumHeight(500)
@@ -49,7 +53,13 @@ class FallbackOrderDialog(QDialog):
         self.add_btn = QPushButton("Add Model")
         self.add_btn.clicked.connect(self.add_item)
         
+        self.fetch_btn = QPushButton("Fetch")
+        self.fetch_btn.setFixedWidth(70)
+        self.fetch_btn.setToolTip("Fetch latest available models from provider API.")
+        self.fetch_btn.clicked.connect(self.on_fetch_clicked)
+        
         add_layout.addWidget(self.add_edit, 1)
+        add_layout.addWidget(self.fetch_btn)
         add_layout.addWidget(self.add_btn)
         layout.addLayout(add_layout)
         
@@ -58,6 +68,11 @@ class FallbackOrderDialog(QDialog):
         dlg_btns.accepted.connect(self.accept)
         dlg_btns.rejected.connect(self.reject)
         layout.addWidget(dlg_btns)
+
+    def on_fetch_clicked(self):
+        # We temporarily bridge the dropdown to the main dialog's fetcher
+        if hasattr(self.main_dialog, "on_fetch_models"):
+            self.main_dialog.on_fetch_models(self.provider, self.add_edit)
 
     def move_item(self, delta):
         curr_row = self.list_widget.currentRow()
