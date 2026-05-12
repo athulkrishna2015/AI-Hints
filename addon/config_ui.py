@@ -1774,6 +1774,17 @@ class ConfigDialog(QDialog):
                 edit.addItem(model_name)
             edit.setCurrentText(model_name)
             
+        # Explicitly restore custom separated models
+        ag_model = models.get("antigravity", DEFAULT_MODELS.get("antigravity", ""))
+        if self.ag_model_edit.findText(ag_model) == -1:
+            self.ag_model_edit.addItem(ag_model)
+        self.ag_model_edit.setCurrentText(ag_model)
+        
+        local_model = c.get("local_endpoint", {}).get("model", "")
+        if self.local_model_edit.findText(local_model) == -1:
+            self.local_model_edit.addItem(local_model)
+        self.local_model_edit.setCurrentText(local_model)
+            
         logger.info("Restored default model selections.")
         tooltip("Default models restored.")
 
@@ -1823,7 +1834,7 @@ class ConfigDialog(QDialog):
                 
         self.model_edits = {}
         for p in default_priority:
-            if p == "local":
+            if p in ["local", "antigravity"]:
                 continue
             w = ProviderRowWidget(p, self)
             model_name = models.get(p, DEFAULT_MODELS.get(p, ""))
@@ -1840,6 +1851,12 @@ class ConfigDialog(QDialog):
             self.local_model_edit.addItem(model_name)
         self.local_model_edit.setCurrentText(model_name)
         self.local_fallback_cb.setChecked(local.get("enabled", False))
+        
+        # 2. Explicitly restore Antigravity Model
+        ag_model = models.get("antigravity", DEFAULT_MODELS.get("antigravity", ""))
+        if self.ag_model_edit.findText(ag_model) == -1:
+            self.ag_model_edit.addItem(ag_model)
+        self.ag_model_edit.setCurrentText(ag_model)
         
         logger.info("Restored Provider defaults (models, priority; API keys preserved).")
         tooltip("Provider defaults restored.")
