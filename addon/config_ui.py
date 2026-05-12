@@ -649,8 +649,9 @@ class ConfigDialog(QDialog):
         
         layout.addWidget(self.tabs)
         
-        # Restore last visited tab
-        self.tabs.setCurrentIndex(LAST_ACTIVE_TAB_INDEX)
+        # Restore last visited tab from persistent configuration
+        initial_idx = self.config.get("last_active_tab", 0)
+        self.tabs.setCurrentIndex(initial_idx)
         self.tabs.currentChanged.connect(self._on_tab_changed_tracker)
         
         # --- Bottom Buttons ---
@@ -1601,9 +1602,17 @@ class ConfigDialog(QDialog):
             showWarning(f"Setup failed: {e}")
 
     def _on_tab_changed_tracker(self, index):
-        """Caches the last active configuration tab globally."""
+        """Caches the last active configuration tab globally and persists to persistent config immediately."""
         global LAST_ACTIVE_TAB_INDEX
         LAST_ACTIVE_TAB_INDEX = index
+        
+        # Silently save index into active disk config so memory survives app reboots
+        if hasattr(self, 'config'):
+             self.config["last_active_tab"] = index
+             try:
+                 mw.addonManager.writeConfig(ADDON_PACKAGE, self.config)
+             except Exception:
+                 pass
 
     def on_delete_binary(self):
         """Safely handles purging local binary caches."""
