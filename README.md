@@ -8,7 +8,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 ## Features
 
 - **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, **Antigravity Proxy**, and any OpenAI-compatible local API (like Ollama or LM Studio).
-- **Native Antigravity Daemon**: Features seamless embedded integration of the [Antigravity Cloud Proxy](https://github.com/athulkrishna2015/antigravity-proxy). Automatically manages background executable lifecycle, offers one-click account setup dashboard, and provides direct gateway to premier LLMs completely locally.
+- **Native Antigravity Daemon**: Features seamless embedded integration of the [Antigravity Cloud Proxy](https://github.com/frieser/antigravity-proxy). Automatically manages background executable lifecycle, offers one-click account setup dashboard, and provides direct gateway to premier LLMs completely locally.
 - **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next provider. The fallback order is strictly ranked by absolute intelligence (smartest-first).
 - **Smart Key Guard**: The fallback system only queries providers where you have configured a valid API key (or enabled local endpoints). Any unconfigured providers are safely and silently skipped.
 - **Model Fallbacks**: Each provider has its own **intelligence-ranked fallback hierarchy** (smartest-first) to automatically retry next-best models before switching to a different provider.
@@ -92,7 +92,7 @@ To use this add-on, you need an API key from one of the supported providers.
 - **Cerebras**: [cloud.cerebras.ai](https://cloud.cerebras.ai/)
 - **Hugging Face**: [huggingface.co](https://huggingface.co/settings/tokens)
 - **OpenRouter**: [openrouter.ai](https://openrouter.ai/keys) (Offers many $0/token models)
-- **Antigravity Cloud Proxy**: [Embedded Plugin](https://github.com/athulkrishna2015/antigravity-proxy) (No credit card, internal account rotation)
+- **Antigravity Cloud Proxy**: [Embedded Plugin](https://github.com/frieser/antigravity-proxy) (No credit card, internal account rotation)
 - **Ollama (Local AI)**: [ollama.com](https://ollama.com/) (No API key or internet required)
 
 ### Paid Providers
