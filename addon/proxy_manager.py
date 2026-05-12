@@ -5,6 +5,8 @@ import sys
 import time
 from .logger import logger
 
+PROXY_VERSION = "proxy-v0.7.1"
+
 class ProxyManager:
     def __init__(self):
         self.process = None
@@ -12,19 +14,25 @@ class ProxyManager:
         # Determine paths
         addon_dir = os.path.dirname(os.path.abspath(__file__))
         self.bin_dir = os.path.join(addon_dir, "bin")
+        
         # OS and Architecture detection
         import platform
         arch = platform.machine().lower()
         is_arm = "arm" in arch or "aarch" in arch
 
+        # Explicit underlying release asset names
         if sys.platform == "win32":
-            self.executable = os.path.join(self.bin_dir, "antigravity-proxy-windows.exe")
+            self.remote_asset = "antigravity-proxy-windows.exe"
         elif sys.platform == "darwin":
             mac_suffix = "arm64" if is_arm else "x64"
-            self.executable = os.path.join(self.bin_dir, f"antigravity-proxy-darwin-{mac_suffix}")
+            self.remote_asset = f"antigravity-proxy-darwin-{mac_suffix}"
         else:
-            # Default linux
-            self.executable = os.path.join(self.bin_dir, "antigravity-proxy-linux")
+            self.remote_asset = "antigravity-proxy-linux"
+
+        # Local filename now includes VERSION so that version bump updates trigger redownload automatically
+        # e.g. antigravity-proxy-linux-v0.7.1
+        local_name = f"{self.remote_asset}-{PROXY_VERSION}"
+        self.executable = os.path.join(self.bin_dir, local_name)
 
     def is_enabled(self, config):
         """Check if the proxy should be running based on config."""
@@ -38,17 +46,16 @@ class ProxyManager:
         progress_callback signature: (downloaded_bytes, total_bytes, elapsed_seconds)
         """
         if os.path.exists(self.executable):
-            logger.info(f"Antigravity Proxy is already downloaded.")
+            logger.info(f"Antigravity Proxy {PROXY_VERSION} is already downloaded.")
             return True
 
-        logger.info(f"Antigravity Proxy binary not found. Downloading...")
+        logger.info(f"Antigravity Proxy {PROXY_VERSION} binary not found. Starting download...")
         try:
             import urllib.request
             import time
             start_time = time.time()
             
-            binary_name = os.path.basename(self.executable)
-            remote_url = f"https://github.com/athulkrishna2015/AI-Hints/releases/download/proxy-v0.7.1/{binary_name}"
+            remote_url = f"https://github.com/athulkrishna2015/AI-Hints/releases/download/{PROXY_VERSION}/{self.remote_asset}"
             
             def _reporthook(count, block_size, total_size):
                 if progress_callback:
@@ -57,6 +64,19 @@ class ProxyManager:
                     progress_callback(downloaded, total_size, elapsed)
 
             os.makedirs(self.bin_dir, exist_ok=True)
+            
+            # Cleanup old version binaries to save disk space if user already had them
+            try:
+                for item in os.listdir(self.bin_dir):
+                    if item.startswith("antigravity-proxy-") and item != os.path.basename(self.executable):
+                        # Extra caution so we don't wipe database
+                        if not item.endswith(".json"):
+                            old_path = os.path.join(self.bin_dir, item)
+                            if os.path.isfile(old_path):
+                                os.remove(old_path)
+                                logger.debug(f"Pruned legacy proxy binary: {item}")
+            except: pass
+
             urllib.request.urlretrieve(remote_url, self.executable, reporthook=_reporthook)
             logger.info(f"Successfully downloaded proxy to {self.executable}")
             # Ensure permissions right after download
