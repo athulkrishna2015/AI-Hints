@@ -421,6 +421,7 @@ class AIClient:
                 if e.code in [429, 500, 503]:
                     delay = self._extract_retry_delay(provider_name, model, e, body)
                     self._mark_model_failed(provider_name, model, delay)
+                    break
             except Exception as e:
                 logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
                 self._mark_model_failed(provider_name, model)
@@ -525,6 +526,9 @@ class AIClient:
                 if e.code in [429, 500, 503]:
                     delay = self._extract_retry_delay(provider, model, e, body)
                     self._mark_model_failed(provider, model, delay)
+                    # For most providers, a 429/500/503 means the whole service or account is struggling.
+                    # Break to move to the next provider immediately.
+                    break
             except Exception as e:
                 logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
                 self._mark_model_failed(provider, model)
@@ -564,6 +568,7 @@ class AIClient:
                 if e.code in [429, 500, 503]:
                     delay = self._extract_retry_delay("anthropic", model, e, body)
                     self._mark_model_failed("anthropic", model, delay)
+                    break
             except Exception as e:
                 logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
                 self._mark_model_failed("anthropic", model)
@@ -623,6 +628,7 @@ class AIClient:
                 if e.code in [429, 500, 503]:
                     delay = self._extract_retry_delay("gemini", model, e, body)
                     self._mark_model_failed("gemini", model, delay)
+                    break
             except Exception as e:
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
                 self._mark_model_failed("gemini", model)

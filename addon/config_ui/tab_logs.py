@@ -1,6 +1,8 @@
 import os
 from aqt.qt import *
+from aqt.utils import askUser
 from ..logger import logger, info, tooltip
+from ..batch_manager import batch_manager
 
 class LogTabMixin:
     def _create_log_tab(self):
@@ -53,6 +55,12 @@ class LogTabMixin:
         clear_btn = QPushButton("Clear Log")
         clear_btn.clicked.connect(self.clear_log)
         filter_layout.addWidget(clear_btn)
+
+        stop_btn = QPushButton("🛑 Stop All")
+        stop_btn.setToolTip("Emergency stop for all background tasks and batch generations.")
+        stop_btn.setStyleSheet("color: white; background-color: #d9534f; font-weight: bold; padding: 3px 8px;")
+        stop_btn.clicked.connect(self.emergency_stop)
+        filter_layout.addWidget(stop_btn)
         
         layout.addLayout(filter_layout)
         
@@ -65,6 +73,11 @@ class LogTabMixin:
         # when the user switches to this tab. Calling it during construction
         # blocks the main thread before the dialog is shown, freezing Anki.
         return tab
+
+    def emergency_stop(self):
+        if askUser("Are you sure you want to stop all active generations? This will clear the current queue."):
+            batch_manager.stop_all()
+            self.load_log()
 
     def load_log(self):
         log_file = os.path.join(self.addon_dir, "ai_hints.log")

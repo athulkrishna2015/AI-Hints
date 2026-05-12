@@ -364,6 +364,23 @@ class BatchManager:
         logger.info("Local Sequential Queue ABORT manually triggered by user.")
         return True
 
+    def stop_all(self):
+        """Emergency stop for ALL activity (Local Queue + Cloud Batches)."""
+        logger.info("🚨 EMERGENCY STOP: Aborting all active generations.")
+        self.stop_local_queue()
+        
+        # Clear cloud batches from tracking
+        if self.jobs:
+            count = len(self.jobs)
+            self.jobs = {}
+            if self.timer:
+                self.timer.stop()
+            logger.info(f"Cleared {count} cloud batch jobs from tracking.")
+            
+        self.save_state()
+        tooltip("🛑 All generations stopped.")
+        return True
+
     def set_pause_local_queue(self, pause_state: bool):
         """Sets global loop gate status."""
         self.local_queue_paused = pause_state
