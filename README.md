@@ -218,7 +218,7 @@ MIT
 - **Robust Latex Normalization**: Standardized options comparison logic so LaTeX variances like `$$` vs `\(` never cause highlight mismatches.
 - **Clean-State Startup Recovery**: Patched non-standard library imports guaranteeing 100% load health across high-strictness environments.
 
-### May 11, 2026
+### May 11, 2026 (v1.4.1)
 - **Gemini 3 Native Integration**: Restored full compatibility for `gemini-3` preview models.
 - **Explicit Thinking Configuration**: Leverages new `thinkingConfig` to maximize logical reasoning fidelity.
 - **Correct Answer Highlighting**: Automatically identifies and highlights correct options on the back side of the card.
@@ -227,7 +227,7 @@ MIT
 - **Modeless Config Windows**: Transitioned configuration views to modeless UI widgets to allow concurrently deck browsing.
 - **Smart Stability Patches**: Disabled aggressive LaTeX fixes by default and added dynamic offline status animations.
 
-### May 9, 2026
+### May 9, 2026 (v1.3.0)
 - **Robust JSON Parsing Layer**: Vendored the [`json_repair`](https://github.com/mangiucugna/json_repair) engine and added hallucination filters to sanitize AI output strings.
 - **Asynchronous Generation**: Fully threaded backend processing to completely eliminate review lag and interface blocking.
 - **Native Undo Integration**: Hooked into Anki storage caches for zero-latency real-time synchronization on **Ctrl+Z**.
