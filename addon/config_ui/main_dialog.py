@@ -170,9 +170,14 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         restore_btn.setToolTip("Restores default values ONLY for the currently selected tab.")
         restore_btn.clicked.connect(self.on_restore_current_tab)
         btn_layout.addWidget(restore_btn)
-        
+
+        stop_all_btn = QPushButton("🛑 Stop All")
+        stop_all_btn.setToolTip("Emergency stop for all background tasks and batch generations.")
+        stop_all_btn.setStyleSheet("color: white; background-color: #d9534f; font-weight: bold; padding: 3px 10px;")
+        stop_all_btn.clicked.connect(self.emergency_stop)
+        btn_layout.addWidget(stop_all_btn)
+
         btn_layout.addStretch()
-        
         save_btn = QPushButton("Save && Close")
         save_btn.clicked.connect(self.save_config)
         save_btn.setDefault(True)

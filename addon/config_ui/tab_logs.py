@@ -55,12 +55,6 @@ class LogTabMixin:
         clear_btn = QPushButton("Clear Log")
         clear_btn.clicked.connect(self.clear_log)
         filter_layout.addWidget(clear_btn)
-
-        stop_btn = QPushButton("🛑 Stop All")
-        stop_btn.setToolTip("Emergency stop for all background tasks and batch generations.")
-        stop_btn.setStyleSheet("color: white; background-color: #d9534f; font-weight: bold; padding: 3px 8px;")
-        stop_btn.clicked.connect(self.emergency_stop)
-        filter_layout.addWidget(stop_btn)
         
         layout.addLayout(filter_layout)
         
