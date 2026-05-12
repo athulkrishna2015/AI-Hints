@@ -40,7 +40,7 @@ PROVIDER_ORDER = [
 DEFAULT_MODELS = {
     "openai":     "gpt-4o",
     "anthropic":  "claude-3-7-sonnet-latest",
-    "gemini":     "gemini-3-flash-preview",
+    "gemini":     "gemini-2.5-flash",
     "groq":       "llama-3.3-70b-versatile",
     "deepseek":   "deepseek-reasoner",
     "grok":       "grok-2-1212",
@@ -69,13 +69,16 @@ MODEL_SUGGESTIONS = {
         "claude-3-7-sonnet-latest",
     ],
     "gemini": [
+        "gemini-3-flash",
         "gemini-3.1-flash-lite",
-        "gemini-3-flash-preview",
-        "gemini-3.1-flash-lite-preview",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2-flash",
+        "gemini-2-flash-lite",
+        "gemini-3.1-pro",
         "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
-        "gemini-2.0-pro-exp-02-05",
-        "gemini-1.5-pro",
+        "gemini-flash-latest",
+        "gemini-pro-latest",
     ],
     "groq": [
         "llama-3.3-70b-versatile",
@@ -86,11 +89,11 @@ MODEL_SUGGESTIONS = {
     ],
     "openrouter": [
         "google/gemini-2.0-flash-001",
+        "google/gemini-2.0-flash-lite-001",
         "openai/gpt-4o-mini",
         "anthropic/claude-3.5-haiku",
         "deepseek/deepseek-chat",
         "meta-llama/llama-3.3-70b-instruct",
-        "google/gemini-2.0-flash-exp:free",
     ],
     "deepseek": [
         "deepseek-chat",
@@ -121,12 +124,11 @@ MODEL_SUGGESTIONS = {
         "Qwen/Qwen2.5-72B-Instruct",
     ],
     "antigravity": [
-        "gemini-2.0-flash",
         "gemini-3.1-flash-lite",
-        "gemini-3.1-flash-lite-preview",
-        "gemini-3-flash-preview",
-        "gemini-2.0-pro-exp-02-05",
-        "gemini-1.5-pro",
+        "gemini-3-flash",
+        "gemini-2.5-flash",
+        "gemini-2-flash",
+        "gemini-2.5-pro",
     ],
 }
 
@@ -135,6 +137,11 @@ LEGACY_MODEL_REPLACEMENTS = {
     ("gemini", "gemini-1.5-flash"): "gemini-2.0-flash",
     ("gemini", "models/gemini-1.5-flash"): "gemini-2.0-flash",
     ("gemini", "models/gemini-2.0-flash-exp"): "gemini-2.0-flash",
+    ("gemini", "gemini-1.5-pro"): "gemini-pro-latest",
+    ("gemini", "gemini-2.0-pro-exp-02-05"): "gemini-2.5-pro",
+    ("gemini", "gemini-3.1-flash-lite-preview"): "gemini-3.1-flash-lite",
+    ("gemini", "gemini-3-flash-preview"): "gemini-3-flash",
+    ("gemini", "gemini-2.0-flash"): "gemini-2-flash",
     ("groq", "llama3-8b-8192"): "llama-3.1-8b-instant",
     ("groq", "llama3-70b-8192"): "llama-3.3-70b-versatile",
     ("grok", "grok-1"): "grok-2-1212",
@@ -156,17 +163,16 @@ MODEL_FALLBACKS = {
         "claude-3-5-haiku-latest",
     ],
     "gemini": [
-        "gemini-2.0-flash-lite",
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
+        "gemini-3-flash",
         "gemini-3.1-flash-lite",
-        "gemini-3.1-flash-lite-preview",
+        "gemini-2.5-flash",
         "gemini-2.5-pro",
-        "gemini-2.0-pro-exp-02-05",
-        "gemini-1.5-pro",
-        "gemini-3-flash-preview",
+        "gemini-2-flash",
+        "gemini-2-flash-lite",
+        "gemini-3.1-pro",
+        "gemini-2.5-flash-lite",
         "gemini-flash-latest",
+        "gemini-pro-latest",
     ],
     "groq": [
         "llama-3.3-70b-versatile",
@@ -191,12 +197,12 @@ MODEL_FALLBACKS = {
         "meta/llama-3.1-8b-instruct",
     ],
     "openrouter": [
+        "google/gemini-2.0-flash-001",
+        "google/gemini-2.0-flash-lite-001",
         "anthropic/claude-3.5-sonnet",
         "openai/gpt-4o",
         "deepseek/deepseek-chat",
         "meta-llama/llama-3.3-70b-instruct",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemini-2.0-flash-001",
         "openrouter/auto",
     ],
     "together": [
@@ -213,13 +219,15 @@ MODEL_FALLBACKS = {
     ],
     "antigravity": [
         "gemini-3.1-flash-lite",
-        "gemini-2.5-flash",
         "gemini-3-flash",
+        "gemini-2.5-flash",
+        "gemini-2-flash",
         "gemini-2.5-pro",
-        "gemini-2.0-flash",
-        "gemini-1.5-pro",
     ],
 }
+
+
+
 
 class AIClient:
     def __init__(self, config: Dict[str, Any]):
@@ -867,29 +875,7 @@ class AIClient:
         return True
 
     def _extract_retry_delay(self, provider: str, error: urllib.error.HTTPError, body: str) -> float:
-        """Attempts to find the exact retry delay from headers or body."""
-        # 1. Check standard header
-        retry_after = error.headers.get("Retry-After")
-        if retry_after and retry_after.isdigit():
-            return float(retry_after)
-
-        # 2. Provider-specific parsing
-        try:
-            if provider == "gemini":
-                data = json.loads(body)
-                for detail in data.get("error", {}).get("details", []):
-                    if detail.get("@type") == "type.googleapis.com/google.rpc.RetryInfo":
-                        delay_str = detail.get("retryDelay", "0s")
-                        if delay_str.endswith("s"):
-                            return float(delay_str[:-1])
-            
-            # 3. Message-based regex fallback (OpenAI/Groq often use strings)
-            # "Please try again in 12s" or "Please retry in 58.3s"
-            match = re.search(r"(?:try again in|retry in) ([\d\.]+)s", body, re.IGNORECASE)
-            if match:
-                return float(match.group(1))
-        except: pass
-
+        """Always returns the static cooldown constant as requested."""
         return MODEL_COOLDOWN_SECONDS
 
     def _models_for_provider(self, provider: str, primary_model: str = "", extra_fallbacks: List[str] = None) -> List[str]:
