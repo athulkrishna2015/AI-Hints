@@ -52,7 +52,7 @@ AI-Hints/
 │   └── all_available_models.json # Diagnostic output from fetch_all_models.py
 ├── make_ankiaddon.py             # Packaging script → produces .ankiaddon file
 ├── bump.py                       # Version auto-increment script
-└── update_deps.py                # Refreshes vendored dependencies from GitHub
+└── update_deps.py                # Refreshes vendored dependencies (json_repair, latex_fixer, proxy config)
 ```
 
 ---
@@ -90,22 +90,19 @@ New-Item -ItemType SymbolicLink -Path "$env:APPDATA\Anki2\addons21\ai_hints_dev"
 
 ### 3. Vendored Dependencies
 
-AI-Hints vendors some third-party libraries directly in the `addon/` tree to stay self-contained (no pip install required for users).
+AI-Hints vendors some third-party libraries and configurations directly in the `addon/` tree to stay self-contained (no pip install required for users).
 
-- **`json_repair`** (`addon/json_repair/`): Robust AI response JSON parser. Managed via `update_deps.py`.
-- **`latex_fixer`** (`addon/latex_fixer/`): LaTeX/MathJax normalization engine. Managed as a Git submodule.
+- **`json_repair`** (`addon/json_repair/`): Robust AI response JSON parser.
+- **`latex_fixer`** (`addon/latex_fixer/`): LaTeX/MathJax normalization engine.
+- **Proxy Config** (`addon/bin/config.json`): Default runtime configuration for the Antigravity daemon.
 
-To update `json_repair` and any other vendored dependencies to their latest versions:
+To refresh all vendored dependencies to their latest versions from their respective GitHub master/main branches:
 ```shell
 python3 update_deps.py
 ```
 
-To update the `ai-latex-fixer` submodule to the latest commit:
-```shell
-git submodule update --remote addon/latex_fixer
-git add addon/latex_fixer
-git commit -m "Update ai-latex-fixer submodule to latest"
-```
+> [!TIP]
+> While `latex_fixer` is initially set up as a Git submodule, `update_deps.py` provides a convenient way to sync its core logic files without needing to manage submodule pointers manually.
 
 ---
 
@@ -233,21 +230,58 @@ Follows `major.minor.patch` semver (e.g., `1.6.0` → `1.6.1`).
 
 ## Running Tests
 
+The project includes a comprehensive test suite covering core logic, UI behavior, and network integrations.
+
+### 1. Logic Verification (Quick Sanity)
+Mocks the Anki/Qt environment. No API keys or internet required.
 ```shell
-# Full unit test suite:
-python3 -B -m unittest discover -s tests -p "test_*.py"
-
-# Logic verification (no API keys, mocks Anki/Qt):
 python3 -B tests/local_verify.py
+```
+- **Tests**: Addon import, MathJax normalization logic, model name mapping.
 
+### 2. Specialized Logic Suites
+Targeted unit tests for core internal engines.
+```shell
 # LaTeX normalization regression tests:
 python3 -B tests/test_latex_fixer.py
 
-# JSON repair integration tests:
+# JSON repair and malformed output recovery:
 python3 tests/test_json_repair_integration.py
 
-# Live provider test (requires addon/meta.json with real API keys):
+# Card content extraction and cloze parsing:
+python3 tests/test_card_parser.py
+
+# AI response sanitization (prefix/hallucination cleaning):
+python3 tests/test_sanitization_regex.py
+```
+
+### 3. Lifecycle and Integration
+Verifies the orchestration of background processes and UI states.
+```shell
+# Antigravity Proxy daemon lifecycle (start/stop/generate):
+python3 tests/test_antigravity_lifecycle.py
+
+# Reviewer state management (generation cycle and UI reset):
+python3 tests/test_generation_cycle.py
+
+# Local AI (Ollama/LM Studio) integration:
+python3 tests/test_local_ai.py
+```
+
+### 4. Live Network Tests
+Requires real API keys configured in `addon/config.json` or a local `meta.json`.
+```shell
+# Full end-to-end generation test against active cloud providers:
 python3 tests/live_test.py
+
+# Direct low-level network check for local endpoints:
+python3 tests/test_raw_local.py
+```
+
+### 5. Full Suite
+Run all discovery-compatible tests using Python's standard unittest runner:
+```shell
+python3 -B -m unittest discover -s tests -p "test_*.py"
 ```
 
 ---

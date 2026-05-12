@@ -17,8 +17,6 @@ DEPENDENCIES = {
             "json_repair.py",
             "json_parser.py",
             "parse_array.py",
-            "parse_boolean.py",
-            "parse_null.py",
             "parse_number.py",
             "parse_object.py",
             "parse_string.py",
@@ -44,6 +42,15 @@ DEPENDENCIES = {
                 "string_file_wrapper.py"
             ]
         }
+    },
+    "latex_fixer": {
+        "base_url": "https://raw.githubusercontent.com/athulkrishna2015/ai-latex-fixer/main",
+        "target_dir": "addon/latex_fixer",
+        "files": [
+            "__init__.py",
+            "latex_fixer.py",
+            "README.md"
+        ]
     }
 }
 
@@ -51,37 +58,46 @@ def download_file(url, local_path):
     print(f"  Downloading: {url} -> {local_path}")
     try:
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
-        urllib.request.urlretrieve(url, local_path)
+        # Using a User-Agent to avoid being blocked by some servers
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            with open(local_path, 'wb') as f:
+                f.write(response.read())
     except Exception as e:
         print(f"  ERROR downloading {url}: {e}")
         return False
     return True
 
-def update_json_repair():
-    cfg = DEPENDENCIES["json_repair"]
+def update_dependency(name):
+    cfg = DEPENDENCIES[name]
     target_root = cfg["target_dir"]
     base_url = cfg["base_url"]
     
-    print(f"Updating {target_root} from {base_url}...")
+    print(f"\nUpdating {name} ({target_root}) from {base_url}...")
     
     # 1. Download root files
-    for filename in cfg["files"]:
+    for filename in cfg.get("files", []):
         url = f"{base_url}/{filename}"
         path = os.path.join(target_root, filename)
         download_file(url, path)
         
     # 2. Download subdirectories
-    for subdir, files in cfg["subdirs"].items():
+    for subdir, files in cfg.get("subdirs", {}).items():
         for filename in files:
             url = f"{base_url}/{subdir}/{filename}"
             path = os.path.join(target_root, subdir, filename)
             download_file(url, path)
             
-    print("\nSuccessfully updated json_repair.")
-    print("Recommendation: Run 'python3 tests/test_json_repair_integration.py' to verify.")
+    print(f"Successfully updated {name}.")
 
 def main():
-    update_json_repair()
+    for dep in DEPENDENCIES:
+        update_dependency(dep)
+    
+    print("\nAll dependencies updated.")
+    print("\nRecommendations:")
+    print(" - Run 'python3 tests/test_json_repair_integration.py' to verify json_repair.")
+    print(" - Run 'python3 tests/test_latex_fixer.py' to verify latex_fixer.")
 
 if __name__ == "__main__":
     main()
