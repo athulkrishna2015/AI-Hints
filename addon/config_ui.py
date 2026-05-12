@@ -10,6 +10,7 @@ import logging
 
 # Resolve the top-level addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
 ADDON_PACKAGE = __name__.split(".")[0]
+LAST_ACTIVE_TAB_INDEX = 6  # Remembers configuration screen state between openings
 
 class CustomProviderDialog(QDialog):
     def __init__(self, parent, name="", data=None, config=None):
@@ -400,13 +401,19 @@ class ConfigDialog(QDialog):
         self.ag_fetch_btn.setToolTip("Manually download the latest executable from GitHub if missing.")
         self.ag_fetch_btn.clicked.connect(self.on_fetch_binary)
         
-        # Set button states based on binary presence
+        self.ag_delete_btn = QPushButton("🗑️ Delete Binary")
+        self.ag_delete_btn.setToolTip("Removes the proxy and credential files from disk to free space.")
+        self.ag_delete_btn.clicked.connect(self.on_delete_binary)
+        
+        # Button state logic
         from .proxy_manager import proxy_manager
         import os
         has_bin = os.path.exists(proxy_manager.executable)
         self.ag_dashboard_btn.setEnabled(has_bin)
         self.ag_enable_cb.setEnabled(has_bin)
         self.ag_fetch_btn.setEnabled(not has_bin)
+        self.ag_delete_btn.setEnabled(has_bin)
+        
         if not has_bin:
              self.ag_dashboard_btn.setToolTip("Download the binary first to enable dashboard access.")
              self.ag_enable_cb.setToolTip("Download the binary first to enable this feature.")
@@ -418,6 +425,7 @@ class ConfigDialog(QDialog):
         btn_hbox = QHBoxLayout()
         btn_hbox.addWidget(self.ag_fetch_btn)
         btn_hbox.addWidget(self.ag_dashboard_btn)
+        btn_hbox.addWidget(self.ag_delete_btn)
         ag_layout.addRow("", btn_hbox)
         
         self.ag_dl_progress = QProgressBar()
@@ -618,8 +626,9 @@ class ConfigDialog(QDialog):
         
         layout.addWidget(self.tabs)
         
-        # Set Logs tab as default
-        self.tabs.setCurrentIndex(6)
+        # Restore last visited tab
+        self.tabs.setCurrentIndex(LAST_ACTIVE_TAB_INDEX)
+        self.tabs.currentChanged.connect(self._on_tab_changed_tracker)
         
         # --- Bottom Buttons ---
         btn_layout = QHBoxLayout()
@@ -1527,6 +1536,7 @@ class ConfigDialog(QDialog):
                         self.ag_fetch_btn.setEnabled(False)
                         self.ag_fetch_btn.setToolTip("Binary is already downloaded locally.")
                         self.ag_dashboard_btn.setToolTip("Open the local web interface to configure Google accounts.")
+                        self.ag_delete_btn.setEnabled(True)
                     else:
                         self.ag_dl_progress.setVisible(False)
                         self.ag_dl_status.setText(f"❌ Failed: {err_msg}")
@@ -1540,6 +1550,48 @@ class ConfigDialog(QDialog):
         except Exception as e:
             from aqt.utils import showWarning
             showWarning(f"Setup failed: {e}")
+
+    def _on_tab_changed_tracker(self, index):
+        """Caches the last active configuration tab globally."""
+        global LAST_ACTIVE_TAB_INDEX
+        LAST_ACTIVE_TAB_INDEX = index
+
+    def on_delete_binary(self):
+        """Safely handles purging local binary caches."""
+        from aqt.utils import askUser, showInfo
+        if not askUser("Are you sure you want to delete the Antigravity Proxy binary from your drive?\n\nThis will not delete your saved configuration, but disables the proxy until re-downloaded."):
+            return
+            
+        try:
+            from .proxy_manager import proxy_manager
+            import os
+            
+            # First stop the running instance
+            proxy_manager.stop()
+            
+            if os.path.exists(proxy_manager.executable):
+                os.remove(proxy_manager.executable)
+                
+            # Update visual state
+            self.ag_fetch_btn.setEnabled(True)
+            self.ag_fetch_btn.setToolTip("Manually download the latest executable from GitHub if missing.")
+            
+            self.ag_dashboard_btn.setEnabled(False)
+            self.ag_dashboard_btn.setToolTip("Download the binary first to enable dashboard access.")
+            
+            self.ag_enable_cb.setEnabled(False)
+            self.ag_enable_cb.setChecked(False)
+            self.ag_enable_cb.setToolTip("Download the binary first to enable this feature.")
+            
+            self.ag_delete_btn.setEnabled(False)
+            
+            self.ag_dl_status.setVisible(True)
+            self.ag_dl_status.setText("🗑️ Native binary successfully removed from disk.")
+            self.ag_dl_progress.setVisible(False)
+            
+        except Exception as e:
+            from aqt.utils import showWarning
+            showWarning(f"Deletion failed: {e}\n\nPlease ensure the proxy isn't locked by another program.")
 
     def on_fetch_all_models(self):
         tooltip("Starting batch model fetch...")

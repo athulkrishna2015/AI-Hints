@@ -48,7 +48,7 @@ class ProxyManager:
             start_time = time.time()
             
             binary_name = os.path.basename(self.executable)
-            remote_url = f"https://github.com/athulkrishna2015/AI-Hints/releases/download/proxy-v0.7.0/{binary_name}"
+            remote_url = f"https://github.com/athulkrishna2015/AI-Hints/releases/download/proxy-v0.7.1/{binary_name}"
             
             def _reporthook(count, block_size, total_size):
                 if progress_callback:
