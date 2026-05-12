@@ -118,6 +118,14 @@ MODEL_SUGGESTIONS = {
         "meta-llama/Llama-3.3-70B-Instruct",
         "Qwen/Qwen2.5-72B-Instruct",
     ],
+    "antigravity": [
+        "gemini-2.0-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-3-flash-preview",
+        "gemini-2.0-pro-exp-02-05",
+        "gemini-1.5-pro",
+    ],
 }
 
 LEGACY_MODEL_REPLACEMENTS = {
@@ -197,6 +205,15 @@ MODEL_FALLBACKS = {
     "cerebras": [
         "llama-3.3-70b",
         "llama-3.1-8b",
+    ],
+    "antigravity": [
+        "gemini-2.0-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-flash-lite-preview",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-pro-exp-02-05",
+        "gemini-1.5-pro",
     ],
 }
 

@@ -420,6 +420,29 @@ class ConfigDialog(QDialog):
         else:
              self.ag_fetch_btn.setToolTip("Binary is already downloaded locally.")
         
+        self.ag_model_layout = QHBoxLayout()
+        self.ag_model_edit = QComboBox()
+        self.ag_model_edit.setEditable(True)
+        self.ag_model_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.ag_model_edit.setToolTip("Select/Enter specific model desired via Proxy.")
+        
+        # Prepopulate standard defaults
+        suggestions = MODEL_SUGGESTIONS.get("antigravity", [])
+        default_mod = DEFAULT_MODELS.get("antigravity", "")
+        all_suggestions = list(suggestions)
+        if default_mod and default_mod not in all_suggestions:
+            all_suggestions.insert(0, default_mod)
+        self.ag_model_edit.addItems(all_suggestions)
+        
+        self.ag_model_fetch_btn = QPushButton("Fetch")
+        self.ag_model_fetch_btn.setFixedWidth(70)
+        self.ag_model_fetch_btn.setToolTip("Fetch currently available backend models directly from the local proxy server (Must be running).")
+        self.ag_model_fetch_btn.clicked.connect(lambda: self.on_fetch_models("antigravity", self.ag_model_edit))
+        
+        self.ag_model_layout.addWidget(self.ag_model_edit)
+        self.ag_model_layout.addWidget(self.ag_model_fetch_btn)
+        ag_layout.addRow("Active Model:", self.ag_model_layout)
+        
         ag_layout.addRow(self.ag_enable_cb)
         
         btn_hbox = QHBoxLayout()
@@ -1368,6 +1391,11 @@ class ConfigDialog(QDialog):
                 edit.addItem(model_name)
             edit.setCurrentText(model_name)
             
+        ag_model = models.get("antigravity", DEFAULT_MODELS.get("antigravity", ""))
+        if self.ag_model_edit.findText(ag_model) == -1:
+            self.ag_model_edit.addItem(ag_model)
+        self.ag_model_edit.setCurrentText(ag_model)
+            
         ag_cfg = c.get("antigravity_proxy", {}) or {}
         self.ag_enable_cb.setChecked(ag_cfg.get("enabled", False))
             
@@ -1487,7 +1515,7 @@ class ConfigDialog(QDialog):
             
             self.model_edits = {}
             for p in new_priority:
-                if p == "local":
+                if p in ["local", "antigravity"]:
                     continue
                 w = ProviderRowWidget(p, self)
                 if p in current_models_state:
@@ -1871,6 +1899,8 @@ class ConfigDialog(QDialog):
                 p: (edit.currentText().strip() or DEFAULT_MODELS.get(p, ""))
                 for p, edit in self.model_edits.items()
             }
+            # Store specialized Antigravity model manually
+            new_config["models"]["antigravity"] = self.ag_model_edit.currentText().strip() or DEFAULT_MODELS.get("antigravity", "")
             new_config["antigravity_proxy"] = {
                 "enabled": self.ag_enable_cb.isChecked(),
                 "port": 3015
