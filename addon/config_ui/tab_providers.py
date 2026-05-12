@@ -3,6 +3,91 @@ from aqt.qt import *
 from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS
 from .widgets import ProviderRowWidget
 
+class FallbackOrderDialog(QDialog):
+    def __init__(self, parent, provider, current_list, suggestions):
+        super().__init__(parent)
+        self.setWindowTitle(f"Fallback Priority: {provider.capitalize()}")
+        self.setMinimumWidth(400)
+        self.setMinimumHeight(500)
+        
+        layout = QVBoxLayout(self)
+        
+        info_label = QLabel(
+            "Configure the list of models to try if the primary model fails.<br/>"
+            "The add-on will attempt these models in order from top to bottom."
+        )
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
+        layout.addWidget(info_label)
+        
+        self.list_widget = QListWidget()
+        for m in current_list:
+            self.list_widget.addItem(m)
+        layout.addWidget(self.list_widget)
+        
+        # Action buttons
+        btn_layout = QHBoxLayout()
+        self.up_btn = QPushButton("Move Up")
+        self.up_btn.clicked.connect(lambda: self.move_item(-1))
+        self.down_btn = QPushButton("Move Down")
+        self.down_btn.clicked.connect(lambda: self.move_item(1))
+        self.remove_btn = QPushButton("Remove")
+        self.remove_btn.clicked.connect(self.remove_item)
+        
+        btn_layout.addWidget(self.up_btn)
+        btn_layout.addWidget(self.down_btn)
+        btn_layout.addWidget(self.remove_btn)
+        layout.addLayout(btn_layout)
+        
+        # Add new model section
+        add_layout = QHBoxLayout()
+        self.add_edit = QComboBox()
+        self.add_edit.setEditable(True)
+        self.add_edit.addItems(suggestions)
+        self.add_edit.setCurrentText("")
+        
+        self.add_btn = QPushButton("Add Model")
+        self.add_btn.clicked.connect(self.add_item)
+        
+        add_layout.addWidget(self.add_edit, 1)
+        add_layout.addWidget(self.add_btn)
+        layout.addLayout(add_layout)
+        
+        # OK / Cancel
+        dlg_btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        dlg_btns.accepted.connect(self.accept)
+        dlg_btns.rejected.connect(self.reject)
+        layout.addWidget(dlg_btns)
+
+    def move_item(self, delta):
+        curr_row = self.list_widget.currentRow()
+        if curr_row == -1: return
+        target_row = curr_row + delta
+        if 0 <= target_row < self.list_widget.count():
+            item = self.list_widget.takeItem(curr_row)
+            self.list_widget.insertItem(target_row, item)
+            self.list_widget.setCurrentRow(target_row)
+
+    def remove_item(self):
+        curr_row = self.list_widget.currentRow()
+        if curr_row != -1:
+            self.list_widget.takeItem(curr_row)
+
+    def add_item(self):
+        text = self.add_edit.currentText().strip()
+        if not text: return
+        
+        # Don't add duplicates
+        existing = [self.list_widget.item(i).text() for i in range(self.list_widget.count())]
+        if text in existing: return
+        
+        self.list_widget.addItem(text)
+        self.add_edit.setCurrentText("")
+
+    def get_ordered_list(self):
+        return [self.list_widget.item(i).text() for i in range(self.list_widget.count())]
+
+
 class ProvidersTabMixin:
     def _create_providers_tab(self):
         """Constructs the Tab 2: AI Providers UI"""

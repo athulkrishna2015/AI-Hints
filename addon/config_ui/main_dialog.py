@@ -241,6 +241,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         ag_cfg = c.get("antigravity_proxy", {}) or {}
         self.ag_enable_cb.setChecked(ag_cfg.get("enabled", False))
             
+        self.model_fallbacks_data = c.get("model_fallbacks", {}).copy()
+            
         local = c.get("local_endpoint", {}) or {}
         self.local_url_edit.setText(local.get("base_url", ""))
         model_name = local.get("model", "")
@@ -743,6 +745,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             if hasattr(self, 'nt_cb'): new_config["note_type_fields"] = self.note_type_fields_data
             else: new_config["note_type_fields"] = json.loads(self.note_fields_edit.toPlainText())
             new_config["custom_providers"] = self.custom_providers_data
+            new_config["model_fallbacks"] = self.model_fallbacks_data
             priority = []
             for i in range(self.models_layout.count()):
                 item = self.models_layout.itemAt(i)

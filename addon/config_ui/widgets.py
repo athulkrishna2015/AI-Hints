@@ -168,3 +168,26 @@ class ProviderRowWidget(QWidget):
         self.down_btn.setFixedWidth(45)
         self.down_btn.clicked.connect(lambda: self.parent_dialog.move_provider_row(self, 1))
         layout.addWidget(self.down_btn)
+        
+        # Fallbacks button
+        self.fallbacks_btn = QPushButton("Fallbacks")
+        self.fallbacks_btn.setFixedWidth(85)
+        self.fallbacks_btn.setToolTip(f"Configure and prioritize fallback models for {provider.capitalize()}")
+        self.fallbacks_btn.clicked.connect(self.on_fallbacks_clicked)
+        layout.addWidget(self.fallbacks_btn)
+
+    def on_fallbacks_clicked(self):
+        from .tab_providers import FallbackOrderDialog
+        
+        # Get currently configured fallbacks for this provider
+        # Note: We need to pull from the current live config in the parent dialog
+        current_fallbacks = self.parent_dialog.model_fallbacks_data.get(self.provider, [])
+        
+        # We also want to provide some smart suggestions for adding new ones
+        suggestions = MODEL_SUGGESTIONS.get(self.provider, [])
+        
+        dlg = FallbackOrderDialog(self, self.provider, current_fallbacks, suggestions)
+        if dlg.exec():
+            new_fallbacks = dlg.get_ordered_list()
+            self.parent_dialog.model_fallbacks_data[self.provider] = new_fallbacks
+            tooltip(f"Updated fallback priority for {self.provider.capitalize()}")
