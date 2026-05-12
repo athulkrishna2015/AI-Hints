@@ -25,7 +25,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Smart Shuffling**: Options are shuffled every time you review the card to prevent pattern memorization.
 - **Storage Modes**: Choose between **visible HTML** (visible on all devices) or **invisible JSON** (cleaner look, requires add-on to render).
 - **Configurable Options**: Set exactly how many MCQ options the AI should generate, including the correct answer (default is 4).
-- **Robust JSON Parsing**: Integrates the `json_repair` library to gracefully handle malformed AI output (missing quotes, trailing commas, or truncated responses) and recover valid hints.
+- **Robust JSON Parsing**: Integrates the [`json_repair`](https://github.com/mangiucugna/json_repair) library to gracefully handle malformed AI output (missing quotes, trailing commas, or truncated responses) and recover valid hints.
 - **MathJax-Aware Rendering**: AI-Hints repairs common LaTeX/MathJax output, including escaped JSON backslashes and bare variables such as `lambda_L`.
  The default `delimiters` format stores inline math as `\( ... \)` and block math as `\[ ... \]`; the optional `inline` format stores `$ ... $` and `$$ ... $$`.
 - **Field Customization**: Specify exactly which fields to send to the AI for each note type. Optimized for Cloze cards by default.
@@ -55,8 +55,9 @@ When checking fallbacks, providers are queried in the following descending order
 10. **SambaNova**
 11. **NVIDIA**
 12. **Mistral**
-13. **Antigravity Proxy** (Embedded Cloud Relay)
-14. **Local AI** (Ollama/LM Studio)
+13. **Cerebras**
+14. **Antigravity Proxy** (Embedded Cloud Relay)
+15. **Local AI** (Ollama/LM Studio)
 
 ### Model Fallback Rankings
 For individual providers, if the default model fails, it retries using the smartest available models first:
@@ -196,7 +197,7 @@ MIT
 - **Smart Stability Patches**: Disabled aggressive LaTeX fixes by default and added dynamic offline status animations.
 
 ### May 9, 2026
-- **Robust JSON Parsing Layer**: Vendored the `json_repair` engine and added hallucination filters to sanitize AI output strings.
+- **Robust JSON Parsing Layer**: Vendored the [`json_repair`](https://github.com/mangiucugna/json_repair) engine and added hallucination filters to sanitize AI output strings.
 - **Asynchronous Generation**: Fully threaded backend processing to completely eliminate review lag and interface blocking.
 - **Native Undo Integration**: Hooked into Anki storage caches for zero-latency real-time synchronization on **Ctrl+Z**.
 - **Dynamic UI Rendering**: Re-architected HTML display loops to render and scale assets instantly without delay.
