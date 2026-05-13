@@ -108,6 +108,18 @@ class BatchManager:
             html_parts.append(f"💾 <b style='color:#fd7e14;'>Saved Dormant Queue</b> ({remaining} cards pending)<br/>")
             html_parts.append(f"Completed so far: {done} / {self.local_queue_total} total.<br/>")
             html_parts.append("<i>Click 'Resume Saved Queue' below to restart.</i><br/><br/>")
+            
+        elif self.last_run_stats:
+            stats = self.last_run_stats
+            success = stats['total'] - stats['errors']
+            html_parts.append(f"<div style='font-size:12px; padding-bottom:4px;'><span style='color:#28a745;'><b>✅ COMPLETED</b></span> <b>Last Local Queue</b></div>")
+            html_parts.append(f"✨ Success: <b>{success}</b> / {stats['total']} cards.<br/>")
+            if stats['errors'] > 0:
+                html_parts.append(f"⚠️ Errors: <span style='color:#dc3545;'>{stats['errors']}</span><br/>")
+            
+            finished_at = time.strftime('%H:%M:%S', time.localtime(stats.get('time', 0)))
+            html_parts.append(f"🕒 Finished at: {finished_at}<br/>")
+            html_parts.append("<hr style='border:0; border-top:1px solid #ccc; margin:8px 0;'/>")
 
         if not self.jobs:
             if not html_parts:
@@ -324,6 +336,7 @@ class BatchManager:
              self.local_queue_errors = 0
              self.saved_config = config or {}
              self.saved_provider = provider_override
+             self.last_run_stats = None 
         
         if not config:
              logger.error("Cannot start background queue without valid config map.")

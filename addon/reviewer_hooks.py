@@ -603,90 +603,6 @@ def clear_ai_hints_from_browser_selection(browser):
 
     return len(card_ids), changed_cards, len(changed_notes)
 
-def generate_ai_hints_batch_from_browser(browser):
-    card_ids = _selected_browser_card_ids(browser)
-    if not card_ids:
-        tooltip("AI-Hints: Select one or more cards first.")
-        return
-
-    # Only limit for sane behavior per batch API overhead
-    if len(card_ids) > 1000:
-         tooltip("AI-Hints Limit: Max 1,000 cards allowed per single batch.")
-         return
-         
-    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-    
-    provider = config.get("ai_provider", "gemini")
-    if provider != "gemini":
-        # Note: Only Gemini supports native REST Batch currently. 
-        # OpenRouter batch is different. Show error.
-        info("Batch API Generation is currently only available when your Active Provider is set to Gemini.")
-        return
-        
-    client = AIClient(config)
-    parser = CardParser(
-        config.get("target_fields", []),
-        config.get("note_type_fields", {}),
-        config.get("storage_mode", "json"),
-        mathjax_format=config.get("mathjax_format", "delimiters"),
-        fix_latex=config.get("fix_latex", False)
-    )
-    
-    if not client.has_any_ready_provider():
-        info("Please configure your Gemini API key in settings before creating a batch.")
-        return
-        
-    # Construct prompt items
-    from .reviewer_hooks import _get_card_from_collection
-    
-    items = []
-    cids_successfully_read = []
-    
-    for cid in card_ids:
-        try:
-            card = _get_card_from_collection(cid)
-            if not card: continue
-            
-            # Get base system prompts
-            f, b = parser.get_note_content(card.note(), card)
-            if not f and not b:
-                continue
-
-            sys_p = config.get("system_prompt", "")
-            
-            items.append({
-                "key": str(cid),
-                "system_prompt": sys_p,
-                "user_prompt": f"FRONT:\n{f}\n\nBACK:\n{b}"
-            })
-            cids_successfully_read.append(cid)
-        except Exception:
-            pass
-            
-    if not items:
-        tooltip("AI-Hints: Failed to read data from selected cards.")
-        return
-        
-    logger.info(f"User initiating batch submission for {len(items)} cards in Browser.")
-    
-    def submit_in_bg():
-        try:
-            response = client.submit_gemini_batch(items)
-            job_name = response.get("name")
-            if job_name:
-                from .batch_manager import batch_manager
-                batch_manager.register_job(job_name, cids_successfully_read)
-                mw.taskman.run_on_main(lambda: info(f"✅ Gemini Batch job successfully submitted!\n\nJob: {job_name}\nCards: {len(items)}\n\nResults will load in the background automatically when complete (may take several hours). You do not need to keep this window open."))
-            else:
-                mw.taskman.run_on_main(lambda: info(f"Failed to start batch. Server responded without a job ID."))
-        except Exception as e:
-            logger.error(f"Browser Batch Submission failed: {e}")
-            err_text = str(e)
-            mw.taskman.run_on_main(lambda: info(f"AI-Hints Batch API Error:\n{err_text}"))
-            
-    import threading
-    threading.Thread(target=submit_in_bg, daemon=True).start()
-
 def on_browser_context_menu(browser, menu):
     menu.addSeparator()
     
@@ -701,11 +617,6 @@ def on_browser_context_menu(browser, menu):
     act_batch_ui.triggered.connect(
         lambda _checked=False, b=browser: on_config_dialog(mw, tab_index=4, card_ids=_selected_browser_card_ids(b))
     )
-    
-    # Action 3: Quick Gemini Batch (Legacy/Shortcut)
-    act_batch = menu.addAction("⚡ Quick Gemini Batch (REST API)")
-    act_batch.setEnabled(bool(_selected_browser_card_ids(browser)))
-    act_batch.triggered.connect(lambda _checked=False, b=browser: generate_ai_hints_batch_from_browser(b))
     
 
 def update_bottom_bar_button(card=None):

@@ -128,6 +128,10 @@ class BatchTabMixin:
         
         self.batch_list_view = QTextBrowser()
         self.batch_list_view.setReadOnly(True)
+        self.batch_list_view.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse | 
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
         self.batch_list_view.setPlaceholderText("No active native batch tracking handles found.")
         self.batch_list_view.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         self.batch_list_view.setOpenExternalLinks(False)
@@ -239,6 +243,11 @@ class BatchTabMixin:
 
             summary = batch_manager.get_status_summary()
             
+            # 🚦 Selection Safety: If user is currently selecting text, DO NOT update
+            # as it will clear their selection and make navigation/copying impossible.
+            if self.batch_list_view.textCursor().hasSelection():
+                return
+
             if not summary:
                   self.batch_list_view.setHtml("<i>(Ready to initialize)</i>")
             else:

@@ -56,6 +56,10 @@ class LogTabMixin:
         
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
+        self.log_view.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse | 
+            Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
         self.log_view.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         layout.addWidget(self.log_view)
         
@@ -101,6 +105,11 @@ class LogTabMixin:
             content = "".join(lines) if lines else "No entries matching the selected filters."
             if self.log_view.toPlainText() == content:
                 return
+            
+            # 🚦 Selection Safety: If user is currently selecting text, DO NOT update
+            # as it will clear their selection and make copying impossible.
+            if self.log_view.textCursor().hasSelection():
+                return
 
             vbar = self.log_view.verticalScrollBar()
             was_at_bottom = vbar.value() >= vbar.maximum() - 10
@@ -110,7 +119,8 @@ class LogTabMixin:
             if was_at_bottom:
                 vbar.setValue(vbar.maximum())
         except Exception as e:
-            self.log_view.setPlainText(f"Error reading log: {e}")
+            if not self.log_view.textCursor().hasSelection():
+                self.log_view.setPlainText(f"Error reading log: {e}")
 
     def clear_log(self):
         log_file = os.path.join(self.addon_dir, "ai_hints.log")
