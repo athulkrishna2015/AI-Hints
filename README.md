@@ -181,6 +181,18 @@ MIT
 
 ## Changelog
 
+### May 13, 2026 (v2.2.0)
+- **Improved Pre-generation Strategy**: Implemented a smarter queue-peeking algorithm that scans the top 5 cards to reliably identify the next card needing hints, even when the current card is still marked as queued by Anki's v3 scheduler.
+- **Robust Network Monitoring**: Added a background network status monitor that prevents AI providers from being blacklisted during general internet outages, ensuring faster recovery once back online.
+- **Global Emergency Stop**: Added an instant-kill signal to immediately terminate all active AI generations across the entire add-on.
+- **Optimized Provider Failover**: Enhanced the failover logic to instantly break the model retry loop on 404/Timeout errors, enabling faster switching to backup providers.
+- **Missing Cloze Handling**: Added graceful detection and skipping for cards with missing cloze deletions, preventing "no content found" errors during batch processing and pre-generation.
+- **UI & UX Refinement**:
+  - Relocated the "Stop All" button to the bottom action bar for better accessibility.
+  - Fixed UI layout stretching issues in the General configuration tab.
+  - Added a "Pre-generation" source filter to the Live Log Viewer.
+- **Technical Integrity**: Updated the internal test suite to verify queue peeking, missing cloze logic, and pre-generation cycles.
+
 ### May 12, 2026 (v2.1.0)
 - **Persistent Model Blacklisting**: Model failures, rate limits, and quota exhaustion states now persist across Anki restarts via a local `blacklist.json` file.
 - **Enhanced Fallback UI**:
