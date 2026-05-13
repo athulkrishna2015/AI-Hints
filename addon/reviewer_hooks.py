@@ -37,11 +37,15 @@ def get_addon_version() -> str:
     """Return the addon version string (e.g. '1.4.2')."""
     return _ADDON_VERSION
 
-def _apply_results_to_card(card, data, is_manual=True):
+def _apply_results_to_card(card, data, is_manual=True, web=None):
     if not card or not data:
         return False
-        
+
+    if web is None:
+        web = getattr(mw.reviewer, "web", None)
+
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+
     parser = CardParser(
         config.get("target_fields", []),
         config.get("note_type_fields", {}),
@@ -71,16 +75,15 @@ def _apply_results_to_card(card, data, is_manual=True):
         _remember_generated_hints(card, data, toggles)
         _just_generated_card_ids.add(card.id)
         
-        # Update UI if we are still on the card
-        current_reviewer_card = getattr(mw.reviewer, "card", None)
-        if current_reviewer_card and current_reviewer_card.id == card.id:
+        # Update UI if we are still on the card in this webview
+        if web:
             try:
-                mw.reviewer.web.eval(
+                web.eval(
                     f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}, {'true' if is_manual else 'false'}); }}"
                 )
             except Exception as e:
                 logger.error(f"AI-Hints direct web update failed: {e}")
-                refresh_current_card()
+                refresh_current_card(card=card, web=web)
         
         if is_manual and config.get("show_in_popup", False):
             global _popup_dialog_instance
@@ -272,14 +275,14 @@ def on_webview_will_set_content(web_content, context):
             web_content.body += f"<script>{_bottom_bar_button_script()}</script>"
         return
 
-    # Determine if we are in the reviewer context
-    is_reviewer = (
-        getattr(context, "name", None) == "reviewer" or 
-        type(context).__name__ == "Reviewer" or
+    # Determine if we are in the reviewer or previewer context
+    is_supported = (
+        getattr(context, "name", None) in ["reviewer", "previewer"] or 
+        type(context).__name__ in ["Reviewer", "Previewer"] or
         (context is None and any("reviewer.css" in c for c in web_content.css))
     )
     
-    if not is_reviewer:
+    if not is_supported:
         return
 
     global _current_card_has_data
@@ -296,14 +299,7 @@ def on_webview_will_set_content(web_content, context):
         fix_latex=config.get("fix_latex", False)
     )
 
-    card = getattr(context, "card", None)
-    if not card:
-        is_reviewer_context = (
-            getattr(context, "name", None) == "reviewer" or 
-            type(context).__name__ == "Reviewer"
-        )
-        if is_reviewer_context:
-            card = getattr(mw.reviewer, "card", None)
+    card, web = _get_card_and_web_from_context(context)
 
     hints_blocks = []
     auto_reveal = False
@@ -346,7 +342,11 @@ def on_webview_will_set_content(web_content, context):
 
     card_payload = json.dumps(_card_context_payload(context))
     # Determine if we are currently displaying the back side (answer)
-    is_answer = getattr(mw.reviewer, "state", "") == "answer"
+    is_answer = False
+    if context and getattr(context, "name", None) == "reviewer":
+        is_answer = getattr(mw.reviewer, "state", "") == "answer"
+    elif context and getattr(context, "name", None) == "previewer":
+        is_answer = getattr(context, "_state", "question") == "answer"
 
     ui_payload = json.dumps({
         "show_on_card": config.get("show_on_card", True),
@@ -381,9 +381,12 @@ def on_webview_will_set_content(web_content, context):
     # Debug log for frontend
     web_content.body += f"<script>console.log('AI-Hints: Content injected for card {card.id if card else 'unknown'} (auto_reveal={auto_reveal})');</script>"
 
-def _trigger_frontend_setup(card):
+def _trigger_frontend_setup(card, web=None):
     if not card:
         return
+
+    if web is None:
+        web = getattr(mw.reviewer, "web", None)
     
     # Clear auto-reveal state for OTHER cards when moving to a new one
     to_remove = [cid for cid in _just_generated_card_ids if cid != card.id]
@@ -437,35 +440,75 @@ def _trigger_frontend_setup(card):
         logger.debug(f"AI-Hints: _trigger_frontend_setup hint lookup failed: {e}")
 
     hint_data_json = json.dumps(hint_data)  # null if no data
-    mw.reviewer.web.eval(f"""
-        (function() {{
-            var data = {json.dumps(card_data)};
-            var hintData = {hint_data_json};
-            function trySetup() {{
-                if (typeof window.aiHintsSetup === 'function') {{
-                    // Hook into Anki's async render lifecycle to prevent our buttons from being wiped
-                    if (typeof onUpdateHook !== 'undefined') {{
-                        onUpdateHook.push(function() {{ window.aiHintsSetup(data, hintData); }});
+    if web:
+        web.eval(f"""
+            (function() {{
+                var data = {json.dumps(card_data)};
+                var hintData = {hint_data_json};
+                function trySetup() {{
+                    if (typeof window.aiHintsSetup === 'function') {{
+                        // Hook into Anki's async render lifecycle to prevent our buttons from being wiped
+                        if (typeof onUpdateHook !== 'undefined') {{
+                            onUpdateHook.push(function() {{ window.aiHintsSetup(data, hintData); }});
+                        }}
+                        // Fallback to guarantee execution even if the hook already fired
+                        setTimeout(function() {{ window.aiHintsSetup(data, hintData); }}, 150);
+                    }} else {{
+                        setTimeout(trySetup, 50);
                     }}
-                    // Fallback to guarantee execution even if the hook already fired
-                    setTimeout(function() {{ window.aiHintsSetup(data, hintData); }}, 150);
-                }} else {{
-                    setTimeout(trySetup, 50);
                 }}
-            }}
-            trySetup();
-        }})();
-    """)
+                trySetup();
+            }})();
+        """)
+
+def _get_card_and_web_from_context(context):
+    """Helper to extract the active card and web object from various Anki contexts
+    (Reviewer, Previewer, etc.)."""
+    card = getattr(context, "card", None)
+    if not card:
+        # Some versions use ._card
+        card = getattr(context, "_card", None)
+        
+    if callable(card):
+        # Previewer.card is a method in some Anki versions
+        try:
+            card = card()
+        except Exception:
+            card = None
+    
+    # Final fallback if we have a card id but no card object
+    if not card and hasattr(context, "cardId"):
+        card_id = getattr(context, "cardId")
+        if card_id and mw.col:
+            try:
+                card = mw.col.get_card(card_id)
+            except:
+                pass
+
+    web = getattr(context, "web", None)
+    if not web:
+        # Fallback for internal naming conventions
+        web = getattr(context, "_web", None)
+    
+    # Fallback to global reviewer if context doesn't yield anything
+    if not card and mw.reviewer:
+        card = mw.reviewer.card
+    if not web and mw.reviewer:
+        web = mw.reviewer.web
+        
+    return card, web
 
 def on_webview_did_receive_js_message(handled, message, context):
+    card, web = _get_card_and_web_from_context(context)
+    
     if message == "ai_hints_generate":
-        generate_hints()
+        generate_hints(card=card, web=web)
         return (True, None)
     if message == "ai_hints_clear":
-        clear_hints()
+        clear_hints(card=card, web=web)
         return (True, None)
     if message == "ai_hints_refresh":
-        refresh_current_card()
+        refresh_current_card(card=card, web=web)
         return (True, None)
     if message == "ai_hints_restart_speed_focus":
         restart_speed_focus_timer()
@@ -475,10 +518,14 @@ def on_webview_did_receive_js_message(handled, message, context):
         return (True, None)
     return handled
 
-def clear_hints():
-    card = mw.reviewer.card
+def clear_hints(card=None, web=None):
+    if card is None:
+        card = mw.reviewer.card
     if not card:
         return
+
+    if web is None:
+        web = getattr(mw.reviewer, "web", None)
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
@@ -495,17 +542,19 @@ def clear_hints():
         _forget_generated_hints(card)
         logger.info("AI-Hints cleared for card %s", card.id)
         tooltip("AI-Hints: Cleared.")
-        try:
-            mw.reviewer.web.eval("if (window.aiHintsClearData) { window.aiHintsClearData(); }")
-        except Exception:
-            refresh_current_card()
+        if web:
+            try:
+                web.eval("if (window.aiHintsClearData) { window.aiHintsClearData(); }")
+            except Exception:
+                refresh_current_card(card=card, web=web)
     elif _cached_hints_for_card(card):
         _forget_generated_hints(card)
         tooltip("AI-Hints: Cleared.")
-        try:
-            mw.reviewer.web.eval("if (window.aiHintsClearData) { window.aiHintsClearData(); }")
-        except Exception:
-            refresh_current_card()
+        if web:
+            try:
+                web.eval("if (window.aiHintsClearData) { window.aiHintsClearData(); }")
+            except Exception:
+                refresh_current_card(card=card, web=web)
     else:
         tooltip("AI-Hints: No cached data found to clear.")
 
@@ -771,8 +820,20 @@ def restart_speed_focus_timer():
     except Exception as e:
         logger.error(f"Failed to restart Speed Focus timer: {e}")
 
-def refresh_current_card():
+def refresh_current_card(card=None, web=None):
     reviewer = getattr(mw, "reviewer", None)
+    
+    # If we have a specific web view (e.g. Previewer), try to refresh it
+    if web and card:
+        # For Previewer, we can often just trigger a re-render
+        # But if it's the reviewer, we use the specialized logic below
+        if reviewer and web == reviewer.web:
+            pass # Use standard reviewer logic
+        else:
+            # For other webviews, trigger frontend setup to sync data
+            _trigger_frontend_setup(card, web=web)
+            return
+
     if not reviewer or not getattr(reviewer, "card", None):
         return
 
@@ -894,18 +955,21 @@ def close_popup_if_open():
         _popup_dialog_instance.close()
         _popup_dialog_instance = None
 
-def generate_hints(is_manual=True, card=None, is_pregen=False):
+def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
     if card is None:
         card = mw.reviewer.card
     if not card:
         return
+        
+    if web is None:
+        web = getattr(mw.reviewer, "web", None)
 
     card_id = getattr(card, "id", None)
     if card_id in _generating_card_ids:
-        if not is_pregen:
+        if not is_pregen and web:
             # If we arrive at a card already being pre-generated, 
             # just trigger the UI animation so the user sees the progress.
-            mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(true); }")
+            web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(true); }")
         return
     
     # Priority: If ANY card is currently generating and this is a pre-gen, abort.
@@ -935,7 +999,8 @@ def generate_hints(is_manual=True, card=None, is_pregen=False):
             is_custom = provider in (config.get("custom_providers") or {})
             show_api_error_dialog(provider if provider else None, is_custom=is_custom)
             # Stop animation in frontend
-            mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
+            if web:
+                web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
         return
 
     front, back = parser.get_note_content(card.note(), card)
@@ -951,8 +1016,8 @@ def generate_hints(is_manual=True, card=None, is_pregen=False):
         state.GLOBAL_STOP = False
 
     # Trigger animation in frontend only if not pre-generating
-    if not is_pregen:
-        mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(true); }")
+    if not is_pregen and web:
+        web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(true); }")
 
     def on_done(data):
         try:
@@ -962,8 +1027,8 @@ def generate_hints(is_manual=True, card=None, is_pregen=False):
             if state.GLOBAL_STOP:
                 logger.info(f"AI-Hints: Generation aborted for card {card_id} via Emergency Stop signal.")
                 # Clear animation
-                if not is_pregen:
-                    mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
+                if not is_pregen and web:
+                    web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
                 return
 
             if is_pregen:
@@ -978,7 +1043,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False):
                     current_reviewer_card = getattr(mw.reviewer, "card", None)
                     if current_reviewer_card and current_reviewer_card.id == card_id:
                          logger.info(f"AI-Hints: Pre-generation finished while card {card_id} is on screen. Applying immediately.")
-                         _apply_results_to_card(card, data, is_manual=False)
+                         _apply_results_to_card(card, data, is_manual=False, web=web)
                     else:
                         _pregenerated_data[card_id] = data
                         logger.info(f"AI-Hints: Pre-generation complete for card {card_id}. Cached in memory.")
@@ -991,7 +1056,8 @@ def generate_hints(is_manual=True, card=None, is_pregen=False):
             if current_reviewer_card and current_reviewer_card.id != card.id:
                 logger.info("AI-Hints: User moved to another card. Discarding generated data to prevent database and undo conflicts.")
                 # Still need to clear the generating flag in the frontend if it's currently active
-                mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
+                if web:
+                    web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
                 return
 
             if not data or (not data.get("hints") and not data.get("options")):
@@ -1001,11 +1067,11 @@ def generate_hints(is_manual=True, card=None, is_pregen=False):
                 err_msg = data.get("_ai_error_msg", "")
                 
                 # Safely update frontend to transition from animation -> feedback -> rest state
-                if current_reviewer_card and current_reviewer_card.id == card.id:
+                if web:
                     try:
                         # Wrap error string safely for Javascript injection
                         js_err_arg = json.dumps(err_msg)
-                        mw.reviewer.web.eval(
+                        web.eval(
                             f"if (window.aiHintsSetGenerating) {{ window.aiHintsSetGenerating(false, '{err_status}', {js_err_arg}); }}"
                         )
                     except Exception:
@@ -1015,7 +1081,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False):
                 # and previously caused recursion bugs by reading the lock before cleanup.
                 return
 
-            if _apply_results_to_card(card, data, is_manual=is_manual):
+            if _apply_results_to_card(card, data, is_manual=is_manual, web=web):
                 tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
                 
                 # IMPORTANT: Discard current card from generating set BEFORE trying to pre-gen next.
@@ -1028,9 +1094,9 @@ def generate_hints(is_manual=True, card=None, is_pregen=False):
                     _trigger_next_pregeneration()
             else:
                 _generating_card_ids.discard(card_id)
-                if current_reviewer_card and current_reviewer_card.id == card.id:
+                if web:
                     try:
-                        mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false, 'Failed'); }")
+                        web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false, 'Failed'); }")
                     except Exception: pass
                 info("AI-Hints: No hints or options were generated.")
         finally:

@@ -1492,5 +1492,8 @@
         document.addEventListener('keydown', window.aiHintsKeyHandler, true);
     }
 
+    // Automatic initialization for cases where the script is injected directly
+    // (e.g. Browser Previewer) and not explicitly triggered by Python.
+    setupAIHints();
 
 })();
