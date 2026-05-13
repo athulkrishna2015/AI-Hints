@@ -69,6 +69,26 @@ For individual providers, if the default model fails, it retries using the smart
 
 ---
 
+## Batch Generation & Resumption
+
+The "Local Sequential Queue" is designed for heavy-duty background processing with maximum reliability:
+
+- **Continuous Checkpointing**: The add-on saves its progress to disk (`batch_state.json`) after *every single card* processed. 
+- **Accidental Quit Protection**: If you close Anki or it crashes mid-batch, your progress is preserved. Upon restarting and opening the Batch tab, the add-on will detect the unfinished job and offer a one-click **"Resume Saved Queue"** button.
+- **Non-Blocking Background Execution**: Closing the configuration window **does not stop** the batch. The process runs in a dedicated background thread, allowing you to study or browse while it works.
+- **Live Status Sync**: Re-opening the configuration window at any time will instantly re-sync and show the current live progress, including the specific model and card ID being processed.
+
+## Generation Priorities
+
+When multiple generation modes are active, the add-on follows a strict hierarchy to ensure your study session remains fast and responsive:
+
+1. **Manual Generation**: Triggered by clicking "Generate" or using a shortcut. Highest priority; clears any active emergency stops.
+2. **Auto-Generation**: Automatically starts for new cards or cards with old versions when you show the question.
+3. **Pre-generation**: Automatically looks ahead to the *next* card in your queue. To save resources, this **aborts immediately** if a Manual or Auto generation is already running.
+4. **Batch Generation**: Runs in a "low-gear" background thread with a 1.5s delay between cards to prevent "hogging" your network or API rate limits.
+
+---
+
 ## Configuration
 
 Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configuration window.
