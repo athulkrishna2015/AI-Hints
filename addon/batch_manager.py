@@ -457,6 +457,11 @@ class BatchManager:
                     resp_data = client.generate_options(front_txt, back_txt)
                 
                 if resp_data and (resp_data.get("hints") or resp_data.get("options")):
+                    # 🚀 Update diagnostic model name live from actual successful response
+                    actual_model = resp_data.get("_model")
+                    if actual_model:
+                        self.current_local_model = actual_model
+
                     logger.info(
                         "AI-Hints local queue response for card %s: %s",
                         cid,
