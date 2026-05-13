@@ -104,18 +104,52 @@ def _trigger_next_pregeneration():
 
     def _task():
         try:
-            # getCard() returns the next card in the queue. 
-            # In v3 scheduler it is safe to call as a peek if we don't answer.
-            next_card = mw.col.sched.getCard()
-            if not next_card:
-                logger.debug("AI-Hints pre-gen: No next card in queue.")
+            # SAFETY: Do NOT use mw.col.sched.getCard() here. In v3 scheduler, getCard() 
+            # actually takes the card from the queue. Calling it twice (here and then 
+            # by the actual reviewer) causes the card to be skipped by the user.
+            
+            next_card = None
+            if hasattr(mw.col.sched, "get_queued_cards"):
+                # Modern Anki (2.1.49+) with v3 scheduler
+                try:
+                    # Fetch more than 1 to skip the current card if it's still in the queue
+                    queued = mw.col.sched.get_queued_cards(fetch_limit=5)
+                except TypeError:
+                    # Fallback for versions where positional or keyword arguments differ
+                    try:
+                        queued = mw.col.sched.get_queued_cards()
+                    except Exception as e:
+                        logger.debug(f"AI-Hints pre-gen: get_queued_cards failed: {e}")
+                        return
+                
+                if queued:
+                    # In modern Anki, get_queued_cards returns a QueuedCards protobuf object
+                    # which has a 'cards' attribute. In older versions or mocks it might be a list.
+                    cards = getattr(queued, "cards", queued)
+                    if cards and len(cards) > 0:
+                        for first_item in cards:
+                            cid = getattr(first_item, "card_id", None)
+                            if cid is None:
+                                # Protobuf version: QueuedCard.card.id
+                                inner_card = getattr(first_item, "card", None)
+                                cid = getattr(inner_card, "id", None)
+                            
+                            if cid:
+                                # Skip if it's the current card
+                                if mw.reviewer.card and cid == mw.reviewer.card.id:
+                                    continue
+                                
+                                next_card = mw.col.get_card(cid)
+                                if next_card:
+                                    break
+            else:
+                # Fallback: some old schedulers don't support peeking easily.
+                # In this case, it is safer to skip pre-generation than to risk skipping cards.
+                logger.debug("AI-Hints pre-gen: get_queued_cards not available, skipping pre-gen to prevent card stealing.")
                 return
 
-            # Don't pre-gen current card again
-            if mw.reviewer.card and next_card.id == mw.reviewer.card.id:
-                # In some cases, we might want to try to get the NEXT card after this one,
-                # but Anki's API doesn't make it easy to peek deep.
-                logger.debug(f"AI-Hints pre-gen: next_card {next_card.id} is the current card. Skipping.")
+            if not next_card:
+                logger.debug("AI-Hints pre-gen: No next card in queue (or all are current).")
                 return
 
             # Don't pre-gen if already cached or generating
@@ -615,6 +649,9 @@ def generate_ai_hints_batch_from_browser(browser):
             
             # Get base system prompts
             f, b = parser.get_note_content(card.note(), card)
+            if not f and not b:
+                continue
+
             sys_p = config.get("system_prompt", "")
             
             items.append({
@@ -984,6 +1021,11 @@ def generate_hints(is_manual=True, card=None, is_pregen=False):
         return
 
     front, back = parser.get_note_content(card.note(), card)
+    if not front and not back:
+        _generating_card_ids.discard(card_id)
+        logger.info("AI-Hints: Skipping generation for card %s as no content was found (likely a missing cloze).", card_id)
+        return
+
     logger.info("AI-Hints generation started for card %s using provider: %s (manual=%s, pregen=%s)", card_id, provider, is_manual, is_pregen)
     
     if is_manual:

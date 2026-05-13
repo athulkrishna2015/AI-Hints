@@ -419,6 +419,9 @@ class BatchTabMixin:
                         card = _get_card_from_collection(cid)
                         if not card: continue
                         f, b = parser.get_note_content(card.note(), card)
+                        if not f and not b:
+                            continue
+
                         items.append({
                             "key": str(cid),
                             "system_prompt": config.get("system_prompt", ""),

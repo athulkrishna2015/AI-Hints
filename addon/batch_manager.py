@@ -426,6 +426,13 @@ class BatchManager:
                 
                 # 1. Prep input
                 front_txt, back_txt = parser.get_note_content(card.note(), card)
+                if not front_txt and not back_txt:
+                    logger.info(f"AI-Hints local queue: Skipping card {cid} as no content was found (likely a missing cloze).")
+                    if self.local_queue:
+                        self.local_queue.pop(0)
+                        self.save_state()
+                    continue
+
                 final_sys = config.get("system_prompt", "")
                 final_usr = f"FRONT:\n{front_txt}\n\nBACK:\n{back_txt}"
                 

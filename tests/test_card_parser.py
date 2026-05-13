@@ -97,6 +97,19 @@ class CardParserTests(unittest.TestCase):
         self.assertNotIn("<script>alert(1)</script>", block)
         self.assertIn("<anki-mathjax>x</anki-mathjax>", block)
 
+    def test_missing_cloze_returns_empty_content(self):
+        note = FakeNote("Cloze", {"Text": "This is {{c1::cloze 1}}."})
+        parser = CardParser([], {"Cloze": ["Text"]})
+
+        # Card 1 (ord 0) should find c1
+        front, back = parser.get_note_content(note, card=FakeCard(1, 0))
+        self.assertEqual(back, "cloze 1")
+
+        # Card 2 (ord 1) should NOT find c2 and return empty strings
+        front, back = parser.get_note_content(note, card=FakeCard(2, 1))
+        self.assertEqual(front, "")
+        self.assertEqual(back, "")
+
 
 if __name__ == "__main__":
     unittest.main()

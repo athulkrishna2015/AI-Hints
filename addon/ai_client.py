@@ -6,6 +6,8 @@ import html
 import urllib.request
 import urllib.error
 import urllib.parse
+import socket
+import threading
 from typing import List, Dict, Any, Tuple
 from .logger import logger, state
 
@@ -22,6 +24,33 @@ GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 MODEL_COOLDOWN_SECONDS = 3600  # 1 hour
 FAILED_MODELS_CACHE: Dict[Tuple[str, str], float] = {}  # (provider, model) -> expiry_timestamp
 RATE_LIMIT_STREAK: Dict[Tuple[str, str], int] = {}    # (provider, model) -> consecutive_hits
+
+# Global network state for background monitoring
+_NETWORK_STATE = {"online": True, "last_check": 0}
+
+def _check_network_online() -> bool:
+    """Internal helper to perform a quick connectivity check."""
+    try:
+        # Check Cloudflare DNS (1.1.1.1) on port 53 (DNS)
+        socket.create_connection(("1.1.1.1", 53), timeout=1.5)
+        _NETWORK_STATE["online"] = True
+    except OSError:
+        _NETWORK_STATE["online"] = False
+    _NETWORK_STATE["last_check"] = time.time()
+    return _NETWORK_STATE["online"]
+
+def _start_network_monitor():
+    """Starts a background thread to periodically update network status."""
+    def monitor():
+        while True:
+            _check_network_online()
+            time.sleep(30)
+    t = threading.Thread(target=monitor, daemon=True)
+    t.name = "AI-Hints-NetworkMonitor"
+    t.start()
+
+# Initialize monitor
+_start_network_monitor()
 
 PROVIDER_ORDER = [
     "anthropic",
@@ -894,8 +923,25 @@ class AIClient:
             return replacement
         return model
 
+    def _is_actually_online(self) -> bool:
+        """
+        Returns True if the network is currently available.
+        Uses a cached value updated by a background thread, but performs
+        a synchronous refresh if the cache is older than 60 seconds.
+        """
+        now = time.time()
+        if now - _NETWORK_STATE["last_check"] < 60:
+            return _NETWORK_STATE["online"]
+        return _check_network_online()
+
     def _mark_model_failed(self, provider: str, model: str, delay_seconds: float = None):
         """Records a model failure and sets a cooldown timer."""
+        # Only blacklist if we are actually online. If the network is down, 
+        # the failure is likely due to connectivity, not the specific model/provider.
+        if not self._is_actually_online():
+            logger.info(f"AI-Hints: Skipping blacklist for {provider}/{model} because network appears offline.")
+            return
+
         if delay_seconds is None:
             delay_seconds = MODEL_COOLDOWN_SECONDS
             

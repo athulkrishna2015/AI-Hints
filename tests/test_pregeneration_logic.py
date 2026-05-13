@@ -157,5 +157,62 @@ class TestPregeneration(unittest.TestCase):
             # and it won't log "generation started"
             self.assertFalse(any("generation started" in str(args) for args in mock_logger.info.call_args_list))
 
+    def test_trigger_next_pregeneration_logic(self):
+        """Verify that _trigger_next_pregeneration peeks using get_queued_cards."""
+        mock_next_card = MagicMock()
+        mock_next_card.id = 555
+
+        # Setup scheduler to support get_queued_cards (Protobuf-like)
+        mock_card_proto = MagicMock()
+        mock_card_proto.id = 555
+
+        mock_queued_card = MagicMock()
+        # Mocking both protobuf 'card.id' and legacy 'card_id' for robustness
+        mock_queued_card.card = mock_card_proto
+        mock_queued_card.card_id = 555
+
+        mock_queued_cards = MagicMock()
+        mock_queued_cards.cards = [mock_queued_card]
+
+        self.mock_mw.col.sched.get_queued_cards.return_value = mock_queued_cards
+        self.mock_mw.col.get_card.return_value = mock_next_card
+
+        # Ensure reviewer.card is different
+        self.mock_mw.reviewer.card.id = 111
+
+        with patch('addon.reviewer_hooks.generate_hints') as mock_generate, \
+             patch('addon.reviewer_hooks.card_has_hints') as mock_has_hints, \
+             patch('addon.reviewer_hooks.QTimer') as mock_timer:
+
+            mock_has_hints.return_value = False
+
+            # Reset mock to clear any calls from previous tests (async side effects)
+            self.mock_mw.taskman.run_on_main.reset_mock()
+
+            # Trigger it
+            _trigger_next_pregeneration()
+
+            # Capture the task
+            task = mock_timer.singleShot.call_args[0][1]
+            
+            # Execute the task
+            task()
+            
+            # It should have called get_card with the ID from our mock
+            self.mock_mw.col.get_card.assert_called_with(555)
+
+            # Execute the lambda passed to taskman.run_on_main
+            self.mock_mw.taskman.run_on_main.assert_called_once()
+            gen_lambda = self.mock_mw.taskman.run_on_main.call_args[0][0]
+            gen_lambda()
+            
+            # Should have called get_queued_cards(fetch_limit=5)
+            self.mock_mw.col.sched.get_queued_cards.assert_called_with(fetch_limit=5)
+            # Should have triggered generation for card 555
+            mock_generate.assert_called_once()
+            args, kwargs = mock_generate.call_args
+            self.assertEqual(kwargs['card'].id, 555)
+            self.assertEqual(kwargs['is_pregen'], True)
+
 if __name__ == '__main__':
     unittest.main()

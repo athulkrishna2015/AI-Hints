@@ -179,6 +179,8 @@ class CardParser:
                 content = " ".join(value for _, value in selected_fields)
                 back = ""
                 content, back = self._focus_current_cloze(content, card)
+                if not back:
+                    return "", ""
                 return self._clean_html(content), self._clean_html(back)
 
             front = selected_fields[0][1]
@@ -196,6 +198,8 @@ class CardParser:
             # If it's a Cloze card, we often don't need the other fields for generating options
             if "cloze" in model_name.lower():
                 front, back = self._focus_current_cloze(front, card)
+                if not back:
+                    return "", ""
             else:
                 back = "\n".join([v for k, v in fields[1:]])
         
