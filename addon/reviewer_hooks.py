@@ -99,6 +99,7 @@ def _trigger_next_pregeneration():
 
     # Don't pre-generate if we are already generating something (priority to current card)
     if _generating_card_ids:
+        logger.debug(f"AI-Hints pre-gen: Skipping because active generations exist: {_generating_card_ids}")
         return
 
     def _task():
@@ -107,27 +108,36 @@ def _trigger_next_pregeneration():
             # In v3 scheduler it is safe to call as a peek if we don't answer.
             next_card = mw.col.sched.getCard()
             if not next_card:
+                logger.debug("AI-Hints pre-gen: No next card in queue.")
                 return
-                
+
             # Don't pre-gen current card again
             if mw.reviewer.card and next_card.id == mw.reviewer.card.id:
+                # In some cases, we might want to try to get the NEXT card after this one,
+                # but Anki's API doesn't make it easy to peek deep.
+                logger.debug(f"AI-Hints pre-gen: next_card {next_card.id} is the current card. Skipping.")
                 return
-            
+
             # Don't pre-gen if already cached or generating
-            if next_card.id in _pregenerated_data or next_card.id in _generating_card_ids:
+            if next_card.id in _pregenerated_data:
+                logger.debug(f"AI-Hints pre-gen: card {next_card.id} already in pregen cache.")
                 return
-                
+            if next_card.id in _generating_card_ids:
+                logger.debug(f"AI-Hints pre-gen: card {next_card.id} already generating.")
+                return
+
             # Check if it needs hints
             if not card_has_hints(next_card):
                 logger.info(f"AI-Hints: Triggering pre-generation for next card {next_card.id}")
                 # Use a timer or taskman to run generation to avoid blocking
                 mw.taskman.run_on_main(lambda: generate_hints(is_manual=False, card=next_card, is_pregen=True))
-        except:
-            pass
+            else:
+                logger.debug(f"AI-Hints pre-gen: card {next_card.id} already has hints.")
+        except Exception as e:
+            logger.debug(f"AI-Hints pre-gen error in task: {e}")
 
     # Defer slightly to let UI settle
     QTimer.singleShot(500, _task)
-
 def get_web_assets():
     global _css_cache, _js_cache
     if _css_cache is None or _js_cache is None:
@@ -1048,17 +1058,23 @@ def generate_hints(is_manual=True, card=None, is_pregen=False):
             if _apply_results_to_card(card, data, is_manual=is_manual):
                 tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
                 
+                # IMPORTANT: Discard current card from generating set BEFORE trying to pre-gen next.
+                # Otherwise _trigger_next_pregeneration will see this card and abort.
+                _generating_card_ids.discard(card_id)
+
                 # If we just finished the current card, and pre-generation is on, 
                 # try to pre-generate for the NEXT card now.
                 if not is_manual:
                     _trigger_next_pregeneration()
             else:
+                _generating_card_ids.discard(card_id)
                 if current_reviewer_card and current_reviewer_card.id == card.id:
                     try:
                         mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false, 'Failed'); }")
                     except Exception: pass
                 info("AI-Hints: No hints or options were generated.")
         finally:
+            # Safety discard in case of unexpected exceptions before our manual discards
             _generating_card_ids.discard(card_id)
 
     import threading
