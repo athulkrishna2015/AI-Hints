@@ -217,6 +217,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.auto_regenerate_min_version_edit.setEnabled(
             auto_gen_on and self.auto_regenerate_old_version_cb.isChecked()
         )
+        self.pre_generate_next_cb.setChecked(c.get("pre_generate_next", True))
+        self.pre_generate_next_cb.setEnabled(auto_gen_on)
+        
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", True))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
@@ -729,7 +732,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["auto_regenerate_all"] = self.auto_regenerate_all_cb.isChecked()
             new_config["auto_regenerate_if_old_version"] = self.auto_regenerate_old_version_cb.isChecked()
             new_config["auto_regenerate_min_version"] = self.auto_regenerate_min_version_edit.text().strip()
+            new_config["pre_generate_next"] = self.pre_generate_next_cb.isChecked()
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
+
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
             new_config["manual_show_hints"] = self.manual_show_hints_cb.isChecked()
             new_config["manual_show_options"] = self.manual_show_options_cb.isChecked()

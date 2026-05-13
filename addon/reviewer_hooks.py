@@ -5,13 +5,14 @@ from aqt import mw, gui_hooks
 from .ai_client import AIClient
 from .card_parser import CardParser
 from .config_ui import ADDON_PACKAGE, on_config_dialog
-from aqt.qt import QMessageBox, QMenu, QAction, QPoint, Qt, QDialog, QVBoxLayout
-from .logger import logger, info, tooltip
+from aqt.qt import QMessageBox, QMenu, QAction, QPoint, Qt, QDialog, QVBoxLayout, QTimer
+from .logger import logger, info, tooltip, state
 from .batch_manager import initialize_batch_manager
 
 _hooks_registered = False
 _generating_card_ids = set()
 _just_generated_card_ids = set()
+_pregenerated_data = {} # {card_id: data}
 _generated_hint_cache = {}
 _popup_dialog_instance = None
 MAX_HINT_CACHE_SIZE = 200
@@ -35,6 +36,97 @@ except Exception:
 def get_addon_version() -> str:
     """Return the addon version string (e.g. '1.4.2')."""
     return _ADDON_VERSION
+
+def _apply_results_to_card(card, data, is_manual=True):
+    if not card or not data:
+        return False
+        
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        config.get("target_fields", []),
+        config.get("note_type_fields", {}),
+        config.get("storage_mode", "json"),
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
+    )
+    
+    data = parser.normalize_hint_data(data)
+    if _ADDON_VERSION:
+        data["_version"] = _ADDON_VERSION
+        
+    logger.info(
+        "AI-Hints applying data to card %s: %s",
+        card.id,
+        json.dumps(data, ensure_ascii=False),
+    )
+        
+    note = card.note()
+    toggles = {
+        "show_hints_button": config.get("show_hints_button", True),
+        "show_options_button": config.get("show_options_button", True)
+    }
+    
+    if parser.update_note_with_hints(note, data, toggles, card):
+        mw.col.update_note(note)
+        _remember_generated_hints(card, data, toggles)
+        _just_generated_card_ids.add(card.id)
+        
+        # Update UI if we are still on the card
+        current_reviewer_card = getattr(mw.reviewer, "card", None)
+        if current_reviewer_card and current_reviewer_card.id == card.id:
+            try:
+                mw.reviewer.web.eval(
+                    f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}, {'true' if is_manual else 'false'}); }}"
+                )
+            except Exception as e:
+                logger.error(f"AI-Hints direct web update failed: {e}")
+                refresh_current_card()
+        
+        if is_manual and config.get("show_in_popup", False):
+            global _popup_dialog_instance
+            close_popup_if_open()
+            html_content = parser._build_html_block(data)
+            _popup_dialog_instance = ResultsPopup(mw, html_content)
+            _popup_dialog_instance.show()
+            
+        return True
+    return False
+
+def _trigger_next_pregeneration():
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    if not config.get("auto_generate_new", False) or not config.get("pre_generate_next", True):
+        return
+
+    # Don't pre-generate if we are already generating something (priority to current card)
+    if _generating_card_ids:
+        return
+
+    def _task():
+        try:
+            # getCard() returns the next card in the queue. 
+            # In v3 scheduler it is safe to call as a peek if we don't answer.
+            next_card = mw.col.sched.getCard()
+            if not next_card:
+                return
+                
+            # Don't pre-gen current card again
+            if mw.reviewer.card and next_card.id == mw.reviewer.card.id:
+                return
+            
+            # Don't pre-gen if already cached or generating
+            if next_card.id in _pregenerated_data or next_card.id in _generating_card_ids:
+                return
+                
+            # Check if it needs hints
+            if not card_has_hints(next_card):
+                logger.info(f"AI-Hints: Triggering pre-generation for next card {next_card.id}")
+                # Use a timer or taskman to run generation to avoid blocking
+                mw.taskman.run_on_main(lambda: generate_hints(is_manual=False, card=next_card, is_pregen=True))
+        except:
+            pass
+
+    # Defer slightly to let UI settle
+    QTimer.singleShot(500, _task)
 
 def get_web_assets():
     global _css_cache, _js_cache
@@ -355,12 +447,7 @@ def clear_hints():
     
     note = card.note()
     if parser.clear_hints_from_note(note, card):
-        try:
-            mw.col.add_custom_undo_entry("Clear AI Hints")
-            mw.col.update_note(note)
-            mw.col.merge_undo_entries(1)
-        except Exception:
-            mw.col.update_note(note)
+        mw.col.update_note(note)
         _forget_generated_hints(card)
         logger.info("AI-Hints cleared for card %s", card.id)
         tooltip("AI-Hints: Cleared.")
@@ -842,7 +929,7 @@ def close_popup_if_open():
         _popup_dialog_instance.close()
         _popup_dialog_instance = None
 
-def generate_hints(is_manual=True, card=None):
+def generate_hints(is_manual=True, card=None, is_pregen=False):
     if card is None:
         card = mw.reviewer.card
     if not card:
@@ -850,8 +937,17 @@ def generate_hints(is_manual=True, card=None):
 
     card_id = getattr(card, "id", None)
     if card_id in _generating_card_ids:
-        tooltip("AI-Hints: Generation already in progress.")
+        if not is_pregen:
+            # If we arrive at a card already being pre-generated, 
+            # just trigger the UI animation so the user sees the progress.
+            mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(true); }")
         return
+    
+    # Priority: If ANY card is currently generating and this is a pre-gen, abort.
+    # Current card (manual or auto) always has priority.
+    if is_pregen and _generating_card_ids:
+        return
+
     _generating_card_ids.add(card_id)
 
     restart_speed_focus_timer()
@@ -870,21 +966,52 @@ def generate_hints(is_manual=True, card=None):
     client = AIClient(config)
     if not client.has_any_ready_provider():
         _generating_card_ids.discard(card_id)
-        is_custom = provider in (config.get("custom_providers") or {})
-        show_api_error_dialog(provider if provider else None, is_custom=is_custom)
-        # Stop animation in frontend
-        mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
+        if not is_pregen:
+            is_custom = provider in (config.get("custom_providers") or {})
+            show_api_error_dialog(provider if provider else None, is_custom=is_custom)
+            # Stop animation in frontend
+            mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
         return
 
     front, back = parser.get_note_content(card.note(), card)
-    logger.info("AI-Hints generation started for card %s using provider: %s (manual=%s)", card_id, provider, is_manual)
+    logger.info("AI-Hints generation started for card %s using provider: %s (manual=%s, pregen=%s)", card_id, provider, is_manual, is_pregen)
     
-    # Trigger animation in frontend
-    mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(true); }")
+    if is_manual:
+        # User explicitly asked for generation; clear any active emergency stop
+        state.GLOBAL_STOP = False
+
+    # Trigger animation in frontend only if not pre-generating
+    if not is_pregen:
+        mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(true); }")
 
     def on_done(data):
         try:
             if not mw.col:
+                return
+
+            if state.GLOBAL_STOP:
+                logger.info(f"AI-Hints: Generation aborted for card {card_id} via Emergency Stop signal.")
+                # Clear animation
+                if not is_pregen:
+                    mw.reviewer.web.eval("if (window.aiHintsSetGenerating) { window.aiHintsSetGenerating(false); }")
+                return
+
+            if is_pregen:
+                if data and (data.get("hints") or data.get("options")):
+                    logger.info(
+                        "AI-Hints pre-generation response for card %s: %s",
+                        card_id,
+                        json.dumps(data, ensure_ascii=False),
+                    )
+                    # If by the time it finished, the card is ALREADY on screen, 
+                    # apply it immediately instead of just caching.
+                    current_reviewer_card = getattr(mw.reviewer, "card", None)
+                    if current_reviewer_card and current_reviewer_card.id == card_id:
+                         logger.info(f"AI-Hints: Pre-generation finished while card {card_id} is on screen. Applying immediately.")
+                         _apply_results_to_card(card, data, is_manual=False)
+                    else:
+                        _pregenerated_data[card_id] = data
+                        logger.info(f"AI-Hints: Pre-generation complete for card {card_id}. Cached in memory.")
                 return
 
             # Only discard if the user moved to a DIFFERENT card.
@@ -918,68 +1045,13 @@ def generate_hints(is_manual=True, card=None):
                 # and previously caused recursion bugs by reading the lock before cleanup.
                 return
 
-            data = parser.normalize_hint_data(data)
-            # Stamp the current addon version so we can track when hints were
-            # generated and trigger version-gated regeneration in the future.
-            if _ADDON_VERSION:
-                data["_version"] = _ADDON_VERSION
-            logger.info(
-                "AI-Hints response for card %s: %s",
-                card_id,
-                json.dumps(data, ensure_ascii=False),
-            )
-                
-            note = card.note()
-            toggles = {
-                "show_hints_button": config.get("show_hints_button", True),
-                "show_options_button": config.get("show_options_button", True)
-            }
-            if parser.update_note_with_hints(note, data, toggles, card):
-                # Save to database
-                mw.col.update_note(note)
-                
-                # Optional: try to force a disk write/autosave
-                try:
-                    if hasattr(mw.col, "autosave"):
-                        mw.col.autosave()
-                except:
-                    pass
-
-                # Add undo entry if possible
-                try:
-                    mw.col.add_custom_undo_entry("Generate AI Hints")
-                    # No need to call update_note again, it's already done
-                    mw.col.merge_undo_entries(1)
-                except Exception:
-                    pass
-
-                _remember_generated_hints(card, data, toggles)
-                logger.info(
-                    "AI-Hints saved %d hints and %d options to note %s for card %s.",
-                    len(data.get("hints", [])),
-                    len(data.get("options", [])),
-                    getattr(note, "id", ""),
-                    card_id,
-                )
-                _just_generated_card_ids.add(card.id)
+            if _apply_results_to_card(card, data, is_manual=is_manual):
                 tooltip("AI-Hints: Generated. Use Show Hints / Show Options on the card.")
                 
-                # Update UI if we are still on the card
-                if current_reviewer_card and current_reviewer_card.id == card.id:
-                    try:
-                        mw.reviewer.web.eval(
-                            f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}, {'true' if is_manual else 'false'}); }}"
-                        )
-                    except Exception as e:
-                        logger.error(f"AI-Hints direct web update failed: {e}")
-                        refresh_current_card()
-                
-                if config.get("show_in_popup", False):
-                    global _popup_dialog_instance
-                    close_popup_if_open()
-                    html_content = parser._build_html_block(data)
-                    _popup_dialog_instance = ResultsPopup(mw, html_content)
-                    _popup_dialog_instance.show()
+                # If we just finished the current card, and pre-generation is on, 
+                # try to pre-generate for the NEXT card now.
+                if not is_manual:
+                    _trigger_next_pregeneration()
             else:
                 if current_reviewer_card and current_reviewer_card.id == card.id:
                     try:
@@ -1122,6 +1194,16 @@ def init_hooks():
         
         # Auto generate for new cards if configured and no data exists
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        
+        # 1. Check if we have pre-generated data for THIS card
+        if card.id in _pregenerated_data:
+            data = _pregenerated_data.pop(card.id)
+            logger.info(f"AI-Hints: Applying pre-generated data for card {card.id}")
+            _apply_results_to_card(card, data, is_manual=False)
+            # Now that this card is done, pre-generate the NEXT one
+            _trigger_next_pregeneration()
+            return
+
         if config.get("auto_generate_new", False) and card:
             # Skip auto-generation if we just undid something
             if time.time() - _last_undo_time < 0.5:
@@ -1151,14 +1233,21 @@ def init_hooks():
             if needs_generation or force_regen or regen_old:
                 logger.info(f"AI-Hints: Auto-generating hints for card {card.id} (force_regen={force_regen}, regen_old={regen_old}).")
                 generate_hints(is_manual=False, card=card)
+            else:
+                # Current card is already good. Pre-generate the NEXT one.
+                _trigger_next_pregeneration()
 
     gui_hooks.reviewer_did_show_question.append(on_show_question)
     gui_hooks.reviewer_did_show_answer.append(_trigger_frontend_setup)
     
     # Close popup on next card or when leaving reviewer
+    def _on_reviewer_end():
+        close_popup_if_open()
+        _pregenerated_data.clear()
+        
     gui_hooks.reviewer_did_show_question.append(lambda _card: close_popup_if_open())
-    gui_hooks.reviewer_will_end.append(close_popup_if_open)
-    gui_hooks.profile_will_close.append(close_popup_if_open)
+    gui_hooks.reviewer_will_end.append(_on_reviewer_end)
+    gui_hooks.profile_will_close.append(_on_reviewer_end)
     
     # Sync UI and caches on undo operations
     def on_undo(changes):

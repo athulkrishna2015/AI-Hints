@@ -7,7 +7,7 @@ import urllib.request
 import urllib.error
 import urllib.parse
 from typing import List, Dict, Any, Tuple
-from .logger import logger
+from .logger import logger, state
 
 try:
     from .json_repair import loads as repair_loads
@@ -283,6 +283,9 @@ class AIClient:
         last_exception = None
         # Try providers in sequence
         for provider in all_potential:
+            if state.GLOBAL_STOP:
+                logger.info(f"AI-Hints: Generation aborted via Emergency Stop signal (provider loop).")
+                return {"hints": [], "options": []}
             try:
                 result = self._call_provider(provider, system_prompt, prompt)
                 if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
@@ -398,6 +401,8 @@ class AIClient:
 
         models = self._models_for_provider(provider_name, custom_cfg.get("model", ""), custom_cfg.get("model_fallbacks", []))
         for model in models:
+            if state.GLOBAL_STOP:
+                break
             data = {
                 "model": model,
                 "messages": [
@@ -413,6 +418,8 @@ class AIClient:
                 parsed = self._parse_json_result(content)
                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                     self._on_model_success(provider_name, model)
+                    parsed["_provider"] = provider_name
+                    parsed["_model"] = model
                     return parsed
                 logger.warning(f"AI-Hints: Custom provider {provider_name} model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -493,6 +500,9 @@ class AIClient:
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
+                    actual_model = result.get("model", "openrouter-auto")
+                    parsed["_provider"] = "openrouter"
+                    parsed["_model"] = actual_model
                     return parsed
                 logger.warning("AI-Hints: OpenRouter models array returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -502,6 +512,8 @@ class AIClient:
             # If the models array call fails, we fall back to the per-model loop below as a safety measure.
 
         for model in models:
+            if state.GLOBAL_STOP:
+                break
             data = {
                 "model": model,
                 "messages": [
@@ -519,6 +531,8 @@ class AIClient:
                 parsed = self._parse_json_result(content)
                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                     self._on_model_success(provider, model)
+                    parsed["_provider"] = provider
+                    parsed["_model"] = model
                     return parsed
                 logger.warning(f"AI-Hints: {provider} model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -548,6 +562,8 @@ class AIClient:
         })
 
         for model in models:
+            if state.GLOBAL_STOP:
+                break
             data = {
                 "model": model,
                 "system": system_prompt,
@@ -562,6 +578,8 @@ class AIClient:
                 parsed = self._parse_json_result(content)
                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                     self._on_model_success("anthropic", model)
+                    parsed["_provider"] = "anthropic"
+                    parsed["_model"] = model
                     return parsed
                 logger.warning(f"AI-Hints: Anthropic model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -585,6 +603,8 @@ class AIClient:
         headers["x-goog-api-key"] = api_key
 
         for model in models:
+            if state.GLOBAL_STOP:
+                break
             model_path = urllib.parse.quote(model, safe="")
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_path}:generateContent"
             logger.debug(f"Calling Gemini with model: {model}")
@@ -621,6 +641,8 @@ class AIClient:
                 parsed = self._parse_json_result(content)
                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                     self._on_model_success("gemini", model)
+                    parsed["_provider"] = "gemini"
+                    parsed["_model"] = model
                     return parsed
                 logger.warning(f"AI-Hints: Gemini model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:

@@ -5,7 +5,7 @@ import threading
 from typing import List, Dict, Set, Any
 from aqt import mw
 from aqt.qt import QTimer
-from .logger import logger, info, tooltip
+from .logger import logger, info, tooltip, state
 from .ai_client import AIClient
 from .card_parser import CardParser
 
@@ -281,11 +281,6 @@ class BatchManager:
             for note in notes_to_flush.values():
                  mw.col.update_note(note)
             
-            if applied_count > 0:
-                try:
-                    mw.col.autosave()
-                except: pass
-                
             # Success cleanup!
             if job_name in self.jobs:
                 del self.jobs[job_name]
@@ -366,6 +361,7 @@ class BatchManager:
 
     def stop_all(self):
         """Emergency stop for ALL activity (Local Queue + Cloud Batches)."""
+        state.GLOBAL_STOP = True
         logger.info("🚨 EMERGENCY STOP: Aborting all active generations.")
         self.stop_local_queue()
         
@@ -441,6 +437,11 @@ class BatchManager:
                     resp_data = client.generate_options(front_txt, back_txt)
                 
                 if resp_data and (resp_data.get("hints") or resp_data.get("options")):
+                    logger.info(
+                        "AI-Hints local queue response for card %s: %s",
+                        cid,
+                        json.dumps(resp_data, ensure_ascii=False),
+                    )
                     # 3. Apply directly to db using our concurrent-safe update method!
                     def _apply_on_main(note, d):
                         # Apply directly inside main thread loop to avoid col collisions
@@ -477,8 +478,7 @@ class BatchManager:
         
         def _finished_notify():
               # Auto-save deck silently upon completion
-              try: mw.col.autosave()
-              except: pass
+              pass
 
         mw.taskman.run_on_main(_finished_notify)
 

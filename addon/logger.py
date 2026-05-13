@@ -16,6 +16,12 @@ def get_logger():
 
 logger = get_logger()
 
+class SharedState:
+    def __init__(self):
+        self.GLOBAL_STOP = False
+
+state = SharedState()
+
 def clear_log_file():
     """Wipes the log file content."""
     addon_dir = os.path.dirname(__file__)

@@ -88,6 +88,13 @@ class GeneralTabMixin:
         version_row.addStretch()
         show_layout.addRow(version_row)
 
+        self.pre_generate_next_cb = QCheckBox("Pre-generate for next card in queue")
+        self.pre_generate_next_cb.setToolTip(
+            "Start generating hints for the next card in the background while you are reviewing the current one. "
+            "Data is only saved to the card when it actually appears on screen."
+        )
+        show_layout.addRow(self.pre_generate_next_cb)
+
         # Couple all sub-checkboxes to the primary Auto-Generate checkbox
         def _update_regen_controls(enabled):
             self.auto_regenerate_all_cb.setEnabled(enabled)
@@ -95,6 +102,10 @@ class GeneralTabMixin:
             self.auto_regenerate_min_version_edit.setEnabled(
                 enabled and self.auto_regenerate_old_version_cb.isChecked()
             )
+            self.pre_generate_next_cb.setEnabled(enabled)
+            if not enabled:
+                self.pre_generate_next_cb.setChecked(False)
+
         self.auto_generate_new_cb.toggled.connect(_update_regen_controls)
         self.auto_regenerate_old_version_cb.toggled.connect(
             lambda checked: self.auto_regenerate_min_version_edit.setEnabled(
@@ -123,5 +134,10 @@ class GeneralTabMixin:
         show_group.setLayout(show_layout)
         gen_layout.addRow(show_group)
         
-        self.general_tab.setLayout(gen_layout)
+        # Main layout wrapper to prevent vertical stretching
+        main_layout = QVBoxLayout()
+        main_layout.addLayout(gen_layout)
+        main_layout.addStretch()
+        
+        self.general_tab.setLayout(main_layout)
         return self.general_tab

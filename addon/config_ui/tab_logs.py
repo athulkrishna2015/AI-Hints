@@ -20,7 +20,7 @@ class LogTabMixin:
         
         filter_layout.addWidget(QLabel(" Source:"))
         self.log_source_cb = QComboBox()
-        self.log_source_cb.addItems(["ALL", "Antigravity Proxy", "Batch Processing", "Standard Addon"])
+        self.log_source_cb.addItems(["ALL", "Antigravity Proxy", "Batch Processing", "Pre-generation", "Standard Addon"])
         self.log_source_cb.currentIndexChanged.connect(self.load_log)
         filter_layout.addWidget(self.log_source_cb)
         
@@ -35,10 +35,6 @@ class LogTabMixin:
         self.auto_clear_cb = QCheckBox("Clear on startup")
         self.auto_clear_cb.setToolTip("Automatically clear the log file every time Anki starts.")
         filter_layout.addWidget(self.auto_clear_cb)
-
-        refresh_btn = QPushButton("Refresh")
-        refresh_btn.clicked.connect(self.load_log)
-        filter_layout.addWidget(refresh_btn)
 
         self.live_label = QLabel("● Live")
         self.live_label.setStyleSheet("color: green; font-weight: bold;")
@@ -94,6 +90,8 @@ class LogTabMixin:
                 lines = [l for l in lines if "[Proxy]" in l]
             elif source_filter == "Batch Processing":
                 lines = [l for l in lines if "Batch" in l or "Queue" in l]
+            elif source_filter == "Pre-generation":
+                lines = [l for l in lines if "pre-generation" in l.lower() or "pregen" in l.lower()]
             elif source_filter == "Standard Addon":
                 lines = [l for l in lines if "[Proxy]" not in l]
             

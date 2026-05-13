@@ -90,6 +90,11 @@ class CardParser:
                     ca = self._convert_to_mathjax_tags(ca)
                 normalized["correct_answer"] = ca
 
+            # Preserve metadata keys (starting with '_')
+            for k, v in data.items():
+                if k.startswith("_") and k not in normalized:
+                    normalized[k] = v
+
             return normalized
         
         # Handle keyed structure (e.g. c1, c2)
@@ -97,9 +102,12 @@ class CardParser:
         for k, v in data.items():
             if isinstance(v, dict):
                 normalized[k] = self.normalize_hint_data(v)
-            else:
+            elif k.startswith("_"):
                 normalized[k] = v
+            else:
+                pass # skip unknown fields
         return normalized
+
 
 
     def _strip_ai_hallucinations(self, text: str) -> str:
