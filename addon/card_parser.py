@@ -225,22 +225,81 @@ class CardParser:
             return text, ""
         cloze_number += 1
 
-        answers = []
-        def replace_cloze(match):
-            number = int(match.group(1))
-            answer = match.group(2)
-            hint = match.group(3) or ""
+        answers_map = {} # {original_pos: cleaned_ans}
+
+        ACTIVE_MARKER_START = "@@@AI_HINTS_ACTIVE_START@@@"
+        ACTIVE_MARKER_END = "@@@AI_HINTS_ACTIVE_END@@@"
+
+        def resolve_cloze_match(match_text: str, start_pos_in_original: int) -> str:
+            """Resolves a single {{c1::answer::hint}} block."""
+            inner = match_text[2:-2]
+            parts = inner.split("::", 1)
+            if len(parts) < 2:
+                return match_text
+            
+            tag = parts[0]
+            content_with_hint = parts[1]
+            
+            c_parts = content_with_hint.rsplit("::", 1)
+            if len(c_parts) > 1:
+                answer = c_parts[0]
+                hint = c_parts[1]
+            else:
+                answer = content_with_hint
+                hint = ""
+                
+            try:
+                num_match = re.search(r"\d+", tag)
+                number = int(num_match.group()) if num_match else 0
+            except (ValueError, AttributeError):
+                return match_text
+
             if number != cloze_number:
                 return answer
 
-            answers.append(self._clean_html(answer))
-            current = f"Current cloze deletion: {answer}"
+            # This IS the active cloze.
+            cleaned_ans = self._clean_html(answer)
+            answers_map[start_pos_in_original] = cleaned_ans
+            
+            res = f"{ACTIVE_MARKER_START}{answer}"
             if hint:
-                current += f" (existing hint: {hint})"
-            return current
+                res += f" (existing hint: {hint})"
+            res += ACTIVE_MARKER_END
+            return res
 
-        focused_text = re.sub(r"\{\{c(\d+)::(.*?)(?:::([^{}]*?))?\}\}", replace_cloze, text, flags=re.DOTALL)
-        return focused_text, ", ".join(answers)
+        def process_recursive(content: str) -> str:
+            """Iteratively resolves the innermost clozes first."""
+            iteration_limit = 50
+            while iteration_limit > 0:
+                matches = list(re.finditer(r"\{\{c\d+::", content))
+                if not matches:
+                    break
+                
+                found_any = False
+                for m in reversed(matches):
+                    start_pos = m.start()
+                    end_pos = content.find("}}", start_pos)
+                    if end_pos != -1:
+                        cloze_text = content[start_pos:end_pos+2]
+                        # We track the original position to keep answers in order
+                        # (approximate since content shifts, but relative order holds)
+                        resolved = resolve_cloze_match(cloze_text, start_pos)
+                        content = content[:start_pos] + resolved + content[end_pos+2:]
+                        found_any = True
+                        break
+                
+                if not found_any:
+                    break
+                iteration_limit -= 1
+            
+            content = content.replace(ACTIVE_MARKER_START, "Current cloze deletion: ")
+            content = content.replace(ACTIVE_MARKER_END, "")
+            return content
+
+        focused_text = process_recursive(text)
+        # Sort answers by their original discovered position
+        sorted_answers = [answers_map[k] for k in sorted(answers_map.keys())]
+        return focused_text, ", ".join(sorted_answers)
 
     def update_note_with_hints(self, note, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None, skip_if_exists: bool = False) -> bool:
         """Appends or replaces the AI hints block in the target field."""
