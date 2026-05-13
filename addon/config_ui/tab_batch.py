@@ -286,40 +286,68 @@ class BatchTabMixin:
              self.pause_local_btn.setChecked(False)
              self.update_batch_status_tab()
 
+    def update_batch_ui_for_selection(self):
+        """Called when external cards are passed into the dialog from browser."""
+        if not hasattr(self, "selected_card_ids") or not self.selected_card_ids:
+            return
+            
+        count = len(self.selected_card_ids)
+        # Update Deck Chooser to reflect selection
+        self.batch_deck_chooser.setEditable(True)
+        self.batch_deck_chooser.lineEdit().setText(f"(Selected: {count} cards)")
+        self.batch_deck_chooser.setEnabled(False)
+        
+        # Switch method to Local Queue by default for broad compatibility
+        # unless user already specifically chose Cloud
+        if not self.rb_native_async.isChecked():
+            self.rb_local_queue.setChecked(True)
+            self._on_batch_method_changed()
+
     def on_start_config_batch(self):
         from ..batch_manager import batch_manager
         
-        if not self.rb_native_async.isChecked() and not batch_manager.local_queue_active and batch_manager.local_queue:
-             count = len(batch_manager.local_queue)
-             res = askUser(
-                  f"💾 **UNFINISHED BATCH DETECTED**\n\n"
-                  f"Found {count} cards waiting from your previous session.\n\n"
-                  f"• Click 'Yes' to RESUME processing these cards.\n"
-                  f"• Click 'No' to DISCARD the old queue and start a fresh batch."
-             )
-             if res:
-                  started = batch_manager.start_local_sequential_queue(card_ids=None) 
-                  if started:
-                       self.update_batch_status_tab()
-                       self._on_batch_method_changed() 
-                  return
-             else:
-                  batch_manager.stop_local_queue() 
+        # 1. Handle selection from browser if present
+        if hasattr(self, "selected_card_ids") and self.selected_card_ids:
+            source_cids = list(self.selected_card_ids)
+            deck_name = "Selected Cards"
+        else:
+            # Traditional deck-based search
+            if not self.rb_native_async.isChecked() and not batch_manager.local_queue_active and batch_manager.local_queue:
+                 count = len(batch_manager.local_queue)
+                 res = askUser(
+                      f"💾 **UNFINISHED BATCH DETECTED**\n\n"
+                      f"Found {count} cards waiting from your previous session.\n\n"
+                      f"• Click 'Yes' to RESUME processing these cards.\n"
+                      f"• Click 'No' to DISCARD the old queue and start a fresh batch."
+                 )
+                 if res:
+                      started = batch_manager.start_local_sequential_queue(card_ids=None) 
+                      if started:
+                           self.update_batch_status_tab()
+                           self._on_batch_method_changed() 
+                      return
+                 else:
+                      batch_manager.stop_local_queue() 
 
-        deck_name = self.batch_deck_chooser.currentText().strip()
-        all_valid_decks = mw.col.decks.all_names()
-        if deck_name not in all_valid_decks:
-             info(f"⚠️ Deck not found: '{deck_name}'\nPlease select a valid deck from the list.")
-             return
+            deck_name = self.batch_deck_chooser.currentText().strip()
+            all_valid_decks = mw.col.decks.all_names()
+            if deck_name not in all_valid_decks:
+                 info(f"⚠️ Deck not found: '{deck_name}'\nPlease select a valid deck from the list.")
+                 return
 
-        if not deck_name:
-             info("Please select a deck first.")
-             return
-             
+            if not deck_name:
+                 info("Please select a deck first.")
+                 return
+                 
+            try:
+                source_cids = mw.col.find_cards(f"deck:\"{deck_name}\"")
+            except Exception as e:
+                logger.error(f"Deck search failed: {e}")
+                source_cids = []
+
         try:
-            cids = mw.col.find_cards(f"deck:\"{deck_name}\"")
-            if not cids:
-                info(f"No cards found in deck '{deck_name}'.")
+            if not source_cids:
+                info(f"No cards found for processing ({deck_name}).")
                 return
                 
             if self.batch_skip_existing_cb.isChecked():
@@ -328,7 +356,7 @@ class BatchTabMixin:
                 use_ver_gate = self.batch_regen_version_cb.isChecked()
                 min_ver = self.batch_regen_min_version_edit.text().strip()
                 
-                for cid in cids:
+                for cid in source_cids:
                     c = _get_card_from_collection(cid)
                     if not c: continue
                     has_hints = card_has_hints(c)
@@ -339,7 +367,7 @@ class BatchTabMixin:
                         if _version_less_than(saved_ver, min_ver):
                             final_ids.append(cid)
             else:
-                final_ids = list(cids)
+                final_ids = list(source_cids)
                 
             if not final_ids:
                 info("No cards need hint generation (all selected have hints already).")

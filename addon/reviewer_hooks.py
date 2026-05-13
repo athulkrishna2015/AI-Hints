@@ -695,8 +695,15 @@ def on_browser_context_menu(browser, menu):
     act_clear.setEnabled(bool(_selected_browser_card_ids(browser)))
     act_clear.triggered.connect(lambda _checked=False, b=browser: clear_ai_hints_from_browser_selection(b))
     
-    # Action 2: Batch Generate (Gemini only for now)
-    act_batch = menu.addAction("✨ Generate AI-Hints (Gemini Batch)")
+    # Action 2: Batch Generation UI (Main entry point)
+    act_batch_ui = menu.addAction("✨ Batch Generation...")
+    act_batch_ui.setEnabled(bool(_selected_browser_card_ids(browser)))
+    act_batch_ui.triggered.connect(
+        lambda _checked=False, b=browser: on_config_dialog(mw, tab_index=4, card_ids=_selected_browser_card_ids(b))
+    )
+    
+    # Action 3: Quick Gemini Batch (Legacy/Shortcut)
+    act_batch = menu.addAction("⚡ Quick Gemini Batch (REST API)")
     act_batch.setEnabled(bool(_selected_browser_card_ids(browser)))
     act_batch.triggered.connect(lambda _checked=False, b=browser: generate_ai_hints_batch_from_browser(b))
     

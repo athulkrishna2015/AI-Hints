@@ -29,13 +29,14 @@ LAST_ACTIVE_TAB_INDEX = 6  # Fallback static state
 class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin, 
                    ShortcutsTabMixin, BatchTabMixin, SupportTabMixin, LogTabMixin):
     
-    def __init__(self, parent):
+    def __init__(self, parent, card_ids=None):
         super().__init__(parent)
         self.setWindowTitle("AI-Hints Configuration")
         self.setModal(False)
         self.setMinimumSize(600, 700)
         self.addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
+        self.selected_card_ids = card_ids
         self.config = self._normalize_config(mw.addonManager.getConfig(ADDON_PACKAGE) or {})
         
         # Load default config for restoration
@@ -68,6 +69,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         # Running it synchronously here would call load_log() (file I/O) on the
         # main thread during construction, causing Anki to freeze.
         QTimer.singleShot(0, lambda: self.on_tab_changed(self.tabs.currentIndex()))
+
+    def set_selected_cards(self, card_ids):
+        """External hook to pass cards from browser into the Batch tab."""
+        self.selected_card_ids = card_ids
+        if hasattr(self, "update_batch_ui_for_selection"):
+            self.update_batch_ui_for_selection()
 
     def on_tab_changed(self, index):
         tab_name = self.tabs.tabText(index)
@@ -189,6 +196,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         layout.addLayout(btn_layout)
         self.setLayout(layout)
+
+        # Apply initial selection if any
+        if self.selected_card_ids:
+            QTimer.singleShot(100, self.update_batch_ui_for_selection)
 
     def load_config_into_ui(self):
         c = self.config
@@ -841,21 +852,29 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 # --- Module Global Lifecycle functions ---
 _config_dialog_instance = None
 
-def on_config_dialog(parent=None):
+def on_config_dialog(parent=None, tab_index=None, card_ids=None):
     global _config_dialog_instance
     dialog_parent = parent or mw
     if _config_dialog_instance is not None:
         try:
             if _config_dialog_instance.isVisible():
+                 if tab_index is not None:
+                     _config_dialog_instance.tabs.setCurrentIndex(tab_index)
+                 if card_ids is not None:
+                     _config_dialog_instance.set_selected_cards(card_ids)
                  _config_dialog_instance.raise_()
                  _config_dialog_instance.activateWindow()
                  return
         except (RuntimeError, AttributeError): 
             _config_dialog_instance = None
 
-    _config_dialog_instance = ConfigDialog(dialog_parent)
+    _config_dialog_instance = ConfigDialog(dialog_parent, card_ids=card_ids)
     _config_dialog_instance.setWindowFlag(Qt.WindowType.Window, True)
     _config_dialog_instance.setWindowModality(Qt.WindowModality.NonModal)
+    
+    if tab_index is not None:
+        _config_dialog_instance.tabs.setCurrentIndex(tab_index)
+        
     QTimer.singleShot(50, _config_dialog_instance.show)
 
 def _close_config_dialog_on_shutdown():
