@@ -867,9 +867,41 @@ def _close_config_dialog_on_shutdown():
             pass
         _config_dialog_instance = None
 
+def check_support_on_update():
+    """Automatically opens the Support tab once after an update, unless opted out."""
+    try:
+        # 1. Get current version from VERSION file
+        addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        version_path = os.path.join(addon_dir, "VERSION")
+        if not os.path.exists(version_path):
+            return
+        with open(version_path, "r", encoding="utf-8") as f:
+            current_version = f.read().strip()
+
+        # 2. Get meta state
+        meta = mw.addonManager.addonMeta(ADDON_PACKAGE)
+        last_version = meta.get("last_seen_version", "")
+        opt_out = meta.get("supporter_opt_out", False)
+
+        # 3. Trigger if version changed
+        if current_version != last_version:
+            meta["last_seen_version"] = current_version
+            mw.addonManager.writeAddonMeta(ADDON_PACKAGE, meta)
+            
+            if not opt_out:
+                # Open dialog and switch to Support tab (Index 5)
+                on_config_dialog(mw)
+                def _switch_tab():
+                    if _config_dialog_instance:
+                        _config_dialog_instance.tabs.setCurrentIndex(5)
+                QTimer.singleShot(1000, _switch_tab) # Wait for UI to stabilize
+    except Exception as e:
+        logger.error(f"AI-Hints: Update check failed: {e}")
+
 def init_config_ui():
     from aqt import gui_hooks
     gui_hooks.profile_will_close.append(_close_config_dialog_on_shutdown)
+    gui_hooks.profile_did_open.append(check_support_on_update)
     
     mw.addonManager.setConfigAction(ADDON_PACKAGE, on_config_dialog)
     # Add Tools menu entry so the window can be opened any time

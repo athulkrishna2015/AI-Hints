@@ -12,18 +12,33 @@ ADDON_DIR = os.path.join(PROJECT_ROOT, 'addon')
 sys.path.insert(0, PROJECT_ROOT)
 
 # 2. Mock Anki/Qt
-mock_qt = MagicMock()
+from types import ModuleType
+aqt = ModuleType('aqt')
+sys.modules['aqt'] = aqt
+aqt.qt = MagicMock()
+sys.modules['aqt.qt'] = aqt.qt
+aqt.utils = MagicMock()
+sys.modules['aqt.utils'] = aqt.utils
+aqt.webview = MagicMock()
+sys.modules['aqt.webview'] = aqt.webview
+aqt.theme = MagicMock()
+sys.modules['aqt.theme'] = aqt.theme
+aqt.colors = MagicMock()
+sys.modules['aqt.colors'] = aqt.colors
+aqt.gui_hooks = MagicMock()
+sys.modules['aqt.gui_hooks'] = aqt.gui_hooks
+aqt.mw = MagicMock()
+sys.modules['aqt.mw'] = aqt.mw
+
+mock_qt = aqt.qt
 classes = ['QDialog', 'QWidget', 'QVBoxLayout', 'QHBoxLayout', 'QLabel', 
            'QLineEdit', 'QPushButton', 'QComboBox', 'QCheckBox', 'QTextEdit',
-           'QScrollArea', 'QGroupBox', 'QFormLayout', 'QSpinBox', 'QDialogButtonBox']
+           'QScrollArea', 'QGroupBox', 'QFormLayout', 'QSpinBox', 'QDialogButtonBox',
+           'QPixmap', 'Qt', 'QApplication', 'QSizePolicy', 'QTimer', 'QTabWidget',
+           'QListWidget', 'QListWidgetItem', 'QDesktopServices', 'QUrl', 'QProgressBar',
+           'QDialogButtonBox']
 for cls in classes:
     setattr(mock_qt, cls, MagicMock)
-
-sys.modules['aqt'] = MagicMock()
-sys.modules['aqt.qt'] = mock_qt
-sys.modules['aqt.utils'] = MagicMock()
-sys.modules['aqt.theme'] = MagicMock()
-sys.modules['aqt.colors'] = MagicMock()
 
 from aqt import mw
 mw.addonManager = MagicMock()
