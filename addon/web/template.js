@@ -8,19 +8,21 @@
 (function() {
     // 1. Configuration & Styling
     const STYLES = `
-        .ai-hints-container { margin-top: 15px; padding: 12px; border: 1px dashed #aaa; border-radius: 10px; background-color: rgba(128,128,128,0.08); text-align: left; font-family: sans-serif; clear: both; }
-        .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; justify-content: center; }
-        .ai-hints-btn { padding: 6px 12px; cursor: pointer; border-radius: 6px; border: 1px solid #999; background-color: #f0f0f0; color: #222; font-size: 13px; font-weight: 500; transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
+        .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; }
+        .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; }
+        .ai-hints-content-active { display: block; border: 1px dashed #aaa; background-color: rgba(128,128,128,0.06); }
+        .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+        .ai-hints-btn { padding: 4px 10px; cursor: pointer; border-radius: 6px; border: 1px solid #999; background-color: #f0f0f0; color: #222; font-size: 12px; font-weight: 500; transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
         .ai-hints-btn:hover { background-color: #e0e0e0; }
         .ai-hints-btn:active { background-color: #d0d0d0; transform: translateY(1px); }
         .ai-hints-btn:disabled { opacity: 0.5; cursor: default; }
-        .ai-hints-list, .ai-hints-hint-list { margin-top: 10px; padding-left: 20px; display: none; }
-        .ai-hints-list li, .ai-hints-hint-list li { margin-bottom: 6px; line-height: 1.4; }
-        .ai-hints-correct { border-left: 4px solid #2ecc71; background-color: rgba(46, 204, 113, 0.15); padding-left: 8px; font-weight: 600; border-radius: 0 4px 4px 0; }
-        .nightMode .ai-hints-container { background-color: rgba(255,255,255,0.05); border-color: #555; }
+        .ai-hints-list, .ai-hints-hint-list { margin-top: 6px; padding-left: 20px; margin-bottom: 0; }
+        .ai-hints-list li, .ai-hints-hint-list li { margin-bottom: 4px; line-height: 1.3; font-size: 13px; }
+        .ai-hints-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.12); padding-left: 8px; font-weight: 600; border-radius: 0 4px 4px 0; }
+        .nightMode .ai-hints-content-active { background-color: rgba(255,255,255,0.04); border-color: #555; }
         .nightMode .ai-hints-btn { background-color: #333; color: #eee; border-color: #666; }
         .nightMode .ai-hints-btn:hover { background-color: #444; }
-        .ai-hints-title { font-weight: bold; margin-bottom: 4px; display: block; font-size: 0.9em; opacity: 0.8; }
+        .ai-hints-title { font-weight: bold; margin-bottom: 2px; display: block; font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; }
         .ai-hints-json-view { margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 5px; font-family: monospace; font-size: 11px; white-space: pre-wrap; overflow-x: auto; }
         .nightMode .ai-hints-json-view { background: rgba(255,255,255,0.05); }
         .ai-hints-btn-generating { animation: ai-hints-pulse 1.5s infinite; background: linear-gradient(90deg, #f8fafc, #dbeafe, #f8fafc); background-size: 200% 100%; color: #111827; border-color: #60a5fa; opacity: 1; }
@@ -76,12 +78,20 @@
         }
     }
 
-    function renderSection(parent, title, items, isCorrectFn, seed) {
+    function renderSection(parent, title, items, isCorrectFn, seed, showTitle) {
         if (!items || items.length === 0) return null;
-        const label = document.createElement('span');
-        label.className = 'ai-hints-title';
-        label.textContent = title;
-        parent.appendChild(label);
+        
+        const section = document.createElement('div');
+        section.className = 'ai-hints-section';
+        section.style.display = 'none';
+
+        if (showTitle) {
+            const label = document.createElement('span');
+            label.className = 'ai-hints-title';
+            label.textContent = title;
+            section.appendChild(label);
+        }
+
         const list = document.createElement('ul');
         list.className = title.toLowerCase().includes('hint') ? 'ai-hints-hint-list' : 'ai-hints-list';
         const listItems = items.map(text => {
@@ -92,8 +102,9 @@
         });
         if (title.toLowerCase().includes('option')) shuffle(listItems, seed);
         listItems.forEach(li => list.appendChild(li));
-        parent.appendChild(list);
-        return list;
+        section.appendChild(list);
+        parent.appendChild(section);
+        return section;
     }
 
     function blockBelongsToCurrentCard(block, data, cardKey, cardId, ord) {
@@ -113,6 +124,7 @@
         return true;
     }
 
+    // 3. Main Init
     function init(manualData, isManualAction) {
         // manualData presence indicates an update from Python after generation
         const hasOverrideData = !!manualData;
@@ -167,17 +179,14 @@
 
         // Auto-reveal logic based on configuration and actions
         if (isManualAction === true) {
-            // Manual generation finished
             if (uiCfg.manual_show_hints) state.hints = true;
             if (uiCfg.manual_show_options) state.options = true;
             persistence.save(stateKey, state);
         } else if (isManualAction === false) {
-            // Auto generation finished
             if (uiCfg.auto_show_hints) state.hints = true;
             if (uiCfg.auto_show_options) state.options = true;
             persistence.save(stateKey, state);
         } else if (isFirstLoad) {
-            // Page load. If it's the first time seeing this card this session, apply the "On Card Load" config.
             if (uiCfg.auto_show_hints) state.hints = true;
             if (uiCfg.auto_show_options) state.options = true;
             persistence.save(stateKey, state);
@@ -214,6 +223,25 @@
                 btnBox.className = 'ai-hints-btn-box';
                 container.appendChild(btnBox);
 
+                const contentBox = document.createElement('div');
+                contentBox.className = 'ai-hints-content-box';
+                container.appendChild(contentBox);
+
+                const showTitles = data && data.hints && data.hints.length > 0 && data.options && data.options.length > 0;
+
+                const hSection = renderSection(contentBox, "Hints:", (data ? data.hints : []), null, 0, showTitles);
+                const oSection = renderSection(contentBox, "Options:", (data ? data.options : []), (txt) => 
+                    onAnswer && data.correct_answer && txt.trim().toLowerCase() === data.correct_answer.trim().toLowerCase(),
+                    state.seed, showTitles
+                );
+
+                const updateVisibility = () => {
+                    const anyVisible = state.hints || state.options;
+                    contentBox.className = anyVisible ? 'ai-hints-content-box ai-hints-content-active' : 'ai-hints-content-box';
+                    if (hSection) hSection.style.display = state.hints ? 'block' : 'none';
+                    if (oSection) oSection.style.display = state.options ? 'block' : 'none';
+                };
+
                 // Desktop: Generate Button
                 if (isAddonActive) {
                     const genBtn = document.createElement('button');
@@ -232,57 +260,52 @@
                     btnBox.appendChild(genBtn);
                 }
 
-                let hList, oList;
                 if (hasContent) {
-                    hList = renderSection(container, "AI Hints:", data.hints);
-                    oList = renderSection(container, "AI Options:", data.options, (txt) => 
-                        onAnswer && data.correct_answer && txt.trim().toLowerCase() === data.correct_answer.trim().toLowerCase(),
-                        state.seed
-                    );
-
-                    if (hList) {
+                    if (hSection) {
                         const btn = document.createElement('button');
                         btn.className = 'ai-hints-btn';
                         btn.textContent = state.hints ? labels.hideHints : labels.hints;
-                        hList.style.display = state.hints ? 'block' : 'none';
-                        if (state.hints) renderMath(hList);
                         btn.onclick = () => {
-                            state.hints = hList.style.display !== 'block';
-                            hList.style.display = state.hints ? 'block' : 'none';
+                            state.hints = !state.hints;
                             btn.textContent = state.hints ? labels.hideHints : labels.hints;
-                            if (state.hints) renderMath(hList);
+                            updateVisibility();
+                            if (state.hints) renderMath(hSection);
                             persistence.save(stateKey, state);
                         };
                         btnBox.appendChild(btn);
                     }
 
-                    if (oList) {
+                    if (oSection) {
                         const btn = document.createElement('button');
                         btn.className = 'ai-hints-btn';
                         btn.textContent = state.options ? labels.hideOptions : labels.options;
-                        oList.style.display = state.options ? 'block' : 'none';
-                        if (state.options) renderMath(oList);
                         btn.onclick = () => {
-                            state.options = oList.style.display !== 'block';
-                            oList.style.display = state.options ? 'block' : 'none';
+                            state.options = !state.options;
                             btn.textContent = state.options ? labels.hideOptions : labels.options;
-                            if (state.options) renderMath(oList);
+                            updateVisibility();
+                            if (state.options) renderMath(oSection);
                             persistence.save(stateKey, state);
                         };
                         btnBox.appendChild(btn);
                     }
 
-                    if (isAddonActive) {
-                        const clrBtn = document.createElement('button');
-                        clrBtn.className = 'ai-hints-btn';
-                        clrBtn.textContent = labels.clear;
-                        clrBtn.title = "Permanently clear hints from this card";
-                        clrBtn.onclick = () => {
+                    // Clear button (Default on all platforms)
+                    const clrBtn = document.createElement('button');
+                    clrBtn.className = 'ai-hints-btn';
+                    clrBtn.textContent = labels.clear;
+                    clrBtn.title = isAddonActive ? "Permanently clear hints from this card" : "Hide hints for this session";
+                    clrBtn.onclick = () => {
+                        if (isAddonActive) {
                             if (confirm("Permanently delete hints from this card?")) pycmd('ai_hints_clear');
-                        };
-                        btnBox.appendChild(clrBtn);
-                    }
-
+                        } else {
+                            window.aiHintsClearData();
+                        }
+                    };
+                    btnBox.appendChild(clrBtn);
+                    
+                    updateVisibility();
+                    if (state.hints && hSection) renderMath(hSection);
+                    if (state.options && oSection) renderMath(oSection);
                     if (hasOverrideData) persistence.save(stateKey, state);
                 }
 
@@ -354,11 +377,10 @@
         // Clear all state keys for this specific card to prevent ghost reveals
         const ord = getCardOrd();
         const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
-        const prefix = 'ai_hints_state_' + cardId + '_' + ord;
+        const prefix = 'state_' + cardId + '_' + ord;
         
         try {
             sessionStorage.removeItem('ai_hints_' + prefix);
-            // Also scan and remove any variations
             for (let i = 0; i < sessionStorage.length; i++) {
                 const key = sessionStorage.key(i);
                 if (key && (key.includes(cardId) || key.startsWith('ai_hints_state'))) {
@@ -392,7 +414,6 @@
                         if (errorMsg) btn.title = errorMsg;
                         setTimeout(() => { btn.textContent = oldTxt; btn.title = ""; }, 3000);
                     } else {
-                        // Success or normal reset; init() will handle re-rendering labels
                         init();
                     }
                 }
@@ -402,10 +423,6 @@
     window.aiHintsSetup = (card, hints) => { 
         const setupKey = JSON.stringify({ card: card || null, hints: hints || null });
         const currentAnswerState = isAnswerSide();
-        
-        // We only return early if we've already set up THIS exact data AND we know the container has content.
-        // We cannot blindly return if ANY container exists, because a page reload might have
-        // spawned an empty container (e.g. cached back-side HTML missing recently generated JSON).
         const existingContainer = document.querySelector('.ai-hints-container');
         const hasData = hints != null || document.querySelector('.ai-hints-json');
         const isEmptyContainer = existingContainer && !existingContainer.querySelector('.ai-hints-list') && !existingContainer.querySelector('.ai-hints-hint-list');
@@ -421,16 +438,12 @@
         if (existingContainer) {
             document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
         }
-        
-        // Never remove valid JSON blocks from the DOM here. clearData() handles stale JSON cleanup.
         document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
-        
         init(hints); 
     };
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init());
     else init();
     
-    // AnkiDroid/Async handling
     if (!isAddonActive) setInterval(() => init(), 1000);
 })();
