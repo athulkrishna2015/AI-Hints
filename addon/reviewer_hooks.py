@@ -936,6 +936,15 @@ def refresh_current_card(card=None, web=None):
 
     reviewer = getattr(mw, "reviewer", None)
     
+    if card:
+        _forget_generated_hints(card)
+        _pregenerated_data.pop(card.id, None)
+        try:
+            card.load()
+            card.note().load()
+        except Exception:
+            pass
+    
     # If we have a specific web view (e.g. Previewer), try to refresh it
     if web and card:
         # For Previewer, we can often just trigger a re-render

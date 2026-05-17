@@ -204,5 +204,4 @@ if (scopedStaleTest.getJsonBlocks().length !== 0) throw new Error("Stale scoped 
 if (!scopedStaleLabels.includes("Generate AI Hints")) throw new Error("Current empty card should not render previous card data");
 if (scopedStaleLabels.includes("Regenerate")) throw new Error("Previous card data should not make current card look generated");
 
-console.log("\nALL JS TESTS PASSED.");
-process.exit(0);
+console.log("\nALL JS TESTS PASSED."); process.exit(0);

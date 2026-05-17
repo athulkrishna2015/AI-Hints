@@ -43,6 +43,9 @@
     }
 
     function getCardOrd() {
+        if (isAddonActive && window.aiHintsCurrentCard && window.aiHintsCurrentCard.ord !== undefined && window.aiHintsCurrentCard.ord !== null) {
+            return window.aiHintsCurrentCard.ord;
+        }
         const cloze = document.querySelector('.cloze');
         if (cloze) {
             const match = cloze.className.match(/\bc(\d+)\b/);
@@ -95,6 +98,7 @@
 
     function blockBelongsToCurrentCard(block, data, cardKey, cardId, ord) {
         if (!block || !isAddonActive) return true;
+        if (!window.aiHintsCurrentCard || cardId === 'temp') return true;
 
         const blockCardId = block.getAttribute ? block.getAttribute('data-ai-hints-card-id') : null;
         if (blockCardId && String(blockCardId) !== String(cardId)) return false;
@@ -375,6 +379,7 @@
     };
     window.aiHintsSetup = (card, hints) => { 
         const setupKey = JSON.stringify({ card: card || null, hints: hints || null });
+        const currentAnswerState = isAnswerSide();
         
         // We only return early if we've already set up THIS exact data AND we know the container has content.
         // We cannot blindly return if ANY container exists, because a page reload might have
@@ -383,11 +388,12 @@
         const hasData = hints != null || document.querySelector('.ai-hints-json');
         const isEmptyContainer = existingContainer && !existingContainer.querySelector('.ai-hints-list') && !existingContainer.querySelector('.ai-hints-hint-list');
         
-        if (window.aiHintsLastSetupKey === setupKey && existingContainer && (!hasData || !isEmptyContainer)) {
+        if (window.aiHintsLastSetupKey === setupKey && existingContainer && (!hasData || !isEmptyContainer) && window.aiHintsLastAnswerState === currentAnswerState) {
             return;
         }
 
         window.aiHintsLastSetupKey = setupKey;
+        window.aiHintsLastAnswerState = currentAnswerState;
         window.aiHintsCurrentCard = card; 
         
         if (existingContainer) {
