@@ -13,6 +13,7 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
     def on_profile_loaded():
         from .logger import clear_log_file
         from .proxy_manager import proxy_manager
+        from .mobile_sync import auto_update_mobile_setup
         
         # Clear logs on startup if enabled
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
@@ -20,6 +21,7 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
             clear_log_file()
 
         proxy_manager.start(config)
+        auto_update_mobile_setup()
 
     gui_hooks.profile_did_open.append(on_profile_loaded)
     init_hooks()

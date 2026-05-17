@@ -780,6 +780,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             # Mobile Config
             new_config["mobile_use_emojis"] = self.mobile_emojis_cb.isChecked()
             new_config["mobile_show_extra_buttons"] = self.mobile_extra_cb.isChecked()
+            new_config["mobile_setup_completed"] = self.config.get("mobile_setup_completed", False)
 
             priority = []
             for i in range(self.models_layout.count()):
@@ -791,7 +792,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(new_config))
             try:
                 from ..proxy_manager import proxy_manager
+                from ..mobile_sync import auto_update_mobile_setup
                 proxy_manager.start(new_config)
+                auto_update_mobile_setup() # Silently update if setup was already completed
             except Exception: pass
             self.config = new_config
             if close: self.accept()
@@ -860,6 +863,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         # Mobile Support Defaults
         config.setdefault("mobile_use_emojis", False)
         config.setdefault("mobile_show_extra_buttons", False)
+        config.setdefault("mobile_setup_completed", False)
 
         default_shortcuts = {"modifier": "alt", "generate": "1", "toggle-options": "2", "toggle-hints": "3", "clear": "4", "refresh": "5", "show-json": "6"}
         shortcuts = dict(default_shortcuts)

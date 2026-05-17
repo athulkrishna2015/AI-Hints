@@ -115,6 +115,11 @@ class MobileTabMixin:
             QMessageBox.critical(self, "AI-Hints", "Failed to sync script file to media folder.")
             return
 
+        # Update flag
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        config["mobile_setup_completed"] = True
+        mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+
         # 2. Inject into all templates
         new_block = self._get_full_template_block()
         count = 0
@@ -156,6 +161,11 @@ class MobileTabMixin:
             QMessageBox.critical(self, "AI-Hints", f"Error during template installation: {e}")
 
     def on_full_remove(self):
+        # Update flag
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        config["mobile_setup_completed"] = False
+        mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+
         count = 0
         pattern = r"(\n\n)?<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"
         
