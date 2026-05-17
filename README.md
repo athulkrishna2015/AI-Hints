@@ -44,6 +44,11 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Robust Clearing**: Re-engineered the "Clear" logic to be HTML-aware, aggressively removing redundant `<br>` tags and empty lines to keep your cards perfectly clean.
 - **Improved Navigation**: Added separate "Save", "Save & Close", and "Cancel" buttons to the configuration dialog.
 - **Performance**: Optimized rendering and state management to eliminate "ghost data" and flickering during card transitions.
+
+### Patch v2.3.1
+
+- **Critical Stability Fix**: Implemented a singleton guard in the UI script to prevent multiple instances from running simultaneously, resolving reported crashes in Anki's web engine (SIGABRT).
+- **Reduced Rendering Overhead**: Removed redundant re-render triggers in the backend to improve performance and reduce UI flickering.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
 
 ## Intelligence-Ranked Fallback Hierarchy
