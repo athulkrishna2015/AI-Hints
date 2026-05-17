@@ -20,14 +20,15 @@ from .tab_shortcuts import ShortcutsTabMixin
 from .tab_batch import BatchTabMixin
 from .tab_support import SupportTabMixin
 from .tab_logs import LogTabMixin
+from .tab_mobile import MobileTabMixin
 
 # Import Support Widgets
 from .widgets import CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE
 
-LAST_ACTIVE_TAB_INDEX = 6  # Fallback static state
+LAST_ACTIVE_TAB_INDEX = 7  # Fallback static state
 
 class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin, 
-                   ShortcutsTabMixin, BatchTabMixin, SupportTabMixin, LogTabMixin):
+                   ShortcutsTabMixin, BatchTabMixin, SupportTabMixin, LogTabMixin, MobileTabMixin):
     
     def __init__(self, parent, card_ids=None):
         super().__init__(parent)
@@ -148,6 +149,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         advanced = self._create_advanced_tab()
         shortcuts = self._create_shortcuts_tab()
         batch = self._create_batch_tab()
+        mobile = self._create_mobile_tab()
         support = self._create_support_tab()
         logs = self._create_log_tab()
         
@@ -157,6 +159,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.tabs.addTab(advanced, "Advanced")
         self.tabs.addTab(shortcuts, "Shortcuts")
         self.tabs.addTab(batch, "Batch Generation")
+        self.tabs.addTab(mobile, "Mobile Support")
         self.tabs.addTab(support, "Support Authors")
         self.tabs.addTab(logs, "Logs")
         
@@ -244,14 +247,19 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         keys = c.get("api_keys", {}) or {}
         for p, edit in self.api_key_edits.items():
             edit.setText(keys.get(p, ""))
+models = c.get("models", {}) or {}
+for p, edit in self.model_edits.items():
+    model_name = models.get(p, DEFAULT_MODELS.get(p, ""))
+    if edit.findText(model_name) == -1:
+        edit.addItem(model_name)
+    edit.setCurrentText(model_name)
 
-        models = c.get("models", {}) or {}
-        for p, edit in self.model_edits.items():
-            model_name = models.get(p, DEFAULT_MODELS.get(p, ""))
-            if edit.findText(model_name) == -1:
-                edit.addItem(model_name)
-            edit.setCurrentText(model_name)
-            
+# Mobile Support Tab
+self.mobile_emojis_cb.setChecked(c.get("mobile_use_emojis", False))
+self.mobile_extra_cb.setChecked(c.get("mobile_show_extra_buttons", False))
+self.update_mobile_script_view()
+# AI Provider Logic
+
         ag_model = models.get("antigravity", DEFAULT_MODELS.get("antigravity", ""))
         if self.ag_model_edit.findText(ag_model) == -1:
             self.ag_model_edit.addItem(ag_model)
@@ -767,6 +775,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             else: new_config["note_type_fields"] = json.loads(self.note_fields_edit.toPlainText())
             new_config["custom_providers"] = self.custom_providers_data
             new_config["model_fallbacks"] = self.model_fallbacks_data
+
+            # Mobile Config
+            new_config["mobile_use_emojis"] = self.mobile_emojis_cb.isChecked()
+            new_config["mobile_show_extra_buttons"] = self.mobile_extra_cb.isChecked()
+
             priority = []
             for i in range(self.models_layout.count()):
                 item = self.models_layout.itemAt(i)
@@ -842,6 +855,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("auto_show_options", False)
         config.setdefault("manual_show_hints", True)
         config.setdefault("manual_show_options", False)
+        
+        # Mobile Support Defaults
+        config.setdefault("mobile_use_emojis", False)
+        config.setdefault("mobile_show_extra_buttons", False)
+
         default_shortcuts = {"modifier": "alt", "generate": "1", "toggle-options": "2", "toggle-hints": "3", "clear": "4", "refresh": "5", "show-json": "6"}
         shortcuts = dict(default_shortcuts)
         raw_shortcuts = config.get("shortcuts", {}) or {}
