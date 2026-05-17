@@ -297,6 +297,30 @@
         document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
         init(); 
     };
+    window.aiHintsSetGenerating = (active, status, errorMsg) => {
+        const genBtns = document.querySelectorAll('.ai-hints-btn');
+        genBtns.forEach(btn => {
+            if (btn.textContent.includes("AI Hints") || btn.textContent.includes("Regenerate") || btn.classList.contains('ai-hints-btn-generating')) {
+                if (active) {
+                    btn.disabled = true;
+                    btn.textContent = "✨ Generating...";
+                    btn.classList.add('ai-hints-btn-generating');
+                } else {
+                    btn.disabled = false;
+                    btn.classList.remove('ai-hints-btn-generating');
+                    if (status === 'Failed' || status === 'Offline') {
+                        const oldTxt = btn.textContent;
+                        btn.textContent = "❌ " + (status || "Failed");
+                        if (errorMsg) btn.title = errorMsg;
+                        setTimeout(() => { btn.textContent = oldTxt; btn.title = ""; }, 3000);
+                    } else {
+                        // Success or normal reset; init() will handle re-rendering labels
+                        init();
+                    }
+                }
+            }
+        });
+    };
     window.aiHintsSetup = (card, hints) => { 
         window.aiHintsCurrentCard = card; 
         document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
