@@ -23,7 +23,8 @@
         .ai-hints-title { font-weight: bold; margin-bottom: 4px; display: block; font-size: 0.9em; opacity: 0.8; }
         .ai-hints-json-view { margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 5px; font-family: monospace; font-size: 11px; white-space: pre-wrap; overflow-x: auto; }
         .nightMode .ai-hints-json-view { background: rgba(255,255,255,0.05); }
-        .ai-hints-btn-generating { animation: ai-hints-pulse 1.5s infinite; background: linear-gradient(90deg, #f0f0f0, #e0e0e0, #f0f0f0); background-size: 200% 100%; }
+        .ai-hints-btn-generating { animation: ai-hints-pulse 1.5s infinite; background: linear-gradient(90deg, #f8fafc, #dbeafe, #f8fafc); background-size: 200% 100%; color: #111827; border-color: #60a5fa; opacity: 1; }
+        .nightMode .ai-hints-btn-generating { background: linear-gradient(90deg, #172554, #1d4ed8, #172554); background-size: 200% 100%; color: #ffffff; border-color: #93c5fd; opacity: 1; }
         @keyframes ai-hints-pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
     `;
 
@@ -92,6 +93,22 @@
         return list;
     }
 
+    function blockBelongsToCurrentCard(block, data, cardKey, cardId, ord) {
+        if (!block || !isAddonActive) return true;
+
+        const blockCardId = block.getAttribute ? block.getAttribute('data-ai-hints-card-id') : null;
+        if (blockCardId && String(blockCardId) !== String(cardId)) return false;
+
+        const blockOrd = block.getAttribute ? block.getAttribute('data-ai-hints-card-ord') : null;
+        if (blockOrd !== null && blockOrd !== undefined && blockOrd !== '' && String(blockOrd) !== String(ord)) return false;
+
+        const isKeyed = data && typeof data === 'object' && !Array.isArray(data) &&
+            !data.hints && !data.options && Object.keys(data).some(key => /^c\d+$/.test(key));
+        if (isKeyed && !data[cardKey]) return false;
+
+        return true;
+    }
+
     // 3. Main Init
     function init(manualData) {
         // manualData presence indicates an update from Python after generation
@@ -148,7 +165,14 @@
         const onAnswer = isAnswerSide();
 
         // Process existing blocks or create container
-        let targetBlocks = manualData ? [null] : Array.from(jsonBlocks);
+        let targetBlocks = manualData ? [null] : Array.from(jsonBlocks).filter(block => {
+            try {
+                const blockData = JSON.parse(block.textContent);
+                if (blockBelongsToCurrentCard(block, blockData, cardKey, cardId, ord)) return true;
+            } catch (e) {}
+            block.remove();
+            return false;
+        });
         if (targetBlocks.length === 0 && isAddonActive) targetBlocks = [null];
 
         targetBlocks.forEach(block => {
@@ -226,21 +250,16 @@
                         btnBox.appendChild(btn);
                     }
 
-                    // Clear button (Default on all platforms)
-                    const clrBtn = document.createElement('button');
-                    clrBtn.className = 'ai-hints-btn';
-                    clrBtn.textContent = labels.clear;
-                    clrBtn.title = isAddonActive ? "Permanently clear hints from this card" : "Hide hints for this session";
-                    clrBtn.onclick = () => {
-                        if (isAddonActive) {
+                    if (isAddonActive) {
+                        const clrBtn = document.createElement('button');
+                        clrBtn.className = 'ai-hints-btn';
+                        clrBtn.textContent = labels.clear;
+                        clrBtn.title = "Permanently clear hints from this card";
+                        clrBtn.onclick = () => {
                             if (confirm("Permanently delete hints from this card?")) pycmd('ai_hints_clear');
-                        } else {
-                            // Standalone Mobile: Just remove the UI
-                            container.remove();
-                            if (block) delete block.dataset.aiHintsRendered;
-                        }
-                    };
-                    btnBox.appendChild(clrBtn);
+                        };
+                        btnBox.appendChild(clrBtn);
+                    }
 
                     if (isManual) persistence.save(stateKey, state);
                 }
@@ -300,8 +319,12 @@
     }
 
     // API for Python
-    window.aiHintsUpdateData = (data) => { init(data); };
+    window.aiHintsUpdateData = (data) => {
+        if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_generating = false;
+        init(data);
+    };
     window.aiHintsClearData = () => { 
+        window.aiHintsLastSetupKey = undefined;
         document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
         document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
         
@@ -314,7 +337,12 @@
         init(); 
     };
     window.aiHintsSetGenerating = (active, status, errorMsg) => {
-        const genBtns = document.querySelectorAll('.ai-hints-btn');
+        if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_generating = !!active;
+        let genBtns = document.querySelectorAll('.ai-hints-btn');
+        if (active && genBtns.length === 0) {
+            init();
+            genBtns = document.querySelectorAll('.ai-hints-btn');
+        }
         genBtns.forEach(btn => {
             if (btn.textContent.includes("AI Hints") || btn.textContent.includes("Regenerate") || btn.classList.contains('ai-hints-btn-generating')) {
                 if (active) {
@@ -338,13 +366,29 @@
         });
     };
     window.aiHintsSetup = (card, hints) => { 
-        window.aiHintsCurrentCard = card; 
-        document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
-        if (hints == null) {
-            document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
-        } else {
-            document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+        const setupKey = JSON.stringify({ card: card || null, hints: hints || null });
+        
+        // We only return early if we've already set up THIS exact data AND we know the container has content.
+        // We cannot blindly return if ANY container exists, because a page reload might have
+        // spawned an empty container (e.g. cached back-side HTML missing recently generated JSON).
+        const existingContainer = document.querySelector('.ai-hints-container');
+        const hasData = hints != null || document.querySelector('.ai-hints-json');
+        const isEmptyContainer = existingContainer && !existingContainer.querySelector('.ai-hints-list') && !existingContainer.querySelector('.ai-hints-hint-list');
+        
+        if (window.aiHintsLastSetupKey === setupKey && existingContainer && (!hasData || !isEmptyContainer)) {
+            return;
         }
+
+        window.aiHintsLastSetupKey = setupKey;
+        window.aiHintsCurrentCard = card; 
+        
+        if (existingContainer) {
+            document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
+        }
+        
+        // Never remove valid JSON blocks from the DOM here. clearData() handles stale JSON cleanup.
+        document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+        
         init(hints); 
     };
 

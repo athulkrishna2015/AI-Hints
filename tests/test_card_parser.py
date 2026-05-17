@@ -83,6 +83,19 @@ class CardParserTests(unittest.TestCase):
         self.assertFalse(parser.clear_hints_from_note(note, FakeCard(2, 1)))
         self.assertEqual(note["Back"], original)
 
+    def test_unscoped_legacy_json_does_not_block_sibling_auto_generation(self):
+        parser = CardParser(["Back"], storage_mode="json")
+        note = FakeNote(
+            "Cloze",
+            {
+                "Text": "Prompt",
+                "Back": parser.build_hints_block({"hints": ["old"], "options": ["old option"]}),
+            },
+        )
+
+        self.assertIsNotNone(parser.find_hints_block(note, FakeCard(1, 0)))
+        self.assertIsNone(parser.find_hints_block(note, FakeCard(2, 1)))
+
     def test_html_mode_escapes_non_math_tags(self):
         parser = CardParser(["Back"], storage_mode="html")
 

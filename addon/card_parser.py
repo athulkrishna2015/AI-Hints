@@ -634,6 +634,13 @@ class CardParser:
 
         if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
             return f"c{card_ord + 1}" in parsed
+        if (
+            isinstance(parsed, dict)
+            and ("hints" in parsed or "options" in parsed)
+            and not self._block_has_card_scope(block)
+            and card_ord > 0
+        ):
+            return False
         return True
 
     def _build_html_block(self, data: Dict[str, List[str]], attrs: str = "") -> str:
