@@ -3,7 +3,6 @@
 import os
 import re
 from aqt import mw
-from aqt.utils import askUser
 from aqt.qt import *
 from .widgets import ADDON_PACKAGE
 
@@ -49,12 +48,12 @@ class MobileTabMixin:
         setup_btn_layout = QHBoxLayout()
         
         self.full_install_btn = QPushButton("One-Click Install: Setup All Note Types")
-        self.full_install_btn.setToolTip("Automatically installs the script and updates all templates.\n\nNOTE: This will require a FULL SYNC (one-way) to AnkiWeb.")
+        self.full_install_btn.setToolTip("Automatically installs the script and updates all templates.")
         self.full_install_btn.clicked.connect(self.on_full_install)
         setup_btn_layout.addWidget(self.full_install_btn)
 
         self.full_remove_btn = QPushButton("Remove from All Note Types")
-        self.full_remove_btn.setToolTip("Removes AI-Hints tags from all your templates.\n\nNOTE: This will require a FULL SYNC (one-way) to AnkiWeb.")
+        self.full_remove_btn.setToolTip("Removes AI-Hints tags from all your templates.")
         self.full_remove_btn.clicked.connect(self.on_full_remove)
         setup_btn_layout.addWidget(self.full_remove_btn)
 
@@ -110,15 +109,6 @@ class MobileTabMixin:
         QMessageBox.information(self, "AI-Hints", "Template script copied to clipboard!")
 
     def on_full_install(self):
-        msg = (
-            "This will modify the templates of ALL your Note Types to include the AI-Hints UI. "
-            "Because this changes your database structure, Anki will require a **FULL SYNC (One-Way)** "
-            "to AnkiWeb the next time you sync.\n\n"
-            "Do you want to continue?"
-        )
-        if not askUser(msg):
-            return
-
         # 1. Sync script file
         from ..mobile_sync import sync_mobile_script
         if not sync_mobile_script():
@@ -157,30 +147,18 @@ class MobileTabMixin:
                     count += 1
             
             if count > 0:
-                # Force Anki to recognize structural changes for sync
                 mw.col.set_mod()
-                if hasattr(mw, "requireReset"):
-                    mw.requireReset()
             
             QMessageBox.information(
                 self, 
                 "AI-Hints", 
                 f"Successfully updated {count} note types ({templates_updated} cards)!\n\n"
-                "IMPORTANT: You must now SYNC and choose 'Upload to AnkiWeb' when prompted."
+                "Please sync your devices to apply the changes."
             )
         except Exception as e:
             QMessageBox.critical(self, "AI-Hints", f"Error during template installation: {e}")
 
     def on_full_remove(self):
-        msg = (
-            "This will REMOVE the AI-Hints UI tags from ALL your Note Types. "
-            "Because this changes your database structure, Anki will require a **FULL SYNC (One-Way)** "
-            "to AnkiWeb the next time you sync.\n\n"
-            "Do you want to continue?"
-        )
-        if not askUser(msg):
-            return
-
         count = 0
         pattern = r"(\n\n)?<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"
         
@@ -202,14 +180,12 @@ class MobileTabMixin:
             
             if count > 0:
                 mw.col.set_mod()
-                if hasattr(mw, "requireReset"):
-                    mw.requireReset()
 
             QMessageBox.information(
                 self, 
                 "AI-Hints", 
                 f"Successfully removed AI-Hints from {count} note types!\n\n"
-                "IMPORTANT: You must now SYNC and choose 'Upload to AnkiWeb' when prompted."
+                "Please sync your devices to apply the changes."
             )
         except Exception as e:
             QMessageBox.critical(self, "AI-Hints", f"Error during template removal: {e}")
