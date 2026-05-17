@@ -354,7 +354,7 @@ class CardParser:
         if not matches:
             payload = {card_key: new_data} if card_key else new_data
             content_block = self.build_hints_block(payload, toggles, card if not card_key else None)
-            return current_val + "\n" + content_block
+            return current_val.strip() + "\n\n" + content_block
 
         # If a block exists, try to merge
         for match in matches:
@@ -504,8 +504,9 @@ class CardParser:
 
     def clear_hints_from_note(self, note, card=None) -> bool:
         """Removes AI hints blocks matching the card from all fields."""
+        # Regex updated to optionally match leading newlines/whitespace
         pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
+            rf'\s*<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
             flags=re.DOTALL | re.IGNORECASE,
         )
         cleared = False
@@ -549,7 +550,7 @@ class CardParser:
                     field_cleared = True
             
             if field_cleared:
-                note[f_name] = new_val
+                note[f_name] = new_val.strip()
                 cleared = True
         
         return cleared
@@ -571,7 +572,7 @@ class CardParser:
             if not self._block_has_card_scope(match.group(0)):
                 return current_val[:match.start()] + content_block + current_val[match.end():]
 
-        return current_val + "\n" + content_block
+        return current_val.strip() + "\n\n" + content_block
 
     def _block_matches_card(self, block: str, card=None) -> bool:
         if card is None:

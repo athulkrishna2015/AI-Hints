@@ -225,18 +225,27 @@
                         };
                         btnBox.appendChild(btn);
                     }
+
+                    // Clear button (Default on all platforms)
+                    const clrBtn = document.createElement('button');
+                    clrBtn.className = 'ai-hints-btn';
+                    clrBtn.textContent = labels.clear;
+                    clrBtn.title = isAddonActive ? "Permanently clear hints from this card" : "Hide hints for this session";
+                    clrBtn.onclick = () => {
+                        if (isAddonActive) {
+                            if (confirm("Permanently delete hints from this card?")) pycmd('ai_hints_clear');
+                        } else {
+                            // Standalone Mobile: Just remove the UI
+                            container.remove();
+                            if (block) delete block.dataset.aiHintsRendered;
+                        }
+                    };
+                    btnBox.appendChild(clrBtn);
+
                     if (isManual) persistence.save(stateKey, state);
                 }
 
                 if (showExtra) {
-                    if (isAddonActive && hasContent) {
-                        const clrBtn = document.createElement('button');
-                        clrBtn.className = 'ai-hints-btn';
-                        clrBtn.textContent = labels.clear;
-                        clrBtn.onclick = () => { if(confirm("Clear hints?")) pycmd('ai_hints_clear'); };
-                        btnBox.appendChild(clrBtn);
-                    }
-
                     const refBtn = document.createElement('button');
                     refBtn.className = 'ai-hints-btn';
                     refBtn.textContent = labels.refresh;
