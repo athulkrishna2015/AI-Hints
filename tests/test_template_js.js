@@ -164,7 +164,7 @@ const revealTest = createMockDOM({ isAddonActive: true, hasData: true });
 eval(scriptContent);
 
 // Simulate receiving new data after manual generation
-window.aiHintsUpdateData({ hints: ["Hint revealed!"], options: ["Option hidden"] });
+window.aiHintsUpdateData({ hints: ["Hint revealed!"], options: ["Option hidden"] }, true);
 
 // Find the last container (the one created by aiHintsUpdateData)
 const allRenders = revealTest.getRendered();

@@ -110,11 +110,11 @@
     }
 
     // 3. Main Init
-    function init(manualData) {
+    function init(manualData, isManualAction) {
         // manualData presence indicates an update from Python after generation
-        const isManual = !!manualData;
+        const hasOverrideData = !!manualData;
         const jsonBlocks = document.querySelectorAll('.ai-hints-json');
-        if (jsonBlocks.length === 0 && !isManual && !isAddonActive) return;
+        if (jsonBlocks.length === 0 && !hasOverrideData && !isAddonActive) return;
 
         // Cleanup any existing rendered containers to prevent duplicates
         document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
@@ -148,14 +148,22 @@
         const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
         const stateKey = 'state_' + cardId + '_' + ord;
         const persistence = getPersistence();
+        const isFirstLoad = !persistence.get(stateKey);
         let state = persistence.get(stateKey) || { hints: false, options: false, seed: Date.now() };
 
-        // Auto-reveal logic based on configuration
-        if (isManual) {
+        // Auto-reveal logic based on configuration and actions
+        if (isManualAction === true) {
+            // Manual generation finished
             if (uiCfg.manual_show_hints) state.hints = true;
             if (uiCfg.manual_show_options) state.options = true;
             persistence.save(stateKey, state);
-        } else if (uiCfg.auto_reveal) {
+        } else if (isManualAction === false) {
+            // Auto generation finished
+            if (uiCfg.auto_show_hints) state.hints = true;
+            if (uiCfg.auto_show_options) state.options = true;
+            persistence.save(stateKey, state);
+        } else if (isFirstLoad) {
+            // Page load. If it's the first time seeing this card this session, apply the "On Card Load" config.
             if (uiCfg.auto_show_hints) state.hints = true;
             if (uiCfg.auto_show_options) state.options = true;
             persistence.save(stateKey, state);
@@ -261,7 +269,7 @@
                         btnBox.appendChild(clrBtn);
                     }
 
-                    if (isManual) persistence.save(stateKey, state);
+                    if (hasOverrideData) persistence.save(stateKey, state);
                 }
 
                 if (showExtra) {
@@ -319,9 +327,9 @@
     }
 
     // API for Python
-    window.aiHintsUpdateData = (data) => {
+    window.aiHintsUpdateData = (data, isManualAction) => {
         if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_generating = false;
-        init(data);
+        init(data, isManualAction);
     };
     window.aiHintsClearData = () => { 
         window.aiHintsLastSetupKey = undefined;
