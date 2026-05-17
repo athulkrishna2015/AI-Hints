@@ -503,10 +503,11 @@ class CardParser:
         return blocks
 
     def clear_hints_from_note(self, note, card=None) -> bool:
-        """Removes AI hints blocks matching the card from all fields."""
-        # Regex updated to optionally match leading newlines/whitespace
+        """Removes AI hints blocks matching the card from all fields, including HTML line breaks."""
+        # Regex updated to match leading/trailing whitespace, <br> tags, and &nbsp;
+        ws_pattern = r'(?:\s|<br\s*/?>|&nbsp;)*'
         pattern = re.compile(
-            rf'\s*<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
+            rf'{ws_pattern}<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>{ws_pattern}',
             flags=re.DOTALL | re.IGNORECASE,
         )
         cleared = False
@@ -535,10 +536,13 @@ class CardParser:
                             if parsed:
                                 # Re-save updated JSON
                                 new_payload = html.escape(json.dumps(parsed), quote=False)
-                                new_block = block_html.replace(match.group(1), new_payload)
-                                new_val = new_val[:match.start()] + new_block + new_val[match.end():]
-                                field_cleared = True
-                                continue
+                                # We only replace the inner payload, keep the outer div
+                                inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
+                                if inner_match:
+                                    new_block = block_html.replace(inner_match.group(1), new_payload)
+                                    new_val = new_val[:match.start()] + new_block + new_val[match.end():]
+                                    field_cleared = True
+                                    continue
                             # Else if empty, fall through to full removal
                         elif isinstance(parsed, dict) and self._is_keyed_payload(parsed):
                             continue
@@ -546,10 +550,13 @@ class CardParser:
                         pass
 
                 if self._block_matches_card(block_html, card):
+                    # Replace the entire matched block (including surrounding <br>/whitespace) with a single newline or nothing
                     new_val = new_val[:match.start()] + new_val[match.end():]
                     field_cleared = True
             
             if field_cleared:
+                # Systematic cleanup of multiple <br> tags at the end of the field
+                new_val = re.sub(r'(?:<br\s*/?>|\s|&nbsp;)+$', '', new_val, flags=re.IGNORECASE)
                 note[f_name] = new_val.strip()
                 cleared = True
         
