@@ -111,8 +111,8 @@
 
         const labels = {
             generate: (isAddonActive && !manualData) ? "Generate AI Hints" : "Regenerate",
-            hints: useEmojis ? "💡 Hints" : "Show Hints",
-            options: useEmojis ? "🎯 Options" : "Show Options",
+            hints: useEmojis ? "💡" : "Show Hints",
+            options: useEmojis ? "🎯" : "Show Options",
             refresh: useEmojis ? "🔄" : "Refresh",
             json: useEmojis ? "📝" : "JSON",
             clear: useEmojis ? "🗑️" : "Clear",
@@ -304,6 +304,13 @@
     window.aiHintsClearData = () => { 
         document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
         document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
+        
+        // Clear state for this specific card
+        const ord = getCardOrd();
+        const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+        const stateKey = 'state_' + cardId + '_' + ord;
+        try { sessionStorage.removeItem('ai_hints_' + stateKey); } catch(e){}
+        
         init(); 
     };
     window.aiHintsSetGenerating = (active, status, errorMsg) => {
