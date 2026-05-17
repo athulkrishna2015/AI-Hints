@@ -94,12 +94,8 @@ class MobileTabMixin:
 
     def _get_full_template_block(self):
         config_js = self._get_config_js()
-        import time
-        # Add a timestamp to ensure Anki sees the template as 'changed' for sync purposes
-        ts = int(time.time())
         return (
             "<!-- AI-HINTS-BEGIN -->\n"
-            f"<!-- updated:{ts} -->\n"
             "<ai-hints></ai-hints>\n"
             "<script>\n"
             f"{config_js}\n"
