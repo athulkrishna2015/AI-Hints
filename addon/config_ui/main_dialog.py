@@ -247,18 +247,19 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         keys = c.get("api_keys", {}) or {}
         for p, edit in self.api_key_edits.items():
             edit.setText(keys.get(p, ""))
-models = c.get("models", {}) or {}
-for p, edit in self.model_edits.items():
-    model_name = models.get(p, DEFAULT_MODELS.get(p, ""))
-    if edit.findText(model_name) == -1:
-        edit.addItem(model_name)
-    edit.setCurrentText(model_name)
+        models = c.get("models", {}) or {}
+        for p, edit in self.model_edits.items():
+            model_name = models.get(p, DEFAULT_MODELS.get(p, ""))
+            if edit.findText(model_name) == -1:
+                edit.addItem(model_name)
+            edit.setCurrentText(model_name)
 
-# Mobile Support Tab
-self.mobile_emojis_cb.setChecked(c.get("mobile_use_emojis", False))
-self.mobile_extra_cb.setChecked(c.get("mobile_show_extra_buttons", False))
-self.update_mobile_script_view()
-# AI Provider Logic
+        # Mobile Support Tab
+        self.mobile_emojis_cb.setChecked(c.get("mobile_use_emojis", False))
+        self.mobile_extra_cb.setChecked(c.get("mobile_show_extra_buttons", False))
+        self.update_mobile_script_view()
+
+        # AI Provider Logic
 
         ag_model = models.get("antigravity", DEFAULT_MODELS.get("antigravity", ""))
         if self.ag_model_edit.findText(ag_model) == -1:
