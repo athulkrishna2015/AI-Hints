@@ -176,14 +176,12 @@ def _trigger_next_pregeneration():
     # Defer slightly to let UI settle
     QTimer.singleShot(500, _task)
 def get_web_assets():
-    global _css_cache, _js_cache
-    if _css_cache is None or _js_cache is None:
+    global _js_cache
+    if _js_cache is None:
         addon_dir = os.path.dirname(__file__)
-        with open(os.path.join(addon_dir, "web", "style.css"), "r", encoding="utf-8") as f:
-            _css_cache = f.read()
-        with open(os.path.join(addon_dir, "web", "script.js"), "r", encoding="utf-8") as f:
+        with open(os.path.join(addon_dir, "web", "template.js"), "r", encoding="utf-8") as f:
             _js_cache = f.read()
-    return _css_cache, _js_cache
+    return "", _js_cache
 
 def show_api_error_dialog(provider=None, is_custom=False):
     msg = QMessageBox(mw)
@@ -371,15 +369,21 @@ def on_webview_will_set_content(web_content, context):
             config.get("auto_show_options", False)
         )
 
-    web_content.head += f"<style>{css}</style>"
+    # Ensure placeholder exists for the unified script to target
+    if "<ai-hints" not in web_content.body:
+        web_content.body += "<ai-hints></ai-hints>"
+
     for block in hints_blocks:
         web_content.body += block
-    web_content.body += f"<script>window.aiHintsCurrentCard = {card_payload};</script>"
-    web_content.body += f"<script>window.aiHintsUiConfig = {ui_payload};</script>"
-    web_content.body += f"<script>{js}</script>"
     
-    # Debug log for frontend
-    web_content.body += f"<script>console.log('AI-Hints: Content injected for card {card.id if card else 'unknown'} (auto_reveal={auto_reveal})');</script>"
+    # Inject state and the unified template script
+    web_content.body += f"""
+<script>
+window.aiHintsCurrentCard = {card_payload};
+window.aiHintsUiConfig = {ui_payload};
+{js}
+</script>
+"""
 
 def _trigger_frontend_setup(card, web=None):
     if not card:
