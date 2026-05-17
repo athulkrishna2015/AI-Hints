@@ -33,7 +33,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Target Fields**: Configure a global fallback list of fields where the AI-Hints block should be stored.
 - **MathJax Format Control**: Switch between standard LaTeX delimiters `\( ... \)` and inline `$...$` depending on your preference.
 - **Persistent Storage**: Generated hints are saved directly in your card's fields (e.g., "Extras" or "Back"), so they work on AnkiMobile and AnkiDroid too.
-- **Cross-Platform Support**: Includes a standalone template script that enables the AI-Hints UI on any device (AnkiDroid, AnkiMobile, Web) even without the add-on installed. Features a **One-Click Installer** in the add-on config that automatically sets up all your card templates.
+- **Cross-Platform Support**: Includes a standalone template script that enables the AI-Hints UI on any device (AnkiDroid, AnkiMobile, Web) even without the add-on installed. Features a **One-Click Installer** and **Remover** in the add-on config that automatically manages your card templates.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
 
 ## Intelligence-Ranked Fallback Hierarchy

@@ -45,10 +45,20 @@ class MobileTabMixin:
         group = QGroupBox("Template Setup")
         group_layout = QVBoxLayout(group)
 
+        # Installation/Removal Buttons
+        setup_btn_layout = QHBoxLayout()
+        
         self.full_install_btn = QPushButton("One-Click Install: Setup All Note Types")
         self.full_install_btn.setToolTip("Automatically installs the script and updates all templates.\n\nNOTE: This will require a FULL SYNC (one-way) to AnkiWeb.")
         self.full_install_btn.clicked.connect(self.on_full_install)
-        group_layout.addWidget(self.full_install_btn)
+        setup_btn_layout.addWidget(self.full_install_btn)
+
+        self.full_remove_btn = QPushButton("Remove from All Note Types")
+        self.full_remove_btn.setToolTip("Removes AI-Hints tags from all your templates.\n\nNOTE: This will require a FULL SYNC (one-way) to AnkiWeb.")
+        self.full_remove_btn.clicked.connect(self.on_full_remove)
+        setup_btn_layout.addWidget(self.full_remove_btn)
+
+        group_layout.addLayout(setup_btn_layout)
 
         group_layout.addSpacing(10)
         
@@ -151,3 +161,41 @@ class MobileTabMixin:
             )
         except Exception as e:
             QMessageBox.critical(self, "AI-Hints", f"Error during template installation: {e}")
+
+    def on_full_remove(self):
+        msg = (
+            "This will REMOVE the AI-Hints UI tags from ALL your Note Types. "
+            "Because this changes your database structure, Anki will require a **FULL SYNC (One-Way)** "
+            "to AnkiWeb the next time you sync.\n\n"
+            "Do you want to continue?"
+        )
+        if not askUser(msg):
+            return
+
+        count = 0
+        pattern = r"(\n\n)?<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"
+        
+        try:
+            for model in mw.col.models.all():
+                model_changed = False
+                for tmpl in model['tmpls']:
+                    for side in ['qfmt', 'afmt']:
+                        old_html = tmpl[side]
+                        if "<!-- AI-HINTS-BEGIN -->" in old_html:
+                            new_html = re.sub(pattern, "", old_html, flags=re.DOTALL)
+                            if new_html != old_html:
+                                tmpl[side] = new_html.strip()
+                                model_changed = True
+                
+                if model_changed:
+                    mw.col.models.save(model)
+                    count += 1
+            
+            QMessageBox.information(
+                self, 
+                "AI-Hints", 
+                f"Successfully removed AI-Hints from {count} note types!\n\n"
+                "Please sync your devices to apply the changes."
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "AI-Hints", f"Error during template removal: {e}")
