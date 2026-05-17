@@ -552,7 +552,6 @@ def _trigger_frontend_setup(card, web=None):
                 function trySetup() {{
                     if (typeof window.aiHintsSetup === 'function') {{
                         applySetup();
-                        setTimeout(applySetup, 150);
                     }} else {{
                         setTimeout(trySetup, 50);
                     }}

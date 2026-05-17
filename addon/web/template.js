@@ -6,6 +6,9 @@
  * Otherwise, it provides a standalone viewer for mobile.
  */
 (function() {
+    if (window.aiHintsUnifiedLoaded) return;
+    window.aiHintsUnifiedLoaded = true;
+
     // 1. Configuration & Styling
     const STYLES = `
         .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; }
