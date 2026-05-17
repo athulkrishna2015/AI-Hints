@@ -292,7 +292,11 @@
 
     // API for Python
     window.aiHintsUpdateData = (data) => { init(data); };
-    window.aiHintsClearData = () => { document.querySelectorAll('.ai-hints-container').forEach(e => e.remove()); init(); };
+    window.aiHintsClearData = () => { 
+        document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
+        document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
+        init(); 
+    };
     window.aiHintsSetup = (card, hints) => { 
         window.aiHintsCurrentCard = card; 
         document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());

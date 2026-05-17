@@ -548,7 +548,10 @@ def clear_hints(card=None, web=None):
         tooltip("AI-Hints: Cleared.")
         if web:
             try:
+                # Attempt fast clear via JS
                 web.eval("if (window.aiHintsClearData) { window.aiHintsClearData(); }")
+                # Fallback to full refresh to ensure DOM is clean
+                QTimer.singleShot(100, lambda: refresh_current_card(card=card, web=web))
             except Exception:
                 refresh_current_card(card=card, web=web)
     elif _cached_hints_for_card(card):
@@ -557,6 +560,7 @@ def clear_hints(card=None, web=None):
         if web:
             try:
                 web.eval("if (window.aiHintsClearData) { window.aiHintsClearData(); }")
+                QTimer.singleShot(100, lambda: refresh_current_card(card=card, web=web))
             except Exception:
                 refresh_current_card(card=card, web=web)
     else:
