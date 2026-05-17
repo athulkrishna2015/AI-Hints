@@ -7,9 +7,11 @@
  * or paste this code inside a <script> tag.
  */
 (function() {
+    console.log("AI-Hints: Template script initializing...");
+
     // 1. Configuration & Styling
     const STYLES = `
-        .ai-hints-container { margin-top: 15px; padding: 12px; border: 1px dashed #aaa; border-radius: 10px; background-color: rgba(128,128,128,0.08); text-align: left; font-family: sans-serif; }
+        .ai-hints-container { margin-top: 15px; padding: 12px; border: 1px dashed #aaa; border-radius: 10px; background-color: rgba(128,128,128,0.08); text-align: left; font-family: sans-serif; clear: both; }
         .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
         .ai-hints-btn { padding: 6px 12px; cursor: pointer; border-radius: 6px; border: 1px solid #999; background-color: #f0f0f0; color: #222; font-size: 13px; font-weight: 500; transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
         .ai-hints-btn:hover { background-color: #e0e0e0; }
@@ -87,6 +89,8 @@
         const jsonBlocks = document.querySelectorAll('.ai-hints-json');
         if (jsonBlocks.length === 0) return;
 
+        console.log("AI-Hints: Found " + jsonBlocks.length + " JSON data blocks.");
+
         // Config from window
         const cfg = window.aiHintsMobileConfig || {};
         const useEmojis = cfg.useEmojis === true;
@@ -118,6 +122,8 @@
                 let data = JSON.parse(block.textContent);
                 if (data[cardKey]) data = data[cardKey];
                 if (!data || (!data.hints && !data.options)) return;
+
+                console.log("AI-Hints: Rendering buttons for key " + cardKey);
 
                 const container = document.createElement('div');
                 container.className = 'ai-hints-container';
@@ -195,7 +201,9 @@
                 }
                 block.dataset.aiHintsRendered = "true";
 
-            } catch (e) {}
+            } catch (e) {
+                console.error("AI-Hints Error: ", e);
+            }
         });
     }
 

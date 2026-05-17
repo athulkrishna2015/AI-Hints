@@ -128,6 +128,7 @@ class MobileTabMixin:
         # 2. Inject into all templates
         new_block = self._get_full_template_block()
         count = 0
+        templates_updated = 0
         
         try:
             for model in mw.col.models.all():
@@ -144,20 +145,28 @@ class MobileTabMixin:
                             if new_html != old_html:
                                 tmpl[side] = new_html
                                 model_changed = True
+                                templates_updated += 1
                         else:
                             # Append to end
                             tmpl[side] = old_html + "\n\n" + new_block
                             model_changed = True
+                            templates_updated += 1
                 
                 if model_changed:
                     mw.col.models.save(model)
                     count += 1
             
+            if count > 0:
+                # Force Anki to recognize structural changes for sync
+                mw.col.set_mod()
+                if hasattr(mw, "requireReset"):
+                    mw.requireReset()
+            
             QMessageBox.information(
                 self, 
                 "AI-Hints", 
-                f"Successfully installed to media folder and updated {count} note types!\n\n"
-                "Please sync your devices to apply the changes."
+                f"Successfully updated {count} note types ({templates_updated} cards)!\n\n"
+                "IMPORTANT: You must now SYNC and choose 'Upload to AnkiWeb' when prompted."
             )
         except Exception as e:
             QMessageBox.critical(self, "AI-Hints", f"Error during template installation: {e}")
@@ -191,11 +200,16 @@ class MobileTabMixin:
                     mw.col.models.save(model)
                     count += 1
             
+            if count > 0:
+                mw.col.set_mod()
+                if hasattr(mw, "requireReset"):
+                    mw.requireReset()
+
             QMessageBox.information(
                 self, 
                 "AI-Hints", 
                 f"Successfully removed AI-Hints from {count} note types!\n\n"
-                "Please sync your devices to apply the changes."
+                "IMPORTANT: You must now SYNC and choose 'Upload to AnkiWeb' when prompted."
             )
         except Exception as e:
             QMessageBox.critical(self, "AI-Hints", f"Error during template removal: {e}")
