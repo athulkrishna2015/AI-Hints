@@ -113,10 +113,20 @@
         return true;
     }
 
-    // 3. Main Init
     function init(manualData, isManualAction) {
         // manualData presence indicates an update from Python after generation
         const hasOverrideData = !!manualData;
+        
+        // COMPATIBILITY: Don't re-render if user is currently editing a field 
+        // (Edit Field During Review Native compatibility)
+        if (!hasOverrideData && document.activeElement && (
+            document.activeElement.isContentEditable || 
+            document.activeElement.tagName === 'INPUT' || 
+            document.activeElement.tagName === 'TEXTAREA'
+        )) {
+            return;
+        }
+
         const jsonBlocks = document.querySelectorAll('.ai-hints-json');
         if (jsonBlocks.length === 0 && !hasOverrideData && !isAddonActive) return;
 
@@ -337,14 +347,26 @@
     };
     window.aiHintsClearData = () => { 
         window.aiHintsLastSetupKey = undefined;
+        window.aiHintsSetupToken = undefined;
         document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
         document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
         
-        // Clear state for this specific card
+        // Clear all state keys for this specific card to prevent ghost reveals
         const ord = getCardOrd();
         const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
-        const stateKey = 'state_' + cardId + '_' + ord;
-        try { sessionStorage.removeItem('ai_hints_' + stateKey); } catch(e){}
+        const prefix = 'ai_hints_state_' + cardId + '_' + ord;
+        
+        try {
+            sessionStorage.removeItem('ai_hints_' + prefix);
+            // Also scan and remove any variations
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                if (key && (key.includes(cardId) || key.startsWith('ai_hints_state'))) {
+                    sessionStorage.removeItem(key);
+                    i--;
+                }
+            }
+        } catch(e){}
         
         init(); 
     };

@@ -505,7 +505,8 @@ class CardParser:
     def clear_hints_from_note(self, note, card=None) -> bool:
         """Removes AI hints blocks matching the card from all fields, including HTML line breaks."""
         # Regex updated to match leading/trailing whitespace, <br> tags, and &nbsp;
-        ws_pattern = r'(?:\s|<br\s*/?>|&nbsp;)*'
+        # We use a greedy match for surrounding whitespace to clean up as much as possible
+        ws_pattern = r'(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*'
         pattern = re.compile(
             rf'{ws_pattern}<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>{ws_pattern}',
             flags=re.DOTALL | re.IGNORECASE,

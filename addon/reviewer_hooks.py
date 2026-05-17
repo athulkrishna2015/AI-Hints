@@ -984,21 +984,21 @@ def refresh_current_card(card=None, web=None):
 
         # Force the current face to redraw so newly-saved hints appear on the
         # question side immediately instead of waiting for Show Answer.
-        if getattr(reviewer, "state", None) == "question":
+        state = getattr(reviewer, "state", None)
+        if state == "question":
             show_question = getattr(reviewer, "_showQuestion", None)
             if callable(show_question):
                 show_question()
+                return
+        elif state == "answer":
+            show_answer = getattr(reviewer, "_showAnswer", None)
+            if callable(show_answer):
+                show_answer()
                 return
 
         if hasattr(reviewer, "refresh") and callable(reviewer.refresh):
             reviewer.refresh()
             return
-
-        if getattr(reviewer, "state", None) == "answer":
-            show_answer = getattr(reviewer, "_showAnswer", None)
-            if callable(show_answer):
-                show_answer()
-                return
 
         redraw = getattr(reviewer, "_redraw_current_card", None)
         if callable(redraw):
