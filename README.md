@@ -33,7 +33,17 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Target Fields**: Configure a global fallback list of fields where the AI-Hints block should be stored.
 - **MathJax Format Control**: Switch between standard LaTeX delimiters `\( ... \)` and inline `$...$` depending on your preference.
 - **Persistent Storage**: Generated hints are saved directly in your card's fields (e.g., "Extras" or "Back"), so they work on AnkiMobile and AnkiDroid too.
-- **Cross-Platform Support**: Includes a standalone template script that enables the AI-Hints UI on any device (AnkiDroid, AnkiMobile, Web) even without the add-on installed. Features a **One-Click Installer** and **Remover** in the add-on config that automatically manages your card templates.
+- **Cross-Platform Support**: Features a **Unified UI** script that works on AnkiDroid, AnkiMobile, and AnkiWeb even without the add-on installed. Includes a **Smart One-Click Installer** that automatically manages your templates and keep them in sync.
+
+## What's New in v2.3.0
+
+- **Unified UI System**: Desktop and Mobile now share the exact same rendering engine (`template.js`), ensuring consistent features (like shuffling and MathJax) across all devices.
+- **Smart Auto-Updates**: Once you click "One-Click Install", the addon automatically keeps your mobile script and templates up to date whenever you update the addon or change settings.
+- **Compact Emoji Mode**: Optional ultra-compact UI for mobile that uses pure emojis (💡, 🎯, 🗑️) instead of text labels.
+- **Edit Field Compatibility**: Improved compatibility with "Edit Field During Review Native" — UI updates now pause while you are typing to prevent focus loss.
+- **Robust Clearing**: Re-engineered the "Clear" logic to be HTML-aware, aggressively removing redundant `<br>` tags and empty lines to keep your cards perfectly clean.
+- **Improved Navigation**: Added separate "Save", "Save & Close", and "Cancel" buttons to the configuration dialog.
+- **Performance**: Optimized rendering and state management to eliminate "ghost data" and flickering during card transitions.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
 
 ## Intelligence-Ranked Fallback Hierarchy
