@@ -94,8 +94,14 @@
 
     // 3. Main Init
     function init(manualData) {
+        // manualData presence indicates an update from Python after generation
+        const isManual = !!manualData;
         const jsonBlocks = document.querySelectorAll('.ai-hints-json');
-        if (jsonBlocks.length === 0 && !manualData && !isAddonActive) return;
+        if (jsonBlocks.length === 0 && !isManual && !isAddonActive) return;
+
+        // Cleanup any existing rendered containers to prevent duplicates
+        document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
+        document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
 
         // Configuration
         const uiCfg = window.aiHintsUiConfig || {};
@@ -122,12 +128,24 @@
         }
 
         const ord = getCardOrd();
+        const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+        const stateKey = 'state_' + cardId + '_' + ord;
+        const persistence = getPersistence();
+        let state = persistence.get(stateKey) || { hints: false, options: false, seed: Date.now() };
+
+        // Auto-reveal logic based on configuration
+        if (isManual) {
+            if (uiCfg.manual_show_hints) state.hints = true;
+            if (uiCfg.manual_show_options) state.options = true;
+            persistence.save(stateKey, state);
+        } else if (uiCfg.auto_reveal) {
+            if (uiCfg.auto_show_hints) state.hints = true;
+            if (uiCfg.auto_show_options) state.options = true;
+            persistence.save(stateKey, state);
+        }
+
         const cardKey = 'c' + (ord + 1);
         const onAnswer = isAnswerSide();
-        const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
-        const stateKey = cardId + '_' + ord;
-        const persistence = getPersistence();
-        const state = persistence.get('state_' + stateKey) || { hints: false, options: false, seed: Date.now() };
 
         // Process existing blocks or create container
         let targetBlocks = manualData ? [null] : Array.from(jsonBlocks);
@@ -181,12 +199,13 @@
                         btn.className = 'ai-hints-btn';
                         btn.textContent = state.hints ? labels.hideHints : labels.hints;
                         hList.style.display = state.hints ? 'block' : 'none';
+                        if (state.hints) renderMath(hList);
                         btn.onclick = () => {
                             state.hints = hList.style.display !== 'block';
                             hList.style.display = state.hints ? 'block' : 'none';
                             btn.textContent = state.hints ? labels.hideHints : labels.hints;
                             if (state.hints) renderMath(hList);
-                            persistence.save('state_' + stateKey, state);
+                            persistence.save(stateKey, state);
                         };
                         btnBox.appendChild(btn);
                     }
@@ -196,15 +215,17 @@
                         btn.className = 'ai-hints-btn';
                         btn.textContent = state.options ? labels.hideOptions : labels.options;
                         oList.style.display = state.options ? 'block' : 'none';
+                        if (state.options) renderMath(oList);
                         btn.onclick = () => {
                             state.options = oList.style.display !== 'block';
                             oList.style.display = state.options ? 'block' : 'none';
                             btn.textContent = state.options ? labels.hideOptions : labels.options;
                             if (state.options) renderMath(oList);
-                            persistence.save('state_' + stateKey, state);
+                            persistence.save(stateKey, state);
                         };
                         btnBox.appendChild(btn);
                     }
+                    if (isManual) persistence.save(stateKey, state);
                 }
 
                 if (showExtra) {
@@ -226,7 +247,7 @@
                             container.remove();
                             if (block) delete block.dataset.aiHintsRendered;
                             state.seed = Date.now();
-                            persistence.save('state_' + stateKey, state);
+                            persistence.save(stateKey, state);
                             init();
                         }
                     };

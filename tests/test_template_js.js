@@ -56,8 +56,10 @@ function createMockDOM(env) {
         addEventListener: () => {}
     };
 
+    if (!global.window) global.window = {};
     global.window = {
-        aiHintsUiConfig: isAddonActive ? { is_generating: false } : null,
+        ...global.window,
+        aiHintsUiConfig: isAddonActive ? (global.window.aiHintsUiConfig || { is_generating: false }) : null,
         aiHintsMobileConfig: !isAddonActive ? { useEmojis: true, showExtraButtons: true } : null,
         focus: () => {}
     };
@@ -107,4 +109,33 @@ const noDataBtns = noDataContainer.querySelector('.ai-hints-btn-box').querySelec
 console.log("Buttons found:", noDataBtns.map(b => b.textContent).join(', '));
 if (noDataBtns[0].textContent !== "Generate AI Hints") throw new Error("Should show 'Generate' when no data");
 
+console.log("\n--- TEST 4: AUTO-REVEAL CONFIG (Desktop) ---");
+global.window.aiHintsCurrentCard = { id: 'card_reveal_test', ord: 0 };
+// This is the global uiCfg that the eval'd script will use
+global.window.aiHintsUiConfig = {
+    manual_show_hints: true,
+    manual_show_options: false,
+    auto_reveal: false,
+    is_generating: false
+};
+const revealTest = createMockDOM({ isAddonActive: true, hasData: true });
+// Re-eval to ensure init() is defined with the new global window state
+eval(scriptContent);
+
+// Simulate receiving new data after manual generation
+window.aiHintsUpdateData({ hints: ["Hint revealed!"], options: ["Option hidden"] });
+
+// Find the last container (the one created by aiHintsUpdateData)
+const allRenders = revealTest.getRendered();
+const revealedContainer = allRenders[allRenders.length - 1];
+const hListReveal = revealedContainer.querySelector('.ai-hints-hint-list');
+const oListReveal = revealedContainer.querySelector('.ai-hints-list');
+
+console.log("Hints display style:", hListReveal.style.display);
+console.log("Options display style:", oListReveal.style.display);
+
+if (hListReveal.style.display !== 'block') throw new Error("Hints should be automatically revealed");
+if (oListReveal.style.display === 'block') throw new Error("Options should remain hidden");
+
 console.log("\nALL JS TESTS PASSED.");
+process.exit(0);
