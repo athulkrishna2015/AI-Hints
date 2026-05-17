@@ -188,10 +188,16 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         btn_layout.addWidget(stop_all_btn)
 
         btn_layout.addStretch()
-        save_btn = QPushButton("Save && Close")
-        save_btn.clicked.connect(self.save_config)
-        save_btn.setDefault(True)
-        btn_layout.addWidget(save_btn)
+        
+        save_only_btn = QPushButton("Save")
+        save_only_btn.setToolTip("Saves configuration without closing the window.")
+        save_only_btn.clicked.connect(lambda: self.save_config(close=False))
+        btn_layout.addWidget(save_only_btn)
+
+        save_close_btn = QPushButton("Save && Close")
+        save_close_btn.clicked.connect(lambda: self.save_config(close=True))
+        save_close_btn.setDefault(True)
+        btn_layout.addWidget(save_close_btn)
         
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
