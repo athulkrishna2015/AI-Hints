@@ -340,7 +340,11 @@
     window.aiHintsSetup = (card, hints) => { 
         window.aiHintsCurrentCard = card; 
         document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
-        document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+        if (hints == null) {
+            document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
+        } else {
+            document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+        }
         init(hints); 
     };
 

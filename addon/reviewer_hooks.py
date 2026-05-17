@@ -547,6 +547,7 @@ def clear_hints(card=None, web=None):
     )
     
     note = card.note()
+    _pregenerated_data.pop(card.id, None)
     if parser.clear_hints_from_note(note, card):
         mw.col.update_note(note)
         _forget_generated_hints(card)

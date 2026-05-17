@@ -9,11 +9,22 @@ function createMockDOM(env) {
     const { isAddonActive, hasData } = env;
     
     let renderedBlocks = [];
+    let jsonBlocks = [];
+    if (hasData) {
+        const jsonBlock = {
+            textContent: JSON.stringify({ hints: ["H1"], options: ["O1"] }),
+            dataset: {},
+            parentNode: { insertBefore: (n, r) => renderedBlocks.push(n) },
+            remove: () => { jsonBlocks = jsonBlocks.filter(item => item !== jsonBlock); }
+        };
+        jsonBlocks = [jsonBlock];
+    }
     const persistence = {};
 
     global.sessionStorage = {
         setItem: (key, val) => { persistence[key] = val; },
-        getItem: (key) => persistence[key] || null
+        getItem: (key) => persistence[key] || null,
+        removeItem: (key) => { delete persistence[key]; }
     };
 
     global.document = {
@@ -24,13 +35,8 @@ function createMockDOM(env) {
         },
         getElementById: (id) => (id === 'qa') ? global.document.body : null,
         querySelectorAll: (selector) => {
-            if (selector === '.ai-hints-json' && hasData) {
-                return [{
-                    textContent: JSON.stringify({ hints: ["H1"], options: ["O1"] }),
-                    dataset: {},
-                    parentNode: { insertBefore: (n, r) => renderedBlocks.push(n) }
-                }];
-            }
+            if (selector === '.ai-hints-container') return renderedBlocks.filter(el => el.className === 'ai-hints-container');
+            if (selector === '.ai-hints-json') return jsonBlocks;
             return [];
         },
         querySelector: (selector) => null,
@@ -48,7 +54,10 @@ function createMockDOM(env) {
                    if (sel === 'button') return el.children.filter(c => c.tagName === 'BUTTON');
                    return [];
                 },
-                remove: () => {}
+                remove: () => {
+                    renderedBlocks = renderedBlocks.filter(item => item !== el);
+                    jsonBlocks = jsonBlocks.filter(item => item !== el);
+                }
             };
             return el;
         },
@@ -71,7 +80,8 @@ function createMockDOM(env) {
     }
 
     return {
-        getRendered: () => renderedBlocks
+        getRendered: () => renderedBlocks,
+        getJsonBlocks: () => jsonBlocks
     };
 }
 
@@ -136,6 +146,19 @@ console.log("Options display style:", oListReveal.style.display);
 
 if (hListReveal.style.display !== 'block') throw new Error("Hints should be automatically revealed");
 if (oListReveal.style.display === 'block') throw new Error("Options should remain hidden");
+
+console.log("\n--- TEST 5: SETUP WITH NULL DATA CLEARS STALE JSON ---");
+global.window.aiHintsCurrentCard = { id: 'card_stale_test', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const staleTest = createMockDOM({ isAddonActive: true, hasData: true });
+eval(scriptContent);
+window.aiHintsSetup({ id: 'empty_card_after_clear', ord: 0 }, null);
+const staleRendered = staleTest.getRendered().filter(el => el.className === 'ai-hints-container');
+const staleLabels = staleRendered[staleRendered.length - 1].querySelector('.ai-hints-btn-box').querySelectorAll('button').map(b => b.textContent);
+console.log("Buttons found after null setup:", staleLabels.join(', '));
+if (staleTest.getJsonBlocks().length !== 0) throw new Error("Stale JSON blocks should be removed");
+if (!staleLabels.includes("Generate AI Hints")) throw new Error("Empty card should show Generate AI Hints");
+if (staleLabels.includes("Regenerate")) throw new Error("Empty card should not show stale Regenerate state");
 
 console.log("\nALL JS TESTS PASSED.");
 process.exit(0);
