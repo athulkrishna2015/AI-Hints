@@ -12,6 +12,7 @@ from .batch_manager import initialize_batch_manager
 _hooks_registered = False
 _generating_card_ids = set()
 _just_generated_card_ids = set()
+_just_cleared_card_ids = set()
 _pregenerated_data = {} # {card_id: data}
 _generated_hint_cache = {}
 _popup_dialog_instance = None
@@ -396,6 +397,11 @@ def _trigger_frontend_setup(card, web=None):
     to_remove = [cid for cid in _just_generated_card_ids if cid != card.id]
     for cid in to_remove:
         _just_generated_card_ids.discard(cid)
+    
+    # Also clear "just cleared" state for OTHER cards
+    to_remove_cleared = [cid for cid in _just_cleared_card_ids if cid != card.id]
+    for cid in to_remove_cleared:
+        _just_cleared_card_ids.discard(cid)
 
     card_data = {"id": str(card.id), "ord": int(card.ord)}
 
@@ -544,6 +550,7 @@ def clear_hints(card=None, web=None):
     if parser.clear_hints_from_note(note, card):
         mw.col.update_note(note)
         _forget_generated_hints(card)
+        _just_cleared_card_ids.add(card.id)
         logger.info("AI-Hints cleared for card %s", card.id)
         tooltip("AI-Hints: Cleared.")
         if web:
@@ -1258,6 +1265,11 @@ def init_hooks():
             # Skip auto-generation if we just undid something
             if time.time() - _last_undo_time < 0.5:
                 logger.info("AI-Hints: Skipping auto-generation because of recent undo.")
+                return
+
+            # Skip if manually cleared during this view
+            if card.id in _just_cleared_card_ids:
+                logger.info(f"AI-Hints: Skipping auto-generation for card {card.id} because it was just manually cleared.")
                 return
 
             needs_generation = not card_has_hints(card)
