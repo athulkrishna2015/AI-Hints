@@ -45,8 +45,7 @@ class MobileTabMixin:
         group = QGroupBox("Template Setup")
         group_layout = QVBoxLayout(group)
 
-        self.full_install_btn = QPushButton("🚀 ONE-CLICK INSTALL: Setup All Note Types")
-        self.full_install_btn.setStyleSheet("font-weight: bold; padding: 8px; background-color: #5cb85c; color: white;")
+        self.full_install_btn = QPushButton("One-Click Install: Setup All Note Types")
         self.full_install_btn.setToolTip("Automatically installs the script and updates all templates.\n\nNOTE: This will require a FULL SYNC (one-way) to AnkiWeb.")
         self.full_install_btn.clicked.connect(self.on_full_install)
         group_layout.addWidget(self.full_install_btn)
