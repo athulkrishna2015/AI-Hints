@@ -146,9 +146,6 @@ class MobileTabMixin:
                     mw.col.models.save(model)
                     count += 1
             
-            if count > 0:
-                mw.col.set_mod()
-            
             QMessageBox.information(
                 self, 
                 "AI-Hints", 
@@ -178,9 +175,6 @@ class MobileTabMixin:
                     mw.col.models.save(model)
                     count += 1
             
-            if count > 0:
-                mw.col.set_mod()
-
             QMessageBox.information(
                 self, 
                 "AI-Hints", 
