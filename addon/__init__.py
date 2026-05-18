@@ -23,6 +23,24 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         proxy_manager.start(config)
         auto_update_mobile_setup()
 
+    def on_profile_will_close():
+        # Stop proxy manager daemon cleanly
+        try:
+            from .proxy_manager import proxy_manager
+            proxy_manager.stop()
+        except Exception:
+            pass
+
+        # Stop and release any active batch/polling timers to avoid exit-time Qt SEGV
+        try:
+            from .batch_manager import batch_manager
+            if batch_manager.timer:
+                batch_manager.timer.stop()
+                batch_manager.timer = None
+        except Exception:
+            pass
+
     gui_hooks.profile_did_open.append(on_profile_loaded)
+    gui_hooks.profile_will_close.append(on_profile_will_close)
     init_hooks()
     init_config_ui()

@@ -109,6 +109,19 @@ class ProxyManager:
             logger.warning("Antigravity Proxy binary is missing. Please click 'Fetch' in Add-on configuration to enable background daemon.")
             return
             
+        # Clean up any orphaned background processes running this specific binary to free port 3000
+        try:
+            base_name = os.path.basename(self.executable)
+            if sys.platform != "win32":
+                subprocess.run(["pkill", "-f", base_name], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                # Give the OS a tiny fraction of a second to release the socket
+                time.sleep(0.1)
+            else:
+                subprocess.run(["taskkill", "/F", "/IM", base_name], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                time.sleep(0.1)
+        except Exception:
+            pass
+
         logger.info("Starting Antigravity Proxy daemon...")
         
         # Ensure executable permissions right before launch ONLY if missing

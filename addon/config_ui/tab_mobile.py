@@ -5,6 +5,7 @@ import re
 from aqt import mw
 from aqt.qt import *
 from .widgets import ADDON_PACKAGE
+from ..logger import logger
 
 class MobileTabMixin:
     def _create_mobile_tab(self):
@@ -60,6 +61,13 @@ class MobileTabMixin:
 
         group_layout.addLayout(setup_btn_layout)
 
+        # Status feedback label instead of annoying modal popups
+        self.status_label = QLabel("")
+        self.status_label.setWordWrap(True)
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("font-size: 11px; margin-top: 4px; padding: 4px;")
+        group_layout.addWidget(self.status_label)
+
         group_layout.addSpacing(10)
         
         step_label = QLabel("<b>Manual Installation (Alternative):</b>")
@@ -93,9 +101,28 @@ class MobileTabMixin:
             "};"
         )
 
-    def _get_full_template_block(self, field_name: str = None):
+    def _get_full_template_block(self, field_name: str = None, template_html: str = "", is_cloze: bool = False, is_front: bool = False):
         config_js = self._get_config_js()
-        field_tag = f"{{{{{field_name}}}}}" if field_name else ""
+        
+        should_inject = False
+        if field_name:
+            if is_cloze and is_front:
+                # Always inject hidden cloze:field_name on the Front side of Cloze cards
+                # to bypass AnkiDroid's raw field cloze leakage protection.
+                should_inject = True
+            elif template_html:
+                has_field_tag = (
+                    f"{{{{{field_name}}}}}" in template_html or
+                    f":{field_name}}}" in template_html or
+                    f"cloze:{field_name}" in template_html
+                )
+                if not has_field_tag:
+                    should_inject = True
+            else:
+                should_inject = True
+                    
+        field_expr = f"cloze:{field_name}" if (is_cloze and is_front) else field_name
+        field_tag = f'<div style="display:none;">{{{{{field_expr}}}}}</div>' if should_inject else ""
         return (
             "<!-- AI-HINTS-BEGIN -->\n"
             f"{field_tag}\n"
@@ -139,33 +166,29 @@ class MobileTabMixin:
             for model in mw.col.models.all():
                 model_changed = False
                 
-                # Determine which field to use for this specific model
-                note_type_fields = config.get("note_type_fields", {})
-                model_specific_fields = note_type_fields.get(model['name'], [])
-                field_name = model_specific_fields[0] if model_specific_fields else default_field
-                
-                # Verify field actually exists in this model
+                # Determine target field for this model (first matching target_field)
                 model_fields = [f['name'] for f in model['flds']]
-                if field_name not in model_fields:
-                    # Fallback to the first available target field that exists
-                    for tf in target_fields:
-                        if tf in model_fields:
-                            field_name = tf
-                            break
-                    else:
-                        # Fallback to last field if none match
-                        field_name = model_fields[-1] if model_fields else None
+                field_name = None
+                for tf in target_fields:
+                    if tf in model_fields:
+                        field_name = tf
+                        break
+                if not field_name:
+                    field_name = model_fields[-1] if model_fields else default_field
 
-                new_block = self._get_full_template_block(field_name)
-
+                pattern = r"<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"
+                is_cloze = (model.get('type') == 1)
                 for tmpl in model['tmpls']:
                     # Update Front and Back
                     for side in ['qfmt', 'afmt']:
                         old_html = tmpl[side]
+                        clean_html = re.sub(pattern, "", old_html, flags=re.DOTALL)
+                        new_block = self._get_full_template_block(
+                            field_name, clean_html, is_cloze=is_cloze, is_front=(side == 'qfmt')
+                        )
                         # Check if block exists
                         if "<!-- AI-HINTS-BEGIN -->" in old_html:
                             # Replace existing block
-                            pattern = r"<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"
                             new_html = re.sub(pattern, new_block, old_html, flags=re.DOTALL)
                             if new_html != old_html:
                                 tmpl[side] = new_html
@@ -190,14 +213,18 @@ class MobileTabMixin:
                 elif hasattr(mw.col, "mark_dirty"):
                     mw.col.mark_dirty()
             
-            QMessageBox.information(
-                self, 
-                "AI-Hints", 
-                f"Successfully updated {count} note types ({templates_updated} cards)!\n\n"
-                "Please sync your devices to apply the changes."
+            self.status_label.setStyleSheet("color: #28a745; font-weight: bold; font-size: 11px;")
+            self.status_label.setText(
+                f"✅ Successfully updated {count} note types ({templates_updated} cards)!\n"
+                "🔄 Triggering AnkiWeb Sync to apply changes to mobile..."
             )
+            QTimer.singleShot(8000, lambda: self.status_label.setText(""))
+            
+            if count > 0 and hasattr(mw, "onSync"):
+                mw.onSync()
         except Exception as e:
-            QMessageBox.critical(self, "AI-Hints", f"Error during template installation: {e}")
+            self.status_label.setStyleSheet("color: #dc3545; font-weight: bold; font-size: 11px;")
+            self.status_label.setText(f"❌ Error during template installation: {e}")
 
     def on_full_remove(self):
         # Update flag
@@ -227,17 +254,35 @@ class MobileTabMixin:
                         mw.col.models.save(model)
                     count += 1
             
-            if count > 0:
+            # Automatically delete the _ai_hints_template.js file from media directory
+            script_deleted = False
+            try:
+                dest_name = "_ai_hints_template.js"
+                dest_path = os.path.join(mw.col.media.dir(), dest_name)
+                if os.path.exists(dest_path):
+                    os.remove(dest_path)
+                    script_deleted = True
+            except Exception as e:
+                logger.error(f"AI-Hints auto-delete script failed: {e}")
+
+            if count > 0 or script_deleted:
                 if hasattr(mw.col, "set_modified"):
                     mw.col.set_modified()
                 elif hasattr(mw.col, "mark_dirty"):
                     mw.col.mark_dirty()
             
-            QMessageBox.information(
-                self, 
-                "AI-Hints", 
-                f"Successfully removed AI-Hints from {count} note types!\n\n"
-                "Please sync your devices to apply the changes."
-            )
+            self.status_label.setStyleSheet("color: #fd7e14; font-weight: bold; font-size: 11px;")
+            status_text = f"🧹 Successfully removed AI-Hints from {count} note types"
+            if script_deleted:
+                status_text += " and deleted the template script"
+            status_text += "!\n🔄 Triggering AnkiWeb Sync to apply changes to mobile..."
+            
+            self.status_label.setText(status_text)
+            QTimer.singleShot(8000, lambda: self.status_label.setText(""))
+            
+            # Always sync on remove to push both template changes and script deletion
+            if hasattr(mw, "onSync"):
+                mw.onSync()
         except Exception as e:
-            QMessageBox.critical(self, "AI-Hints", f"Error during template removal: {e}")
+            self.status_label.setStyleSheet("color: #dc3545; font-weight: bold; font-size: 11px;")
+            self.status_label.setText(f"❌ Error during template removal: {e}")

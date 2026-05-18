@@ -55,6 +55,31 @@ The "Local Sequential Queue" is designed for heavy-duty background processing wi
 
 ---
 
+## Mobile Setup & Troubleshooting
+
+The **Mobile Support** tab allows you to run AI-Hints on mobile devices (AnkiDroid, AnkiMobile, or AnkiWeb) with a premium, responsive layout. 
+
+### ⚡ Getting Started (One-Click Setup)
+1. Go to **Tools -> Add-ons -> AI-Hints -> Config -> Mobile Support**.
+2. Click **One-Click Install: Setup All Note Types**. (This inserts the safe injection tags into your templates and copies the modern `_ai_hints_template.js` script to your media folder automatically).
+3. **Sync Anki on PC** to upload the fresh template script to AnkiWeb.
+4. **Sync AnkiDroid/AnkiMobile** on your phone to download the new files.
+
+### ⚠️ Troubleshooting AnkiDroid Cache (WebView)
+If you have recently updated the add-on and still see the old card style, duplicate labels (e.g., `AI Hints:`), or missing buttons on **AnkiDroid**, it is because Android's internal WebView aggressively caches local JavaScript files.
+
+To force AnkiDroid to load the new script:
+1. **Sync AnkiDroid** to ensure all files are downloaded.
+2. **Force-Close the App**: Swipe AnkiDroid away from your phone's **Recent Apps** list. This terminates the persistent WebView session and clears the cache.
+3. **Reopen AnkiDroid**: Open the app and review a card. The clean desktop-style UI will render perfectly.
+
+### 🧹 Clean Uninstallation
+If you want to remove AI-Hints from mobile:
+1. Go to the **Mobile Support** tab and click **Remove from All Note Types**.
+2. This will instantly strip the injection code from all templates, **automatically delete the `_ai_hints_template.js` file** from your media folder, and trigger a sync to push the cleanup to AnkiWeb in a single click!
+
+---
+
 ## Configuration
 
 Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configuration window.

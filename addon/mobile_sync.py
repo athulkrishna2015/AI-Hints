@@ -43,6 +43,37 @@ def sync_mobile_script():
         logger.error(f"AI-Hints: Failed to sync mobile script: {e}")
         return False
 
+def _get_full_template_block(field_name: str, template_html: str, config_js: str, is_cloze: bool = False, is_front: bool = False) -> str:
+    should_inject = False
+    if field_name:
+        if is_cloze and is_front:
+            # Always inject hidden cloze:field_name on the Front side of Cloze cards
+            # to bypass AnkiDroid's raw field cloze leakage protection.
+            should_inject = True
+        elif template_html:
+            has_field_tag = (
+                f"{{{{{field_name}}}}}" in template_html or
+                f":{field_name}}}" in template_html or
+                f"cloze:{field_name}" in template_html
+            )
+            if not has_field_tag:
+                should_inject = True
+        else:
+            should_inject = True
+                
+    field_expr = f"cloze:{field_name}" if (is_cloze and is_front) else field_name
+    field_tag = f'<div style="display:none;">{{{{{field_expr}}}}}</div>' if should_inject else ""
+    return (
+        "<!-- AI-HINTS-BEGIN -->\n"
+        f"{field_tag}\n"
+        "<ai-hints></ai-hints>\n"
+        "<script>\n"
+        f"{config_js}\n"
+        "</script>\n"
+        "<script src='_ai_hints_template.js'></script>\n"
+        "<!-- AI-HINTS-END -->"
+    )
+
 def auto_update_mobile_setup():
     """Silently updates script file and all templates IF the user previously opted-in 
     via the 'One-Click Install' button."""
@@ -65,6 +96,8 @@ def auto_update_mobile_setup():
         "};"
     )
     
+    pattern = r"<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"
+    
     try:
         updated_count = 0
         target_fields = config.get("target_fields", [])
@@ -74,37 +107,26 @@ def auto_update_mobile_setup():
         for model in mw.col.models.all():
             model_changed = False
             
-            # Determine which field to use for this specific model
-            model_specific_fields = note_type_fields.get(model['name'], [])
-            field_name = model_specific_fields[0] if model_specific_fields else default_field
-            
-            # Verify field actually exists in this model
+            # Determine target field for this model (first matching target_field)
             model_fields = [f['name'] for f in model['flds']]
-            if field_name not in model_fields:
-                for tf in target_fields:
-                    if tf in model_fields:
-                        field_name = tf
-                        break
-                else:
-                    field_name = model_fields[-1] if model_fields else "AI Hints"
+            field_name = None
+            for tf in target_fields:
+                if tf in model_fields:
+                    field_name = tf
+                    break
+            if not field_name:
+                field_name = model_fields[-1] if model_fields else default_field
 
-            field_tag = f"{{{{{field_name}}}}}"
-            new_block = (
-                "<!-- AI-HINTS-BEGIN -->\n"
-                f"{field_tag}\n"
-                "<ai-hints></ai-hints>\n"
-                "<script>\n"
-                f"{config_js}\n"
-                "</script>\n"
-                "<script src='_ai_hints_template.js'></script>\n"
-                "<!-- AI-HINTS-END -->"
-            )
-
+            is_cloze = (model.get('type') == 1)
             for tmpl in model['tmpls']:
                 for side in ['qfmt', 'afmt']:
                     old_html = tmpl[side]
                     # ONLY update if markers already exist
                     if "<!-- AI-HINTS-BEGIN -->" in old_html:
+                        clean_html = re.sub(pattern, "", old_html, flags=re.DOTALL)
+                        new_block = _get_full_template_block(
+                            field_name, clean_html, config_js, is_cloze=is_cloze, is_front=(side == 'qfmt')
+                        )
                         new_html = re.sub(pattern, new_block, old_html, flags=re.DOTALL)
                         if new_html != old_html:
                             tmpl[side] = new_html

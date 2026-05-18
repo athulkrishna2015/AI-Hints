@@ -6,7 +6,7 @@
  * Otherwise, it provides a standalone viewer for mobile.
  */
 (function() {
-    if (window.aiHintsUnifiedLoaded) return;
+    // Track loaded status for diagnostics
     window.aiHintsUnifiedLoaded = true;
 
     // 1. Configuration & Styling
@@ -144,12 +144,21 @@
         const jsonBlocks = document.querySelectorAll('.ai-hints-json');
         const containers = document.querySelectorAll('.ai-hints-container');
         
+
+        
         // If no data blocks and no containers, and not in active addon mode, nothing to do
         if (jsonBlocks.length === 0 && containers.length === 0 && !hasOverrideData && !isAddonActive) return;
 
         // Cleanup any existing rendered containers to prevent duplicates (only those we created)
         document.querySelectorAll('.ai-hints-container-rendered').forEach(e => e.remove());
         document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+
+        // Always hide original static containers from the page when rendering the interactive UI
+        containers.forEach(c => {
+            if (!c.classList.contains('ai-hints-container-rendered')) {
+                c.style.display = 'none';
+            }
+        });
 
         // Configuration
         const uiCfg = window.aiHintsUiConfig || {};
@@ -283,7 +292,8 @@
                         genBtn.disabled = true;
                         genBtn.classList.add('ai-hints-btn-generating');
                     }
-                    genBtn.onclick = () => {
+                    genBtn.onclick = (e) => {
+                        if (e) { e.stopPropagation(); e.preventDefault(); }
                         genBtn.disabled = true;
                         genBtn.textContent = "✨ Generating...";
                         if (typeof pycmd === 'function') pycmd('ai_hints_generate');
@@ -296,7 +306,8 @@
                         const btn = document.createElement('button');
                         btn.className = 'ai-hints-btn';
                         btn.textContent = state.hints ? labels.hideHints : labels.hints;
-                        btn.onclick = () => {
+                        btn.onclick = (e) => {
+                            if (e) { e.stopPropagation(); e.preventDefault(); }
                             state.hints = !state.hints;
                             btn.textContent = state.hints ? labels.hideHints : labels.hints;
                             updateVisibility();
@@ -310,7 +321,8 @@
                         const btn = document.createElement('button');
                         btn.className = 'ai-hints-btn';
                         btn.textContent = state.options ? labels.hideOptions : labels.options;
-                        btn.onclick = () => {
+                        btn.onclick = (e) => {
+                            if (e) { e.stopPropagation(); e.preventDefault(); }
                             state.options = !state.options;
                             btn.textContent = state.options ? labels.hideOptions : labels.options;
                             updateVisibility();
@@ -320,19 +332,18 @@
                         btnBox.appendChild(btn);
                     }
 
-                    // Clear button (Default on all platforms)
-                    const clrBtn = document.createElement('button');
-                    clrBtn.className = 'ai-hints-btn';
-                    clrBtn.textContent = labels.clear;
-                    clrBtn.title = isAddonActive ? "Permanently clear hints from this card" : "Hide hints for this session";
-                    clrBtn.onclick = () => {
-                        if (isAddonActive) {
+                    // Clear button (Only available when Python addon is active)
+                    if (isAddonActive) {
+                        const clrBtn = document.createElement('button');
+                        clrBtn.className = 'ai-hints-btn';
+                        clrBtn.textContent = labels.clear;
+                        clrBtn.title = "Permanently clear hints from this card";
+                        clrBtn.onclick = (e) => {
+                            if (e) { e.stopPropagation(); e.preventDefault(); }
                             if (confirm("Permanently delete hints from this card?")) pycmd('ai_hints_clear');
-                        } else {
-                            window.aiHintsClearData();
-                        }
-                    };
-                    btnBox.appendChild(clrBtn);
+                        };
+                        btnBox.appendChild(clrBtn);
+                    }
                     
                     updateVisibility();
                     if (state.hints && hSection) renderMath(hSection);
@@ -344,7 +355,8 @@
                     const refBtn = document.createElement('button');
                     refBtn.className = 'ai-hints-btn';
                     refBtn.textContent = labels.refresh;
-                    refBtn.onclick = () => {
+                    refBtn.onclick = (e) => {
+                        if (e) { e.stopPropagation(); e.preventDefault(); }
                         if (isAddonActive) {
                             if (typeof pycmd === 'function') pycmd('ai_hints_refresh');
                         } else {
@@ -360,7 +372,8 @@
                     const jsonBtn = document.createElement('button');
                     jsonBtn.className = 'ai-hints-btn';
                     jsonBtn.textContent = labels.json;
-                    jsonBtn.onclick = () => {
+                    jsonBtn.onclick = (e) => {
+                        if (e) { e.stopPropagation(); e.preventDefault(); }
                         let view = container.querySelector('.ai-hints-json-view');
                         if (view) view.remove();
                         else {
@@ -478,5 +491,8 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init());
     else init();
     
-    if (!isAddonActive) setInterval(() => init(), 500);
+    if (!isAddonActive) {
+        if (window.aiHintsInterval) clearInterval(window.aiHintsInterval);
+        window.aiHintsInterval = setInterval(() => init(), 500);
+    }
 })();
