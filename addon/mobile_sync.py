@@ -65,22 +65,41 @@ def auto_update_mobile_setup():
         "};"
     )
     
-    new_block = (
-        "<!-- AI-HINTS-BEGIN -->\n"
-        "<ai-hints></ai-hints>\n"
-        "<script>\n"
-        f"{config_js}\n"
-        "</script>\n"
-        "<script src='_ai_hints_template.js'></script>\n"
-        "<!-- AI-HINTS-END -->"
-    )
-
-    pattern = r"<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"
-    
     try:
         updated_count = 0
+        target_fields = config.get("target_fields", [])
+        default_field = target_fields[0] if target_fields else "AI Hints"
+        note_type_fields = config.get("note_type_fields", {})
+
         for model in mw.col.models.all():
             model_changed = False
+            
+            # Determine which field to use for this specific model
+            model_specific_fields = note_type_fields.get(model['name'], [])
+            field_name = model_specific_fields[0] if model_specific_fields else default_field
+            
+            # Verify field actually exists in this model
+            model_fields = [f['name'] for f in model['flds']]
+            if field_name not in model_fields:
+                for tf in target_fields:
+                    if tf in model_fields:
+                        field_name = tf
+                        break
+                else:
+                    field_name = model_fields[-1] if model_fields else "AI Hints"
+
+            field_tag = f"{{{{{field_name}}}}}"
+            new_block = (
+                "<!-- AI-HINTS-BEGIN -->\n"
+                f"{field_tag}\n"
+                "<ai-hints></ai-hints>\n"
+                "<script>\n"
+                f"{config_js}\n"
+                "</script>\n"
+                "<script src='_ai_hints_template.js'></script>\n"
+                "<!-- AI-HINTS-END -->"
+            )
+
             for tmpl in model['tmpls']:
                 for side in ['qfmt', 'afmt']:
                     old_html = tmpl[side]

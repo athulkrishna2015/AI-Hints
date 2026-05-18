@@ -18,8 +18,9 @@ class MobileTabMixin:
         layout.addWidget(title)
 
         intro = QLabel(
-            "AI-Hints saves generated hints directly into card fields. "
-            "To view them on mobile, you need to add a script to your card templates."
+            "AI-Hints supports AnkiDroid and AnkiMobile by saving data directly into your cards. "
+            "Use the <b>One-Click Install</b> below to automatically set up your templates "
+            "for all note types."
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
@@ -92,10 +93,12 @@ class MobileTabMixin:
             "};"
         )
 
-    def _get_full_template_block(self):
+    def _get_full_template_block(self, field_name: str = None):
         config_js = self._get_config_js()
+        field_tag = f"{{{{{field_name}}}}}" if field_name else ""
         return (
             "<!-- AI-HINTS-BEGIN -->\n"
+            f"{field_tag}\n"
             "<ai-hints></ai-hints>\n"
             "<script>\n"
             f"{config_js}\n"
@@ -105,7 +108,12 @@ class MobileTabMixin:
         )
 
     def on_copy_script(self):
-        QApplication.clipboard().setText(self.script_edit.toPlainText())
+        # Determine the likely target field for the manual script preview
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        target_fields = config.get("target_fields", [])
+        field_name = target_fields[0] if target_fields else "AI Hints"
+        
+        QApplication.clipboard().setText(self._get_full_template_block(field_name))
         QMessageBox.information(self, "AI-Hints", "Template script copied to clipboard!")
 
     def on_full_install(self):
@@ -120,14 +128,36 @@ class MobileTabMixin:
         config["mobile_setup_completed"] = True
         mw.addonManager.writeConfig(ADDON_PACKAGE, config)
 
+        target_fields = config.get("target_fields", [])
+        default_field = target_fields[0] if target_fields else "AI Hints"
+
         # 2. Inject into all templates
-        new_block = self._get_full_template_block()
         count = 0
         templates_updated = 0
         
         try:
             for model in mw.col.models.all():
                 model_changed = False
+                
+                # Determine which field to use for this specific model
+                note_type_fields = config.get("note_type_fields", {})
+                model_specific_fields = note_type_fields.get(model['name'], [])
+                field_name = model_specific_fields[0] if model_specific_fields else default_field
+                
+                # Verify field actually exists in this model
+                model_fields = [f['name'] for f in model['flds']]
+                if field_name not in model_fields:
+                    # Fallback to the first available target field that exists
+                    for tf in target_fields:
+                        if tf in model_fields:
+                            field_name = tf
+                            break
+                    else:
+                        # Fallback to last field if none match
+                        field_name = model_fields[-1] if model_fields else None
+
+                new_block = self._get_full_template_block(field_name)
+
                 for tmpl in model['tmpls']:
                     # Update Front and Back
                     for side in ['qfmt', 'afmt']:
@@ -143,7 +173,7 @@ class MobileTabMixin:
                                 templates_updated += 1
                         else:
                             # Append to end
-                            tmpl[side] = old_html + "\n\n" + new_block
+                            tmpl[side] = old_html.strip() + "\n\n" + new_block
                             model_changed = True
                             templates_updated += 1
                 

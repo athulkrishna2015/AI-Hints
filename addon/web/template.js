@@ -133,7 +133,6 @@
         const hasOverrideData = !!manualData;
         
         // COMPATIBILITY: Don't re-render if user is currently editing a field 
-        // (Edit Field During Review Native compatibility)
         if (!hasOverrideData && document.activeElement && (
             document.activeElement.isContentEditable || 
             document.activeElement.tagName === 'INPUT' || 
@@ -143,10 +142,13 @@
         }
 
         const jsonBlocks = document.querySelectorAll('.ai-hints-json');
-        if (jsonBlocks.length === 0 && !hasOverrideData && !isAddonActive) return;
+        const containers = document.querySelectorAll('.ai-hints-container');
+        
+        // If no data blocks and no containers, and not in active addon mode, nothing to do
+        if (jsonBlocks.length === 0 && containers.length === 0 && !hasOverrideData && !isAddonActive) return;
 
-        // Cleanup any existing rendered containers to prevent duplicates
-        document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
+        // Cleanup any existing rendered containers to prevent duplicates (only those we created)
+        document.querySelectorAll('.ai-hints-container-rendered').forEach(e => e.remove());
         document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
 
         // Configuration
@@ -178,9 +180,15 @@
         const stateKey = 'state_' + cardId + '_' + ord;
         const persistence = getPersistence();
         const isFirstLoad = !persistence.get(stateKey);
-        let state = persistence.get(stateKey) || { hints: false, options: false, seed: Date.now() };
+        let state = persistence.get(stateKey) || { hints: false, options: false, seed: Date.now(), cleared: false };
 
-        // Auto-reveal logic based on configuration and actions
+        if (state.cleared && !isAddonActive) {
+            // If cleared in this session, ensure static boxes remain hidden and return
+            containers.forEach(c => c.style.display = 'none');
+            return;
+        }
+
+        // Auto-reveal logic
         if (isManualAction === true) {
             if (uiCfg.manual_show_hints) state.hints = true;
             if (uiCfg.manual_show_options) state.options = true;
@@ -198,7 +206,7 @@
         const cardKey = 'c' + (ord + 1);
         const onAnswer = isAnswerSide();
 
-        // Process existing blocks or create container
+        // Process existing blocks or containers
         let targetBlocks = manualData ? [null] : Array.from(jsonBlocks).filter(block => {
             try {
                 const blockData = JSON.parse(block.textContent);
@@ -207,6 +215,17 @@
             block.remove();
             return false;
         });
+
+        // Mobile Fallback: If no JSON blocks were found but we have HTML containers, treat them as targets
+        if (targetBlocks.length === 0 && !isAddonActive && containers.length > 0) {
+            targetBlocks = Array.from(containers).filter(c => {
+                // Skip if it's already one we rendered
+                if (c.classList.contains('ai-hints-container-rendered')) return false;
+                // Check if it belongs to this card (if it has the attributes)
+                return blockBelongsToCurrentCard(c, null, cardKey, cardId, ord);
+            });
+        }
+
         if (targetBlocks.length === 0 && isAddonActive) targetBlocks = [null];
 
         targetBlocks.forEach(block => {
@@ -214,13 +233,22 @@
             try {
                 let data = manualData;
                 if (!data && block) {
-                    data = JSON.parse(block.textContent);
-                    if (data[cardKey]) data = data[cardKey];
+                    if (block.classList.contains('ai-hints-json')) {
+                        data = JSON.parse(block.textContent);
+                        if (data[cardKey]) data = data[cardKey];
+                    } else if (block.classList.contains('ai-hints-container')) {
+                        // Scraping fallback for HTML-only containers
+                        data = { hints: [], options: [] };
+                        block.querySelectorAll('.ai-hints-hint-list li').forEach(li => data.hints.push(li.innerHTML));
+                        block.querySelectorAll('.ai-hints-list li').forEach(li => data.options.push(li.innerHTML));
+                        // Hide the original static block so we can replace it with our interactive one
+                        block.style.display = 'none';
+                    }
                 }
                 
                 const hasContent = data && (data.hints || data.options);
                 const container = document.createElement('div');
-                container.className = 'ai-hints-container';
+                container.className = 'ai-hints-container ai-hints-container-rendered';
                 
                 const btnBox = document.createElement('div');
                 btnBox.className = 'ai-hints-btn-box';
@@ -374,24 +402,26 @@
     window.aiHintsClearData = () => { 
         window.aiHintsLastSetupKey = undefined;
         window.aiHintsSetupToken = undefined;
-        document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
-        document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
         
-        // Clear all state keys for this specific card to prevent ghost reveals
+        // Clear all state keys for this specific card
         const ord = getCardOrd();
         const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
         const prefix = 'state_' + cardId + '_' + ord;
+        const persistence = getPersistence();
         
         try {
-            sessionStorage.removeItem('ai_hints_' + prefix);
-            for (let i = 0; i < sessionStorage.length; i++) {
-                const key = sessionStorage.key(i);
-                if (key && (key.includes(cardId) || key.startsWith('ai_hints_state'))) {
-                    sessionStorage.removeItem(key);
-                    i--;
-                }
+            // On mobile, we set a 'cleared' flag to keep it hidden for this session
+            if (!isAddonActive) {
+                const state = persistence.get(prefix) || {};
+                state.cleared = true;
+                persistence.save(prefix, state);
+            } else {
+                sessionStorage.removeItem('ai_hints_' + prefix);
             }
         } catch(e){}
+        
+        document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
+        document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
         
         init(); 
     };
@@ -448,5 +478,5 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init());
     else init();
     
-    if (!isAddonActive) setInterval(() => init(), 1000);
+    if (!isAddonActive) setInterval(() => init(), 500);
 })();
