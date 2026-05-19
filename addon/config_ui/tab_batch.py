@@ -146,15 +146,7 @@ class BatchTabMixin:
         self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
         try: self.batch_run_btn.clicked.disconnect()
         except Exception: pass
-        self.batch_run_btn.clicked.connect(self.on_start_config_batch)
-        
-        self.pause_local_btn = QPushButton("⏸️ Pause Queue")
-        self.pause_local_btn.setAutoDefault(False)
-        self.pause_local_btn.setCheckable(True)
-        self.pause_local_btn.setMinimumHeight(30)
-        try: self.pause_local_btn.clicked.disconnect()
-        except Exception: pass
-        self.pause_local_btn.clicked.connect(self.on_pause_toggled)
+        self.batch_run_btn.clicked.connect(self.on_batch_control_clicked)
         
         self.stop_local_btn = QPushButton("🛑 Stop Queue")
         self.stop_local_btn.setAutoDefault(False)
@@ -173,7 +165,6 @@ class BatchTabMixin:
         
         # Grouped Layout
         refresh_row.addWidget(self.batch_run_btn)
-        refresh_row.addWidget(self.pause_local_btn)
         refresh_row.addWidget(self.stop_local_btn)
         refresh_row.addStretch() 
         refresh_row.addWidget(self.refresh_status_btn)
@@ -206,40 +197,54 @@ class BatchTabMixin:
 
     def _on_batch_method_changed(self):
         """Updates descriptions, buttons, and valid providers when toggle flips."""
-        if self.rb_native_async.isChecked():
-            # Cloud Native Async selected
+        self._refresh_batch_controls()
+
+    def _refresh_batch_controls(self):
+        """Unified UI state manager for the main batch button and descriptions."""
+        from ..batch_manager import batch_manager
+        
+        is_cloud = self.rb_native_async.isChecked()
+        is_active = getattr(batch_manager, "local_queue_active", False)
+        is_paused = getattr(batch_manager, "local_queue_paused", False)
+        has_saved = bool(getattr(batch_manager, "local_queue", []))
+
+        if is_cloud:
             self.batch_desc_label.setText("⚠️ Uses Cloud Native API. Requires **PAID ACCOUNT** / linked billing. Currently ONLY Gemini supports this schema. Closes fast.")
             self.batch_desc_label.setStyleSheet("color: #dc3545; font-weight: bold; font-size: 11px; margin-bottom: 5px;")
-            
             self.batch_run_btn.setText("🚀 Submit Cloud Batch")
             self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #0d6efd; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
-        else:
-            # Local Sequential Queue selected
+            return
+
+        # Local Queue Logic
+        if is_active:
+            if is_paused:
+                self.batch_run_btn.setText("▶️ Resume Queue")
+                self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #ffc107; color: black; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+            else:
+                self.batch_run_btn.setText("⏸️ Pause Queue")
+                self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #e9ecef; color: black; border-radius: 4px; border: 1px solid #ced4da; padding-left: 10px; padding-right: 10px;")
+            
             self.batch_desc_label.setText("💡 Uses standard local background loop. Perfectly respects your fallback tree, works on all free keys! (Anki must stay open)")
             self.batch_desc_label.setStyleSheet("color: #6c757d; font-style: italic; font-size: 11px; margin-bottom: 5px;")
-            
-            from ..batch_manager import batch_manager
-            if not getattr(batch_manager, "local_queue_active", False) and getattr(batch_manager, "local_queue", []):
-                 self.batch_run_btn.setText("⏯️ Resume Saved Queue")
-                 self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #fd7e14; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
-                 self.batch_desc_label.setText("💾 Found an unfinished offline batch from a previous session! Click below to Resume.")
-            else:
-                 self.batch_run_btn.setText("🚀 Initiate Queue")
-                 self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+        
+        elif has_saved:
+            self.batch_run_btn.setText("⏯️ Resume Saved Queue")
+            self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #fd7e14; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+            self.batch_desc_label.setText("💾 Found an unfinished offline batch from a previous session! Click below to Resume.")
+            self.batch_desc_label.setStyleSheet("color: #6c757d; font-style: italic; font-size: 11px; margin-bottom: 5px;")
+        
+        else:
+            self.batch_run_btn.setText("🚀 Initiate Queue")
+            self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+            self.batch_desc_label.setText("💡 Uses standard local background loop. Perfectly respects your fallback tree, works on all free keys! (Anki must stay open)")
+            self.batch_desc_label.setStyleSheet("color: #6c757d; font-style: italic; font-size: 11px; margin-bottom: 5px;")
 
     def update_batch_status_tab(self):
         try:
             from ..batch_manager import batch_manager
             
-            # Sync Pause Button UI State based on engine state
-            is_paused = getattr(batch_manager, "local_queue_paused", False)
-            self.pause_local_btn.setChecked(is_paused)
-            if is_paused:
-                 self.pause_local_btn.setText("▶️ Resume Queue")
-                 self.pause_local_btn.setStyleSheet("background-color: #ffc107; font-weight: bold;")
-            else:
-                 self.pause_local_btn.setText("⏸️ Pause Queue")
-                 self.pause_local_btn.setStyleSheet("")
+            # Sync Unified Button UI State
+            self._refresh_batch_controls()
 
             summary = batch_manager.get_status_summary()
             
@@ -279,20 +284,28 @@ class BatchTabMixin:
              browser.activateWindow()
              browser.raise_()
 
-    def on_pause_toggled(self, checked):
+    def on_batch_control_clicked(self):
         from ..batch_manager import batch_manager
-        batch_manager.set_pause_local_queue(checked)
-        tooltip("⏸️ Local Queue Paused" if checked else "▶️ Local Queue Resumed")
-        self.update_batch_status_tab()
+        
+        # 1. If active local queue, toggle pause
+        if not self.rb_native_async.isChecked() and batch_manager.local_queue_active:
+            new_pause = not batch_manager.local_queue_paused
+            batch_manager.set_pause_local_queue(new_pause)
+            tooltip("⏸️ Local Queue Paused" if new_pause else "▶️ Local Queue Resumed")
+            self._refresh_batch_controls()
+            return
+            
+        # 2. Otherwise, delegate to start logic
+        self.on_start_config_batch()
 
     def on_stop_local_queue(self):
         from ..batch_manager import batch_manager
-        if not batch_manager.local_queue_active:
-             info("There is no local sequential queue currently running.")
+        if not batch_manager.local_queue_active and not batch_manager.local_queue:
+             info("There is no local sequential queue currently running or saved.")
              return
-        if askUser("Are you sure you want to HALT the local background queue?\n\nCompleted cards are already saved. Remaining queued cards will be discarded."):
+        if askUser("Are you sure you want to STOP and CLEAR the local sequential queue?\n\nRemaining queued cards will be discarded."):
              batch_manager.stop_local_queue()
-             self.pause_local_btn.setChecked(False)
+             self._refresh_batch_controls()
              self.update_batch_status_tab()
 
     def update_batch_ui_for_selection(self):

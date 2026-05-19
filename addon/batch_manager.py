@@ -30,6 +30,7 @@ class BatchManager:
         # Live Runtime Diagnostic Hooks
         self.current_local_cid = None
         self.current_local_model = ""
+        self.last_run_stats = None
         
         self.load_state()
 
@@ -362,12 +363,14 @@ class BatchManager:
         if not self.local_queue_active:
              # Wipe persistent cache even if thread isn't running (force clear saved state)
              self.local_queue = []
+             self.last_run_stats = None
              self.save_state()
              return True
              
         self.local_queue_active = False
         self.local_queue_paused = False
         self.local_queue = [] # Clear remaining list
+        self.last_run_stats = None
         self.save_state() # Persist full stop clearing cache
         logger.info("Local Sequential Queue ABORT manually triggered by user.")
         return True
@@ -498,6 +501,15 @@ class BatchManager:
         self.local_queue_active = False
         self.current_local_cid = None
         self.current_local_model = ""
+        
+        # Only set completion stats if we actually finished naturally (didn't abort)
+        if not self.local_queue:
+            self.last_run_stats = {
+                "total": self.local_queue_total,
+                "errors": self.local_queue_errors,
+                "time": time.time()
+            }
+            
         self.save_state() # Confirm final wipe of local cache from disk
         logger.info(f"FINISHED local sequential queue. Total={self.local_queue_total}, Errors={self.local_queue_errors}")
         
