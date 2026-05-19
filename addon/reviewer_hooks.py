@@ -464,15 +464,21 @@ def on_webview_will_set_content(web_content, context):
         web_content.body += block
     
     # Inject state and the unified template script
+    # Explicitly clear stale setup keys to prevent data from previous card bleeding into this one
     web_content.body += f"""
 <script>
+window.aiHintsLastSetupKey = undefined;
+window.aiHintsSetupToken = undefined;
 window.aiHintsCurrentCard = {card_payload};
 window.aiHintsUiConfig = {ui_payload};
 {js}
 </script>
 """
 
-def _trigger_frontend_setup(card, web=None):
+def _trigger_frontend_setup(card=None, web=None):
+    if card is None:
+        card = getattr(mw.reviewer, "card", None)
+    
     if not card:
         return
     if _reviewer_is_ending:

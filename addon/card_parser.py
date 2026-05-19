@@ -399,6 +399,8 @@ class CardParser:
         # Fallback: append new
         payload = {card_key: new_data} if card_key else new_data
         content_block = self.build_hints_block(payload, toggles, card if not card_key else None)
+        if not current_val:
+            return content_block
         return current_val + "\n" + content_block
 
     def build_hints_block(self, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None) -> str:
@@ -412,13 +414,28 @@ class CardParser:
 
     def _find_target_field(self, note) -> Optional[str]:
         note_fields = note.keys()
+        
+        # 1. Prefer fields that ALREADY have AI hints data
+        for target in self.target_fields:
+            if target in note_fields:
+                val = str(note[target])
+                if f'class="{self.json_class}"' in val or f'class="{self.container_class}"' in val:
+                    return target
+        
+        # 2. Prefer fields that are NOT empty (avoid making empty fields non-empty)
+        for target in self.target_fields:
+            if target in note_fields:
+                if note[target].strip():
+                    return target
+                    
+        # 3. Fallback to first existing target field
         for target in self.target_fields:
             if target in note_fields:
                 return target
         return None
 
     def _build_attrs(self, toggles: Dict[str, bool] = None, card=None) -> str:
-        attrs = [f'data-ai-hints-addon-id="2119980872"']
+        attrs = [f'data-ai-hints-addon-id="2119980872"', 'contenteditable="false"']
         if toggles:
             attrs.extend([
                 f'data-show-hints="{str(toggles.get("show_hints_button", True)).lower()}"',

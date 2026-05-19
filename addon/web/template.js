@@ -11,10 +11,10 @@
 
     // 1. Configuration & Styling
     const STYLES = `
-        .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; }
-        .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; }
+        .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; pointer-events: none; }
+        .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; pointer-events: auto; }
         .ai-hints-content-active { display: block; border: 1px dashed #aaa; background-color: rgba(128,128,128,0.06); }
-        .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+        .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; pointer-events: auto; }
         .ai-hints-btn { padding: 4px 10px; cursor: pointer; border-radius: 6px; border: 1px solid #999; background-color: #f0f0f0; color: #222; font-size: 12px; font-weight: 500; transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
         .ai-hints-btn:hover { background-color: #e0e0e0; }
         .ai-hints-btn:active { background-color: #d0d0d0; transform: translateY(1px); }
@@ -44,7 +44,7 @@
     }
 
     function isAnswerSide() {
-        return !!document.getElementById('answer') || !!document.querySelector('.answer') || document.body.classList.contains('answer') || (window.aiHintsUiConfig && window.aiHintsUiConfig.is_answer_side);
+        return !!document.getElementById('answer') || !!document.querySelector('.answer') || !!document.querySelector('#answer') || document.body.classList.contains('answer') || (window.aiHintsUiConfig && window.aiHintsUiConfig.is_answer_side);
     }
 
     function getCardOrd() {
@@ -99,7 +99,7 @@
         list.className = title.toLowerCase().includes('hint') ? 'ai-hints-hint-list' : 'ai-hints-list';
         const listItems = items.map(text => {
             const li = document.createElement('li');
-            li.textContent = text;
+            li.innerHTML = text;
             if (isCorrectFn && isCorrectFn(text)) li.className = 'ai-hints-correct';
             return li;
         });
@@ -221,7 +221,8 @@
                 const blockData = JSON.parse(block.textContent);
                 if (blockBelongsToCurrentCard(block, blockData, cardKey, cardId, ord)) return true;
             } catch (e) {}
-            block.remove();
+            // Do NOT remove blocks here; they might belong to the card currently being loaded 
+            // if Anki's state is temporarily inconsistent.
             return false;
         });
 
@@ -258,6 +259,7 @@
                 const hasContent = data && (data.hints || data.options);
                 const container = document.createElement('div');
                 container.className = 'ai-hints-container ai-hints-container-rendered';
+                container.setAttribute('contenteditable', 'false');
                 
                 const btnBox = document.createElement('div');
                 btnBox.className = 'ai-hints-btn-box';
@@ -269,9 +271,10 @@
 
                 const showTitles = data && data.hints && data.hints.length > 0 && data.options && data.options.length > 0;
 
+                const clean = (s) => (s || "").toString().replace(/<[^>]*>/g, "").trim().toLowerCase();
                 const hSection = renderSection(contentBox, "Hints:", (data ? data.hints : []), null, 0, showTitles);
                 const oSection = renderSection(contentBox, "Options:", (data ? data.options : []), (txt) => 
-                    onAnswer && data.correct_answer && txt.trim().toLowerCase() === data.correct_answer.trim().toLowerCase(),
+                    onAnswer && data.correct_answer && clean(txt) === clean(data.correct_answer),
                     state.seed, showTitles
                 );
 
@@ -473,6 +476,8 @@
         const hasData = hints != null || document.querySelector('.ai-hints-json');
         const isEmptyContainer = existingContainer && !existingContainer.querySelector('.ai-hints-list') && !existingContainer.querySelector('.ai-hints-hint-list');
         
+        // If we have an existing container but we are doing a fresh setup (e.g. card changed),
+        // we must ensure we don't bail out due to a stale setupKey.
         if (window.aiHintsLastSetupKey === setupKey && existingContainer && (!hasData || !isEmptyContainer) && window.aiHintsLastAnswerState === currentAnswerState) {
             return;
         }
@@ -493,7 +498,27 @@
     
     if (!isAddonActive) {
         if (window.aiHintsInterval) clearInterval(window.aiHintsInterval);
-        window.aiHintsInterval = setInterval(() => init(), 500);
+        window.aiHintsInterval = setInterval(() => {
+            // Detect card change in standalone mode (no Python to trigger setup)
+            const currentId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+            const currentOrd = getCardOrd();
+            
+            // Check for clues in the DOM that the card changed
+            const cloze = document.querySelector('.cloze');
+            const clozeClass = cloze ? cloze.className : '';
+            
+            const stateToken = currentId + '_' + currentOrd + '_' + clozeClass;
+            if (window.aiHintsLastStateToken && window.aiHintsLastStateToken !== stateToken) {
+                // Card or cloze changed! Reset state to force re-scan of JSON blocks
+                window.aiHintsLastSetupKey = undefined;
+                window.aiHintsCurrentCard = { id: currentId, ord: currentOrd };
+                document.querySelectorAll('.ai-hints-container-rendered').forEach(e => e.remove());
+                document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+            }
+            window.aiHintsLastStateToken = stateToken;
+            
+            init();
+        }, 500);
     }
 
     // Cross-Platform Keyboard Shortcuts handler
