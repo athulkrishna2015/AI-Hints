@@ -54,7 +54,8 @@ class BatchManager:
                      self.local_queue_errors = cache.get("errors", 0)
                      self.saved_config = cache.get("config", {})
                      self.saved_provider = cache.get("provider", None)
-                     logger.info(f"BatchManager restored paused local queue: {len(self.local_queue)} items remaining.")
+                     self.last_run_stats = cache.get("last_run_stats", None)
+                     logger.info(f"BatchManager restored state. Queue: {len(self.local_queue)} items.")
             else:
                 # Legacy format
                 self.jobs = data if isinstance(data, dict) else {}
@@ -73,7 +74,8 @@ class BatchManager:
                     "total": self.local_queue_total,
                     "errors": self.local_queue_errors,
                     "config": getattr(self, "saved_config", {}),
-                    "provider": getattr(self, "saved_provider", None)
+                    "provider": getattr(self, "saved_provider", None),
+                    "last_run_stats": self.last_run_stats
                 }
             }
             with open(STATE_FILE, "w", encoding="utf-8") as f:

@@ -27,8 +27,20 @@ class LogTabMixin:
         filter_layout.addWidget(QLabel(" Search:"))
         self.log_search_edit = QLineEdit()
         self.log_search_edit.setPlaceholderText("Filter text...")
-        self.log_search_edit.textChanged.connect(self.load_log)
+        self.log_search_edit.setClearButtonEnabled(True)
+        self.log_search_edit.setMinimumWidth(180)
+        
+        # Debounced search timer
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.timeout.connect(self.load_log)
+        self.log_search_edit.textChanged.connect(lambda: self._search_timer.start(300))
+        
         filter_layout.addWidget(self.log_search_edit)
+
+        self.match_count_label = QLabel("")
+        self.match_count_label.setStyleSheet("color: #6c757d; font-size: 11px; font-weight: bold;")
+        filter_layout.addWidget(self.match_count_label)
         
         filter_layout.addStretch()
         
@@ -118,9 +130,52 @@ class LogTabMixin:
             
             if was_at_bottom:
                 vbar.setValue(vbar.maximum())
+
+            # 🖍️ Apply Search Highlighting
+            self._apply_search_highlighting(search_filter)
+
         except Exception as e:
             if not self.log_view.textCursor().hasSelection():
                 self.log_view.setPlainText(f"Error reading log: {e}")
+
+    def _apply_search_highlighting(self, pattern: str):
+        """Highlights all occurrences of the search pattern in the log view."""
+        extra_selections = []
+        
+        if not pattern or len(pattern) < 2:
+            self.log_view.setExtraSelections(extra_selections)
+            return
+
+        # Case-insensitive search to match the filter logic
+        cursor = self.log_view.document().find(pattern, 0) 
+        
+        # Color palette for highlighting (Warm Yellow)
+        fmt = QTextCharFormat()
+        fmt.setBackground(QColor("#fff3cd"))
+        fmt.setForeground(QColor("#856404"))
+        fmt.setFontWeight(QFont.Weight.Bold)
+
+        # Loop through all matches
+        count = 0
+        while not cursor.isNull():
+            count += 1
+            if count > 2000: break # Higher safety limit for log files
+            
+            selection = QTextEdit.ExtraSelection()
+            selection.format = fmt
+            selection.cursor = cursor
+            extra_selections.append(selection)
+            
+            cursor = self.log_view.document().find(pattern, cursor)
+
+        self.log_view.setExtraSelections(extra_selections)
+        
+        # Update match count label
+        if not pattern:
+            self.match_count_label.setText("")
+        else:
+            limit_hit = " (limit hit)" if count > 2000 else ""
+            self.match_count_label.setText(f"{count} matches{limit_hit}")
 
     def clear_log(self):
         log_file = os.path.join(self.addon_dir, "ai_hints.log")
