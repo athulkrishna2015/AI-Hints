@@ -144,10 +144,10 @@
         const jsonBlocks = document.querySelectorAll('.ai-hints-json');
         const containers = document.querySelectorAll('.ai-hints-container');
         
-
-        
-        // If no data blocks and no containers, and not in active addon mode, nothing to do
-        if (jsonBlocks.length === 0 && containers.length === 0 && !hasOverrideData && !isAddonActive) return;
+        // If no data blocks and no containers, and not in active addon mode, we still need to potentially 
+        // show the "Generate" button if that's enabled, or check for HTML containers.
+        // We only bail if we are absolutely sure there is nothing to render and no UI to show.
+        if (jsonBlocks.length === 0 && containers.length === 0 && !hasOverrideData && !isAddonActive && !mobileCfg.showExtraButtons) return;
 
         // Cleanup any existing rendered containers to prevent duplicates (only those we created)
         document.querySelectorAll('.ai-hints-container-rendered').forEach(e => e.remove());
