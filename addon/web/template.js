@@ -514,8 +514,8 @@
             const defaultShortcuts = {
                 modifier: "alt",
                 generate: "1",
-                "toggle-options": "2",
-                "toggle-hints": "3",
+                "toggle-options": "3",
+                "toggle-hints": "2",
                 clear: "4",
                 refresh: "5",
                 "show-json": "6"

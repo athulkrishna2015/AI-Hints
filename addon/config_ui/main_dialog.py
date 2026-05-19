@@ -871,7 +871,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("mobile_show_extra_buttons", False)
         config.setdefault("mobile_setup_completed", False)
 
-        default_shortcuts = {"modifier": "alt", "generate": "1", "toggle-options": "2", "toggle-hints": "3", "clear": "4", "refresh": "5", "show-json": "6"}
+        default_shortcuts = {"modifier": "alt", "generate": "1", "toggle-options": "3", "toggle-hints": "2", "clear": "4", "refresh": "5", "show-json": "6"}
         shortcuts = dict(default_shortcuts)
         raw_shortcuts = config.get("shortcuts", {}) or {}
         if isinstance(raw_shortcuts, dict): shortcuts.update(raw_shortcuts)

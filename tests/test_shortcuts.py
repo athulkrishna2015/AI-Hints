@@ -46,8 +46,8 @@ class TestShortcuts(unittest.TestCase):
             "shortcuts": {
                 "modifier": "alt",
                 "generate": "1",
-                "toggle-options": "2",
-                "toggle-hints": "3",
+                "toggle-options": "3",
+                "toggle-hints": "2",
                 "clear": "4",
                 "refresh": "5",
                 "show-json": "6"
@@ -94,8 +94,8 @@ class TestShortcuts(unittest.TestCase):
         
         shortcut_keys = [s[0] for s in self.shortcuts_list]
         self.assertNotIn("Alt+1", shortcut_keys)
-        self.assertNotIn("Alt+2", shortcut_keys)
-        self.assertIn("Alt+3", shortcut_keys)  # toggle-hints still present
+        self.assertNotIn("Alt+3", shortcut_keys)
+        self.assertIn("Alt+2", shortcut_keys)  # toggle-hints still present
 
 if __name__ == "__main__":
     unittest.main()
