@@ -123,8 +123,45 @@
         const isKeyed = data && typeof data === 'object' && !Array.isArray(data) &&
             !data.hints && !data.options && Object.keys(data).some(key => /^c\d+$/.test(key));
         if (isKeyed && !data[cardKey]) return false;
+        if (!blockCardId && !isKeyed && String(ord) !== '0') return false;
 
         return true;
+    }
+
+    function clearRenderedContainers() {
+        const selector = isAddonActive ? '.ai-hints-container' : '.ai-hints-container-rendered';
+        document.querySelectorAll(selector).forEach(e => e.remove());
+    }
+
+    function resetJsonRenderMarkers() {
+        document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+    }
+
+    function pruneForeignJsonBlocks(cardId, ord) {
+        if (!isAddonActive || !window.aiHintsCurrentCard || cardId === 'temp') return;
+        document.querySelectorAll('.ai-hints-json').forEach(block => {
+            const blockCardId = block.getAttribute ? block.getAttribute('data-ai-hints-card-id') : null;
+            const blockOrd = block.getAttribute ? block.getAttribute('data-ai-hints-card-ord') : null;
+            const idMismatch = blockCardId && String(blockCardId) !== String(cardId);
+            const ordMismatch = blockOrd !== null && blockOrd !== undefined && blockOrd !== '' && String(blockOrd) !== String(ord);
+            if (idMismatch || ordMismatch) block.remove();
+        });
+    }
+
+    function retryInitForCard(cardId, ord) {
+        if (!isAddonActive) return;
+        const key = String(cardId) + '_' + String(ord);
+        window.aiHintsRetryState = window.aiHintsRetryState || {};
+        const attempts = window.aiHintsRetryState[key] || 0;
+        if (attempts >= 8) return;
+        window.aiHintsRetryState[key] = attempts + 1;
+        setTimeout(() => {
+            const currentId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+            const currentOrd = getCardOrd();
+            if (String(currentId) === String(cardId) && String(currentOrd) === String(ord)) {
+                init();
+            }
+        }, 75);
     }
 
     // 3. Main Init
@@ -141,9 +178,14 @@
             return;
         }
 
-        // Cleanup any existing rendered containers to prevent duplicates (only those we created)
-        document.querySelectorAll('.ai-hints-container-rendered').forEach(e => e.remove());
-        document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+        // Anki can briefly leave the previous card's field HTML in the reviewer.
+        // Remove every visible hints container before scanning data so stale buttons cannot flash or be scraped.
+        clearRenderedContainers();
+        resetJsonRenderMarkers();
+
+        const ord = getCardOrd();
+        const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+        pruneForeignJsonBlocks(cardId, ord);
 
         const jsonBlocks = document.querySelectorAll('.ai-hints-json');
         const containers = document.querySelectorAll('.ai-hints-container');
@@ -189,8 +231,6 @@
             document.head.appendChild(s);
         }
 
-        const ord = getCardOrd();
-        const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
         const stateKey = 'state_' + cardId + '_' + ord;
         const persistence = getPersistence();
         const isFirstLoad = !persistence.get(stateKey);
@@ -239,7 +279,13 @@
             });
         }
 
-        if (targetBlocks.length === 0 && isAddonActive) targetBlocks = [null];
+        if (targetBlocks.length === 0 && isAddonActive) {
+            if (!hasOverrideData && jsonBlocks.length > 0) {
+                retryInitForCard(cardId, ord);
+                return;
+            }
+            targetBlocks = [null];
+        } else if (isAddonActive && targetBlocks.length > 1) targetBlocks = targetBlocks.slice(0, 1);
 
         // Ensure we clear the placeholder if we are about to render something (or even if we are not, if it was stale)
         const placeholder = document.querySelector('ai-hints');
@@ -267,6 +313,8 @@
                 const container = document.createElement('div');
                 container.className = 'ai-hints-container ai-hints-container-rendered';
                 container.setAttribute('contenteditable', 'false');
+                container.setAttribute('data-ai-hints-card-id', String(cardId));
+                if (ord !== undefined && ord !== null) container.setAttribute('data-ai-hints-card-ord', String(ord));
                 
                 const btnBox = document.createElement('div');
                 btnBox.className = 'ai-hints-btn-box';
@@ -482,10 +530,22 @@
         const existingContainer = document.querySelector('.ai-hints-container');
         const hasData = hints != null || document.querySelector('.ai-hints-json');
         const isEmptyContainer = existingContainer && !existingContainer.querySelector('.ai-hints-list') && !existingContainer.querySelector('.ai-hints-hint-list');
+        const existingCardId = existingContainer && existingContainer.getAttribute ? existingContainer.getAttribute('data-ai-hints-card-id') : null;
+        const existingCardOrd = existingContainer && existingContainer.getAttribute ? existingContainer.getAttribute('data-ai-hints-card-ord') : null;
+        const sameRenderedCard = existingContainer && card &&
+            String(existingCardId) === String(card.id) &&
+            (existingCardOrd === null || existingCardOrd === undefined || existingCardOrd === '' || String(existingCardOrd) === String(card.ord));
         
         // If we have an existing container but we are doing a fresh setup (e.g. card changed),
         // we must ensure we don't bail out due to a stale setupKey.
         if (window.aiHintsLastSetupKey === setupKey && existingContainer && (!hasData || !isEmptyContainer) && window.aiHintsLastAnswerState === currentAnswerState) {
+            return;
+        }
+
+        if (hints == null && sameRenderedCard && !isEmptyContainer && !hasData) {
+            window.aiHintsLastSetupKey = setupKey;
+            window.aiHintsLastAnswerState = currentAnswerState;
+            window.aiHintsCurrentCard = card;
             return;
         }
 
@@ -610,4 +670,3 @@
         });
     }
 })();
-

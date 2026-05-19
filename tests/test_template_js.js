@@ -10,6 +10,7 @@ function createMockDOM(env) {
     
     let renderedBlocks = [];
     let jsonBlocks = [];
+    let staticContainers = [];
     function addJsonBlock(data = { hints: ["H1"], options: ["O1"] }, attrs = {}) {
         const jsonBlock = {
             textContent: JSON.stringify(data),
@@ -24,6 +25,80 @@ function createMockDOM(env) {
         };
         jsonBlocks.push(jsonBlock);
         return jsonBlock;
+    }
+    function makeElement(tag) {
+        const attrs = {};
+        const el = {
+            tagName: tag.toUpperCase(),
+            className: '',
+            classList: {
+                add: (cls) => {
+                    if (!el.className.split(/\s+/).includes(cls)) {
+                        el.className = `${el.className} ${cls}`.trim();
+                    }
+                },
+                remove: (cls) => {
+                    el.className = el.className.split(/\s+/).filter(item => item && item !== cls).join(' ');
+                },
+                contains: (cls) => el.className.split(/\s+/).includes(cls)
+            },
+            textContent: '',
+            innerHTML: '',
+            style: {},
+            dataset: {},
+            attrs,
+            children: [],
+            setAttribute: (name, value) => {
+                attrs[name] = String(value);
+                if (name === 'class') el.className = String(value);
+            },
+            getAttribute: (name) => attrs[name] || null,
+            appendChild: (child) => {
+                child.parentNode = el;
+                el.children.push(child);
+            },
+            querySelector: (sel) => {
+                const cleanSel = sel.replace('.', '');
+                let found = null;
+                const search = (node) => {
+                    if (found) return;
+                        if (node.tagName === cleanSel.toUpperCase()) { found = node; return; }
+                    if (node.className && node.className.includes(cleanSel)) { found = node; return; }
+                    if (node.children) node.children.forEach(search);
+                };
+                search(el);
+                return found;
+            },
+            querySelectorAll: (sel) => {
+                const cleanSel = sel.replace('.', '');
+                const found = [];
+                const search = (node) => {
+                    if (node !== el) {
+                        if (node.tagName === cleanSel.toUpperCase()) found.push(node);
+                        else if (node.className && node.className.includes(cleanSel)) found.push(node);
+                    }
+                    if (node.children) node.children.forEach(search);
+                };
+                search(el);
+                return found;
+            },
+            remove: () => {
+                renderedBlocks = renderedBlocks.filter(item => item !== el);
+                staticContainers = staticContainers.filter(item => item !== el);
+                jsonBlocks = jsonBlocks.filter(item => item !== el);
+                if (el.parentNode && el.parentNode.children) {
+                    el.parentNode.children = el.parentNode.children.filter(item => item !== el);
+                }
+            }
+        };
+        return el;
+    }
+    function addStaticContainer(attrs = {}) {
+        const container = makeElement('div');
+        container.className = 'ai-hints-container';
+        Object.entries(attrs).forEach(([name, value]) => container.setAttribute(name, value));
+        staticContainers.push(container);
+        return container;
     }
     if (hasData) addJsonBlock();
     const persistence = {};
@@ -43,7 +118,7 @@ function createMockDOM(env) {
         getElementById: (id) => (id === 'qa') ? global.document.body : null,
         querySelectorAll: (selector) => {
             if (selector === '.ai-hints-container' || selector === '.ai-hints-container-rendered') {
-                return renderedBlocks.filter(el => el.className && (el.className.includes('ai-hints-container') || el.className.includes('ai-hints-container-rendered')));
+                return renderedBlocks.concat(staticContainers).filter(el => el.className && (el.className.includes('ai-hints-container') || el.className.includes('ai-hints-container-rendered')));
             }
             if (selector === '.ai-hints-json') return jsonBlocks;
             if (selector === '.ai-hints-btn') {
@@ -59,65 +134,11 @@ function createMockDOM(env) {
         },
         querySelector: (selector) => {
             if (selector === '.ai-hints-container' || selector === '.ai-hints-container-rendered') {
-                return renderedBlocks.find(el => el.className && (el.className.includes('ai-hints-container') || el.className.includes('ai-hints-container-rendered'))) || null;
+                return renderedBlocks.concat(staticContainers).find(el => el.className && (el.className.includes('ai-hints-container') || el.className.includes('ai-hints-container-rendered'))) || null;
             }
             return null;
         },
-        createElement: (tag) => {
-            const el = {
-                tagName: tag.toUpperCase(),
-                className: '',
-                classList: {
-                    add: (cls) => {
-                        if (!el.className.split(/\s+/).includes(cls)) {
-                            el.className = `${el.className} ${cls}`.trim();
-                        }
-                    },
-                    remove: (cls) => {
-                        el.className = el.className.split(/\s+/).filter(item => item && item !== cls).join(' ');
-                    },
-                    contains: (cls) => el.className.split(/\s+/).includes(cls)
-                },
-                textContent: '',
-                style: {},
-                dataset: {},
-                children: [],
-                appendChild: (child) => {
-                    child.parentNode = el;
-                    el.children.push(child);
-                },
-                querySelector: (sel) => {
-                    const cleanSel = sel.replace('.', '');
-                    let found = null;
-                    const search = (node) => {
-                        if (found) return;
-                        if (cleanSel === 'button' && node.tagName === 'BUTTON') { found = node; return; }
-                        if (node.className && node.className.includes(cleanSel)) { found = node; return; }
-                        if (node.children) node.children.forEach(search);
-                    };
-                    search(el);
-                    return found;
-                },
-                querySelectorAll: (sel) => {
-                    const cleanSel = sel.replace('.', '');
-                    const found = [];
-                    const search = (node) => {
-                        if (node !== el) {
-                            if (cleanSel === 'button' && node.tagName === 'BUTTON') found.push(node);
-                            else if (node.className && node.className.includes(cleanSel)) found.push(node);
-                        }
-                        if (node.children) node.children.forEach(search);
-                    };
-                    search(el);
-                    return found;
-                },
-                remove: () => {
-                    renderedBlocks = renderedBlocks.filter(item => item !== el);
-                    jsonBlocks = jsonBlocks.filter(item => item !== el);
-                }
-            };
-            return el;
-        },
+        createElement: makeElement,
         readyState: 'complete',
         addEventListener: () => {}
     };
@@ -128,6 +149,7 @@ function createMockDOM(env) {
         aiHintsUiConfig: isAddonActive ? (global.window.aiHintsUiConfig || { is_generating: false }) : null,
         aiHintsMobileConfig: !isAddonActive ? { useEmojis: true, showExtraButtons: true } : null,
         aiHintsLastSetupKey: undefined,
+        aiHintsRetryState: undefined,
         focus: () => {}
     };
 
@@ -140,7 +162,8 @@ function createMockDOM(env) {
     return {
         getRendered: () => renderedBlocks,
         getJsonBlocks: () => jsonBlocks,
-        addJsonBlock
+        addJsonBlock,
+        addStaticContainer
     };
 }
 
@@ -244,5 +267,75 @@ const scopedStaleLabels = scopedStaleTest.getRendered().find(el => el.className 
 if (scopedStaleTest.getJsonBlocks().length !== 0) throw new Error("Stale scoped JSON block should be removed");
 if (!scopedStaleLabels.includes("Generate AI Hints")) throw new Error("Current empty card should not render previous card data");
 if (scopedStaleLabels.includes("Regenerate")) throw new Error("Previous card data should not make current card look generated");
+
+console.log("\n--- TEST 8: STALE HTML CONTAINER IS CLEARED DURING CARD TRANSITION ---");
+global.window.aiHintsCurrentCard = { id: 'new_card', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const transitionTest = createMockDOM({ isAddonActive: true, hasData: false });
+transitionTest.addStaticContainer({ 'data-ai-hints-card-id': 'old_card', 'data-ai-hints-card-ord': '0' });
+transitionTest.addJsonBlock(
+    { hints: ["New card"], options: ["New option"] },
+    { 'data-ai-hints-card-id': 'new_card', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const transitionContainers = transitionTest.getRendered().filter(el => el.className && el.className.includes('ai-hints-container'));
+if (transitionContainers.length !== 1) throw new Error("Exactly one current-card container should be rendered");
+const transitionLabels = transitionContainers[0].querySelector('.ai-hints-btn-box').querySelectorAll('button').map(b => b.textContent);
+if (!transitionLabels.includes("Regenerate")) throw new Error("Current card data should render after stale HTML is cleared");
+
+console.log("\n--- TEST 9: DUPLICATE CURRENT JSON RENDERS ONE CONTAINER ---");
+global.window.aiHintsCurrentCard = { id: 'dup_card', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const duplicateDataTest = createMockDOM({ isAddonActive: true, hasData: false });
+duplicateDataTest.addJsonBlock(
+    { hints: ["First"], options: ["A"] },
+    { 'data-ai-hints-card-id': 'dup_card', 'data-ai-hints-card-ord': '0' }
+);
+duplicateDataTest.addJsonBlock(
+    { hints: ["Second"], options: ["B"] },
+    { 'data-ai-hints-card-id': 'dup_card', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const duplicateContainers = duplicateDataTest.getRendered().filter(el => el.className && el.className.includes('ai-hints-container'));
+if (duplicateContainers.length !== 1) throw new Error("Duplicate current-card JSON blocks should still render one container");
+
+console.log("\n--- TEST 10: UNSCOPED KEYED JSON FOR SECOND FIELD IS DETECTED ---");
+global.window.aiHintsCurrentCard = { id: 'keyed_card', ord: 1 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const unscopedKeyedTest = createMockDOM({ isAddonActive: true, hasData: false });
+unscopedKeyedTest.addJsonBlock({
+    c1: { hints: ["First ord"], options: ["First option"] },
+    c2: { hints: ["Second field hint"], options: ["Second field option"] }
+});
+eval(scriptContent);
+const keyedContainer = unscopedKeyedTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const keyedLabels = keyedContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button').map(b => b.textContent);
+if (!keyedLabels.includes("Regenerate")) throw new Error("Unscoped keyed c2 JSON should render for card ord 1");
+const keyedHints = keyedContainer.querySelector('.ai-hints-hint-list').querySelectorAll('li').map(li => li.innerHTML || li.textContent);
+if (!keyedHints.includes("Second field hint")) throw new Error("Card ord 1 should read c2 data from unscoped keyed JSON");
+
+console.log("\n--- TEST 11: UNMATCHED JSON DOES NOT RENDER EMPTY GENERATE STATE ---");
+global.window.aiHintsCurrentCard = { id: 'waiting_card', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const retryTest = createMockDOM({ isAddonActive: true, hasData: false });
+retryTest.addJsonBlock(
+    { c2: { hints: ["Other ord"], options: ["Other option"] } }
+);
+eval(scriptContent);
+const retryContainers = retryTest.getRendered().filter(el => el.className && el.className.includes('ai-hints-container'));
+if (retryContainers.length !== 0) throw new Error("Unmatched pending JSON should wait instead of showing Generate");
+
+console.log("\n--- TEST 12: NULL FRONT SETUP DOES NOT ERASE CURRENT DATA CONTAINER ---");
+global.window.aiHintsCurrentCard = { id: 'front_card', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const frontSetupTest = createMockDOM({ isAddonActive: true, hasData: false });
+eval(scriptContent);
+window.aiHintsSetup({ id: 'front_card', ord: 0 }, { hints: ["Front data"], options: ["Front option"] });
+const frontCountBefore = frontSetupTest.getRendered().filter(el => el.className && el.className.includes('ai-hints-container')).length;
+window.aiHintsSetup({ id: 'front_card', ord: 0 }, null);
+const frontContainers = frontSetupTest.getRendered().filter(el => el.className && el.className.includes('ai-hints-container'));
+if (frontContainers.length !== frontCountBefore) throw new Error("Null setup should not remove current data container");
+const frontLabels = frontContainers[0].querySelector('.ai-hints-btn-box').querySelectorAll('button').map(b => b.textContent);
+if (!frontLabels.includes("Regenerate")) throw new Error("Current data container should stay in Regenerate state after null setup");
 
 console.log("\nALL JS TESTS PASSED."); process.exit(0);

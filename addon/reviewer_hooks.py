@@ -80,10 +80,7 @@ def _apply_results_to_card(card, data, is_manual=True, web=None):
         # Update UI if we are still on the card in this webview
         if web:
             try:
-                if not _safe_web_eval(
-                    web,
-                    f"if (window.aiHintsUpdateData) {{ window.aiHintsUpdateData({json.dumps(data)}, {'true' if is_manual else 'false'}); }}"
-                ):
+                if not _push_hint_data_to_frontend(web, card, data, is_manual):
                     raise RuntimeError("webview not available for direct update")
             except Exception as e:
                 logger.error(f"AI-Hints direct web update failed: {e}")
@@ -320,6 +317,52 @@ def _safe_web_eval(web, script: str) -> bool:
     except Exception as e:
         logger.debug(f"AI-Hints: web eval failed: {e}")
     return False
+
+def _push_hint_data_to_frontend(web, card, data, is_manual=True) -> bool:
+    if not web or not card or not data:
+        return False
+
+    card_payload = json.dumps(_card_payload(card))
+    data_payload = json.dumps(data)
+    manual_payload = "true" if is_manual else "false"
+    return _safe_web_eval(web, f"""
+        (function() {{
+            var card = {card_payload};
+            var hintData = {data_payload};
+            var isManual = {manual_payload};
+            var attempts = 0;
+
+            function isCurrentCard() {{
+                if (!window.aiHintsCurrentCard) return null;
+                return String(window.aiHintsCurrentCard.id) === String(card.id) &&
+                    String(window.aiHintsCurrentCard.ord) === String(card.ord);
+            }}
+
+            function applyHints() {{
+                attempts += 1;
+                var current = isCurrentCard();
+                if (current === false) return;
+
+                if (window.aiHintsUiConfig) {{
+                    window.aiHintsUiConfig.is_generating = false;
+                }}
+
+                if (current && typeof window.aiHintsUpdateData === 'function') {{
+                    window.aiHintsUpdateData(hintData, isManual);
+                    return;
+                }}
+
+                if (typeof window.aiHintsSetup === 'function') {{
+                    window.aiHintsSetup(card, hintData);
+                    return;
+                }}
+
+                if (attempts < 40) setTimeout(applyHints, 50);
+            }}
+
+            applyHints();
+        }})();
+    """)
 
 def _prepare_card_review_state(card):
     if not card:
@@ -1448,6 +1491,21 @@ def init_hooks():
         _reviewer_is_ending = False
         _review_token += 1
         _trigger_frontend_setup(card)
+        current_token = _review_token
+        QTimer.singleShot(
+            150,
+            lambda: (
+                None if _reviewer_is_ending or current_token != _review_token
+                else _trigger_frontend_setup(card)
+            )
+        )
+        QTimer.singleShot(
+            400,
+            lambda: (
+                None if _reviewer_is_ending or current_token != _review_token
+                else _trigger_frontend_setup(card)
+            )
+        )
         
         # Auto generate for new cards if configured and no data exists
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
