@@ -141,17 +141,25 @@
             return;
         }
 
-        const jsonBlocks = document.querySelectorAll('.ai-hints-json');
-        const containers = document.querySelectorAll('.ai-hints-container');
-        
-        // If no data blocks and no containers, and not in active addon mode, we still need to potentially 
-        // show the "Generate" button if that's enabled, or check for HTML containers.
-        // We only bail if we are absolutely sure there is nothing to render and no UI to show.
-        if (jsonBlocks.length === 0 && containers.length === 0 && !hasOverrideData && !isAddonActive && !mobileCfg.showExtraButtons) return;
-
         // Cleanup any existing rendered containers to prevent duplicates (only those we created)
         document.querySelectorAll('.ai-hints-container-rendered').forEach(e => e.remove());
         document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+
+        const jsonBlocks = document.querySelectorAll('.ai-hints-json');
+        const containers = document.querySelectorAll('.ai-hints-container');
+        
+        // Configuration
+        const uiCfg = window.aiHintsUiConfig || {};
+        const mobileCfg = window.aiHintsMobileConfig || {};
+
+        // If no data blocks and no containers, and not in active addon mode, we still need to potentially 
+        // show the "Generate" button if that's enabled, or check for HTML containers.
+        // We only bail if we are absolutely sure there is nothing to render and no UI to show.
+        if (jsonBlocks.length === 0 && containers.length === 0 && !hasOverrideData && !isAddonActive && !mobileCfg.showExtraButtons) {
+            // Ensure any static containers are hidden if we are not rendering the interactive UI
+            containers.forEach(c => c.style.display = 'none');
+            return;
+        }
 
         // Always hide original static containers from the page when rendering the interactive UI
         containers.forEach(c => {
@@ -160,9 +168,6 @@
             }
         });
 
-        // Configuration
-        const uiCfg = window.aiHintsUiConfig || {};
-        const mobileCfg = window.aiHintsMobileConfig || {};
         const useEmojis = !isAddonActive && mobileCfg.useEmojis;
         const showExtra = isAddonActive || mobileCfg.showExtraButtons;
 
@@ -221,8 +226,6 @@
                 const blockData = JSON.parse(block.textContent);
                 if (blockBelongsToCurrentCard(block, blockData, cardKey, cardId, ord)) return true;
             } catch (e) {}
-            // Do NOT remove blocks here; they might belong to the card currently being loaded 
-            // if Anki's state is temporarily inconsistent.
             return false;
         });
 
@@ -237,6 +240,10 @@
         }
 
         if (targetBlocks.length === 0 && isAddonActive) targetBlocks = [null];
+
+        // Ensure we clear the placeholder if we are about to render something (or even if we are not, if it was stale)
+        const placeholder = document.querySelector('ai-hints');
+        if (placeholder) placeholder.innerHTML = '';
 
         targetBlocks.forEach(block => {
             if (block && block.dataset.aiHintsRendered) return;
@@ -393,7 +400,7 @@
                 const qa = document.getElementById('qa');
                 const target = document.querySelector('ai-hints') || (block ? block.nextSibling : qa ? qa.lastChild : null);
                 if (target && target.tagName === 'AI-HINTS') {
-                    target.innerHTML = '';
+                    // target was already cleared above if it existed
                     target.appendChild(container);
                 } else if (block && block.parentNode) {
                     block.parentNode.insertBefore(container, block.nextSibling);

@@ -251,16 +251,22 @@ def _card_cache_key(card):
         card_id = str(card.id)
     except Exception:
         card_id = ""
+        
+    card_ord = None
+    try:
+        # We need the ord to distinguish clozes in the same note
+        card_ord = int(card.ord)
+    except Exception:
+        pass
+        
+    if card_id and card_ord is not None:
+        return ("id_ord", card_id, card_ord)
     if card_id:
         return ("id", card_id)
 
-    try:
-        card_ord = int(card.ord)
-    except Exception:
-        card_ord = None
-    if card_ord is None:
-        return None
-    return ("ord", card_ord)
+    if card_ord is not None:
+        return ("ord", card_ord)
+    return None
 
 def _remember_generated_hints(card, data, toggles):
     key = _card_cache_key(card)
@@ -463,9 +469,10 @@ def on_webview_will_set_content(web_content, context):
     for block in hints_blocks:
         web_content.body += block
     
-    # Inject state and the unified template script
-    # Explicitly clear stale setup keys to prevent data from previous card bleeding into this one
-    web_content.body += f"""
+    # Inject state and the unified template script at the BEGINNING of the body
+    # to ensure they run before any other scripts in the body (like those in the template).
+    # Explicitly clear stale setup keys to prevent data from previous card bleeding into this one.
+    state_js = f"""
 <script>
 window.aiHintsLastSetupKey = undefined;
 window.aiHintsSetupToken = undefined;
@@ -474,6 +481,7 @@ window.aiHintsUiConfig = {ui_payload};
 {js}
 </script>
 """
+    web_content.body = state_js + web_content.body
 
 def _trigger_frontend_setup(card=None, web=None):
     if card is None:
@@ -553,7 +561,9 @@ def _trigger_frontend_setup(card=None, web=None):
                 window.aiHintsSetupToken = token;
                 function applySetup() {{
                     if (window.aiHintsSetupToken !== token) return;
-                    window.aiHintsSetup(data, hintData);
+                    if (typeof window.aiHintsSetup === 'function') {{
+                        window.aiHintsSetup(data, hintData);
+                    }}
                 }}
                 function trySetup() {{
                     if (typeof window.aiHintsSetup === 'function') {{
@@ -569,6 +579,16 @@ def _trigger_frontend_setup(card=None, web=None):
 def _get_card_and_web_from_context(context):
     """Helper to extract the active card and web object from various Anki contexts
     (Reviewer, Previewer, etc.)."""
+    
+    # 1. If we are in the reviewer context, prioritize mw.reviewer.card
+    is_reviewer = (
+        getattr(context, "name", None) == "reviewer" or
+        type(context).__name__ == "Reviewer"
+    )
+    if is_reviewer and mw.reviewer:
+        return mw.reviewer.card, mw.reviewer.web
+
+    # 2. Extract from context
     card = getattr(context, "card", None)
     if not card:
         # Some versions use ._card
