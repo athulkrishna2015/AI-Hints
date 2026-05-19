@@ -85,10 +85,16 @@ ln -s "$(pwd)/addon" ~/.local/share/Anki2/addons21/ai_hints_dev
 New-Item -ItemType SymbolicLink -Path "$env:APPDATA\Anki2\addons21\ai_hints_dev" -Target "$pwd\addon"
 ```
 
-> [!NOTE]
-> The symlink directory name `ai_hints_dev` is what Anki uses as the add-on package name (`ADDON_PACKAGE`). It must differ from the production name `AI_Hints` to avoid conflicts if both are installed.
+### 3. Reviewer & Mobile Script Sync
 
-### 3. Vendored Dependencies
+If you modify the frontend logic in `addon/web/template.js`, you must sync it to your Anki profile's media folder as `_ai_hints_template.js` for the changes to take effect in the reviewer. While the add-on syncs this automatically on startup (delayed), manual sync is faster during development.
+
+**Linux Example:**
+```shell
+cp addon/web/template.js ~/.local/share/Anki2/default/collection.media/_ai_hints_template.js && echo "Synced successfully"
+```
+
+### 4. Vendored Dependencies
 
 AI-Hints vendors some third-party libraries and configurations directly in the `addon/` tree to stay self-contained (no pip install required for users).
 
