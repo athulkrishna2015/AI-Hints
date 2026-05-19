@@ -354,12 +354,19 @@ class CardParser:
         if not matches:
             payload = {card_key: new_data} if card_key else new_data
             content_block = self.build_hints_block(payload, toggles, card if not card_key else None)
+            if not current_val.strip():
+                return content_block
             return current_val.strip() + "\n\n" + content_block
 
-        # If a block exists, try to merge
+        # If blocks exist, try to find a matching one to update or merge into
         for match in matches:
             block_html = match.group(0)
             raw_payload = match.group(1)
+            
+            # Check if this block is intended for THIS card (or is a universal keyed block)
+            if not self._block_matches_card(block_html, card):
+                continue
+
             try:
                 # Unescape and parse
                 parsed = self._parse_json_payload(raw_payload)
@@ -396,12 +403,10 @@ class CardParser:
             except Exception:
                 continue
 
-        # Fallback: append new
+        # If no matching block was found among existing ones, append a new one
         payload = {card_key: new_data} if card_key else new_data
         content_block = self.build_hints_block(payload, toggles, card if not card_key else None)
-        if not current_val:
-            return content_block
-        return current_val + "\n" + content_block
+        return current_val.strip() + "\n\n" + content_block
 
     def build_hints_block(self, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None) -> str:
         """Build the persisted/injected hints block for the configured storage mode."""
