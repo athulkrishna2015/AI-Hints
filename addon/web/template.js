@@ -81,7 +81,7 @@
         }
     }
 
-    function renderSection(parent, title, items, isCorrectFn, seed, showTitle) {
+    function renderSection(parent, title, items, isCorrectFn, seed, showTitle, correctIndex) {
         if (!items || items.length === 0) return null;
         
         const section = document.createElement('div');
@@ -97,10 +97,12 @@
 
         const list = document.createElement('ul');
         list.className = title.toLowerCase().includes('hint') ? 'ai-hints-hint-list' : 'ai-hints-list';
-        const listItems = items.map(text => {
+        const listItems = items.map((text, index) => {
             const li = document.createElement('li');
             li.innerHTML = text;
-            if (isCorrectFn && isCorrectFn(text)) li.className = 'ai-hints-correct';
+            if ((correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text))) {
+                li.className = 'ai-hints-correct';
+            }
             return li;
         });
         if (title.toLowerCase().includes('option')) shuffle(listItems, seed);
@@ -108,6 +110,68 @@
         section.appendChild(list);
         parent.appendChild(section);
         return section;
+    }
+
+    function decodeHtmlEntities(text) {
+        const raw = (text || "").toString();
+        if (typeof document !== 'undefined' && document.createElement) {
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.innerHTML = raw;
+                if (textarea.value) return textarea.value;
+            } catch (e) {}
+        }
+        return raw
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/gi, '&')
+            .replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>')
+            .replace(/&quot;/gi, '"')
+            .replace(/&#39;/gi, "'")
+            .replace(/&apos;/gi, "'");
+    }
+
+    function normalizeAnswerText(value) {
+        let text = decodeHtmlEntities(value)
+            .replace(/<br\s*\/?>/gi, ' ')
+            .replace(/<\/?(?:anki-mathjax|mjx-container|span|div|p|b|strong|em|i)[^>]*>/gi, ' ')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/\u00a0/g, ' ')
+            .replace(/[“”]/g, '"')
+            .replace(/[‘’]/g, "'")
+            .replace(/[−–—]/g, '-')
+            .trim()
+            .toLowerCase();
+
+        text = text.replace(/^(?:answer|option|choice)\s*[:.)-]\s*/i, '');
+
+        let changed = true;
+        while (changed) {
+            changed = false;
+            const before = text;
+            text = text
+                .replace(/^\\\(([\s\S]*)\\\)$/g, '$1')
+                .replace(/^\\\[([\s\S]*)\\\]$/g, '$1')
+                .replace(/^\${1,2}([\s\S]*)\${1,2}$/g, '$1')
+                .replace(/^<anki-mathjax>([\s\S]*)<\/anki-mathjax>$/i, '$1')
+                .trim();
+            changed = text !== before;
+        }
+
+        return text
+            .replace(/\\displaystyle\b/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function answersMatch(optionText, correctAnswer) {
+        const option = normalizeAnswerText(optionText);
+        const correct = normalizeAnswerText(correctAnswer);
+        if (!option || !correct) return false;
+        if (option === correct) return true;
+
+        const compact = (s) => s.replace(/\s+/g, '');
+        return compact(option) === compact(correct);
     }
 
     function blockBelongsToCurrentCard(block, data, cardKey, cardId, ord) {
@@ -325,12 +389,19 @@
                 container.appendChild(contentBox);
 
                 const showTitles = data && data.hints && data.hints.length > 0 && data.options && data.options.length > 0;
+                const correctIndex = (
+                    onAnswer &&
+                    data &&
+                    data.correct_answer &&
+                    data.options &&
+                    data.options.length > 0 &&
+                    answersMatch(data.options[0], data.correct_answer)
+                ) ? 0 : null;
 
-                const clean = (s) => (s || "").toString().replace(/<[^>]*>/g, "").trim().toLowerCase();
                 const hSection = renderSection(contentBox, "Hints:", (data ? data.hints : []), null, 0, showTitles);
                 const oSection = renderSection(contentBox, "Options:", (data ? data.options : []), (txt) => 
-                    onAnswer && data.correct_answer && clean(txt) === clean(data.correct_answer),
-                    state.seed, showTitles
+                    onAnswer && data.correct_answer && answersMatch(txt, data.correct_answer),
+                    state.seed, showTitles, correctIndex
                 );
 
                 const updateVisibility = () => {

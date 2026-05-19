@@ -6,7 +6,7 @@ const path = require('path');
  * Mock DOM Environment Factory
  */
 function createMockDOM(env) {
-    const { isAddonActive, hasData } = env;
+    const { isAddonActive, hasData, isAnswerSide } = env;
     
     let renderedBlocks = [];
     let jsonBlocks = [];
@@ -115,7 +115,11 @@ function createMockDOM(env) {
             classList: { contains: () => false },
             appendChild: (el) => { renderedBlocks.push(el); }
         },
-        getElementById: (id) => (id === 'qa') ? global.document.body : null,
+        getElementById: (id) => {
+            if (id === 'qa') return global.document.body;
+            if (id === 'answer' && isAnswerSide) return { id: 'answer' };
+            return null;
+        },
         querySelectorAll: (selector) => {
             if (selector === '.ai-hints-container' || selector === '.ai-hints-container-rendered') {
                 return renderedBlocks.concat(staticContainers).filter(el => el.className && (el.className.includes('ai-hints-container') || el.className.includes('ai-hints-container-rendered')));
@@ -133,6 +137,7 @@ function createMockDOM(env) {
             return [];
         },
         querySelector: (selector) => {
+            if (selector === '.answer' && isAnswerSide) return { className: 'answer' };
             if (selector === '.ai-hints-container' || selector === '.ai-hints-container-rendered') {
                 return renderedBlocks.concat(staticContainers).find(el => el.className && (el.className.includes('ai-hints-container') || el.className.includes('ai-hints-container-rendered'))) || null;
             }
@@ -337,5 +342,42 @@ const frontContainers = frontSetupTest.getRendered().filter(el => el.className &
 if (frontContainers.length !== frontCountBefore) throw new Error("Null setup should not remove current data container");
 const frontLabels = frontContainers[0].querySelector('.ai-hints-btn-box').querySelectorAll('button').map(b => b.textContent);
 if (!frontLabels.includes("Regenerate")) throw new Error("Current data container should stay in Regenerate state after null setup");
+
+console.log("\n--- TEST 13: BACK SIDE CORRECT OPTION HIGHLIGHT NORMALIZES MATH AND ENTITIES ---");
+global.window.aiHintsCurrentCard = { id: 'answer_card', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true };
+const highlightTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: true });
+highlightTest.addJsonBlock(
+    {
+        hints: ["Compare the expressions"],
+        options: ["\\( x < y \\)", "$z$"],
+        correct_answer: "$x &lt; y$"
+    },
+    { 'data-ai-hints-card-id': 'answer_card', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const highlightContainer = highlightTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const highlightedItems = highlightContainer.querySelector('.ai-hints-list').querySelectorAll('li').filter(li => li.className === 'ai-hints-correct');
+if (highlightedItems.length !== 1) throw new Error("Exactly one correct option should be highlighted on the back side");
+if (highlightedItems[0].innerHTML !== "\\( x < y \\)") throw new Error("The normalized matching option should be highlighted");
+
+console.log("\n--- TEST 14: FIRST OPTION CORRECT MARKER SURVIVES SHUFFLE ---");
+global.window.aiHintsCurrentCard = { id: 'shuffle_card', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true };
+const shuffleHighlightTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: true });
+shuffleHighlightTest.addJsonBlock(
+    {
+        hints: ["The first option is the answer before shuffle"],
+        options: ["Correct", "Distractor A", "Distractor B", "Distractor C"],
+        correct_answer: "Correct"
+    },
+    { 'data-ai-hints-card-id': 'shuffle_card', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const shuffleContainer = shuffleHighlightTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const shuffledItems = shuffleContainer.querySelector('.ai-hints-list').querySelectorAll('li');
+const shuffledHighlighted = shuffledItems.filter(li => li.className === 'ai-hints-correct');
+if (shuffledHighlighted.length !== 1) throw new Error("Exactly one shuffled option should keep the correct class");
+if (shuffledHighlighted[0].innerHTML !== "Correct") throw new Error("The pre-shuffle first option should remain highlighted after shuffle");
 
 console.log("\nALL JS TESTS PASSED."); process.exit(0);
