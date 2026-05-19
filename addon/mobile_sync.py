@@ -85,14 +85,17 @@ def auto_update_mobile_setup():
     sync_mobile_script()
 
     # 2. Update templates
-    # We rebuild the block based on current config (emojis, etc)
     use_emojis = config.get("mobile_use_emojis", False)
     show_extra = config.get("mobile_show_extra_buttons", False)
+    shortcuts = config.get("shortcuts", {})
+    import json
+    shortcuts_json = json.dumps(shortcuts)
     
     config_js = (
         "window.aiHintsMobileConfig = { "
         f"useEmojis: {'true' if use_emojis else 'false'}, "
-        f"showExtraButtons: {'true' if show_extra else 'false'} "
+        f"showExtraButtons: {'true' if show_extra else 'false'}, "
+        f"shortcuts: {shortcuts_json} "
         "};"
     )
     

@@ -92,12 +92,17 @@ class MobileTabMixin:
         self.script_edit.setPlainText(self._get_full_template_block())
 
     def _get_config_js(self):
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        shortcuts = config.get("shortcuts", {})
+        import json
+        shortcuts_json = json.dumps(shortcuts)
         use_emojis = self.mobile_emojis_cb.isChecked()
         show_extra = self.mobile_extra_cb.isChecked()
         return (
             "window.aiHintsMobileConfig = { "
             f"useEmojis: {'true' if use_emojis else 'false'}, "
-            f"showExtraButtons: {'true' if show_extra else 'false'} "
+            f"showExtraButtons: {'true' if show_extra else 'false'}, "
+            f"shortcuts: {shortcuts_json} "
             "};"
         )
 

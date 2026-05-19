@@ -114,20 +114,18 @@ MIT
 
 ## Changelog
 
-### May 18, 2026 (v2.3.x Releases)
-
-#### v2.3.2 (Patch)
+### May 18, 2026 (Patch v2.3.2)
 - **Offline Template Resolution**: Corrected a major bug where template installers injected prompt fields instead of storage fields, enabling full offline card reviewer button rendering.
 - **Propagation & Tap Delay Prevention**: Restructured `template.js` reviewer buttons to block event propagation (`e.stopPropagation()` / `e.preventDefault()`), eliminating click delays and double-clicking issues.
 - **Python 3.14 exit-crash prevention**: Cleaned timers and shutdown daemon in `profile_will_close` hook to stop PyQt6/sip crash.
 - **Self-Healing Daemon Startup**: Automatically kills previous session's zombie proxy process on start to release Port 3000 conflicts.
 - **Polished Card UI**: Hidden 'Clear' buttons offline/mobile, and unconditionally hidden duplicate static HTML blocks to ensure styling parity.
 
-#### v2.3.1 (Patch)
+### May 18, 2026 (Patch v2.3.1)
 - **Critical Stability Fix**: Implemented a singleton guard in the UI script to prevent multiple instances from running simultaneously, resolving reported crashes in Anki's web engine (SIGABRT).
 - **Reduced Rendering Overhead**: Removed redundant re-render triggers in the backend to improve performance and reduce UI flickering.
 
-#### v2.3.0 (Minor)
+### May 18, 2026 (v2.3.0)
 - **Unified UI System**: Desktop and Mobile now share the exact same rendering engine (`template.js`), ensuring consistent features (like shuffling and MathJax) across all devices.
 - **Smart Auto-Updates**: Once you click "One-Click Install", the addon automatically keeps your mobile script and templates up to date whenever you update the addon or change settings.
 - **Compact Emoji Mode**: Optional ultra-compact UI for mobile that uses pure emojis (💡, 🎯, 🗑️) instead of text labels.

@@ -1321,6 +1321,87 @@ def _version_less_than(v1: str, v2: str) -> bool:
             return (0, 0, 0)
     return _parse(v1) < _parse(v2)
 
+def trigger_js_click(text_contains: str, emoji: str) -> None:
+    web = getattr(mw.reviewer, "web", None)
+    if not web:
+        return
+    js = f"""
+    (function() {{
+        const btns = document.querySelectorAll('.ai-hints-btn');
+        for (const btn of btns) {{
+            const txt = btn.textContent || "";
+            if (txt.includes("{text_contains}") || txt.includes("{emoji}")) {{
+                btn.click();
+                break;
+            }}
+        }}
+    }})();
+    """
+    _safe_web_eval(web, js)
+
+def on_state_shortcuts_will_change(state: str, shortcuts: list) -> None:
+    if state != "review":
+        return
+
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    shortcuts_cfg = config.get("shortcuts", {})
+    if not shortcuts_cfg:
+        return
+
+    modifier = shortcuts_cfg.get("modifier", "alt")
+
+    def get_shortcut_string(mod: str, key: str) -> str:
+        if not key:
+            return ""
+        key_str = key.strip().upper()
+        if not key_str:
+            return ""
+        if mod == "none":
+            return key_str
+        return f"{mod.capitalize()}+{key_str}"
+
+    # 1. generate
+    gen_key = shortcuts_cfg.get("generate", "")
+    if gen_key:
+        gen_sc = get_shortcut_string(modifier, gen_key)
+        if gen_sc:
+            shortcuts.append((gen_sc, lambda: generate_hints(is_manual=True)))
+
+    # 2. toggle-options
+    opt_key = shortcuts_cfg.get("toggle-options", "")
+    if opt_key:
+        opt_sc = get_shortcut_string(modifier, opt_key)
+        if opt_sc:
+            shortcuts.append((opt_sc, lambda: trigger_js_click("Options", "🎯")))
+
+    # 3. toggle-hints
+    hints_key = shortcuts_cfg.get("toggle-hints", "")
+    if hints_key:
+        hints_sc = get_shortcut_string(modifier, hints_key)
+        if hints_sc:
+            shortcuts.append((hints_sc, lambda: trigger_js_click("Hints", "💡")))
+
+    # 4. clear
+    clear_key = shortcuts_cfg.get("clear", "")
+    if clear_key:
+        clear_sc = get_shortcut_string(modifier, clear_key)
+        if clear_sc:
+            shortcuts.append((clear_sc, lambda: clear_hints()))
+
+    # 5. refresh
+    refresh_key = shortcuts_cfg.get("refresh", "")
+    if refresh_key:
+        refresh_sc = get_shortcut_string(modifier, refresh_key)
+        if refresh_sc:
+            shortcuts.append((refresh_sc, lambda: refresh_current_card()))
+
+    # 6. show-json
+    json_key = shortcuts_cfg.get("show-json", "")
+    if json_key:
+        json_sc = get_shortcut_string(modifier, json_key)
+        if json_sc:
+            shortcuts.append((json_sc, lambda: trigger_js_click("JSON", "📝")))
+
 def init_hooks():
     global _hooks_registered, _reviewer_is_ending
     if _hooks_registered:
@@ -1329,6 +1410,7 @@ def init_hooks():
     gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
     gui_hooks.webview_did_receive_js_message.append(on_webview_did_receive_js_message)
     gui_hooks.browser_will_show_context_menu.append(on_browser_context_menu)
+    gui_hooks.state_shortcuts_will_change.append(on_state_shortcuts_will_change)
     
     # Initialize background tracking layer for ongoing batch processing jobs
     try:

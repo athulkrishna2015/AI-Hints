@@ -15,6 +15,9 @@ function createMockDOM(env) {
             textContent: JSON.stringify(data),
             dataset: {},
             attrs,
+            classList: {
+                contains: (cls) => cls === 'ai-hints-json'
+            },
             getAttribute: (name) => attrs[name] || null,
             parentNode: { insertBefore: (n, r) => renderedBlocks.push(n) },
             remove: () => { jsonBlocks = jsonBlocks.filter(item => item !== jsonBlock); }
@@ -39,12 +42,25 @@ function createMockDOM(env) {
         },
         getElementById: (id) => (id === 'qa') ? global.document.body : null,
         querySelectorAll: (selector) => {
-            if (selector === '.ai-hints-container') return renderedBlocks.filter(el => el.className === 'ai-hints-container');
+            if (selector === '.ai-hints-container' || selector === '.ai-hints-container-rendered') {
+                return renderedBlocks.filter(el => el.className && (el.className.includes('ai-hints-container') || el.className.includes('ai-hints-container-rendered')));
+            }
             if (selector === '.ai-hints-json') return jsonBlocks;
+            if (selector === '.ai-hints-btn') {
+                const btns = [];
+                const search = (el) => {
+                    if (el.tagName === 'BUTTON' || (el.className && el.className.includes('ai-hints-btn'))) btns.push(el);
+                    if (el.children) el.children.forEach(search);
+                };
+                renderedBlocks.forEach(search);
+                return btns;
+            }
             return [];
         },
         querySelector: (selector) => {
-            if (selector === '.ai-hints-container') return renderedBlocks.find(el => el.className === 'ai-hints-container') || null;
+            if (selector === '.ai-hints-container' || selector === '.ai-hints-container-rendered') {
+                return renderedBlocks.find(el => el.className && (el.className.includes('ai-hints-container') || el.className.includes('ai-hints-container-rendered'))) || null;
+            }
             return null;
         },
         createElement: (tag) => {
@@ -66,11 +82,34 @@ function createMockDOM(env) {
                 style: {},
                 dataset: {},
                 children: [],
-                appendChild: (child) => el.children.push(child),
-                querySelector: (sel) => el.children.find(c => c.className === sel.replace('.', '')),
+                appendChild: (child) => {
+                    child.parentNode = el;
+                    el.children.push(child);
+                },
+                querySelector: (sel) => {
+                    const cleanSel = sel.replace('.', '');
+                    let found = null;
+                    const search = (node) => {
+                        if (found) return;
+                        if (cleanSel === 'button' && node.tagName === 'BUTTON') { found = node; return; }
+                        if (node.className && node.className.includes(cleanSel)) { found = node; return; }
+                        if (node.children) node.children.forEach(search);
+                    };
+                    search(el);
+                    return found;
+                },
                 querySelectorAll: (sel) => {
-                   if (sel === 'button') return el.children.filter(c => c.tagName === 'BUTTON');
-                   return [];
+                    const cleanSel = sel.replace('.', '');
+                    const found = [];
+                    const search = (node) => {
+                        if (node !== el) {
+                            if (cleanSel === 'button' && node.tagName === 'BUTTON') found.push(node);
+                            else if (node.className && node.className.includes(cleanSel)) found.push(node);
+                        }
+                        if (node.children) node.children.forEach(search);
+                    };
+                    search(el);
+                    return found;
                 },
                 remove: () => {
                     renderedBlocks = renderedBlocks.filter(item => item !== el);
@@ -111,7 +150,7 @@ const scriptContent = fs.readFileSync(scriptPath, 'utf8');
 console.log("--- TEST 1: DESKTOP MODE (Addon Active) ---");
 const desktop = createMockDOM({ isAddonActive: true, hasData: true });
 eval(scriptContent);
-const desktopContainer = desktop.getRendered().find(el => el.className === 'ai-hints-container');
+const desktopContainer = desktop.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
 const desktopBtns = desktopContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button');
 const desktopLabels = desktopBtns.map(b => b.textContent);
 console.log("Buttons found:", desktopLabels.join(', '));
@@ -121,7 +160,7 @@ if (!desktopLabels.includes("Clear")) throw new Error("Missing Clear button on D
 console.log("\n--- TEST 2: MOBILE MODE (Standalone) ---");
 const mobile = createMockDOM({ isAddonActive: false, hasData: true });
 eval(scriptContent);
-const mobileContainer = mobile.getRendered().find(el => el.className === 'ai-hints-container');
+const mobileContainer = mobile.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
 const mobileBtns = mobileContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button');
 const mobileLabels = mobileBtns.map(b => b.textContent);
 console.log("Buttons found:", mobileLabels.join(', '));
@@ -135,18 +174,20 @@ console.log("\n--- TEST 3: NO DATA (Desktop) ---");
 const noData = createMockDOM({ isAddonActive: true, hasData: false });
 eval(scriptContent);
 const allRendered = noData.getRendered();
-const noDataContainer = allRendered.find(el => el.className === 'ai-hints-container');
+const noDataContainer = allRendered.find(el => el.className && el.className.includes('ai-hints-container'));
 if (!noDataContainer) throw new Error("Container not found in Desktop mode with no data");
 const noDataBtns = noDataContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button');
 console.log("Buttons found:", noDataBtns.map(b => b.textContent).join(', '));
 if (noDataBtns[0].textContent !== "Generate AI Hints") throw new Error("Should show 'Generate' when no data");
 window.aiHintsSetGenerating(true);
-const generatingBtns = noData.getRendered().find(el => el.className === 'ai-hints-container').querySelector('.ai-hints-btn-box').querySelectorAll('button');
+const generatingBtns = noData.getRendered().find(el => el.className && el.className.includes('ai-hints-container')).querySelector('.ai-hints-btn-box').querySelectorAll('button');
 if (generatingBtns[0].textContent !== "✨ Generating...") throw new Error("Auto-generation should animate the Generate button");
 if (!generatingBtns[0].disabled) throw new Error("Generating button should be disabled during auto-generation");
 window.aiHintsUpdateData({ hints: ["Done"], options: ["Option"] });
-const doneContainer = noData.getRendered().find(el => el.className === 'ai-hints-container');
-const doneBtn = doneContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button')[0];
+const doneContainer = noData.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const doneBtns = doneContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button');
+console.log("TEST 3 Buttons found after update:", doneBtns.map(b => b.textContent).join(', '));
+const doneBtn = doneBtns[0];
 if (doneBtn.textContent === "✨ Generating...") throw new Error("Generating animation should stop after successful update");
 if (doneBtn.disabled) throw new Error("Generate button should be enabled after successful update");
 
@@ -172,11 +213,11 @@ const revealedContainer = allRenders[allRenders.length - 1];
 const hListReveal = revealedContainer.querySelector('.ai-hints-hint-list');
 const oListReveal = revealedContainer.querySelector('.ai-hints-list');
 
-console.log("Hints display style:", hListReveal.style.display);
-console.log("Options display style:", oListReveal.style.display);
+console.log("Hints display style:", hListReveal.parentNode.style.display);
+console.log("Options display style:", oListReveal.parentNode.style.display);
 
-if (hListReveal.style.display !== 'block') throw new Error("Hints should be automatically revealed");
-if (oListReveal.style.display === 'block') throw new Error("Options should remain hidden");
+if (hListReveal.parentNode.style.display !== 'block') throw new Error("Hints should be automatically revealed");
+if (oListReveal.parentNode.style.display === 'block') throw new Error("Options should remain hidden");
 
 console.log("\n--- TEST 6: DUPLICATE SETUP IS IDEMPOTENT ---");
 global.window.aiHintsUiConfig = { is_generating: false };
@@ -185,9 +226,9 @@ eval(scriptContent);
 const setupCard = { id: 'stable_card', ord: 0 };
 const setupHints = { hints: ["Stable"], options: ["Option"] };
 window.aiHintsSetup(setupCard, setupHints);
-const firstSetupCount = idempotentTest.getRendered().filter(el => el.className === 'ai-hints-container').length;
+const firstSetupCount = idempotentTest.getRendered().filter(el => el.className && el.className.includes('ai-hints-container')).length;
 window.aiHintsSetup(setupCard, setupHints);
-const secondSetupCount = idempotentTest.getRendered().filter(el => el.className === 'ai-hints-container').length;
+const secondSetupCount = idempotentTest.getRendered().filter(el => el.className && el.className.includes('ai-hints-container')).length;
 if (secondSetupCount !== firstSetupCount) throw new Error("Duplicate setup should not rebuild rendered containers");
 
 console.log("\n--- TEST 7: STALE SCOPED JSON IS IGNORED ---");
@@ -199,7 +240,7 @@ scopedStaleTest.addJsonBlock(
     { 'data-ai-hints-card-id': 'previous_card', 'data-ai-hints-card-ord': '0' }
 );
 eval(scriptContent);
-const scopedStaleLabels = scopedStaleTest.getRendered().find(el => el.className === 'ai-hints-container').querySelector('.ai-hints-btn-box').querySelectorAll('button').map(b => b.textContent);
+const scopedStaleLabels = scopedStaleTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container')).querySelector('.ai-hints-btn-box').querySelectorAll('button').map(b => b.textContent);
 if (scopedStaleTest.getJsonBlocks().length !== 0) throw new Error("Stale scoped JSON block should be removed");
 if (!scopedStaleLabels.includes("Generate AI Hints")) throw new Error("Current empty card should not render previous card data");
 if (scopedStaleLabels.includes("Regenerate")) throw new Error("Previous card data should not make current card look generated");

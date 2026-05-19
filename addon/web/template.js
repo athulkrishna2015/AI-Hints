@@ -495,4 +495,87 @@
         if (window.aiHintsInterval) clearInterval(window.aiHintsInterval);
         window.aiHintsInterval = setInterval(() => init(), 500);
     }
+
+    // Cross-Platform Keyboard Shortcuts handler
+    if (!window.aiHintsKeyboardListenerAdded) {
+        window.aiHintsKeyboardListenerAdded = true;
+        document.addEventListener('keydown', (event) => {
+            // Ignore if user is editing/typing in any input field
+            if (document.activeElement && (
+                document.activeElement.isContentEditable || 
+                document.activeElement.tagName === 'INPUT' || 
+                document.activeElement.tagName === 'TEXTAREA'
+            )) {
+                return;
+            }
+
+            const uiCfg = window.aiHintsUiConfig || {};
+            const mobileCfg = window.aiHintsMobileConfig || {};
+            const defaultShortcuts = {
+                modifier: "alt",
+                generate: "1",
+                "toggle-options": "2",
+                "toggle-hints": "3",
+                clear: "4",
+                refresh: "5",
+                "show-json": "6"
+            };
+            const shortcuts = Object.assign({}, defaultShortcuts, uiCfg.shortcuts || mobileCfg.shortcuts || {});
+
+            // Check modifier key
+            const reqModifier = (shortcuts.modifier || 'alt').toLowerCase();
+            let modifierMatch = false;
+            if (reqModifier === 'none') {
+                modifierMatch = !event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
+            } else if (reqModifier === 'alt') {
+                modifierMatch = event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
+            } else if (reqModifier === 'ctrl') {
+                modifierMatch = event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
+            } else if (reqModifier === 'shift') {
+                modifierMatch = event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey;
+            } else if (reqModifier === 'meta') {
+                modifierMatch = event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey;
+            }
+
+            if (!modifierMatch) return;
+
+            // Match keys
+            const pressedKey = event.key.toLowerCase();
+            
+            // Helper to click button based on text/emoji
+            const clickButton = (textPart, emoji) => {
+                const btns = document.querySelectorAll('.ai-hints-btn');
+                for (const btn of btns) {
+                    const txt = btn.textContent || "";
+                    if (txt.includes(textPart) || txt.includes(emoji)) {
+                        btn.click();
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            // Check actions
+            if (shortcuts.generate && pressedKey === shortcuts.generate.toLowerCase()) {
+                event.preventDefault();
+                clickButton("Generate", "✨") || clickButton("Regenerate", "✨");
+            } else if (shortcuts["toggle-hints"] && pressedKey === shortcuts["toggle-hints"].toLowerCase()) {
+                event.preventDefault();
+                clickButton("Hints", "💡");
+            } else if (shortcuts["toggle-options"] && pressedKey === shortcuts["toggle-options"].toLowerCase()) {
+                event.preventDefault();
+                clickButton("Options", "🎯");
+            } else if (shortcuts.clear && pressedKey === shortcuts.clear.toLowerCase()) {
+                event.preventDefault();
+                clickButton("Clear", "🗑️");
+            } else if (shortcuts.refresh && pressedKey === shortcuts.refresh.toLowerCase()) {
+                event.preventDefault();
+                clickButton("Refresh", "🔄");
+            } else if (shortcuts["show-json"] && pressedKey === shortcuts["show-json"].toLowerCase()) {
+                event.preventDefault();
+                clickButton("JSON", "📝");
+            }
+        });
+    }
 })();
+
