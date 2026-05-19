@@ -13,7 +13,7 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
     def on_profile_loaded():
         from .logger import clear_log_file
         from .proxy_manager import proxy_manager
-        from .mobile_sync import auto_update_mobile_setup
+        from .mobile_sync import auto_update_mobile_setup, sync_mobile_script
         from aqt.qt import QTimer
         
         # Clear logs on startup if enabled
@@ -21,7 +21,11 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         if config.get("auto_clear_logs", True):
             clear_log_file()
 
-        # Delay heavy startup tasks to avoid resource contention and potential crashes
+        # 1. Sync script immediately as it is fast and fixes potential ghosting/rendering issues
+        # only if it has changed from the version in the addon folder.
+        sync_mobile_script()
+
+        # 2. Delay heavy startup tasks to avoid resource contention and potential crashes
         def _delayed_startup():
             if not mw or not mw.col:
                 return
