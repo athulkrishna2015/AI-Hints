@@ -378,16 +378,19 @@ class BatchTabMixin:
                 use_ver_gate = self.batch_regen_version_cb.isChecked()
                 min_ver = self.batch_regen_min_version_edit.text().strip()
                 
+                skipped_count = 0
                 for cid in source_cids:
                     c = _get_card_from_collection(cid)
                     if not c: continue
                     has_hints = card_has_hints(c)
                     if not has_hints:
                         final_ids.append(cid)
-                    elif use_ver_gate and min_ver:
-                        saved_ver = _card_saved_version(c)
-                        if _version_less_than(saved_ver, min_ver):
-                            final_ids.append(cid)
+                    else:
+                        skipped_count += 1
+                        if skipped_count < 5:
+                             logger.debug(f"AI-Hints Batch: Skipping card {cid} (already has hints).")
+                
+                logger.info(f"AI-Hints Batch Filtering: Filtered {len(source_cids)} cards -> {len(final_ids)} cards to process ({skipped_count} skipped).")
             else:
                 final_ids = list(source_cids)
                 

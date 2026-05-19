@@ -212,7 +212,8 @@ class BatchManager:
         
         parsed_results = {} # Map str(CardID) -> data_dict
         
-        config = mw.addonManager.getConfig(os.path.basename(ADDON_PATH)) or {}
+        from .config_ui import ADDON_PACKAGE
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         client = AIClient(config)
         parser = CardParser(
             config.get("target_fields", []),

@@ -40,7 +40,13 @@ sys.modules['aqt.utils'] = MagicMock()
 sys.modules['aqt.gui_hooks'] = MagicMock()
 
 # Import from package
-from addon import reviewer_hooks
+try:
+    from addon import reviewer_hooks
+except ImportError:
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from addon import reviewer_hooks
 from addon.reviewer_hooks import (
     generate_hints, 
     _apply_results_to_card, 

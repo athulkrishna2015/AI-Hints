@@ -343,69 +343,70 @@ class CardParser:
         return True
 
     def _update_json_block_in_field(self, current_val: str, new_data: Dict[str, List[str]], card_key: Optional[str], toggles: Dict[str, bool], card=None) -> str:
+        # 1. First, try to find ANY existing block (JSON or HTML) that matches THIS specific card.
+        # This is the most surgical update.
         pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*{self.json_class}[^"\']*["\'][^>]*>(.*?)</div>',
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
             flags=re.DOTALL | re.IGNORECASE,
         )
-        
         matches = list(pattern.finditer(current_val))
         
-        # If no block exists, create a new one
-        if not matches:
-            payload = {card_key: new_data} if card_key else new_data
-            content_block = self.build_hints_block(payload, toggles, card if not card_key else None)
-            if not current_val.strip():
-                return content_block
-            return current_val.strip() + "\n\n" + content_block
-
-        # If blocks exist, try to find a matching one to update or merge into
+        # Priority 1: Update block that specifically matches this card
         for match in matches:
             block_html = match.group(0)
-            raw_payload = match.group(1)
-            
-            # Check if this block is intended for THIS card (or is a universal keyed block)
-            if not self._block_matches_card(block_html, card):
-                continue
-
-            try:
-                # Unescape and parse
-                parsed = self._parse_json_payload(raw_payload)
-                if not isinstance(parsed, dict):
-                    parsed = {}
+            if self._block_matches_card(block_html, card):
+                # Found it! Now check if it's JSON or HTML.
+                if self.json_class in block_html:
+                    try:
+                        raw_payload = match.group(1)
+                        parsed = self._parse_json_payload(raw_payload)
+                        if not isinstance(parsed, dict): parsed = {}
+                        
+                        # Merge or set data
+                        if card_key:
+                             # Ensure it is keyed
+                             if not self._is_keyed_payload(parsed):
+                                  parsed = {card_key: new_data}
+                             else:
+                                  parsed[card_key] = new_data
+                        else:
+                             parsed.update(new_data)
+                             
+                        new_payload = html.escape(json.dumps(parsed), quote=False)
+                        new_attrs = self._build_attrs(toggles, card if not card_key else None)
+                        new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
+                        return current_val[:match.start()] + new_block + current_val[match.end():]
+                    except:
+                        pass
                 
-                # If it's a legacy top-level block and we now have a card_key, we convert it.
-                if card_key:
-                    if ("hints" in parsed or "options" in parsed) and not self._is_keyed_payload(parsed):
-                        # Convert legacy to keyed
-                        old_ord = self._data_attr(block_html, "data-ai-hints-card-ord")
-                        old_key = f"c{int(old_ord)+1}" if old_ord and old_ord.isdigit() else "c1"
-                        legacy_entry: Dict[str, Any] = {
-                            "hints": parsed.get("hints", []),
-                            "options": parsed.get("options", []),
-                        }
-                        if "correct_answer" in parsed:
-                            legacy_entry["correct_answer"] = parsed["correct_answer"]
-                        parsed = {old_key: legacy_entry}
-                    
-                    parsed[card_key] = new_data
-                else:
-                    if isinstance(parsed, dict) and "hints" in parsed:
-                         parsed.update(new_data)
-                    else:
-                        parsed = new_data
-                
-                # Build new block
-                new_payload = html.escape(json.dumps(parsed), quote=False)
-                new_attrs = self._build_attrs(toggles, card if not card_key else None)
-                new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
-                
+                # If it matched card but was HTML-only or failed JSON parse, replace it entirely.
+                new_block = self.build_hints_block({card_key: new_data} if card_key else new_data, toggles, card)
                 return current_val[:match.start()] + new_block + current_val[match.end():]
-            except Exception:
-                continue
 
-        # If no matching block was found among existing ones, append a new one
+        # Priority 2: Update ANY universal keyed block found in the note
+        if card_key:
+            for match in matches:
+                block_html = match.group(0)
+                if self.json_class in block_html:
+                    try:
+                        raw_payload = match.group(1)
+                        parsed = self._parse_json_payload(raw_payload)
+                        if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
+                            # It's a keyed block but didn't match card_id/ord (maybe card was generated without scope)
+                            # We update it anyway to keep all hints in one block.
+                            parsed[card_key] = new_data
+                            new_payload = html.escape(json.dumps(parsed), quote=False)
+                            new_attrs = self._build_attrs(toggles, None) # keep universal
+                            new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
+                            return current_val[:match.start()] + new_block + current_val[match.end():]
+                    except:
+                        pass
+
+        # 3. No match found: Append new block
         payload = {card_key: new_data} if card_key else new_data
         content_block = self.build_hints_block(payload, toggles, card if not card_key else None)
+        if not current_val.strip():
+            return content_block
         return current_val.strip() + "\n\n" + content_block
 
     def build_hints_block(self, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None) -> str:
@@ -480,6 +481,7 @@ class CardParser:
 
     def find_hints_block(self, note, card=None) -> Optional[str]:
         """Searches all fields of the note for an AI hints block matching the card."""
+        # More flexible regex for class matching (allows any order of classes)
         pattern = re.compile(
             rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
             flags=re.DOTALL | re.IGNORECASE,
@@ -498,8 +500,11 @@ class CardParser:
                 continue
             for match in pattern.finditer(f_val):
                 block = match.group(0)
-                if self._block_matches_card(block, card) and self._json_block_has_data_for_card(block, match.group(1), card):
-                    return block
+                # Check if this block is scoped to the card
+                if self._block_matches_card(block, card):
+                    # Check if the block actually HAS data for this specific card
+                    if self._json_block_has_data_for_card(block, match.group(1), card):
+                        return block
         return None
 
     def find_all_hints_blocks(self, note) -> List[str]:
@@ -644,27 +649,39 @@ class CardParser:
 
     def _json_block_has_data_for_card(self, block: str, raw_payload: str, card=None) -> bool:
         if self.json_class not in block:
+            # HTML-only blocks always count as having data (we don't know what's in them)
             return True
 
         card_ord = self._card_ord(card)
-        if card_ord is None:
-            return True
-
+        
         try:
             parsed = self._parse_json_payload(raw_payload)
         except Exception:
-            return True
+            # Corrupt JSON: count as NO data so we can replace/append
+            return False
 
-        if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
+        if not isinstance(parsed, dict) or not parsed:
+            return False
+
+        if self._is_keyed_payload(parsed):
+            if card_ord is None:
+                # If no card provided, just check if ANY keys exist
+                return bool(parsed)
             return f"c{card_ord + 1}" in parsed
+            
+        # Legacy/Universal block: check for hints/options
+        has_hints = bool(parsed.get("hints")) or bool(parsed.get("options"))
+        
         if (
-            isinstance(parsed, dict)
-            and ("hints" in parsed or "options" in parsed)
+            has_hints
             and not self._block_has_card_scope(block)
+            and card_ord is not None
             and card_ord > 0
         ):
+            # Legacy blocks only match c1
             return False
-        return True
+            
+        return has_hints
 
     def _build_html_block(self, data: Dict[str, List[str]], attrs: str = "") -> str:
         hints = data.get("hints", [])
