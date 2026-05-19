@@ -400,7 +400,7 @@
                 const qa = document.getElementById('qa');
                 const target = document.querySelector('ai-hints') || (block ? block.nextSibling : qa ? qa.lastChild : null);
                 if (target && target.tagName === 'AI-HINTS') {
-                    // target was already cleared above if it existed
+                    target.innerHTML = ''; // Ensure placeholder is clean
                     target.appendChild(container);
                 } else if (block && block.parentNode) {
                     block.parentNode.insertBefore(container, block.nextSibling);
