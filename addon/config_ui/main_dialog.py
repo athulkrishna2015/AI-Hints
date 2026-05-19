@@ -937,12 +937,18 @@ def check_support_on_update():
             mw.addonManager.writeAddonMeta(ADDON_PACKAGE, meta)
             
             if not opt_out:
-                # Open dialog and switch to Support tab (Index 5)
-                on_config_dialog(mw)
-                def _switch_tab():
-                    if _config_dialog_instance:
-                        _config_dialog_instance.tabs.setCurrentIndex(5)
-                QTimer.singleShot(1000, _switch_tab) # Wait for UI to stabilize
+                # Delay the automatic window opening to ensure Anki is stable
+                def _open_support():
+                    if not mw or not mw.col:
+                        return
+                    # Open dialog and switch to Support tab (Index 6)
+                    on_config_dialog(mw)
+                    def _switch_tab():
+                        if _config_dialog_instance:
+                            _config_dialog_instance.tabs.setCurrentIndex(6)
+                    QTimer.singleShot(1000, _switch_tab) # Wait for UI to stabilize
+                
+                QTimer.singleShot(5000, _open_support)
     except Exception as e:
         logger.error(f"AI-Hints: Update check failed: {e}")
 

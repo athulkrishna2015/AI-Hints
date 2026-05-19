@@ -14,14 +14,21 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         from .logger import clear_log_file
         from .proxy_manager import proxy_manager
         from .mobile_sync import auto_update_mobile_setup
+        from aqt.qt import QTimer
         
         # Clear logs on startup if enabled
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         if config.get("auto_clear_logs", True):
             clear_log_file()
 
-        proxy_manager.start(config)
-        auto_update_mobile_setup()
+        # Delay heavy startup tasks to avoid resource contention and potential crashes
+        def _delayed_startup():
+            if not mw or not mw.col:
+                return
+            proxy_manager.start(config)
+            auto_update_mobile_setup()
+            
+        QTimer.singleShot(2000, _delayed_startup)
 
     def on_profile_will_close():
         # Stop proxy manager daemon cleanly

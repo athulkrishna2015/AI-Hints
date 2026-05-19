@@ -25,7 +25,8 @@ qt_names = [
     'QDialog', 'QWidget', 'QComboBox', 'QLineEdit', 'QSpinBox', 'QCheckBox', 
     'QPushButton', 'QVBoxLayout', 'QHBoxLayout', 'QFormLayout', 'QTabWidget', 
     'QGroupBox', 'QLabel', 'QPlainTextEdit', 'QTimer', 'QMessageBox', 
-    'QMenu', 'QAction', 'QPoint', 'QFontDatabase', 'QApplication'
+    'QMenu', 'QAction', 'QPoint', 'QFontDatabase', 'QApplication', 'QScrollArea',
+    'QPixmap'
 ]
 
 for name in qt_names:

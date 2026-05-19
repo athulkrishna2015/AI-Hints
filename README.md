@@ -114,6 +114,11 @@ MIT
 
 ## Changelog
 
+### May 19, 2026 (Patch v2.3.4)
+- **Optimized Startup**: Delayed heavy initialization of the Antigravity Proxy and Mobile Sync to prevent resource contention and potential crashes during Anki startup.
+- **Resource Efficiency**: Replaced the heavy `AnkiWebView` used for the Ko-fi widget with a native `QPushButton` to reduce memory overhead and improve UI responsiveness.
+- **Stable Update Notifications**: Added a delay to automatic support dialog popups after updates and fixed the tab index to correctly open the "Support Authors" tab.
+
 ### May 19, 2026 (Patch v2.3.3)
 - **Cross-Platform Keyboard Shortcuts**: Implemented review screen keyboard shortcuts for both Desktop (native python hook) and Mobile/Standalone (JavaScript keydown listener).
 - **Customizable Default Mappings**: Swapped default toggle mappings so `Alt+2` toggles hints and `Alt+3` toggles options.
