@@ -21,11 +21,8 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         if config.get("auto_clear_logs", True):
             clear_log_file()
 
-        # 1. Sync script immediately as it is fast and fixes potential ghosting/rendering issues
-        # only if it has changed from the version in the addon folder.
-        sync_mobile_script()
-
-        # 2. Delay heavy startup tasks to avoid resource contention and potential crashes
+        # Delay startup tasks to avoid resource contention and potential crashes.
+        # This also ensures we don't interfere with Anki's initial startup sync.
         def _delayed_startup():
             if not mw or not mw.col:
                 return
