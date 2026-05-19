@@ -469,8 +469,9 @@ def on_webview_will_set_content(web_content, context):
     for block in hints_blocks:
         web_content.body += block
     
-    # Inject state and the unified template script at the BEGINNING of the body
-    # to ensure they run before any other scripts in the body (like those in the template).
+    # Inject state and the unified template script at the END of the body
+    # to ensure all DOM elements (like .ai-hints-json blocks) are fully parsed 
+    # and accessible by document.querySelectorAll before the script runs init().
     # Explicitly clear stale setup keys to prevent data from previous card bleeding into this one.
     state_js = f"""
 <script>
@@ -481,7 +482,7 @@ window.aiHintsUiConfig = {ui_payload};
 {js}
 </script>
 """
-    web_content.body = state_js + web_content.body
+    web_content.body += state_js
 
 def _trigger_frontend_setup(card=None, web=None):
     if card is None:
@@ -580,27 +581,23 @@ def _get_card_and_web_from_context(context):
     """Helper to extract the active card and web object from various Anki contexts
     (Reviewer, Previewer, etc.)."""
     
-    # 1. If we are in the reviewer context, prioritize mw.reviewer.card
-    is_reviewer = (
-        getattr(context, "name", None) == "reviewer" or
-        type(context).__name__ == "Reviewer"
-    )
-    if is_reviewer and mw.reviewer:
-        return mw.reviewer.card, mw.reviewer.web
-
-    # 2. Extract from context
+    # 1. Prioritize getting the card directly from the context object (Reviewer/Previewer instance).
+    # During card transitions, mw.reviewer.card might still point to the previous card
+    # while the context object is already preparing the content for the new one.
     card = getattr(context, "card", None)
     if not card:
-        # Some versions use ._card
         card = getattr(context, "_card", None)
         
     if callable(card):
-        # Previewer.card is a method in some Anki versions
         try:
             card = card()
         except Exception:
             card = None
     
+    # 2. Fallback to global reviewer if context doesn't yield a card
+    if not card and mw.reviewer:
+        card = mw.reviewer.card
+
     # Final fallback if we have a card id but no card object
     if not card and hasattr(context, "cardId"):
         card_id = getattr(context, "cardId")
@@ -615,9 +612,6 @@ def _get_card_and_web_from_context(context):
         # Fallback for internal naming conventions
         web = getattr(context, "_web", None)
     
-    # Fallback to global reviewer if context doesn't yield anything
-    if not card and mw.reviewer:
-        card = mw.reviewer.card
     if not web and mw.reviewer:
         web = mw.reviewer.web
         
