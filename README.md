@@ -112,41 +112,40 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions and technical detail
 
 MIT
 
+<img width="2083" height="1188" alt="Screenshot_20260507_215546" src="https://github.com/user-attachments/assets/b3b54ab4-fefb-44cf-85c4-3cf02b7cbe88" />
+<img width="1117" height="1073" alt="Screenshot_20260507_215620" src="https://github.com/user-attachments/assets/02e4401e-acf4-4669-88d2-76c28f007d26" />
+<img width="1117" height="1189" alt="Screenshot_20260507_215646" src="https://github.com/user-attachments/assets/84404bbc-3316-4dc6-ba9a-51e129589aca" />
+<img width="1117" height="1189" alt="Screenshot_20260507_215709" src="https://github.com/user-attachments/assets/0d41d057-0ca9-4415-b5c9-5a09a19c0798" />
+<img width="1117" height="1189" alt="Screenshot_20260507_215713" src="https://github.com/user-attachments/assets/51dc0bba-234e-4a9b-a2cb-638cb7b17e08" />
+
 ## Changelog
 
-### May 21, 2026 (v2.4.0)
+### May 21, 2026
+- **Log Viewer Decoding Fix**: Added `errors="replace"` to the log file reading logic in the configuration dialog to prevent Anki from raising a `UnicodeDecodeError` when logs contain invalid UTF-8/ANSI characters.
 - **Crash Fix**: Resolved a `TypeError` crash in `CardParser.__init__` caused by obsolete configuration arguments (`target_fields` and `note_type_fields`).
 - **Robust Note Updates**: Updated note saving logic to use `mw.col.update_note(note)` instead of the deprecated `note.flush()` method to ensure database consistency.
 - **Enhanced Data Extraction**: Implemented robust field-scanning extraction methods for the migration utility.
-
-### May 21, 2026 (v2.3.5)
 - **First Field Storage Priority**: Forced AI hints storage to the first field of all cards (improving front-side card rendering compatibility).
 - **Data Migration Tool**: Added a dedicated migration utility in the config dialog to scan, clean, and move all existing AI hints to the first fields of notes safely with progress and stop/resume controls.
 - **Card Shuffling Fix**: Ensured the correct answer option is tracked through the shuffle logic.
 - **Reviewer Refresh Races**: Resolved races in reviewer AI hints refresh logic.
 - **Data Ghosting Resolution**: Restored multi-block rendering to completely resolve Web-review card data ghosting.
 
-### May 19, 2026 (Patch v2.3.4)
+### May 19, 2026
 - **Optimized Startup**: Delayed heavy initialization of the Antigravity Proxy and Mobile Sync to prevent resource contention and potential crashes during Anki startup.
 - **Resource Efficiency**: Replaced the heavy `AnkiWebView` used for the Ko-fi widget with a native `QPushButton` to reduce memory overhead and improve UI responsiveness.
 - **Stable Update Notifications**: Added a delay to automatic support dialog popups after updates and fixed the tab index to correctly open the "Support Authors" tab.
-
-### May 19, 2026 (Patch v2.3.3)
 - **Cross-Platform Keyboard Shortcuts**: Implemented review screen keyboard shortcuts for both Desktop (native python hook) and Mobile/Standalone (JavaScript keydown listener).
 - **Customizable Default Mappings**: Swapped default toggle mappings so `Alt+2` toggles hints and `Alt+3` toggles options.
 
-### May 18, 2026 (Patch v2.3.2)
+### May 18, 2026
 - **Offline Template Resolution**: Corrected a major bug where template installers injected prompt fields instead of storage fields, enabling full offline card reviewer button rendering.
 - **Propagation & Tap Delay Prevention**: Restructured `template.js` reviewer buttons to block event propagation (`e.stopPropagation()` / `e.preventDefault()`), eliminating click delays and double-clicking issues.
 - **Python 3.14 exit-crash prevention**: Cleaned timers and shutdown daemon in `profile_will_close` hook to stop PyQt6/sip crash.
 - **Self-Healing Daemon Startup**: Automatically kills previous session's zombie proxy process on start to release Port 3000 conflicts.
 - **Polished Card UI**: Hidden 'Clear' buttons offline/mobile, and unconditionally hidden duplicate static HTML blocks to ensure styling parity.
-
-### May 18, 2026 (Patch v2.3.1)
 - **Critical Stability Fix**: Implemented a singleton guard in the UI script to prevent multiple instances from running simultaneously, resolving reported crashes in Anki's web engine (SIGABRT).
 - **Reduced Rendering Overhead**: Removed redundant re-render triggers in the backend to improve performance and reduce UI flickering.
-
-### May 18, 2026 (v2.3.0)
 - **Unified UI System**: Desktop and Mobile now share the exact same rendering engine (`template.js`), ensuring consistent features (like shuffling and MathJax) across all devices.
 - **Smart Auto-Updates**: Once you click "One-Click Install", the addon automatically keeps your mobile script and templates up to date whenever you update the addon or change settings.
 - **Compact Emoji Mode**: Optional ultra-compact UI for mobile that uses pure emojis (💡, 🎯, 🗑️) instead of text labels.
@@ -155,14 +154,14 @@ MIT
 - **Improved Navigation**: Added separate "Save", "Save & Close", and "Cancel" buttons to the configuration dialog.
 - **Performance**: Optimized rendering and state management to eliminate "ghost data" and flickering during card transitions.
 
-### May 13, 2026 (v2.2.0)
+### May 13, 2026
 - **Improved Pre-generation Strategy**: Implemented smarter queue-peeking for Anki v3 scheduler.
 - **Robust Network Monitoring**: Added background network status monitor.
 - **Global Emergency Stop**: Added instant-kill signal for all AI generations.
 - **Optimized Provider Failover**: Enhanced 404/Timeout recovery.
 - **Missing Cloze Handling**: Graceful detection and skipping for cards with missing clozes.
 
-### May 12, 2026 (v2.1.0)
+### May 12, 2026
 - **Persistent Model Blacklisting**: Failures now persist across restarts via `blacklist.json`.
 - **Enhanced Fallback UI**: Dedicated fallback manager with testing buttons.
 - **Instant-Open Config UI**: Lazy-loading for note types and fields.
