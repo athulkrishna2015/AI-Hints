@@ -103,22 +103,13 @@ def auto_update_mobile_setup():
     
     try:
         updated_count = 0
-        target_fields = config.get("target_fields", [])
-        default_field = target_fields[0] if target_fields else "AI Hints"
-        note_type_fields = config.get("note_type_fields", {})
 
         for model in mw.col.models.all():
-            model_changed = False
+            if not model.get("flds"):
+                continue
             
-            # Determine target field for this model (first matching target_field)
-            model_fields = [f['name'] for f in model['flds']]
-            field_name = None
-            for tf in target_fields:
-                if tf in model_fields:
-                    field_name = tf
-                    break
-            if not field_name:
-                field_name = model_fields[-1] if model_fields else default_field
+            field_name = model["flds"][0]["name"]
+            model_changed = False
 
             is_cloze = (model.get('type') == 1)
             for tmpl in model['tmpls']:

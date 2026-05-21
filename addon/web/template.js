@@ -213,11 +213,11 @@
     }
 
     function retryInitForCard(cardId, ord) {
-        if (!isAddonActive) return;
+        if (!isAddonActive) return false;
         const key = String(cardId) + '_' + String(ord);
         window.aiHintsRetryState = window.aiHintsRetryState || {};
         const attempts = window.aiHintsRetryState[key] || 0;
-        if (attempts >= 8) return;
+        if (attempts >= 8) return false;
         window.aiHintsRetryState[key] = attempts + 1;
         setTimeout(() => {
             const currentId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
@@ -226,6 +226,7 @@
                 init();
             }
         }, 75);
+        return true;
     }
 
     // 3. Main Init
@@ -345,8 +346,7 @@
 
         if (targetBlocks.length === 0 && isAddonActive) {
             if (!hasOverrideData && jsonBlocks.length > 0) {
-                retryInitForCard(cardId, ord);
-                return;
+                if (retryInitForCard(cardId, ord)) return;
             }
             targetBlocks = [null];
         } else if (isAddonActive && targetBlocks.length > 1) targetBlocks = targetBlocks.slice(0, 1);

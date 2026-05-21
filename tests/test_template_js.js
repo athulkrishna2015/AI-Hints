@@ -330,6 +330,20 @@ eval(scriptContent);
 const retryContainers = retryTest.getRendered().filter(el => el.className && el.className.includes('ai-hints-container'));
 if (retryContainers.length !== 0) throw new Error("Unmatched pending JSON should wait instead of showing Generate");
 
+console.log("\n--- TEST 11B: EXHAUSTED RETRY FALLS BACK TO BUTTONS ---");
+global.window.aiHintsCurrentCard = { id: 'waiting_done_card', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const exhaustedRetryTest = createMockDOM({ isAddonActive: true, hasData: false });
+global.window.aiHintsRetryState = { waiting_done_card_0: 8 };
+exhaustedRetryTest.addJsonBlock(
+    { c2: { hints: ["Other ord"], options: ["Other option"] } }
+);
+eval(scriptContent);
+const exhaustedContainer = exhaustedRetryTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+if (!exhaustedContainer) throw new Error("Exhausted retry should render fallback buttons");
+const exhaustedLabels = exhaustedContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button').map(b => b.textContent);
+if (!exhaustedLabels.includes("Generate AI Hints")) throw new Error("Exhausted retry should show Generate fallback");
+
 console.log("\n--- TEST 12: NULL FRONT SETUP DOES NOT ERASE CURRENT DATA CONTAINER ---");
 global.window.aiHintsCurrentCard = { id: 'front_card', ord: 0 };
 global.window.aiHintsUiConfig = { is_generating: false };

@@ -216,8 +216,6 @@ class BatchManager:
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         client = AIClient(config)
         parser = CardParser(
-            config.get("target_fields", []),
-            config.get("note_type_fields", {}),
             config.get("storage_mode", "json"),
             mathjax_format=config.get("mathjax_format", "delimiters"),
             fix_latex=config.get("fix_latex", False)
@@ -261,9 +259,8 @@ class BatchManager:
             logger.info(f"AI-Hints Applying {len(results)} database batch writes.")
             
             parser = CardParser(
-                config.get("target_fields", []),
-                config.get("note_type_fields", {}),
-                config.get("storage_mode", "json"),
+                config.get("storage_mode", "json")
+,
                 mathjax_format=config.get("mathjax_format", "delimiters"),
                 fix_latex=config.get("fix_latex", False)
             )
@@ -408,9 +405,8 @@ class BatchManager:
         # Instantiate client and parser fresh in this thread environment
         client = AIClient(config)
         parser = CardParser(
-            config.get("target_fields", []),
-            config.get("note_type_fields", {}),
             config.get("storage_mode", "json")
+
         )
         
         # 🔍 Snapshot runtime model diagnostics for display

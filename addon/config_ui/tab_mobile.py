@@ -142,8 +142,12 @@ class MobileTabMixin:
     def on_copy_script(self):
         # Determine the likely target field for the manual script preview
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-        target_fields = config.get("target_fields", [])
-        field_name = target_fields[0] if target_fields else "AI Hints"
+        # Determine default storage field (best guess: first field of first model)
+        field_name = "AI Hints"
+        if mw.col and mw.col.models.all():
+            m = mw.col.models.all()[0]
+            if m.get("flds"):
+                field_name = m["flds"][0]["name"]
         
         QApplication.clipboard().setText(self._get_full_template_block(field_name))
         QMessageBox.information(self, "AI-Hints", "Template script copied to clipboard!")
@@ -160,9 +164,6 @@ class MobileTabMixin:
         config["mobile_setup_completed"] = True
         mw.addonManager.writeConfig(ADDON_PACKAGE, config)
 
-        target_fields = config.get("target_fields", [])
-        default_field = target_fields[0] if target_fields else "AI Hints"
-
         # 2. Inject into all templates
         count = 0
         templates_updated = 0
@@ -171,15 +172,10 @@ class MobileTabMixin:
             for model in mw.col.models.all():
                 model_changed = False
                 
-                # Determine target field for this model (first matching target_field)
-                model_fields = [f['name'] for f in model['flds']]
-                field_name = None
-                for tf in target_fields:
-                    if tf in model_fields:
-                        field_name = tf
-                        break
-                if not field_name:
-                    field_name = model_fields[-1] if model_fields else default_field
+                # We now always use the first field to ensure it is rendered on front
+                if not model['flds']:
+                    continue
+                field_name = model['flds'][0]['name']
 
                 pattern = r"<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"
                 is_cloze = (model.get('type') == 1)

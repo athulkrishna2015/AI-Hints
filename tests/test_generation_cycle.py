@@ -21,7 +21,7 @@ from addon.card_parser import CardParser
 def test_full_cycle():
     print("--- Running Full Generation Cycle Tests ---")
     client = AIClient({})
-    parser = CardParser(target_fields=["Back"])
+    parser = CardParser()
 
     # Test cases for hallucinations and malformed output
     test_cases = [

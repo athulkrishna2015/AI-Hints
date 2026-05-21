@@ -26,7 +26,7 @@ class FakeCard:
 
 class TemplateCompatibilityTests(unittest.TestCase):
     def setUp(self):
-        self.parser = CardParser(target_fields=["Back"], storage_mode="json")
+        self.parser = CardParser(storage_mode="json")
 
     def test_json_block_structure_for_basic_card(self):
         """Verify that basic cards get a flat JSON or keyed JSON that template.js can handle."""

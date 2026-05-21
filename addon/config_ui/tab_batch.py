@@ -459,8 +459,6 @@ class BatchTabMixin:
                 from ..reviewer_hooks import _get_card_from_collection
 
                 parser = CardParser(
-                    config.get("target_fields", []),
-                    config.get("note_type_fields", {}),
                     config.get("storage_mode", "json")
                 )
                 

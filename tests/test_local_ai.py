@@ -33,7 +33,7 @@ async def test_local_ai():
     config["local_endpoint"]["enabled"] = True
     
     client = AIClient(config)
-    parser = CardParser(target_fields=["Back"])
+    parser = CardParser()
 
     front = "What is the capital of France?"
     back = "Paris. It is known as the City of Light."

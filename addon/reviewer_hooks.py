@@ -49,9 +49,7 @@ def _apply_results_to_card(card, data, is_manual=True, web=None):
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
 
     parser = CardParser(
-        config.get("target_fields", []),
-        config.get("note_type_fields", {}),
-        config.get("storage_mode", "json"),
+        storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )
@@ -691,9 +689,7 @@ def clear_hints(card=None, web=None):
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
-        config.get("target_fields", []),
-        config.get("note_type_fields", {}),
-        config.get("storage_mode", "json"),
+        storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )
@@ -763,9 +759,7 @@ def clear_ai_hints_from_browser_selection(browser):
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
-        config.get("target_fields", []),
-        config.get("note_type_fields", {}),
-        config.get("storage_mode", "json"),
+        storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )
@@ -1170,9 +1164,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
     provider = config.get("ai_provider", "openai")
 
     parser = CardParser(
-        config.get("target_fields", []),
-        config.get("note_type_fields", {}),
-        config.get("storage_mode", "json"),
+        storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )

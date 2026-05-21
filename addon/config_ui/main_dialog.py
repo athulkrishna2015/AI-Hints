@@ -80,10 +80,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
     def on_tab_changed(self, index):
         tab_name = self.tabs.tabText(index)
         
-        # Handle Note Type Loading
-        if tab_name == "Advanced":
-            self._load_note_types_if_needed()
-
         # Handle Log timer
         if tab_name == "Logs":
             self.load_log()
@@ -108,24 +104,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.status_timer.start(3000) # Update status every 3 seconds
         else:
             self.status_timer.stop()
-
-    def _load_note_types_if_needed(self):
-        """Heavy operation: only call when Advanced tab is actually viewed."""
-        if not hasattr(self, 'nt_cb') or self.nt_cb.count() > 0:
-            return
-            
-        logger.debug("AI-Hints: Lazy-loading note types for Advanced tab.")
-        self.nt_cb.blockSignals(True)
-        self.nt_cb.clear()
-        
-        # This is the heavy collection scan
-        self.models_cache = {m['name']: m['flds'] for m in mw.col.models.all()}
-        self.nt_cb.addItems(list(self.models_cache.keys()))
-        
-        self.nt_cb.blockSignals(False)
-        if self.nt_cb.count() > 0:
-            self.nt_cb.setCurrentIndex(0)
-            self.on_nt_changed()
 
     def update_provider_status(self):
         """Refreshes the live status indicators for background daemons."""
@@ -287,58 +265,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.local_fallback_cb.setChecked(local.get("enabled", False))
         
         self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
-        
-        self.target_fields_edit.setText(", ".join(c.get("target_fields", [])))
-        self.note_type_fields_data = c.get("note_type_fields", {})
-        
-        if hasattr(self, 'note_fields_edit'):
-             self.note_fields_edit.setPlainText(json.dumps(self.note_type_fields_data, indent=4))
         self.raw_editor.setPlainText(json.dumps(c, indent=4))
 
     def copy_to_clipboard(self, text):
         QApplication.clipboard().setText(text)
         tooltip("Copied to clipboard")
-
-    def on_nt_changed(self):
-        self.fld_list.blockSignals(True)
-        self.fld_list.clear()
-        nt_name = self.nt_cb.currentText()
-        if not nt_name:
-            self.fld_list.blockSignals(False)
-            return
-            
-        flds = self.models_cache.get(nt_name, [])
-        active_flds = self.note_type_fields_data.get(nt_name, [])
-        
-        for fld in flds:
-            item = QListWidgetItem(fld["name"])
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            if fld["name"] in active_flds:
-                item.setCheckState(Qt.CheckState.Checked)
-            else:
-                item.setCheckState(Qt.CheckState.Unchecked)
-            self.fld_list.addItem(item)
-            
-        self.fld_list.blockSignals(False)
-
-    def on_fld_changed(self, item):
-        nt_name = self.nt_cb.currentText()
-        if not nt_name: return
-        
-        fld_name = item.text()
-        active_flds = self.note_type_fields_data.get(nt_name, [])
-        
-        if item.checkState() == Qt.CheckState.Checked:
-            if fld_name not in active_flds:
-                active_flds.append(fld_name)
-        else:
-            if fld_name in active_flds:
-                active_flds.remove(fld_name)
-                
-        if active_flds:
-            self.note_type_fields_data[nt_name] = active_flds
-        elif nt_name in self.note_type_fields_data:
-            del self.note_type_fields_data[nt_name]
 
     def refresh_custom_list(self):
         self.custom_list.clear()
@@ -718,12 +649,94 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
     def on_restore_advanced(self):
         if not self.default_config: return
         c = self.default_config
-        self.target_fields_edit.setText(", ".join(c.get("target_fields", [])))
         self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
-        self.note_type_fields_data = c.get("note_type_fields", {}).copy()
-        self.on_nt_changed()
-        if hasattr(self, 'note_fields_edit'): self.note_fields_edit.setPlainText(json.dumps(self.note_type_fields_data, indent=4))
         tooltip("Advanced defaults restored.")
+
+    def on_migrate_data(self):
+        """Finds all AI hints in non-first fields and moves them to the first field."""
+        if not askUser("This will scan your entire collection and move any AI data blocks from secondary fields to the <b>first field</b> of each note to ensure they render correctly during review.\n\nContinue?"):
+            return
+
+        from ..card_parser import CardParser
+        parser = CardParser(storage_mode=self.config.get("storage_mode", "json"))
+        
+        self.migrate_btn.setEnabled(False)
+        self.migrate_btn.setText("🔄 Migrating... please wait")
+        
+        def _task():
+            count = 0
+            moved = 0
+            # Get all note IDs
+            nids = mw.col.find_notes("")
+            total = len(nids)
+            
+            for i, nid in enumerate(nids):
+                try:
+                    note = mw.col.get_note(nid)
+                    fields = list(note.keys())
+                    if len(fields) < 2:
+                        continue
+                        
+                    first_field = fields[0]
+                    other_fields = fields[1:]
+                    
+                    # 1. Extract all blocks from all fields
+                    all_blocks = parser._extract_all_hints_from_fields(note)
+                    if not all_blocks:
+                        continue
+                        
+                    # 2. Check if any blocks are NOT in the first field
+                    # We can simplify: Extract from other fields only
+                    blocks_in_others = []
+                    for f in other_fields:
+                        blocks = parser._extract_hints_from_field(note[f], None) # None means extract all
+                        if blocks:
+                            blocks_in_others.extend(blocks)
+                    
+                    if not blocks_in_others:
+                        continue
+                        
+                    # 3. If found, we clear ALL fields and re-inject into the first field
+                    # This is the safest way to consolidate.
+                    parser._remove_all_hints_from_fields(note)
+                    
+                    # Sort blocks by card index (c1, c2...) to keep them neat
+                    all_blocks.sort(key=lambda x: x.get("card_key", ""))
+                    
+                    # Re-inject into first field
+                    current_val = note[first_field]
+                    for block in all_blocks:
+                        data = block["data"]
+                        card_key = block.get("card_key")
+                        toggles = block.get("toggles", {})
+                        
+                        if parser.storage_mode == "json":
+                            current_val = parser._update_json_block_in_field(current_val, data, card_key, toggles)
+                        else:
+                            # Fallback for HTML mode
+                            content = parser.build_hints_block(data, toggles)
+                            current_val = current_val.strip() + "\n\n" + content
+                            
+                    note[first_field] = current_val
+                    note.flush()
+                    moved += 1
+                    
+                    if i % 100 == 0:
+                        def _prog(v=i, t=total):
+                            self.migrate_btn.setText(f"🔄 Migrating... {v}/{t}")
+                        mw.taskman.run_on_main(_prog)
+                        
+                except Exception as e:
+                    logger.error(f"Migration error on note {nid}: {e}")
+                    
+            def _done(m=moved):
+                self.migrate_btn.setEnabled(True)
+                self.migrate_btn.setText("🚀 Move all AI data to the first field")
+                info(f"✅ Migration Complete!\n\nMoved AI data in {m} notes to their first fields.")
+            mw.taskman.run_on_main(_done)
+
+        import threading
+        threading.Thread(target=_task, daemon=True).start()
 
     def move_provider_row(self, row_widget, delta):
         curr_index = self.models_layout.indexOf(row_widget)
@@ -777,9 +790,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 "api_key": self.local_api_key_edit.text().strip()
             }
             new_config["system_prompt"] = self.system_prompt_edit.toPlainText()
-            new_config["target_fields"] = [f.strip() for f in self.target_fields_edit.text().split(",") if f.strip()]
-            if hasattr(self, 'nt_cb'): new_config["note_type_fields"] = self.note_type_fields_data
-            else: new_config["note_type_fields"] = json.loads(self.note_fields_edit.toPlainText())
             new_config["custom_providers"] = self.custom_providers_data
             new_config["model_fallbacks"] = self.model_fallbacks_data
 
@@ -843,14 +853,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("storage_mode", "json")
         config.setdefault("mathjax_format", "delimiters")
         config.setdefault("fix_latex", False)
-        config.setdefault("target_fields", [])
         config.setdefault("system_prompt", "")
         config.setdefault("show_hints_button", True)
         config.setdefault("show_options_button", True)
         if not isinstance(config.get("custom_providers", {}), dict): config["custom_providers"] = {}
         else: config.setdefault("custom_providers", {})
-        if not isinstance(config.get("note_type_fields", {}), dict): config["note_type_fields"] = {}
-        else: config.setdefault("note_type_fields", {})
         try: config["options_count"] = max(1, min(int(config.get("options_count", 4)), 10))
         except: config["options_count"] = 4
         config.setdefault("show_on_card", True)

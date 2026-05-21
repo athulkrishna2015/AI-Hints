@@ -11,9 +11,7 @@ except ImportError:
 
 class CardParser:
 
-    def __init__(self, target_fields: List[str], note_type_fields: Dict[str, List[str]] = None, storage_mode: str = "json", mathjax_format: str = "delimiters", fix_latex: bool = False):
-        self.target_fields = target_fields
-        self.note_type_fields = note_type_fields or {}
+    def __init__(self, storage_mode: str = "json", mathjax_format: str = "delimiters", fix_latex: bool = False):
         self.storage_mode = storage_mode
         self.mathjax_format = mathjax_format
         self.fix_latex = fix_latex
@@ -162,46 +160,23 @@ class CardParser:
         return text
 
     def get_note_content(self, note, card=None) -> Tuple[str, str]:
-        """Extracts front and back content for AI context based on note type config."""
+        """Extracts front and back content for AI context.
+        Uses the first field as Front and all others as Back context."""
         model_name = note.model()["name"]
-        field_names = self.note_type_fields.get(model_name)
-        
-        if field_names:
-            # Use specific fields from config
-            selected_fields = []
-            for f_name in field_names:
-                if f_name in note:
-                    selected_fields.append((f_name, note[f_name]))
-            if not selected_fields:
-                return "", ""
+        fields = list(note.items())
+        if not fields:
+            return "", ""
 
-            if "cloze" in model_name.lower():
-                content = " ".join(value for _, value in selected_fields)
-                back = ""
-                content, back = self._focus_current_cloze(content, card)
-                if not back:
-                    return "", ""
-                return self._clean_html(content), self._clean_html(back)
-
-            front = selected_fields[0][1]
-            back = "\n".join(value for _, value in selected_fields[1:])
-            return self._clean_html(front), self._clean_html(back)
-        
-        # Fallback to default heuristic
-        fields = note.items()
-        fields = list(fields)
-        front = ""
+        front = fields[0][1]
         back = ""
         
-        if fields:
-            front = fields[0][1]
-            # If it's a Cloze card, we often don't need the other fields for generating options
-            if "cloze" in model_name.lower():
-                front, back = self._focus_current_cloze(front, card)
-                if not back:
-                    return "", ""
-            else:
-                back = "\n".join([v for k, v in fields[1:]])
+        # If it's a Cloze card, we focus on the specific cloze
+        if "cloze" in model_name.lower():
+            front, back = self._focus_current_cloze(front, card)
+            if not back:
+                return "", ""
+        else:
+            back = "\n".join([v for k, v in fields[1:]])
         
         return self._clean_html(front), self._clean_html(back)
 
@@ -419,26 +394,12 @@ class CardParser:
         return self._build_html_block(data, attrs)
 
     def _find_target_field(self, note) -> Optional[str]:
-        note_fields = note.keys()
-        
-        # 1. Prefer fields that ALREADY have AI hints data
-        for target in self.target_fields:
-            if target in note_fields:
-                val = str(note[target])
-                if f'class="{self.json_class}"' in val or f'class="{self.container_class}"' in val:
-                    return target
-        
-        # 2. Prefer fields that are NOT empty (avoid making empty fields non-empty)
-        for target in self.target_fields:
-            if target in note_fields:
-                if note[target].strip():
-                    return target
-                    
-        # 3. Fallback to first existing target field
-        for target in self.target_fields:
-            if target in note_fields:
-                return target
-        return None
+        # User requested to ALWAYS save to the first field of all cards
+        # because other fields might not render in front of card.
+        note_keys = list(note.keys())
+        if not note_keys:
+            return None
+        return note_keys[0]
 
     def _build_attrs(self, toggles: Dict[str, bool] = None, card=None) -> str:
         attrs = [f'data-ai-hints-addon-id="2119980872"', 'contenteditable="false"']

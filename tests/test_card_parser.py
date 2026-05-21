@@ -47,7 +47,7 @@ class CardParserTests(unittest.TestCase):
                 "Back": "<span>Alpha</span>",
             },
         )
-        parser = CardParser([], {"Basic": ["Front", "Back"]})
+        parser = CardParser()
 
         front, back = parser.get_note_content(note)
 
@@ -55,7 +55,7 @@ class CardParserTests(unittest.TestCase):
         self.assertEqual(back, "Alpha")
 
     def test_inline_mathjax_format_uses_dollar_delimiters(self):
-        parser = CardParser(["Back"], mathjax_format="inline", fix_latex=True)
+        parser = CardParser(mathjax_format="inline", fix_latex=True)
 
         data = parser.normalize_hint_data({"options": ["x_i"]})
 
@@ -63,33 +63,33 @@ class CardParserTests(unittest.TestCase):
 
     def test_keyed_json_updates_merge_sibling_cards(self):
         note = FakeNote("Cloze", {"Text": "Prompt", "Back": ""})
-        parser = CardParser(["Back"], storage_mode="json")
+        parser = CardParser(storage_mode="json")
 
         self.assertTrue(parser.update_note_with_hints(note, {"hints": ["h1"], "options": ["o1"]}, card=FakeCard(1, 0)))
         self.assertTrue(parser.update_note_with_hints(note, {"hints": ["h2"], "options": ["o2"]}, card=FakeCard(2, 1)))
 
-        payload = json_payload_from_field(note["Back"])
+        payload = json_payload_from_field(note["Text"])
         self.assertEqual(payload["c1"]["hints"], ["h1"])
         self.assertEqual(payload["c2"]["options"], ["o2"])
-        self.assertEqual(note["Back"].count("ai-hints-json"), 1)
+        self.assertEqual(note["Text"].count("ai-hints-json"), 1)
 
     def test_missing_keyed_card_is_not_reported_or_cleared(self):
         note = FakeNote("Cloze", {"Text": "Prompt", "Back": ""})
-        parser = CardParser(["Back"], storage_mode="json")
+        parser = CardParser(storage_mode="json")
         parser.update_note_with_hints(note, {"hints": ["h1"], "options": ["o1"]}, card=FakeCard(1, 0))
-        original = note["Back"]
+        original = note["Text"]
 
         self.assertIsNone(parser.find_hints_block(note, FakeCard(2, 1)))
         self.assertFalse(parser.clear_hints_from_note(note, FakeCard(2, 1)))
-        self.assertEqual(note["Back"], original)
+        self.assertEqual(note["Text"], original)
 
     def test_unscoped_legacy_json_does_not_block_sibling_auto_generation(self):
-        parser = CardParser(["Back"], storage_mode="json")
+        parser = CardParser(storage_mode="json")
         note = FakeNote(
             "Cloze",
             {
-                "Text": "Prompt",
-                "Back": parser.build_hints_block({"hints": ["old"], "options": ["old option"]}),
+                "Text": "Prompt" + parser.build_hints_block({"hints": ["old"], "options": ["old option"]}),
+                "Back": "",
             },
         )
 
@@ -97,7 +97,7 @@ class CardParserTests(unittest.TestCase):
         self.assertIsNone(parser.find_hints_block(note, FakeCard(2, 1)))
 
     def test_html_mode_escapes_non_math_tags(self):
-        parser = CardParser(["Back"], storage_mode="html")
+        parser = CardParser(storage_mode="html")
 
         block = parser.build_hints_block(
             {
@@ -112,7 +112,7 @@ class CardParserTests(unittest.TestCase):
 
     def test_missing_cloze_returns_empty_content(self):
         note = FakeNote("Cloze", {"Text": "This is {{c1::cloze 1}}."})
-        parser = CardParser([], {"Cloze": ["Text"]})
+        parser = CardParser()
 
         # Card 1 (ord 0) should find c1
         front, back = parser.get_note_content(note, card=FakeCard(1, 0))
