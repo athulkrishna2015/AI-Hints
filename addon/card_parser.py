@@ -11,7 +11,7 @@ except ImportError:
 
 class CardParser:
 
-    def __init__(self, storage_mode: str = "json", mathjax_format: str = "delimiters", fix_latex: bool = False):
+    def __init__(self, storage_mode: str = "json", mathjax_format: str = "delimiters", fix_latex: bool = False, **kwargs):
         self.storage_mode = storage_mode
         self.mathjax_format = mathjax_format
         self.fix_latex = fix_latex
@@ -476,19 +476,103 @@ class CardParser:
         )
         
         blocks = []
-        fields = getattr(note, "fields", [])
-        if not fields and hasattr(note, "values"):
-            try:
-                fields = list(note.values())
-            except Exception:
-                fields = []
-
+        fields = list(note.values()) if hasattr(note, "values") else getattr(note, "fields", [])
         for f_val in fields:
             if not isinstance(f_val, str):
                 continue
             for match in pattern.finditer(f_val):
                 blocks.append(match.group(0))
         return blocks
+
+    def _extract_all_hints_from_fields(self, note) -> List[Dict[str, Any]]:
+        """Scans all fields and returns a list of parsed data objects with metadata."""
+        raw_blocks = self.find_all_hints_blocks(note)
+        extracted = []
+        
+        for block in raw_blocks:
+            # Extract payload
+            match = re.search(r'>(.*?)</div>', block, re.DOTALL)
+            if not match:
+                continue
+            
+            raw_payload = match.group(1)
+            try:
+                parsed = self._parse_json_payload(raw_payload)
+            except Exception:
+                continue
+
+            # Extract toggles and addon ID
+            toggles = {}
+            if 'data-ai-show-hints="true"' in block: toggles["hints"] = True
+            if 'data-ai-show-options="true"' in block: toggles["options"] = True
+            
+            if self._is_keyed_payload(parsed):
+                for card_key, data in parsed.items():
+                    extracted.append({
+                        "data": data,
+                        "card_key": card_key,
+                        "toggles": toggles
+                    })
+            else:
+                # Universal/Legacy block
+                extracted.append({
+                    "data": parsed,
+                    "card_key": None,
+                    "toggles": toggles
+                })
+        return extracted
+
+    def _extract_hints_from_field(self, field_val: str, card_key: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Extracts AI data from a single field string."""
+        if not isinstance(field_val, str):
+            return []
+            
+        pattern = re.compile(
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>.*?</div>',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        
+        extracted = []
+        for match in pattern.finditer(field_val):
+            block = match.group(0)
+            inner_match = re.search(r'>(.*?)</div>', block, re.DOTALL)
+            if not inner_match:
+                continue
+            
+            try:
+                parsed = self._parse_json_payload(inner_match.group(1))
+            except Exception:
+                continue
+                
+            if self._is_keyed_payload(parsed):
+                if card_key:
+                    if card_key in parsed:
+                        extracted.append({"data": parsed[card_key], "card_key": card_key})
+                else:
+                    for k, v in parsed.items():
+                        extracted.append({"data": v, "card_key": k})
+            else:
+                if not card_key:
+                    extracted.append({"data": parsed, "card_key": None})
+                    
+        return extracted
+
+    def _remove_all_hints_from_fields(self, note) -> bool:
+        """Forcefully removes all AI hints blocks from all fields of the note."""
+        pattern = re.compile(
+            r'(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        cleared = False
+        for f_name in note.keys():
+            val = note[f_name]
+            if not isinstance(val, str):
+                continue
+            new_val = re.sub(pattern, "", val)
+            if new_val != val:
+                note[f_name] = new_val.strip()
+                cleared = True
+        return cleared
 
     def clear_hints_from_note(self, note, card=None) -> bool:
         """Removes AI hints blocks matching the card from all fields, including HTML line breaks."""

@@ -53,6 +53,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.setup_ui()
         self.load_config_into_ui()
 
+        self._migration_running = False
+        self._migration_stop_requested = False
+
         # Live Log Timer
         self.log_timer = QTimer(self)
         self.log_timer.timeout.connect(self.load_log)
@@ -182,6 +185,30 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         btn_layout.addWidget(cancel_btn)
         
         layout.addLayout(btn_layout)
+
+        # Migration Progress Section (Hidden by default)
+        self.mig_progress_box = QGroupBox("Collection Migration Progress")
+        self.mig_progress_box.setVisible(False)
+        mig_prog_layout = QVBoxLayout()
+        
+        self.mig_progress_bar = QProgressBar()
+        self.mig_progress_bar.setRange(0, 100)
+        mig_prog_layout.addWidget(self.mig_progress_bar)
+        
+        mig_status_layout = QHBoxLayout()
+        self.mig_status_label = QLabel("Scanning collection...")
+        mig_status_layout.addWidget(self.mig_status_label)
+        
+        mig_status_layout.addStretch()
+        
+        self.mig_stop_btn = QPushButton("🛑 Stop Migration")
+        self.mig_stop_btn.clicked.connect(self.stop_migration)
+        mig_status_layout.addWidget(self.mig_stop_btn)
+        
+        mig_prog_layout.addLayout(mig_status_layout)
+        self.mig_progress_box.setLayout(mig_prog_layout)
+        layout.addWidget(self.mig_progress_box)
+
         self.setLayout(layout)
 
         # Apply initial selection if any
@@ -652,25 +679,44 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
         tooltip("Advanced defaults restored.")
 
+    def stop_migration(self):
+        if self._migration_running:
+            self._migration_stop_requested = True
+            self.mig_status_label.setText("Stopping... finishing current note")
+            self.mig_stop_btn.setEnabled(False)
+
     def on_migrate_data(self):
         """Finds all AI hints in non-first fields and moves them to the first field."""
+        if self._migration_running:
+            return
+
         if not askUser("This will scan your entire collection and move any AI data blocks from secondary fields to the <b>first field</b> of each note to ensure they render correctly during review.\n\nContinue?"):
             return
 
         from ..card_parser import CardParser
         parser = CardParser(storage_mode=self.config.get("storage_mode", "json"))
         
+        self._migration_running = True
+        self._migration_stop_requested = False
+        
         self.migrate_btn.setEnabled(False)
-        self.migrate_btn.setText("🔄 Migrating... please wait")
+        self.migrate_btn.setText("🔄 Migration in progress...")
+        
+        self.mig_progress_box.setVisible(True)
+        self.mig_progress_bar.setValue(0)
+        self.mig_status_label.setText("Initializing migration...")
+        self.mig_stop_btn.setEnabled(True)
         
         def _task():
-            count = 0
             moved = 0
             # Get all note IDs
             nids = mw.col.find_notes("")
             total = len(nids)
             
             for i, nid in enumerate(nids):
+                if self._migration_stop_requested:
+                    break
+                    
                 try:
                     note = mw.col.get_note(nid)
                     fields = list(note.keys())
@@ -686,22 +732,22 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         continue
                         
                     # 2. Check if any blocks are NOT in the first field
-                    # We can simplify: Extract from other fields only
                     blocks_in_others = []
                     for f in other_fields:
-                        blocks = parser._extract_hints_from_field(note[f], None) # None means extract all
+                        blocks = parser._extract_hints_from_field(note[f], None)
                         if blocks:
                             blocks_in_others.extend(blocks)
                     
                     if not blocks_in_others:
                         continue
+                    
+                    logger.debug(f"Migrating note {nid}: found {len(blocks_in_others)} blocks in secondary fields.")
                         
                     # 3. If found, we clear ALL fields and re-inject into the first field
-                    # This is the safest way to consolidate.
                     parser._remove_all_hints_from_fields(note)
                     
-                    # Sort blocks by card index (c1, c2...) to keep them neat
-                    all_blocks.sort(key=lambda x: x.get("card_key", ""))
+                    # Sort blocks by card index (c1, c2...)
+                    all_blocks.sort(key=lambda x: x.get("card_key", "") if x.get("card_key") else "")
                     
                     # Re-inject into first field
                     current_val = note[first_field]
@@ -713,26 +759,40 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         if parser.storage_mode == "json":
                             current_val = parser._update_json_block_in_field(current_val, data, card_key, toggles)
                         else:
-                            # Fallback for HTML mode
                             content = parser.build_hints_block(data, toggles)
                             current_val = current_val.strip() + "\n\n" + content
                             
                     note[first_field] = current_val
-                    note.flush()
+                    mw.col.update_note(note)
                     moved += 1
                     
-                    if i % 100 == 0:
-                        def _prog(v=i, t=total):
-                            self.migrate_btn.setText(f"🔄 Migrating... {v}/{t}")
+                    if i % 10 == 0 or i == total - 1:
+                        def _prog(v=i, t=total, m=moved):
+                            pct = int((v + 1) / t * 100) if t > 0 else 0
+                            self.mig_progress_bar.setValue(pct)
+                            self.mig_status_label.setText(f"Scanning: {v+1}/{t} notes (Moved: {m})")
                         mw.taskman.run_on_main(_prog)
                         
                 except Exception as e:
                     logger.error(f"Migration error on note {nid}: {e}")
                     
-            def _done(m=moved):
+            def _done(m=moved, stopped=self._migration_stop_requested):
+                self._migration_running = False
                 self.migrate_btn.setEnabled(True)
                 self.migrate_btn.setText("🚀 Move all AI data to the first field")
-                info(f"✅ Migration Complete!\n\nMoved AI data in {m} notes to their first fields.")
+                
+                if stopped:
+                    self.mig_status_label.setText(f"🛑 Stopped. Moved {m} notes.")
+                    info(f"Migration stopped.\n\nProcessed until stop, moved AI data in {m} notes.")
+                else:
+                    self.mig_progress_bar.setValue(100)
+                    self.mig_status_label.setText(f"✅ Complete! Moved {m} notes.")
+                    info(f"✅ Migration Complete!\n\nMoved AI data in {m} notes to their first fields.")
+                
+                # Keep progress box visible for a few seconds then hide if complete
+                if not stopped:
+                    QTimer.singleShot(5000, lambda: self.mig_progress_box.setVisible(False))
+                
             mw.taskman.run_on_main(_done)
 
         import threading

@@ -424,8 +424,6 @@ def on_webview_will_set_content(web_content, context):
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
-        target_fields=config.get("target_fields", []),
-        note_type_fields=config.get("note_type_fields", {}),
         storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
@@ -548,8 +546,6 @@ def _trigger_frontend_setup(card=None, web=None):
     try:
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         parser = CardParser(
-            target_fields=config.get("target_fields", []),
-            note_type_fields=config.get("note_type_fields", {}),
             storage_mode=config.get("storage_mode", "json"),
             mathjax_format=config.get("mathjax_format", "delimiters"),
             fix_latex=config.get("fix_latex", False)
@@ -794,9 +790,9 @@ def clear_ai_hints_from_browser_selection(browser):
 
     for note in changed_notes.values():
         try:
-            note.flush()
+            mw.col.update_note(note)
         except Exception as e:
-            logger.error(f"Failed to flush note after clearing AI-Hints from browser: {e}")
+            logger.error(f"Failed to update note after clearing AI-Hints from browser: {e}")
 
     if changed_notes:
         refresh_browser = getattr(browser, "onReset", None)
@@ -1302,8 +1298,6 @@ def card_has_hints(card):
     
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
-        target_fields=config.get("target_fields", []),
-        note_type_fields=config.get("note_type_fields", {}),
         storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
