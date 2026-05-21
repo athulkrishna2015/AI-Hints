@@ -95,7 +95,7 @@ class LogTabMixin:
         search_filter = self.log_search_edit.text().strip().lower()
         
         try:
-            with open(log_file, "r", encoding="utf-8") as f:
+            with open(log_file, "r", encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()
             
             if level_filter != "ALL":

@@ -114,6 +114,18 @@ MIT
 
 ## Changelog
 
+### May 21, 2026 (v2.4.0)
+- **Crash Fix**: Resolved a `TypeError` crash in `CardParser.__init__` caused by obsolete configuration arguments (`target_fields` and `note_type_fields`).
+- **Robust Note Updates**: Updated note saving logic to use `mw.col.update_note(note)` instead of the deprecated `note.flush()` method to ensure database consistency.
+- **Enhanced Data Extraction**: Implemented robust field-scanning extraction methods for the migration utility.
+
+### May 21, 2026 (v2.3.5)
+- **First Field Storage Priority**: Forced AI hints storage to the first field of all cards (improving front-side card rendering compatibility).
+- **Data Migration Tool**: Added a dedicated migration utility in the config dialog to scan, clean, and move all existing AI hints to the first fields of notes safely with progress and stop/resume controls.
+- **Card Shuffling Fix**: Ensured the correct answer option is tracked through the shuffle logic.
+- **Reviewer Refresh Races**: Resolved races in reviewer AI hints refresh logic.
+- **Data Ghosting Resolution**: Restored multi-block rendering to completely resolve Web-review card data ghosting.
+
 ### May 19, 2026 (Patch v2.3.4)
 - **Optimized Startup**: Delayed heavy initialization of the Antigravity Proxy and Mobile Sync to prevent resource contention and potential crashes during Anki startup.
 - **Resource Efficiency**: Replaced the heavy `AnkiWebView` used for the Ko-fi widget with a native `QPushButton` to reduce memory overhead and improve UI responsiveness.
