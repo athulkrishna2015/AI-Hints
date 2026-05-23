@@ -1138,7 +1138,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         clean_btn.clicked.connect(do_clean)
         cancel_btn.clicked.connect(dialog.reject)
 
-        dialog.exec_()
+        dialog.exec()
 
 # --- Module Global Lifecycle functions ---
 _config_dialog_instance = None
