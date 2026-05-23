@@ -124,6 +124,15 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### May 23, 2026
+- **Flicker-Free UI**: Re-engineered the template rendering engine to be fully idempotent. Eliminated the annoying "flash" and intermittent click failures by preventing redundant DOM reconstructions during card transitions and state updates.
+- **Enhanced Cloze Support**: Added support for `c2`/`c3` keyed hints, allowing independent AI hints for different cloze deletions on the same note.
+- **Improved UI Layout**: Refactored the configuration dialog's "General" tab to prevent layout squishing and improved the visual polish of the reviewer buttons with smoother transitions and animations.
+- **PyQt6 Compatibility**: Updated internal dialog execution calls for better compatibility with modern Anki versions.
+- **Reversed Template Fix**: Corrected front/back detection for "Basic (and reversed card)" templates to ensure hints are generated for the correct face.
+- **Unicode Stability**: Fixed potential `UnicodeDecodeError` when reading addon metadata.
+- **Smart Render Guards**: Added protection against re-rendering while editing fields and implemented more aggressive stale data pruning.
+
 ### May 21, 2026
 - **Log Viewer Decoding Fix**: Added `errors="replace"` to the log file reading logic in the configuration dialog to prevent Anki from raising a `UnicodeDecodeError` when logs contain invalid UTF-8/ANSI characters.
 - **Crash Fix**: Resolved a `TypeError` crash in `CardParser.__init__` caused by obsolete configuration arguments (`target_fields` and `note_type_fields`).

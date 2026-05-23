@@ -11,11 +11,11 @@
 
     // 1. Configuration & Styling
     const STYLES = `
-        .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; pointer-events: none; }
-        .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; pointer-events: none; }
+        .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; }
+        .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; }
         .ai-hints-content-active { display: block; border: 1px dashed #aaa; background-color: rgba(128,128,128,0.06); }
-        .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; pointer-events: auto; }
-        .ai-hints-btn { padding: 4px 10px; cursor: pointer; border-radius: 6px; border: 1px solid #999; background-color: #f0f0f0; color: #222; font-size: 12px; font-weight: 500; transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
+        .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+        .ai-hints-btn { padding: 4px 10px; cursor: pointer; border-radius: 6px; border: 1px solid #999; background-color: #f0f0f0; color: #222; font-size: 12px; font-weight: 500; transition: background-color 0.15s ease, box-shadow 0.15s ease; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
         .ai-hints-btn:hover { background-color: #e0e0e0; }
         .ai-hints-btn:active { background-color: #d0d0d0; transform: translateY(1px); }
         .ai-hints-btn:disabled { opacity: 0.5; cursor: default; }
@@ -28,9 +28,9 @@
         .ai-hints-title { font-weight: bold; margin-bottom: 2px; display: block; font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; }
         .ai-hints-json-view { margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 5px; font-family: monospace; font-size: 11px; white-space: pre-wrap; overflow-x: auto; }
         .nightMode .ai-hints-json-view { background: rgba(255,255,255,0.05); }
-        .ai-hints-btn-generating { animation: ai-hints-pulse 1.5s infinite; background: linear-gradient(90deg, #f8fafc, #dbeafe, #f8fafc); background-size: 200% 100%; color: #111827; border-color: #60a5fa; opacity: 1; }
-        .nightMode .ai-hints-btn-generating { background: linear-gradient(90deg, #172554, #1d4ed8, #172554); background-size: 200% 100%; color: #ffffff; border-color: #93c5fd; opacity: 1; }
-        @keyframes ai-hints-pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+        .ai-hints-btn-generating { animation: ai-hints-pulse 1.5s ease-in-out infinite; background: linear-gradient(90deg, #f8fafc 0%, #dbeafe 50%, #f8fafc 100%); background-size: 200% 100%; color: #111827; border-color: #60a5fa; will-change: background-position; }
+        .nightMode .ai-hints-btn-generating { background: linear-gradient(90deg, #172554 0%, #1d4ed8 50%, #172554 100%); background-size: 200% 100%; color: #ffffff; border-color: #93c5fd; will-change: background-position; }
+        @keyframes ai-hints-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
     `;
 
     // 2. State & Helpers
@@ -243,13 +243,39 @@
             return;
         }
 
-        // Anki can briefly leave the previous card's field HTML in the reviewer.
-        // Remove every visible hints container before scanning data so stale buttons cannot flash or be scraped.
-        clearRenderedContainers();
-        resetJsonRenderMarkers();
-
         const ord = getCardOrd();
         const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+        const cardKey = 'c' + (ord + 1);
+        const onAnswer = isAnswerSide();
+
+        // Check if we already have a container rendered for this card and state
+        // to avoid unnecessary clearing which causes flicker.
+        const existingContainer = document.querySelector('.ai-hints-container-rendered');
+        const sameCard = existingContainer && 
+                        existingContainer.getAttribute('data-ai-hints-card-id') === String(cardId) &&
+                        existingContainer.getAttribute('data-ai-hints-card-ord') === String(ord);
+        
+        // If we are already rendered and this is not a manual override, we might be able to bail early
+        if (!hasOverrideData && sameCard && window.aiHintsLastAnswerState === onAnswer) {
+            // Further check: do we have new JSON blocks that need rendering?
+            const unrenderedBlocks = Array.from(document.querySelectorAll('.ai-hints-json')).filter(block => {
+                try {
+                    if (block.dataset.aiHintsRendered) return false;
+                    const blockData = JSON.parse(block.textContent);
+                    return blockBelongsToCurrentCard(block, blockData, cardKey, cardId, ord);
+                } catch (e) { return false; }
+            });
+            
+            if (unrenderedBlocks.length === 0) {
+                // Already rendered for this card/state and no new data blocks found.
+                return;
+            }
+        }
+
+        // Remove every visible hints container before scanning data so stale buttons cannot flash or be scraped.
+        clearRenderedContainers();
+
+        resetJsonRenderMarkers();
         pruneForeignJsonBlocks(cardId, ord);
 
         const jsonBlocks = document.querySelectorAll('.ai-hints-json');
@@ -261,7 +287,6 @@
 
         // If no data blocks and no containers, and not in active addon mode, we still need to potentially 
         // show the "Generate" button if that's enabled, or check for HTML containers.
-        // We only bail if we are absolutely sure there is nothing to render and no UI to show.
         if (jsonBlocks.length === 0 && containers.length === 0 && !hasOverrideData && !isAddonActive && !mobileCfg.showExtraButtons) {
             // Ensure any static containers are hidden if we are not rendering the interactive UI
             containers.forEach(c => c.style.display = 'none');
@@ -341,9 +366,6 @@
             }
         }
 
-        const cardKey = 'c' + (ord + 1);
-        const onAnswer = isAnswerSide();
-
         // Process existing blocks or containers
         let targetBlocks = manualData ? [null] : Array.from(jsonBlocks).filter(block => {
             try {
@@ -392,6 +414,13 @@
                     }
                 }
                 
+                // Track this setup to prevent redundant calls from Python
+                window.aiHintsLastSetupKey = JSON.stringify({ 
+                    card: { id: String(cardId), ord: ord }, 
+                    hints: data || null 
+                });
+                window.aiHintsLastAnswerState = onAnswer;
+
                 const hasContent = data && (data.hints || data.options);
                 const container = document.createElement('div');
                 container.className = 'ai-hints-container ai-hints-container-rendered';

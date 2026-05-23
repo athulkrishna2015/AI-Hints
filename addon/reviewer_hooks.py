@@ -1484,22 +1484,15 @@ def init_hooks():
         global _review_token, _reviewer_is_ending
         _reviewer_is_ending = False
         _review_token += 1
+        
+        # Trigger frontend setup immediately.
+        # The JS-side 'aiHintsSetup' is now smarter and will bail out if 
+        # the card is already rendered via the script injection.
         _trigger_frontend_setup(card)
-        current_token = _review_token
-        QTimer.singleShot(
-            150,
-            lambda: (
-                None if _reviewer_is_ending or current_token != _review_token
-                else _trigger_frontend_setup(card)
-            )
-        )
-        QTimer.singleShot(
-            400,
-            lambda: (
-                None if _reviewer_is_ending or current_token != _review_token
-                else _trigger_frontend_setup(card)
-            )
-        )
+        
+        # We no longer need multiple delayed retries because the unified template 
+        # script is injected into the body and handles its own init() on load,
+        # and our smarter init() prevents flickering.
         
         # Auto generate for new cards if configured and no data exists
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
