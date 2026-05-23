@@ -341,9 +341,11 @@ class CardParser:
                         if card_key:
                              # Ensure it is keyed
                              if not self._is_keyed_payload(parsed):
-                                  parsed = {card_key: new_data}
-                             else:
-                                  parsed[card_key] = new_data
+                                  if "hints" in parsed or "options" in parsed:
+                                       parsed = {"c1": parsed}
+                                  else:
+                                       parsed = {}
+                             parsed[card_key] = new_data
                         else:
                              parsed.update(new_data)
                              

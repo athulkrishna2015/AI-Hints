@@ -161,5 +161,6 @@
         "port": 3000
     },
     "auto_show_hints": true,
-    "auto_show_options": false
+    "auto_show_options": false,
+    "do_not_auto_collapse": false
 }

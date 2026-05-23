@@ -483,6 +483,7 @@ def on_webview_will_set_content(web_content, context):
         "auto_reveal": auto_reveal,
         "auto_show_hints": config.get("auto_show_hints", False),
         "auto_show_options": config.get("auto_show_options", False),
+        "do_not_auto_collapse": config.get("do_not_auto_collapse", False),
         "manual_show_hints": config.get("manual_show_hints", True),
         "manual_show_options": config.get("manual_show_options", False),
         "mathjax_format": config.get("mathjax_format", "delimiters"),

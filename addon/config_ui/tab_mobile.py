@@ -98,10 +98,12 @@ class MobileTabMixin:
         shortcuts_json = json.dumps(shortcuts)
         use_emojis = self.mobile_emojis_cb.isChecked()
         show_extra = self.mobile_extra_cb.isChecked()
+        do_not_collapse = config.get("do_not_auto_collapse", False)
         return (
             "window.aiHintsMobileConfig = { "
             f"useEmojis: {'true' if use_emojis else 'false'}, "
             f"showExtraButtons: {'true' if show_extra else 'false'}, "
+            f"doNotAutoCollapse: {'true' if do_not_collapse else 'false'}, "
             f"shortcuts: {shortcuts_json} "
             "};"
         )

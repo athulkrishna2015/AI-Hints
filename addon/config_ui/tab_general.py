@@ -124,6 +124,10 @@ class GeneralTabMixin:
         self.auto_show_options_cb.setToolTip("Automatically expand and show options when a card is loaded.")
         show_layout.addRow(self.auto_show_options_cb)
 
+        self.do_not_auto_collapse_cb = QCheckBox("Do Not Auto-Collapse on Next Card")
+        self.do_not_auto_collapse_cb.setToolTip("Remember the expanded/collapsed state of hints and options when moving to the next card.")
+        show_layout.addRow(self.do_not_auto_collapse_cb)
+
         show_layout.addRow(QLabel("<b>After Manual Generation:</b>"))
         self.manual_show_hints_cb = QCheckBox("Auto Show Hints")
         self.manual_show_hints_cb.setToolTip("Automatically expand and show hints after clicking Generate/Regenerate.")

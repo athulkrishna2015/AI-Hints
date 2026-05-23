@@ -383,7 +383,13 @@ class BatchTabMixin:
                     c = _get_card_from_collection(cid)
                     if not c: continue
                     has_hints = card_has_hints(c)
-                    if not has_hints:
+                    should_process = not has_hints
+                    if has_hints and use_ver_gate and min_ver:
+                        saved_ver = _card_saved_version(c)
+                        if _version_less_than(saved_ver, min_ver):
+                            should_process = True
+                    
+                    if should_process:
                         final_ids.append(cid)
                     else:
                         skipped_count += 1

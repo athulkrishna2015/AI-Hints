@@ -298,8 +298,19 @@
 
         const stateKey = 'state_' + cardId + '_' + ord;
         const persistence = getPersistence();
+        const doNotCollapse = !!uiCfg.do_not_auto_collapse || (mobileCfg && !!mobileCfg.doNotAutoCollapse);
+
+        let state;
+        if (doNotCollapse) {
+            const globalState = persistence.get('global_state') || { hints: !!uiCfg.auto_show_hints, options: !!uiCfg.auto_show_options };
+            state = persistence.get(stateKey) || { hints: globalState.hints, options: globalState.options, seed: Date.now(), cleared: false };
+            state.hints = globalState.hints;
+            state.options = globalState.options;
+        } else {
+            state = persistence.get(stateKey) || { hints: false, options: false, seed: Date.now(), cleared: false };
+        }
+
         const isFirstLoad = !persistence.get(stateKey);
-        let state = persistence.get(stateKey) || { hints: false, options: false, seed: Date.now(), cleared: false };
 
         if (state.cleared && !isAddonActive) {
             // If cleared in this session, ensure static boxes remain hidden and return
@@ -312,14 +323,22 @@
             if (uiCfg.manual_show_hints) state.hints = true;
             if (uiCfg.manual_show_options) state.options = true;
             persistence.save(stateKey, state);
+            if (doNotCollapse) {
+                persistence.save('global_state', { hints: state.hints, options: state.options });
+            }
         } else if (isManualAction === false) {
             if (uiCfg.auto_show_hints) state.hints = true;
             if (uiCfg.auto_show_options) state.options = true;
             persistence.save(stateKey, state);
+            if (doNotCollapse) {
+                persistence.save('global_state', { hints: state.hints, options: state.options });
+            }
         } else if (isFirstLoad) {
-            if (uiCfg.auto_show_hints) state.hints = true;
-            if (uiCfg.auto_show_options) state.options = true;
-            persistence.save(stateKey, state);
+            if (!doNotCollapse) {
+                if (uiCfg.auto_show_hints) state.hints = true;
+                if (uiCfg.auto_show_options) state.options = true;
+                persistence.save(stateKey, state);
+            }
         }
 
         const cardKey = 'c' + (ord + 1);
@@ -430,6 +449,13 @@
                     btnBox.appendChild(genBtn);
                 }
 
+                const saveState = () => {
+                    persistence.save(stateKey, state);
+                    if (doNotCollapse) {
+                        persistence.save('global_state', { hints: state.hints, options: state.options });
+                    }
+                };
+
                 if (hasContent) {
                     if (hSection) {
                         const btn = document.createElement('button');
@@ -441,7 +467,7 @@
                             btn.textContent = state.hints ? labels.hideHints : labels.hints;
                             updateVisibility();
                             if (state.hints) renderMath(hSection);
-                            persistence.save(stateKey, state);
+                            saveState();
                         };
                         btnBox.appendChild(btn);
                     }
@@ -456,7 +482,7 @@
                             btn.textContent = state.options ? labels.hideOptions : labels.options;
                             updateVisibility();
                             if (state.options) renderMath(oSection);
-                            persistence.save(stateKey, state);
+                            saveState();
                         };
                         btnBox.appendChild(btn);
                     }
@@ -477,7 +503,7 @@
                     updateVisibility();
                     if (state.hints && hSection) renderMath(hSection);
                     if (state.options && oSection) renderMath(oSection);
-                    if (hasOverrideData) persistence.save(stateKey, state);
+                    if (hasOverrideData) saveState();
                 }
 
                 if (showExtra) {

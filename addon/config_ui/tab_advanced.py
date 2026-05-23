@@ -21,6 +21,20 @@ class AdvancedTabMixin:
         mig_group.setLayout(mig_layout)
         adv_layout.addWidget(mig_group)
 
+        # Maintenance Section
+        maint_group = QGroupBox("Maintenance Tools")
+        maint_layout = QVBoxLayout()
+        maint_layout.addWidget(QLabel("Scan for and clean up orphaned/empty hints that no longer correspond to any cards (e.g. if you removed a cloze deletion)."))
+        
+        self.clean_orphans_btn = QPushButton("🧹 Scan & Clean Orphaned Hints")
+        self.clean_orphans_btn.setToolTip("Scans all cards to detect AI hints that do not correspond to any active cards and list them to remove that data.")
+        self.clean_orphans_btn.setStyleSheet("font-weight: bold; padding: 5px;")
+        self.clean_orphans_btn.clicked.connect(self.on_scan_orphans)
+        maint_layout.addWidget(self.clean_orphans_btn)
+        
+        maint_group.setLayout(maint_layout)
+        adv_layout.addWidget(maint_group)
+
         adv_layout.addWidget(QLabel("System Prompt:"))
         self.system_prompt_edit = QTextEdit()
         self.system_prompt_edit.setToolTip("Customize the core AI persona instructions defining generation constraints, math syntaxes, and output layout.")

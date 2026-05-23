@@ -470,16 +470,16 @@ class BatchManager:
                         json.dumps(resp_data, ensure_ascii=False),
                     )
                     # 3. Apply directly to db using our concurrent-safe update method!
-                    def _apply_on_main(note, d):
+                    def _apply_on_main(note, d, c):
                         # Apply directly inside main thread loop to avoid col collisions
-                        if parser.update_note_with_hints(note, d, skip_if_exists=True):
+                        if parser.update_note_with_hints(note, d, card=c, skip_if_exists=True):
                             mw.col.update_note(note)
                             return True
                         return False
 
                     # We need to execute write inside the main UI loop for Anki safety
                     note = card.note()
-                    mw.taskman.run_on_main(lambda n=note, d=resp_data: _apply_on_main(n, d))
+                    mw.taskman.run_on_main(lambda n=note, d=resp_data, c=card: _apply_on_main(n, d, c))
                     
                 else:
                     self.local_queue_errors += 1

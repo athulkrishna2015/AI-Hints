@@ -247,6 +247,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", True))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
+        self.do_not_auto_collapse_cb.setChecked(c.get("do_not_auto_collapse", False))
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
         self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
         
@@ -640,6 +641,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.auto_regenerate_min_version_edit.setEnabled(auto_gen_on and self.auto_regenerate_old_version_cb.isChecked())
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", True))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
+        self.do_not_auto_collapse_cb.setChecked(c.get("do_not_auto_collapse", False))
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
         self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
         tooltip("General defaults restored.")
@@ -833,8 +835,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["auto_regenerate_min_version"] = self.auto_regenerate_min_version_edit.text().strip()
             new_config["pre_generate_next"] = self.pre_generate_next_cb.isChecked()
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
-
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
+            new_config["do_not_auto_collapse"] = self.do_not_auto_collapse_cb.isChecked()
             new_config["manual_show_hints"] = self.manual_show_hints_cb.isChecked()
             new_config["manual_show_options"] = self.manual_show_options_cb.isChecked()
             new_config["shortcuts"] = {key: edit.text().strip() for key, edit in self.shortcut_edits.items()}
@@ -930,6 +932,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("auto_regenerate_min_version", "")
         config.setdefault("auto_show_hints", True)
         config.setdefault("auto_show_options", False)
+        config.setdefault("do_not_auto_collapse", False)
         config.setdefault("manual_show_hints", True)
         config.setdefault("manual_show_options", False)
         
@@ -944,6 +947,198 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if isinstance(raw_shortcuts, dict): shortcuts.update(raw_shortcuts)
         config["shortcuts"] = shortcuts
         return config
+
+    def on_scan_orphans(self):
+        """Scans the entire collection to find and list orphaned AI hints in JSON blocks."""
+        from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox
+        from ..card_parser import CardParser
+        import json, html, re
+
+        parser = CardParser(storage_mode=self.config.get("storage_mode", "json"))
+
+        nids = mw.col.find_notes("")
+        total = len(nids)
+        if total == 0:
+            QMessageBox.information(self, "AI-Hints", "Your collection is empty!")
+            return
+
+        # Show a progress dialog
+        progress = QProgressDialog("Scanning collection for orphaned hints...", "Cancel", 0, total, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(200)
+
+        orphaned_hints = []
+
+        for i, nid in enumerate(nids):
+            if progress.wasCanceled():
+                return
+            progress.setValue(i)
+            progress.setLabelText(f"Scanning note {i+1} of {total}...")
+            QApplication.processEvents()
+
+            try:
+                note = mw.col.get_note(nid)
+                raw_blocks = parser.find_all_hints_blocks(note)
+                if not raw_blocks:
+                    continue
+
+                # Get active cards and their keys
+                active_ords = {c.ord for c in note.cards()}
+                valid_keys = {f"c{ord + 1}" for ord in active_ords}
+
+                note_orphans = []
+                
+                for block in raw_blocks:
+                    if parser.json_class in block:
+                        m = re.search(
+                            r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
+                            block, re.DOTALL | re.IGNORECASE
+                        )
+                        if m:
+                            raw = html.unescape(m.group(1) or "")
+                            try:
+                                parsed = json.loads(raw)
+                            except Exception:
+                                continue
+                            
+                            if isinstance(parsed, dict) and parser._is_keyed_payload(parsed):
+                                # Find keys that are c\d+ but not in valid_keys
+                                for key in list(parsed.keys()):
+                                    if re.fullmatch(r"c\d+", str(key)) and key not in valid_keys:
+                                        note_orphans.append((block, key, parsed[key]))
+
+                if note_orphans:
+                    # Get preview (first field content, stripped of HTML)
+                    first_field_val = list(note.values())[0] if note.values() else ""
+                    preview = parser._clean_html(first_field_val)[:60]
+                    if len(first_field_val) > 60:
+                        preview += "..."
+                    
+                    orphaned_hints.append({
+                        "note_id": nid,
+                        "preview": preview or f"Note ID {nid}",
+                        "orphans": note_orphans,
+                        "note": note
+                    })
+            except Exception as e:
+                logger.error(f"Error scanning note {nid} for orphans: {e}")
+
+        progress.setValue(total)
+
+        if not orphaned_hints:
+            QMessageBox.information(self, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
+            return
+
+        self._show_orphans_cleanup_dialog(orphaned_hints, parser)
+
+    def _show_orphans_cleanup_dialog(self, orphaned_hints, parser):
+        """Displays a dialog showing all orphaned hints found and allows safe cleanup."""
+        from aqt.qt import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QMessageBox
+        import json, html, re
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("🧹 Orphaned Hints Cleanup")
+        dialog.resize(600, 450)
+        layout = QVBoxLayout(dialog)
+
+        desc = QLabel(
+            "The following orphaned AI hints were detected. These exist in your cards' "
+            "JSON data but do not correspond to any active cards (likely because "
+            "cloze deletions were removed or note types were changed)."
+        )
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        list_widget = QListWidget()
+        layout.addWidget(list_widget)
+
+        for item in orphaned_hints:
+            keys_str = ", ".join([opt[1] for opt in item["orphans"]])
+            preview_text = f"📝 {item['preview']}\n   ❌ Orphaned Card Keys: {keys_str}"
+            
+            list_item = QListWidgetItem(preview_text)
+            list_widget.addItem(list_item)
+
+        btn_layout = QHBoxLayout()
+        
+        clean_btn = QPushButton(f"🔥 Remove {len(orphaned_hints)} Orphaned Hints")
+        clean_btn.setStyleSheet("font-weight: bold; background-color: #dc3545; color: white; padding: 6px; border-radius: 4px;")
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setStyleSheet("padding: 6px;")
+        
+        btn_layout.addStretch()
+        btn_layout.addWidget(clean_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        def do_clean():
+            cleaned_count = 0
+            
+            for item in orphaned_hints:
+                note = item["note"]
+                fields = list(note.keys())
+                if not fields:
+                    continue
+                
+                note_changed = False
+                
+                for f_name in fields:
+                    val = note[f_name]
+                    if not isinstance(val, str) or parser.json_class not in val:
+                        continue
+                    
+                    pattern = re.compile(
+                        rf'<div\b[^>]*class=["\'][^"\']*{parser.json_class}[^"\']*["\'][^>]*>(.*?)</div>',
+                        flags=re.DOTALL | re.IGNORECASE,
+                    )
+                    
+                    new_val = val
+                    matches = list(pattern.finditer(val))
+                    for match in reversed(matches):
+                        block_html = match.group(0)
+                        raw_payload = match.group(1)
+                        try:
+                            parsed = parser._parse_json_payload(raw_payload)
+                            if isinstance(parsed, dict) and parser._is_keyed_payload(parsed):
+                                keys_removed = 0
+                                for opt in item["orphans"]:
+                                    orphan_block = opt[0]
+                                    orphan_key = opt[1]
+                                    if block_html == orphan_block and orphan_key in parsed:
+                                        del parsed[orphan_key]
+                                        keys_removed += 1
+                                
+                                if keys_removed > 0:
+                                    if parsed:
+                                        new_payload = html.escape(json.dumps(parsed), quote=False)
+                                        inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
+                                        if inner_match:
+                                            new_block = block_html.replace(inner_match.group(1), new_payload)
+                                            new_val = new_val[:match.start()] + new_block + new_val[match.end():]
+                                            note_changed = True
+                                    else:
+                                        new_val = new_val[:match.start()] + new_val[match.end():]
+                                        note_changed = True
+                        except Exception as e:
+                            logger.error(f"Error cleaning orphaned hint block in note {note.id}: {e}")
+                
+                if note_changed:
+                    new_val = re.sub(r'(?:<br\s*/?>|\s|&nbsp;)+$', '', new_val, flags=re.IGNORECASE)
+                    note[fields[0]] = new_val.strip()
+                    mw.col.update_note(note)
+                    cleaned_count += 1
+
+            dialog.accept()
+            QMessageBox.information(
+                self, "Cleanup Complete",
+                f"🎉 Successfully cleaned up orphaned AI hints from {cleaned_count} notes!"
+            )
+
+        clean_btn.clicked.connect(do_clean)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        dialog.exec_()
 
 # --- Module Global Lifecycle functions ---
 _config_dialog_instance = None

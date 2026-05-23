@@ -87,6 +87,7 @@ def auto_update_mobile_setup():
     # 2. Update templates
     use_emojis = config.get("mobile_use_emojis", False)
     show_extra = config.get("mobile_show_extra_buttons", False)
+    do_not_collapse = config.get("do_not_auto_collapse", False)
     shortcuts = config.get("shortcuts", {})
     import json
     shortcuts_json = json.dumps(shortcuts)
@@ -95,6 +96,7 @@ def auto_update_mobile_setup():
         "window.aiHintsMobileConfig = { "
         f"useEmojis: {'true' if use_emojis else 'false'}, "
         f"showExtraButtons: {'true' if show_extra else 'false'}, "
+        f"doNotAutoCollapse: {'true' if do_not_collapse else 'false'}, "
         f"shortcuts: {shortcuts_json} "
         "};"
     )
