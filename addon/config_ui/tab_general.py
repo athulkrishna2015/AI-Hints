@@ -4,6 +4,15 @@ class GeneralTabMixin:
     def _create_general_tab(self):
         """Constructs the Tab 1: General Settings UI"""
         self.general_tab = QWidget()
+        
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        if hasattr(QFrame, "Shape"):
+            scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        else:
+            scroll_area.setFrameShape(QFrame.NoFrame)
+        
+        scroll_content = QWidget()
         gen_layout = QFormLayout()
         
         self.ai_provider_cb = QComboBox()
@@ -145,5 +154,12 @@ class GeneralTabMixin:
         main_layout.addWidget(show_group)
         main_layout.addStretch()
         
-        self.general_tab.setLayout(main_layout)
+        scroll_content.setLayout(main_layout)
+        scroll_area.setWidget(scroll_content)
+        
+        tab_layout = QVBoxLayout()
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.addWidget(scroll_area)
+        
+        self.general_tab.setLayout(tab_layout)
         return self.general_tab

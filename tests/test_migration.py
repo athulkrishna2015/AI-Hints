@@ -74,9 +74,31 @@ class MigrationTests(unittest.TestCase):
         note[first_field] = current_val
         
         self.assertIn("ai-hints-json", note["Front"])
-        self.assertIn('"hints": ["H1"]', note["Front"])
+        self.assertIn('"hints"', note["Front"])
+        self.assertIn('"H1"', note["Front"])
         self.assertEqual(note["Back"], "Answer")
         print("PASS: Migration logic correctly moved block from Back to Front.")
+
+    def test_auto_format_unformatted_blocks(self):
+        """Verify that flat/legacy or unformatted JSON blocks are auto-migrated and pretty-printed."""
+        parser = CardParser(storage_mode="json")
+        
+        # 1. Setup note with a flat, compact, and unicode-escaped legacy JSON block
+        escaped_flat_json = '<div class="ai-hints-json" data-ai-hints-addon-id="2119980872" style="display:none">{"hints": ["\\u0d08"], "options": ["O1"], "correct_answer": "A"}</div>'
+        note = FakeNote("Basic", {
+            "Front": "Question" + escaped_flat_json,
+            "Back": "Answer"
+        })
+        
+        # 2. Trigger auto-formatting
+        changed = parser.format_unformatted_blocks_in_note(note)
+        self.assertTrue(changed)
+        
+        # 3. Verify it was migrated to keyed 'c1' and unescaped to actual Malayalam characters with pretty indent!
+        front_val = note["Front"]
+        self.assertIn('"c1"', front_val) # Wrapped in c1
+        self.assertIn('"ഈ"', front_val)   # Unescaped from \u0d08 to actual character
+        self.assertIn('\n  "c1": {', front_val) # Indented
 
 if __name__ == "__main__":
     unittest.main()

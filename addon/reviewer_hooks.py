@@ -447,6 +447,13 @@ def on_webview_will_set_content(web_content, context):
                 note = None
 
             if note:
+                # Auto-format and migrate unformatted/legacy JSON blocks on the fly during review
+                try:
+                    if parser.format_unformatted_blocks_in_note(note, card):
+                        mw.col.update_note(note)
+                except Exception as format_err:
+                    logger.error(f"Error auto-formatting note on review: {format_err}")
+
                 # Inject ALL blocks found in the note. The frontend JS will select 
                 # the one matching the card ID once the ID is confirmed.
                 hints_blocks = parser.find_all_hints_blocks(note)

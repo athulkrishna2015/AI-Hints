@@ -53,7 +53,9 @@ class TestShortcuts(unittest.TestCase):
                 "show-json": "6"
             }
         }
-        mw.addonManager.getConfig.return_value = self.mock_config
+        import addon.reviewer_hooks
+        addon.reviewer_hooks.mw.addonManager.getConfig.return_value = self.mock_config
+
 
     def test_reviewer_shortcuts_registered_with_alt(self):
         on_state_shortcuts_will_change("review", self.shortcuts_list)

@@ -349,7 +349,7 @@ class CardParser:
                         else:
                              parsed.update(new_data)
                              
-                        new_payload = html.escape(json.dumps(parsed), quote=False)
+                        new_payload = self.serialize_json_payload(parsed)
                         new_attrs = self._build_attrs(toggles, card if not card_key else None)
                         new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
                         return current_val[:match.start()] + new_block + current_val[match.end():]
@@ -372,7 +372,7 @@ class CardParser:
                             # It's a keyed block but didn't match card_id/ord (maybe card was generated without scope)
                             # We update it anyway to keep all hints in one block.
                             parsed[card_key] = new_data
-                            new_payload = html.escape(json.dumps(parsed), quote=False)
+                            new_payload = self.serialize_json_payload(parsed)
                             new_attrs = self._build_attrs(toggles, None) # keep universal
                             new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
                             return current_val[:match.start()] + new_block + current_val[match.end():]
@@ -391,7 +391,7 @@ class CardParser:
         data = self.normalize_hint_data(data)
         attrs = self._build_attrs(toggles, card)
         if self.storage_mode == "json":
-            payload = html.escape(json.dumps(data), quote=False)
+            payload = self.serialize_json_payload(data)
             return f'<div class="{self.json_class}" {attrs} style="display:none">{payload}</div>'
         return self._build_html_block(data, attrs)
 
@@ -610,7 +610,7 @@ class CardParser:
                             del parsed[card_key]
                             if parsed:
                                 # Re-save updated JSON
-                                new_payload = html.escape(json.dumps(parsed), quote=False)
+                                new_payload = self.serialize_json_payload(parsed)
                                 # We only replace the inner payload, keep the outer div
                                 inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
                                 if inner_match:
@@ -757,3 +757,65 @@ class CardParser:
         escaped = re.sub(r'&lt;(anki-mathjax)&gt;', r'<\1>', escaped, flags=re.IGNORECASE)
         escaped = re.sub(r'&lt;/(anki-mathjax)&gt;', r'</\1>', escaped, flags=re.IGNORECASE)
         return escaped
+
+    def serialize_json_payload(self, data: dict) -> str:
+        """Serializes JSON payload with pretty 2-space indentation, no ASCII encoding, and HTML escaping."""
+        pretty_json = json.dumps(data, indent=2, ensure_ascii=False)
+        return html.escape(pretty_json, quote=False)
+
+    def format_unformatted_blocks_in_note(self, note, card=None) -> bool:
+        """
+        Scans all fields of the note for any JSON hints blocks.
+        If a block is flat (legacy) or unformatted (compact/escaped), 
+        it migrates/formats it, saves the note, and returns True.
+        """
+        fields = list(note.keys()) if hasattr(note, "keys") else []
+        if not fields:
+            return False
+            
+        note_changed = False
+        pattern = re.compile(
+            rf'<div\b[^>]*class=["\'][^"\']*{self.json_class}[^"\']*["\'][^>]*>(.*?)</div>',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        
+        for f_name in fields:
+            val = note[f_name]
+            if not isinstance(val, str) or self.json_class not in val:
+                continue
+                
+            new_val = val
+            matches = list(pattern.finditer(val))
+            for match in reversed(matches):
+                block_html = match.group(0)
+                raw_payload = match.group(1)
+                try:
+                    parsed = self._parse_json_payload(raw_payload)
+                    if not isinstance(parsed, dict) or not parsed:
+                        continue
+                        
+                    # 1. Check if it's a legacy flat block (no keys like c1, c2)
+                    is_flat = not self._is_keyed_payload(parsed)
+                    if is_flat:
+                        parsed = {"c1": parsed}
+                        
+                    # 2. Serialize to pretty format
+                    formatted_payload = self.serialize_json_payload(parsed)
+                    
+                    # 3. If either it was flat, or raw_payload has unicode escapes, or has different whitespace:
+                    if is_flat or raw_payload != formatted_payload:
+                        # Rebuild the div block
+                        inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
+                        if inner_match:
+                            new_block = block_html.replace(inner_match.group(1), formatted_payload)
+                            new_val = new_val[:match.start()] + new_block + new_val[match.end():]
+                            note_changed = True
+                except Exception as e:
+                    logger.error(f"Error checking/formatting JSON block: {e}")
+                    
+            if note_changed:
+                note[f_name] = new_val
+                
+        return note_changed
+
+

@@ -948,6 +948,55 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config["shortcuts"] = shortcuts
         return config
 
+    def on_convert_unicode_escapes(self):
+        """Scans all notes and converts legacy compact/escaped JSON blocks to pretty raw Unicode."""
+        from aqt.qt import Qt, QProgressDialog, QApplication
+        from aqt.utils import askUser, showInfo
+        from ..card_parser import CardParser
+
+        if not askUser("This will scan your entire collection and convert any legacy AI hints JSON data with hex escape codes (like \\uXXXX) into readable text and apply pretty formatting.\n\nContinue?"):
+            return
+
+        parser = CardParser(
+            storage_mode=self.config.get("storage_mode", "json"),
+            mathjax_format=self.config.get("mathjax_format", "delimiters"),
+            fix_latex=self.config.get("fix_latex", False)
+        )
+
+        nids = mw.col.find_notes("")
+        total = len(nids)
+        if total == 0:
+            showInfo("Your collection is empty!")
+            return
+
+        # Show a progress dialog
+        progress = QProgressDialog("Converting legacy Unicode escapes...", "Cancel", 0, total, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(200)
+
+        changed_count = 0
+
+        for i, nid in enumerate(nids):
+            if progress.wasCanceled():
+                break
+            progress.setValue(i)
+            progress.setLabelText(f"Converting note {i+1} of {total}...")
+            QApplication.processEvents()
+
+            try:
+                note = mw.col.get_note(nid)
+                if parser.format_unformatted_blocks_in_note(note):
+                    mw.col.update_note(note)
+                    changed_count += 1
+            except Exception as note_err:
+                logger.error(f"Error converting note {nid} Unicode escapes: {note_err}")
+
+        progress.setValue(total)
+        showInfo(
+            f"🎉 Conversion Complete!\n\n"
+            f"Successfully updated and pretty-printed AI hints in {changed_count} notes."
+        )
+
     def on_scan_orphans(self):
         """Scans the entire collection to find and list orphaned AI hints in JSON blocks."""
         from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox
@@ -1059,7 +1108,16 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             list_item = QListWidgetItem(preview_text)
             list_widget.addItem(list_item)
 
+        tip_label = QLabel("💡 <i>Double-click an item or click 'Show in Browser' to view the note in Anki's Browser.</i>")
+        tip_label.setWordWrap(True)
+        tip_label.setStyleSheet("color: #666; font-size: 11px; margin-top: 2px; margin-bottom: 2px;")
+        layout.addWidget(tip_label)
+
         btn_layout = QHBoxLayout()
+        
+        show_btn = QPushButton("🔍 Show in Browser")
+        show_btn.setStyleSheet("padding: 6px; border-radius: 4px;")
+        show_btn.setEnabled(False)
         
         clean_btn = QPushButton(f"🔥 Remove {len(orphaned_hints)} Orphaned Hints")
         clean_btn.setStyleSheet("font-weight: bold; background-color: #dc3545; color: white; padding: 6px; border-radius: 4px;")
@@ -1067,10 +1125,29 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setStyleSheet("padding: 6px;")
         
+        btn_layout.addWidget(show_btn)
         btn_layout.addStretch()
         btn_layout.addWidget(clean_btn)
         btn_layout.addWidget(cancel_btn)
         layout.addLayout(btn_layout)
+
+        def on_show_card():
+            selected_row = list_widget.currentRow()
+            if selected_row < 0 or selected_row >= len(orphaned_hints):
+                return
+            item_data = orphaned_hints[selected_row]
+            note_id = item_data["note_id"]
+            from aqt import dialogs
+            browser = dialogs.open("Browser", mw)
+            browser.search_for_note_by_id(note_id)
+
+        def on_selection_changed():
+            show_btn.setEnabled(list_widget.currentRow() >= 0)
+
+        list_widget.currentRowChanged.connect(on_selection_changed)
+        list_widget.itemDoubleClicked.connect(on_show_card)
+        show_btn.clicked.connect(on_show_card)
+
 
         def do_clean():
             cleaned_count = 0
@@ -1111,7 +1188,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                                 
                                 if keys_removed > 0:
                                     if parsed:
-                                        new_payload = html.escape(json.dumps(parsed), quote=False)
+                                        new_payload = parser.serialize_json_payload(parsed)
                                         inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
                                         if inner_match:
                                             new_block = block_html.replace(inner_match.group(1), new_payload)

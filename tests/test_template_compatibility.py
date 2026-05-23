@@ -40,7 +40,7 @@ class TemplateCompatibilityTests(unittest.TestCase):
         # Extract the JSON from the field
         match = next(iter(self.parser.find_all_hints_blocks(note)))
         import re
-        json_match = re.search(r'>(.*?)</div>', match)
+        json_match = re.search(r'>(.*?)</div>', match, flags=re.DOTALL)
         payload = json.loads(html.unescape(json_match.group(1)))
         
         # template.js expects either {hints:[], options:[]} or {c1: {hints:[], options:[]}}
@@ -63,7 +63,7 @@ class TemplateCompatibilityTests(unittest.TestCase):
         
         match = next(iter(self.parser.find_all_hints_blocks(note)))
         import re
-        json_match = re.search(r'>(.*?)</div>', match)
+        json_match = re.search(r'>(.*?)</div>', match, flags=re.DOTALL)
         payload = json.loads(html.unescape(json_match.group(1)))
         
         self.assertIn("c1", payload)
