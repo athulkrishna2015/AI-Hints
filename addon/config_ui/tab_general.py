@@ -54,8 +54,7 @@ class GeneralTabMixin:
         button_layout.addRow(self.show_in_popup_cb)
         
         button_group.setLayout(button_layout)
-        gen_layout.addRow(button_group)
-
+        
         # --- Auto-Show & Generation Group ---
         show_group = QGroupBox("Auto-Show & Generation")
         show_layout = QFormLayout()
@@ -138,11 +137,12 @@ class GeneralTabMixin:
         show_layout.addRow(self.manual_show_options_cb)
         
         show_group.setLayout(show_layout)
-        gen_layout.addRow(show_group)
         
         # Main layout wrapper to prevent vertical stretching
         main_layout = QVBoxLayout()
         main_layout.addLayout(gen_layout)
+        main_layout.addWidget(button_group)
+        main_layout.addWidget(show_group)
         main_layout.addStretch()
         
         self.general_tab.setLayout(main_layout)
