@@ -161,7 +161,9 @@ class CardParser:
 
     def get_note_content(self, note, card=None) -> Tuple[str, str]:
         """Extracts front and back content for AI context.
-        Uses the first field as Front and all others as Back context."""
+        Uses the first field as Front and all others as Back context.
+        For reversed cards (card.ord > 0 on non-cloze notes), reads the card
+        template's qfmt to determine the actual front field and swaps accordingly."""
         model_name = note.model()["name"]
         fields = list(note.items())
         if not fields:
@@ -169,16 +171,48 @@ class CardParser:
 
         front = fields[0][1]
         back = ""
-        
+
         # If it's a Cloze card, we focus on the specific cloze
         if "cloze" in model_name.lower():
             front, back = self._focus_current_cloze(front, card)
             if not back:
                 return "", ""
         else:
-            back = "\n".join([v for k, v in fields[1:]])
-        
+            # Detect reversed card templates by inspecting the card's template qfmt.
+            # For "Basic (and reversed card)", card.ord==1 uses the second template
+            # which shows Field[1] on the front and Field[0] on the back.
+            front_field_index = 0
+            if card is not None:
+                try:
+                    model = note.model()
+                    templates = model.get("tmpls", [])
+                    card_ord = self._card_ord(card)
+                    if card_ord is not None and card_ord < len(templates):
+                        tmpl = templates[card_ord]
+                        qfmt = tmpl.get("qfmt", "")
+                        # Find which field name appears first in the question template.
+                        # fields is a list of (field_name, value) tuples.
+                        first_match_idx = None
+                        first_match_pos = len(qfmt) + 1
+                        for idx, (fname, _) in enumerate(fields):
+                            pos = qfmt.find("{{" + fname + "}}")
+                            if pos != -1 and pos < first_match_pos:
+                                first_match_pos = pos
+                                first_match_idx = idx
+                        if first_match_idx is not None and first_match_idx != 0:
+                            front_field_index = first_match_idx
+                except Exception:
+                    pass  # Fall back to default field[0] as front
+
+            if front_field_index != 0:
+                # Reversed: the front field is not field[0]
+                front = fields[front_field_index][1]
+                back = "\n".join([v for i, (k, v) in enumerate(fields) if i != front_field_index])
+            else:
+                back = "\n".join([v for k, v in fields[1:]])
+
         return self._clean_html(front), self._clean_html(back)
+
 
     def _clean_html(self, html_text: str) -> str:
         """Remove most HTML tags to reduce tokens and noise."""

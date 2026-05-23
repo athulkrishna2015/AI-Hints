@@ -13,12 +13,13 @@ from addon.card_parser import CardParser
 
 
 class FakeNote(dict):
-    def __init__(self, model_name, fields):
+    def __init__(self, model_name, fields, templates=None):
         super().__init__(fields)
         self._model_name = model_name
+        self._templates = templates or []
 
     def model(self):
-        return {"name": self._model_name}
+        return {"name": self._model_name, "tmpls": self._templates}
 
 
 class FakeCard:
@@ -122,6 +123,31 @@ class CardParserTests(unittest.TestCase):
         front, back = parser.get_note_content(note, card=FakeCard(2, 1))
         self.assertEqual(front, "")
         self.assertEqual(back, "")
+
+
+    def test_reversed_card_swaps_front_and_back(self):
+        """For 'Basic (and reversed card)', card.ord==1 should swap front and back."""
+        # Simulate the two templates of 'Basic (and reversed card)'
+        templates = [
+            {"qfmt": "{{Front}}", "afmt": "{{Back}}"},   # ord 0: normal
+            {"qfmt": "{{Back}}",  "afmt": "{{Front}}"},  # ord 1: reversed
+        ]
+        note = FakeNote(
+            "Basic (and reversed card)",
+            {"Front": "Capital of France", "Back": "Paris"},
+            templates=templates,
+        )
+        parser = CardParser()
+
+        # Normal card (ord 0): front=Front field, back=Back field
+        front, back = parser.get_note_content(note, card=FakeCard(1, 0))
+        self.assertEqual(front, "Capital of France")
+        self.assertEqual(back, "Paris")
+
+        # Reversed card (ord 1): front=Back field, back=Front field
+        front, back = parser.get_note_content(note, card=FakeCard(2, 1))
+        self.assertEqual(front, "Paris")
+        self.assertEqual(back, "Capital of France")
 
 
 if __name__ == "__main__":
