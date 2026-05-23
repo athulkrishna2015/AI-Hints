@@ -12,7 +12,7 @@
     // 1. Configuration & Styling
     const STYLES = `
         .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; pointer-events: none; }
-        .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; pointer-events: auto; }
+        .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; pointer-events: none; }
         .ai-hints-content-active { display: block; border: 1px dashed #aaa; background-color: rgba(128,128,128,0.06); }
         .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; pointer-events: auto; }
         .ai-hints-btn { padding: 4px 10px; cursor: pointer; border-radius: 6px; border: 1px solid #999; background-color: #f0f0f0; color: #222; font-size: 12px; font-weight: 500; transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
