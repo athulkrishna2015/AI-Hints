@@ -52,3 +52,10 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
     gui_hooks.profile_will_close.append(on_profile_will_close)
     init_hooks()
     init_config_ui()
+
+    # Enable Anki Terminator addon support
+    try:
+        from .anki_terminator_patch import setup_anki_terminator_patch
+        setup_anki_terminator_patch()
+    except Exception:
+        pass
