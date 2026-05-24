@@ -149,6 +149,24 @@ class CardParserTests(unittest.TestCase):
         self.assertEqual(front, "Paris")
         self.assertEqual(back, "Capital of France")
 
+    def test_reversed_card_with_filters_swaps_front_and_back(self):
+        """For 'Basic (and reversed card)' templates with filters or spaces, it should still correctly swap."""
+        templates = [
+            {"qfmt": "{{type:Front}}", "afmt": "{{Back}}"},   # ord 0: normal
+            {"qfmt": "{{type:Back}}",  "afmt": "{{Front}}"},  # ord 1: reversed
+        ]
+        note = FakeNote(
+            "Basic (and reversed card)",
+            {"Front": "Capital of France", "Back": "Paris"},
+            templates=templates,
+        )
+        parser = CardParser()
+
+        # Reversed card with filter (ord 1)
+        front, back = parser.get_note_content(note, card=FakeCard(2, 1))
+        self.assertEqual(front, "Paris")
+        self.assertEqual(back, "Capital of France")
+
 
 if __name__ == "__main__":
     unittest.main()

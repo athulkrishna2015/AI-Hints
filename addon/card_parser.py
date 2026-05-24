@@ -195,10 +195,14 @@ class CardParser:
                         first_match_idx = None
                         first_match_pos = len(qfmt) + 1
                         for idx, (fname, _) in enumerate(fields):
-                            pos = qfmt.find("{{" + fname + "}}")
-                            if pos != -1 and pos < first_match_pos:
-                                first_match_pos = pos
-                                first_match_idx = idx
+                            # Search for field references like {{Field}}, {{type:Field}}, {{cloze:Field}}, etc., with optional spaces
+                            pattern = re.compile(r'\{\{\s*(?:[^}]*?:)?\s*' + re.escape(fname) + r'\s*\}\}')
+                            match = pattern.search(qfmt)
+                            if match:
+                                pos = match.start()
+                                if pos < first_match_pos:
+                                    first_match_pos = pos
+                                    first_match_idx = idx
                         if first_match_idx is not None and first_match_idx != 0:
                             front_field_index = first_match_idx
                 except Exception:
