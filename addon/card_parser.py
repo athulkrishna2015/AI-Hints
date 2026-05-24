@@ -207,9 +207,12 @@ class CardParser:
             if front_field_index != 0:
                 # Reversed: the front field is not field[0]
                 front = fields[front_field_index][1]
-                back = "\n".join([v for i, (k, v) in enumerate(fields) if i != front_field_index])
+                # The back field for a reversed card is typically the first field (index 0)
+                back = fields[0][1] if len(fields) > 0 else ""
             else:
-                back = "\n".join([v for k, v in fields[1:]])
+                front = fields[0][1]
+                # In standard cards, only the front and back (index 0 and 1) fields are sent
+                back = fields[1][1] if len(fields) > 1 else ""
 
         return self._clean_html(front), self._clean_html(back)
 
