@@ -164,7 +164,8 @@ class CardParser:
         Uses the first field as Front and all others as Back context.
         For reversed cards (card.ord > 0 on non-cloze notes), reads the card
         template's qfmt to determine the actual front field and swaps accordingly."""
-        model_name = note.model()["name"]
+        model = note.model()
+        model_name = model["name"].lower()
         fields = list(note.items())
         if not fields:
             return "", ""
@@ -173,7 +174,8 @@ class CardParser:
         back = ""
 
         # If it's a Cloze card, we focus on the specific cloze
-        if "cloze" in model_name.lower():
+        # Check both name and internal model type (1 = Cloze)
+        if "cloze" in model_name or model.get("type") == 1:
             front, back = self._focus_current_cloze(front, card)
             if not back:
                 return "", ""
@@ -225,8 +227,19 @@ class CardParser:
         """Remove most HTML tags to reduce tokens and noise."""
         if not isinstance(html_text, str):
             html_text = str(html_text or "")
+        
         # Remove scripts and styles
         html_text = re.sub(r"<(script|style).*?>.*?</\1>", "", html_text, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Aggressively remove AI-Hints blocks (JSON and container) including their content
+        # to prevent existing hints from polluting the AI prompt context.
+        html_text = re.sub(
+            r'<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>', 
+            "", 
+            html_text, 
+            flags=re.DOTALL | re.IGNORECASE
+        )
+
         # Remove all other tags but keep content
         text = re.sub(r"<.*?>", " ", html_text)
         text = html.unescape(text)
@@ -236,10 +249,13 @@ class CardParser:
 
     def _focus_current_cloze(self, text: str, card=None) -> Tuple[str, str]:
         """Mark the cloze deletion for the current card and extract all active answers."""
+        from .logger import logger
         cloze_number = self._card_ord(card)
         if cloze_number is None:
             return text, ""
         cloze_number += 1
+        
+        logger.debug(f"AI-Hints CardParser focusing cloze #{cloze_number} (card.ord={self._card_ord(card)})")
 
         answers_map = {} # {original_pos: cleaned_ans}
 

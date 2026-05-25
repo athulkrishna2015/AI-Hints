@@ -1188,6 +1188,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         logger.info("AI-Hints: Skipping generation for card %s as no content was found (likely a missing cloze).", card_id)
         return
 
+    logger.info(f"AI-Hints generating for card {card_id} (ord={card.ord}): Front='{front}', Back='{back}'")
     logger.info("AI-Hints generation started for card %s using provider: %s (manual=%s, pregen=%s)", card_id, provider, is_manual, is_pregen)
     
     if is_manual:

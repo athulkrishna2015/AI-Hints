@@ -124,8 +124,13 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### May 25, 2026 (v2.5.3)
+- **Eliminated Prompt Pollution**: Fixed a critical bug where existing AI-Hints JSON data was being sent back to the LLM as part of the card text. The cleaner now aggressively strips all previous hint/option data before generation, ensuring the AI only focuses on the actual card content.
+- **Improved Cloze Context**: Replaced active cloze answers with a `[...]` placeholder on the front side. This prevents the AI from seeing the correct answer in the question context, drastically improving option quality for secondary clozes (like `c2`).
+- **Enhanced AI Transparency**: Updated logs to display the full, un-truncated "Front" and "Back" payloads sent to the AI, making it easier to audit prompt quality.
+- **Robust Model Detection**: Improved detection of cloze note types by checking Anki's internal model type flags.
+
 ### May 25, 2026 (v2.5.2)
-- **Cloze Answer Exposure Fix**: Modified `CardParser` to use a `[...]` placeholder for the active cloze on the front side. This prevents the AI from seeing the correct answer in the question context, resolving the issue where secondary clozes (like `c2`) would generate incorrect options based on already-revealed text.
 - **AnkiDroid Option Randomization Fix**: Added a dynamic `hashCode` content resolver to ensure every card reviewed on AnkiDroid gets a unique state key and random shuffling seed, resolving the stuck-option bug.
 - **Enhanced Distractor Guidelines**: Updated the default system prompt with the **Temporal & Field Parallelism Trap** (for Nobel Prizes and historical events) and the **Prevent Overlapping Clues** constraint to avoid similar options that give away answers.
 
