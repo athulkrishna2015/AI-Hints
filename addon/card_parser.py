@@ -277,7 +277,7 @@ class CardParser:
             cleaned_ans = self._clean_html(answer)
             answers_map[start_pos_in_original] = cleaned_ans
             
-            res = f"{ACTIVE_MARKER_START}{answer}"
+            res = f"{ACTIVE_MARKER_START}[...]"
             if hint:
                 res += f" (existing hint: {hint})"
             res += ACTIVE_MARKER_END

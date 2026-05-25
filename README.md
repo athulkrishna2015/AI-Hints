@@ -125,6 +125,7 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 ## Changelog
 
 ### May 25, 2026 (v2.5.2)
+- **Cloze Answer Exposure Fix**: Modified `CardParser` to use a `[...]` placeholder for the active cloze on the front side. This prevents the AI from seeing the correct answer in the question context, resolving the issue where secondary clozes (like `c2`) would generate incorrect options based on already-revealed text.
 - **AnkiDroid Option Randomization Fix**: Added a dynamic `hashCode` content resolver to ensure every card reviewed on AnkiDroid gets a unique state key and random shuffling seed, resolving the stuck-option bug.
 - **Enhanced Distractor Guidelines**: Updated the default system prompt with the **Temporal & Field Parallelism Trap** (for Nobel Prizes and historical events) and the **Prevent Overlapping Clues** constraint to avoid similar options that give away answers.
 
