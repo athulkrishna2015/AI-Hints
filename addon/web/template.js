@@ -35,6 +35,16 @@
 
     // 2. State & Helpers
     const isAddonActive = !!window.aiHintsUiConfig;
+
+    function hashCode(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash |= 0;
+        }
+        return Math.abs(hash).toString(36);
+    }
     
     function getPersistence() {
         return {
@@ -244,7 +254,16 @@
         }
 
         const ord = getCardOrd();
-        const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+        let cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+        if (cardId === 'temp') {
+            const firstJson = document.querySelector('.ai-hints-json');
+            if (firstJson) {
+                cardId = 'h' + hashCode(firstJson.textContent);
+            } else {
+                const qa = document.getElementById('qa') || document.body;
+                cardId = 'h' + hashCode(qa.innerText || qa.textContent || '');
+            }
+        }
         const cardKey = 'c' + (ord + 1);
         const onAnswer = isAnswerSide();
 
@@ -602,7 +621,16 @@
         
         // Clear all state keys for this specific card
         const ord = getCardOrd();
-        const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+        let cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+        if (cardId === 'temp') {
+            const firstJson = document.querySelector('.ai-hints-json');
+            if (firstJson) {
+                cardId = 'h' + hashCode(firstJson.textContent);
+            } else {
+                const qa = document.getElementById('qa') || document.body;
+                cardId = 'h' + hashCode(qa.innerText || qa.textContent || '');
+            }
+        }
         const prefix = 'state_' + cardId + '_' + ord;
         const persistence = getPersistence();
         
