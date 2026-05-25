@@ -124,6 +124,10 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### May 25, 2026 (v2.5.2)
+- **AnkiDroid Option Randomization Fix**: Added a dynamic `hashCode` content resolver to ensure every card reviewed on AnkiDroid gets a unique state key and random shuffling seed, resolving the stuck-option bug.
+- **Enhanced Distractor Guidelines**: Updated the default system prompt with the **Temporal & Field Parallelism Trap** (for Nobel Prizes and historical events) and the **Prevent Overlapping Clues** constraint to avoid similar options that give away answers.
+
 ### May 24, 2026 (v2.5.1)
 - **Anki Terminator Integration**: Added monkey-patch support for the "Anki Terminator" add-on. Intercepts card text field access and sanitizes AI-Hints hidden divs and container markup, ensuring seamless co-existence without UI disruption.
 - **Strict Field Extraction**: Restructured card content parsing to strictly target standard Front/Back fields for standard/reversed card extraction, ensuring auxiliary/storage fields are not sent to the LLM.
