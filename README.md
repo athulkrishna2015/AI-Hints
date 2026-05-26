@@ -126,6 +126,7 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ### May 25, 2026 (v2.5.3)
 - **Eliminated Prompt Pollution**: Fixed a critical bug where existing AI-Hints JSON data was being sent back to the LLM as part of the card text. The cleaner now aggressively strips all previous hint/option data before generation, ensuring the AI only focuses on the actual card content.
+- **Anti-Synthetic Distractor Logic**: Updated the system prompt with a strict "Real-World Accuracy" constraint. This prevents the AI from creating "made-up" distractors by simply swapping words (e.g., turning "Concurrent List" into "Integrated List") and forces it to use real, existing concepts from the same domain instead.
 - **Improved Cloze Context**: Replaced active cloze answers with a `[...]` placeholder on the front side. This prevents the AI from seeing the correct answer in the question context, drastically improving option quality for secondary clozes (like `c2`).
 - **Enhanced AI Transparency**: Updated logs to display the full, un-truncated "Front" and "Back" payloads sent to the AI, making it easier to audit prompt quality.
 - **Robust Model Detection**: Improved detection of cloze note types by checking Anki's internal model type flags.
