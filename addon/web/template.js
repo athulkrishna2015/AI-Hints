@@ -385,6 +385,12 @@
             }
         }
 
+        // Unconditional display on the back/answer side regardless of other settings
+        if (onAnswer) {
+            state.hints = true;
+            state.options = true;
+        }
+
         // Process existing blocks or containers
         let targetBlocks = manualData ? [null] : Array.from(jsonBlocks).filter(block => {
             try {
