@@ -106,31 +106,33 @@ class TestBatchManager(unittest.TestCase):
     @patch('addon.batch_manager.BatchManager.start_local_sequential_queue')
     @patch('addon.batch_manager.BatchManager.start_timer_if_needed')
     def test_initialize_batch_manager_auto_resumes(self, mock_start_timer, mock_start_queue):
-        """Test that initialize_batch_manager auto-resumes active unpaused sequential queues."""
-        # 1. Active & unpaused -> should auto-resume
+        """Test that initialize_batch_manager restores active sequential queues in a paused state."""
+        # 1. Active & unpaused -> should restore in paused state
         batch_manager.local_queue = [100, 200]
         batch_manager.local_queue_active = True
         batch_manager.local_queue_paused = False
 
         initialize_batch_manager()
         mock_start_queue.assert_called_once_with(None)
+        self.assertTrue(batch_manager.local_queue_paused)   # Should be set to True on startup!
         self.assertFalse(batch_manager.local_queue_active)  # Reset to False so start_local_sequential_queue can run
 
         # Reset mocks
         mock_start_queue.reset_mock()
 
-        # 2. Active but paused -> should NOT auto-resume
+        # 2. Active and already paused -> should also restore in paused state
         batch_manager.local_queue = [100, 200]
         batch_manager.local_queue_active = True
         batch_manager.local_queue_paused = True
 
         initialize_batch_manager()
-        mock_start_queue.assert_not_called()
+        mock_start_queue.assert_called_once_with(None)
+        self.assertTrue(batch_manager.local_queue_paused)
 
         # Reset mocks
         mock_start_queue.reset_mock()
 
-        # 3. Not active -> should NOT auto-resume
+        # 3. Not active -> should NOT restore
         batch_manager.local_queue = [100, 200]
         batch_manager.local_queue_active = False
         batch_manager.local_queue_paused = False

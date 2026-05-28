@@ -348,7 +348,8 @@ class BatchManager:
              return False
 
         self.local_queue_active = True
-        self.local_queue_paused = False # Explicitly ensure unpaused on resume
+        if card_ids is not None:
+             self.local_queue_paused = False
         
         # Immediately persist setup state to disk in case of crash 1ms later
         self.save_state()
@@ -529,7 +530,8 @@ batch_manager = BatchManager()
 def initialize_batch_manager():
     """Call on addon setup to resume outstanding polling or auto-resume local sequential queue if needed."""
     batch_manager.start_timer_if_needed()
-    if batch_manager.local_queue and batch_manager.local_queue_active and not batch_manager.local_queue_paused:
-        logger.info("AI-Hints: Auto-resuming interrupted local sequential queue on startup.")
+    if batch_manager.local_queue and batch_manager.local_queue_active:
+        logger.info("AI-Hints: Restoring interrupted local sequential queue on startup in a PAUSED state.")
+        batch_manager.local_queue_paused = True
         batch_manager.local_queue_active = False # Allow the queue to start
         batch_manager.start_local_sequential_queue(None)

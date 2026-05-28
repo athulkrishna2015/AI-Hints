@@ -124,6 +124,9 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
  
+### May 29, 2026 (v2.6.1)
+- **Batch Startup-Pause State**: Interrupted batch queues will now automatically restore upon Anki startup in a **PAUSED** state, waiting for you to explicitly resume them instead of auto-starting immediately.
+
 ### May 28, 2026 (v2.6.0)
 - **Auto-Resume Interrupted Queues**: Added state persistence for the local sequential batch generation queue. If Anki is closed or terminated while a queue is actively running, it will automatically resume generating upon Anki startup.
 - **Clean Browser Columns & Sort Fields**: Registered a new Anki browser column format hook (`browser_did_fetch_row`) and enhanced the HTML/JSON cleaner to strip tag-stripped JSON blocks. This prevents raw JSON strings from displaying in the Browser's "Sort Field" column or other columns.
