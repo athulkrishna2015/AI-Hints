@@ -123,6 +123,10 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 
 ## Changelog
+ 
+### May 28, 2026 (v2.6.0)
+- **Auto-Resume Interrupted Queues**: Added state persistence for the local sequential batch generation queue. If Anki is closed or terminated while a queue is actively running, it will automatically resume generating upon Anki startup.
+- **Clean Browser Columns & Sort Fields**: Registered a new Anki browser column format hook (`browser_did_fetch_row`) and enhanced the HTML/JSON cleaner to strip tag-stripped JSON blocks. This prevents raw JSON strings from displaying in the Browser's "Sort Field" column or other columns.
 
 ### May 25, 2026 (v2.5.3)
 - **Eliminated Prompt Pollution**: Fixed a critical bug where existing AI-Hints JSON data was being sent back to the LLM as part of the card text. The cleaner now aggressively strips all previous hint/option data before generation, ensuring the AI only focuses on the actual card content.
