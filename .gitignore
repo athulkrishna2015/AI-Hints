@@ -2,9 +2,11 @@ __pycache__/
 *.pyc
 *.ankiaddon
 *.log
+*.log.*
 meta.json
 addon/meta.json
 addon/ai_hints.log
+addon/ai_hints.log.*
 addon/batch_state.json
 addon/blacklist.json
 .vscode/
@@ -15,3 +17,6 @@ addon/bin/antigravity-proxy-*
 addon/bin/antigravity-accounts.json
 config.json
 antigravity-accounts.json
+.antigravitycli/
+**/.antigravitycli/
+**/__pycache__/
