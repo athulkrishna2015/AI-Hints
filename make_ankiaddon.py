@@ -2,6 +2,7 @@ import os
 import argparse
 import sys
 import zipfile
+import fnmatch
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +16,46 @@ from bump import (
 # Configuration
 ADDON_NAME = "AI_Hints"
 ADDON_DIR = "addon"
+
+def load_gitignore_patterns(root_dir: Path) -> list[str]:
+    gitignore_path = root_dir / ".gitignore"
+    if not gitignore_path.exists():
+        return []
+    
+    patterns = []
+    with gitignore_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            patterns.append(line)
+    return patterns
+
+def is_ignored(path: Path, root_dir: Path, patterns: list[str]) -> bool:
+    rel_path = path.relative_to(root_dir).as_posix()
+    parts = rel_path.split("/")
+    
+    # Exclude standard built-in git files unconditionally
+    if ".git" in parts:
+        return True
+        
+    for pattern in patterns:
+        p = pattern
+        is_dir_only = p.endswith("/")
+        if is_dir_only:
+            p = p[:-1]
+            
+        # 1. Match full relative path or any individual part/sub-path
+        if fnmatch.fnmatch(rel_path, p) or any(fnmatch.fnmatch(part, p) for part in parts):
+            return True
+            
+        # 2. Match directory prefix (e.g. pattern is 'scratch' and path is 'scratch/file.txt')
+        for i in range(1, len(parts) + 1):
+            sub_path = "/".join(parts[:i])
+            if fnmatch.fnmatch(sub_path, p):
+                return True
+                
+    return False
 
 def artifact_names(
     addon_name: str,
@@ -62,16 +103,6 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
 
     zip_name, final_name = artifact_names(ADDON_NAME, build_version)
 
-    # Exclusions
-    exclude_dirs = ['__pycache__', '.git', '.vscode', '.github', 'tests', '.antigravitycli']
-    exclude_files_names = ['antigravity-proxy-linux', 'antigravity-proxy-windows.exe',
-                           'antigravity-proxy-darwin-x64', 'antigravity-proxy-darwin-arm64',
-                           'antigravity-accounts.json']
-    exclude_exts = ['.ankiaddon', '.pyc', '.md', '.toml', '.lock', '.cff', '.png', '.bak']
-    exclude_files = ['meta.json', 'ai_hints.log', 'batch_state.json', 'blacklist.json', 
-                     'antigravity-accounts.json', '.gitignore', '.gitmodules', 'mypy.ini', 
-                     'LICENSE', '.git', 'README', 'README.md']
-
     # Clean up any existing .ankiaddon files in the root directory first to keep it tidy
     for f in root_dir.glob("*.ankiaddon"):
         try:
@@ -79,20 +110,31 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
         except Exception:
             pass
 
-    print(f"Creating {final_name} from {ADDON_DIR}...")
+    # Load gitignore patterns to filter files dynamically
+    gitignore_patterns = load_gitignore_patterns(root_dir)
+
+    print(f"Creating {final_name} from {ADDON_DIR} using .gitignore rules...")
 
     with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
         # Walk through the addon directory specifically
         for root, dirs, files in os.walk(addon_path):
-            # Filter directories in-place
-            dirs[:] = [d for d in dirs if d not in exclude_dirs]
+            # Prune directories in-place using gitignore
+            pruned_dirs = []
+            for d in dirs:
+                dir_path = Path(root) / d
+                if not is_ignored(dir_path, root_dir, gitignore_patterns):
+                    pruned_dirs.append(d)
+            dirs[:] = pruned_dirs
             
             for file in files:
                 file_path = Path(root) / file
-                # Skip excluded files/extensions/binary names and any log files (like ai_hints.log.1)
-                if file in exclude_files or file in exclude_files_names or file_path.suffix.lower() in exclude_exts or ".log" in file.lower():
+                
+                # Check if file matches gitignore rules
+                if is_ignored(file_path, root_dir, gitignore_patterns):
                     continue
-                # Skip binary executables by prefix (version-suffixed names like antigravity-proxy-linux-proxy-v0.7.1)
+                
+                # Skip proxy binaries by matching prefix (since these are built binary artifacts)
+                # Keep only what is not gitignored or is actual source
                 if any(file.startswith(n) for n in ['antigravity-proxy-linux', 'antigravity-proxy-windows', 'antigravity-proxy-darwin']):
                     continue
                 
