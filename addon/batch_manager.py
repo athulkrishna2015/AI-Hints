@@ -51,11 +51,13 @@ class BatchManager:
                 if cache and isinstance(cache, dict):
                      self.local_queue = cache.get("queue", [])
                      self.local_queue_total = cache.get("total", len(self.local_queue))
+                     self.local_queue_active = cache.get("active", False)
+                     self.local_queue_paused = cache.get("paused", False)
                      self.local_queue_errors = cache.get("errors", 0)
                      self.saved_config = cache.get("config", {})
                      self.saved_provider = cache.get("provider", None)
                      self.last_run_stats = cache.get("last_run_stats", None)
-                     logger.info(f"BatchManager restored state. Queue: {len(self.local_queue)} items.")
+                     logger.info(f"BatchManager restored state. Queue: {len(self.local_queue)} items (Active: {self.local_queue_active}, Paused: {self.local_queue_paused}).")
             else:
                 # Legacy format
                 self.jobs = data if isinstance(data, dict) else {}
@@ -73,6 +75,8 @@ class BatchManager:
                     "queue": self.local_queue,
                     "total": self.local_queue_total,
                     "errors": self.local_queue_errors,
+                    "active": self.local_queue_active,
+                    "paused": self.local_queue_paused,
                     "config": getattr(self, "saved_config", {}),
                     "provider": getattr(self, "saved_provider", None),
                     "last_run_stats": self.last_run_stats
@@ -396,6 +400,7 @@ class BatchManager:
     def set_pause_local_queue(self, pause_state: bool):
         """Sets global loop gate status."""
         self.local_queue_paused = pause_state
+        self.save_state()
         logger.info(f"Local Queue Pause set to: {pause_state}")
 
     def _run_local_queue(self, config: Dict, provider_override: str):
@@ -522,5 +527,9 @@ class BatchManager:
 batch_manager = BatchManager()
 
 def initialize_batch_manager():
-    """Call on addon setup to resume outstanding polling if needed."""
+    """Call on addon setup to resume outstanding polling or auto-resume local sequential queue if needed."""
     batch_manager.start_timer_if_needed()
+    if batch_manager.local_queue and batch_manager.local_queue_active and not batch_manager.local_queue_paused:
+        logger.info("AI-Hints: Auto-resuming interrupted local sequential queue on startup.")
+        batch_manager.local_queue_active = False # Allow the queue to start
+        batch_manager.start_local_sequential_queue(None)
