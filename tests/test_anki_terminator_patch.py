@@ -41,7 +41,15 @@ class TestAnkiTerminatorPatch(unittest.TestCase):
         hidden_json = '<div class="ai-hints-json" style="display:none">{"hints": ["h1"], "options": ["o1"]}</div>'
         self.assertEqual(clean_ai_hints_from_text(hidden_json), "")
 
-        # 3. Text with both hidden JSON and visible container should be completely cleared
+        # 3. Tag-stripped JSON block (e.g. from sfld) should be completely cleared
+        stripped_json = '1 9 {\n  "c1": {\n    "hints": [\n      "Consider hierarchical logic."\n    ],\n    "options": [\n      "option1",\n      "option2"\n    ]\n  }\n}'
+        self.assertEqual(clean_ai_hints_from_text(stripped_json), "1 9")
+
+        # 4. Another tag-stripped JSON block with multiple clozes
+        stripped_multi = 'what is carbon {\n  "c1": {\n    "hints": ["H1"],\n    "options": ["O1"]\n  },\n  "c2": {\n    "hints": ["H2"],\n    "options": ["O2"]\n  }\n}'
+        self.assertEqual(clean_ai_hints_from_text(stripped_multi), "what is carbon")
+
+        # 5. Text with both hidden JSON and visible container should be completely cleared
         mixed = (
             'Some start text\n'
             '<div class="ai-hints-json" style="display:none">{"hints": ["h1"], "options": ["o1"]}</div>\n'

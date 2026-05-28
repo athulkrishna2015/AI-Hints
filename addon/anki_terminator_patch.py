@@ -8,7 +8,32 @@ def clean_ai_hints_from_text(text: str) -> str:
         r'(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*',
         flags=re.DOTALL | re.IGNORECASE,
     )
-    return re.sub(pattern, "", text).strip()
+    cleaned = re.sub(pattern, "", text)
+    
+    # Strip plain/tag-stripped JSON payloads that get saved in sfld (Sort Field)
+    idx = 0
+    while True:
+        start_idx = cleaned.find("{", idx)
+        if start_idx == -1:
+            break
+        chunk = cleaned[start_idx:start_idx+150]
+        if any(f'"c{i}"' in chunk for i in range(1, 10)) and ('"hints"' in chunk or '"options"' in chunk):
+            brace_count = 0
+            end_idx = -1
+            for i in range(start_idx, len(cleaned)):
+                if cleaned[i] == '{':
+                    brace_count += 1
+                elif cleaned[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_idx = i
+                        break
+            if end_idx != -1:
+                cleaned = cleaned[:start_idx] + cleaned[end_idx+1:]
+                idx = start_idx
+                continue
+        idx = start_idx + 1
+    return cleaned.strip()
 
 class CleanNoteProxy:
     def __init__(self, original_note):
@@ -130,5 +155,15 @@ def setup_anki_terminator_patch():
         from aqt.qt import QTimer
         # Schedule another try in 1 second to make sure it's captured
         QTimer.singleShot(1000, patch_anki_terminator)
+    except Exception:
+        pass
+
+    try:
+        from aqt import gui_hooks
+        def clean_browser_row(item_id, is_card, row, columns):
+            for cell in row.cells:
+                if cell.text:
+                    cell.text = clean_ai_hints_from_text(cell.text)
+        gui_hooks.browser_did_fetch_row.append(clean_browser_row)
     except Exception:
         pass
