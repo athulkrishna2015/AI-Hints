@@ -176,12 +176,20 @@ def _trigger_next_pregeneration():
     # Defer slightly to let UI settle
     QTimer.singleShot(500, _task)
 def get_web_assets():
-    global _js_cache
+    global _js_cache, _css_cache
     if _js_cache is None:
         addon_dir = os.path.dirname(__file__)
         with open(os.path.join(addon_dir, "web", "template.js"), "r", encoding="utf-8") as f:
             _js_cache = f.read()
-    return "", _js_cache
+        
+        # Dynamically extract STYLES block using regex so we don't duplicate CSS code
+        import re
+        style_match = re.search(r'const STYLES = `(.*?)`;', _js_cache, re.DOTALL)
+        if style_match:
+            _css_cache = style_match.group(1).strip()
+        else:
+            _css_cache = ""
+    return _css_cache, _js_cache
 
 def show_api_error_dialog(provider=None, is_custom=False):
     msg = QMessageBox(mw)
@@ -421,6 +429,8 @@ def on_webview_will_set_content(web_content, context):
     _current_card_has_data = False
 
     css, js = get_web_assets()
+    if css:
+        web_content.head += f"\n<style id='ai-hints-head-styles'>{css}</style>\n"
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
