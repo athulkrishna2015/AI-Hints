@@ -11,7 +11,7 @@
 
     // 1. Configuration & Styling
     const STYLES = `
-        .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; }
+        .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; font-size: 0.8em; }
         .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; }
         .ai-hints-content-active { display: block; border: 1px dashed #aaa; background-color: rgba(128,128,128,0.06); }
         .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
@@ -20,7 +20,7 @@
         .ai-hints-btn:active { background-color: #d0d0d0; transform: translateY(1px); }
         .ai-hints-btn:disabled { opacity: 0.5; cursor: default; }
         .ai-hints-list, .ai-hints-hint-list { margin-top: 6px; padding-left: 20px; margin-bottom: 0; }
-        .ai-hints-list li, .ai-hints-hint-list li { margin-bottom: 4px; line-height: 1.3; font-size: 0.8em; }
+        .ai-hints-list li, .ai-hints-hint-list li { margin-bottom: 4px; line-height: 1.3; }
         .ai-hints-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.12); padding-left: 8px; font-weight: 600; border-radius: 0 4px 4px 0; }
         .nightMode .ai-hints-content-active { background-color: rgba(255,255,255,0.04); border-color: #555; }
         .nightMode .ai-hints-btn { background-color: #333; color: #eee; border-color: #666; }
@@ -58,9 +58,23 @@
     }
 
     function getCardOrd() {
+        // If Python backend is active, use the exact ordinal passed by Anki Desktop.
         if (isAddonActive && window.aiHintsCurrentCard && window.aiHintsCurrentCard.ord !== undefined && window.aiHintsCurrentCard.ord !== null) {
             return window.aiHintsCurrentCard.ord;
         }
+
+        // CRITICAL FOR MOBILE Sync (AnkiDroid, AnkiMobile, Web Reviewer):
+        // When Python is not running, we must dynamically detect which cloze deletion is active.
+        // 1. Try body class name: Anki and AnkiDroid set classes like 'card1' (for c1), 'card2' (for c2),
+        //    etc., directly on the <body> tag. This is the most reliable way to find the current cloze.
+        const bodyClass = document.body.className;
+        const bodyMatch = bodyClass.match(/\bcard(\d+)\b/);
+        if (bodyMatch) {
+            return parseInt(bodyMatch[1]) - 1;
+        }
+
+        // 2. Fallback to active cloze class: Some custom templates might tag clozes with classes like 'c1', 'c2'.
+        //    Note: Standard Anki/AnkiDroid only uses class='cloze' without numbering, so this is just a backup.
         const cloze = document.querySelector('.cloze');
         if (cloze) {
             const match = cloze.className.match(/\bc(\d+)\b/);

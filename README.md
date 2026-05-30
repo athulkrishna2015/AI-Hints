@@ -124,6 +124,10 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
  
+### May 30, 2026 (v2.6.2)
+- **Compact Dynamic Sizing**: Scaled option and hint lists down to 80% (`0.8em`) of the native card font size to ensure compact, perfectly proportioned, and responsive layout across all templates.
+- **AnkiDroid Cloze Ordinal Sync**: Fixed mobile synced reviewer always showing `c1` data on AnkiDroid/AnkiMobile. Correctly extracts active cloze index (`card1`, `card2`, etc.) directly from `document.body` classes when the Python backend is absent.
+
 ### May 29, 2026 (v2.6.1)
 - **Batch Startup-Pause State**: Interrupted batch queues will now automatically restore upon Anki startup in a **PAUSED** state, waiting for you to explicitly resume them instead of auto-starting immediately.
 
