@@ -98,12 +98,26 @@ class GeneralTabMixin:
         version_row.addStretch()
         show_layout.addRow(version_container)
 
-        self.pre_generate_next_cb = QCheckBox("Pre-generate for next card in queue")
+        pregen_container = QWidget()
+        pregen_row = QHBoxLayout(pregen_container)
+        pregen_row.setContentsMargins(0, 0, 0, 0)
+        pregen_row.setSpacing(10)
+
+        self.pre_generate_next_cb = QCheckBox("Pre-generate ahead")
         self.pre_generate_next_cb.setToolTip(
-            "Start generating hints for the next card in the background while you are reviewing the current one. "
-            "Data is only saved to the card when it actually appears on screen."
+            "Start generating hints for upcoming cards in the queue in the background while you are reviewing the current one."
         )
-        show_layout.addRow(self.pre_generate_next_cb)
+        pregen_row.addWidget(self.pre_generate_next_cb)
+
+        from aqt.qt import QSpinBox
+        pregen_row.addWidget(QLabel("Buffer size:"))
+        self.pre_generate_count_spin = QSpinBox()
+        self.pre_generate_count_spin.setRange(1, 10)
+        self.pre_generate_count_spin.setFixedWidth(50)
+        self.pre_generate_count_spin.setToolTip("How many upcoming cards to pregenerate and keep in the cache (default is 3).")
+        pregen_row.addWidget(self.pre_generate_count_spin)
+        pregen_row.addStretch()
+        show_layout.addRow(pregen_container)
 
         # Couple all sub-checkboxes to the primary Auto-Generate checkbox
         def _update_regen_controls(enabled):
@@ -113,10 +127,16 @@ class GeneralTabMixin:
                 enabled and self.auto_regenerate_old_version_cb.isChecked()
             )
             self.pre_generate_next_cb.setEnabled(enabled)
+            self.pre_generate_count_spin.setEnabled(enabled and self.pre_generate_next_cb.isChecked())
             if not enabled:
                 self.pre_generate_next_cb.setChecked(False)
 
         self.auto_generate_new_cb.toggled.connect(_update_regen_controls)
+        self.pre_generate_next_cb.toggled.connect(
+            lambda checked: self.pre_generate_count_spin.setEnabled(
+                checked and self.auto_generate_new_cb.isChecked()
+            )
+        )
         self.auto_regenerate_old_version_cb.toggled.connect(
             lambda checked: self.auto_regenerate_min_version_edit.setEnabled(
                 checked and self.auto_generate_new_cb.isChecked()

@@ -100,9 +100,18 @@ def _trigger_next_pregeneration():
     if not config.get("auto_generate_new", False) or not config.get("pre_generate_next", True):
         return
 
-    # Don't pre-generate if we are already generating something (priority to current card)
-    if _generating_card_ids:
-        logger.debug(f"AI-Hints pre-gen: Skipping because active generations exist: {_generating_card_ids}")
+    # Don't pre-generate if the current card itself is actively generating
+    current_card_id = mw.reviewer.card.id if (mw.reviewer and mw.reviewer.card) else None
+    if current_card_id and current_card_id in _generating_card_ids:
+        logger.debug("AI-Hints pre-gen: Skipping because the current card is actively generating.")
+        return
+
+    pregen_limit = int(config.get("pre_generate_count", 3))
+
+    # Check if our active pre-generations already reach the limit
+    active_pregen_count = len([cid for cid in _generating_card_ids if cid != current_card_id])
+    if active_pregen_count >= pregen_limit:
+        logger.debug(f"AI-Hints pre-gen: Skipping because active pre-generations ({active_pregen_count}) reached limit ({pregen_limit}).")
         return
 
     def _task():
@@ -115,8 +124,9 @@ def _trigger_next_pregeneration():
             if hasattr(mw.col.sched, "get_queued_cards"):
                 # Modern Anki (2.1.49+) with v3 scheduler
                 try:
-                    # Fetch more than 1 to skip the current card if it's still in the queue
-                    queued = mw.col.sched.get_queued_cards(fetch_limit=5)
+                    # Fetch enough queued cards to cover our pregen limit plus current card
+                    fetch_depth = max(5, pregen_limit + 4)
+                    queued = mw.col.sched.get_queued_cards(fetch_limit=fetch_depth)
                 except TypeError:
                     # Fallback for versions where positional or keyword arguments differ
                     try:
@@ -130,6 +140,7 @@ def _trigger_next_pregeneration():
                     # which has a 'cards' attribute. In older versions or mocks it might be a list.
                     cards = getattr(queued, "cards", queued)
                     if cards and len(cards) > 0:
+                        prepared_count = 0
                         for first_item in cards:
                             cid = getattr(first_item, "card_id", None)
                             if cid is None:
@@ -139,37 +150,40 @@ def _trigger_next_pregeneration():
                             
                             if cid:
                                 # Skip if it's the current card
-                                if mw.reviewer.card and cid == mw.reviewer.card.id:
+                                if current_card_id and cid == current_card_id:
                                     continue
                                 
-                                next_card = mw.col.get_card(cid)
-                                if next_card:
-                                    break
+                                card = mw.col.get_card(cid)
+                                if not card:
+                                    continue
+                                    
+                                if card_has_hints(card):
+                                    # Already has hints on disk, does not count against our pregen buffer limit
+                                    continue
+                                    
+                                if cid in _pregenerated_data or cid in _generating_card_ids:
+                                    prepared_count += 1
+                                    if prepared_count >= pregen_limit:
+                                        logger.debug(f"AI-Hints pre-gen: Buffer is fully saturated with {prepared_count} cards.")
+                                        return
+                                    continue
+                                
+                                # This is the first upcoming card that needs generation and is not yet in the buffer
+                                next_card = card
+                                break
             else:
                 # Fallback: some old schedulers don't support peeking easily.
                 # In this case, it is safer to skip pre-generation than to risk skipping cards.
-                logger.debug("AI-Hints pre-gen: get_queued_cards not available, skipping pre-gen to prevent card stealing.")
+                logger.debug("AI-Hints pre-gen: get_queued_cards not available, skipping pre-gen.")
                 return
 
             if not next_card:
-                logger.debug("AI-Hints pre-gen: No next card in queue (or all are current).")
+                logger.debug("AI-Hints pre-gen: All upcoming cards are already prepared or have hints.")
                 return
 
-            # Don't pre-gen if already cached or generating
-            if next_card.id in _pregenerated_data:
-                logger.debug(f"AI-Hints pre-gen: card {next_card.id} already in pregen cache.")
-                return
-            if next_card.id in _generating_card_ids:
-                logger.debug(f"AI-Hints pre-gen: card {next_card.id} already generating.")
-                return
-
-            # Check if it needs hints
-            if not card_has_hints(next_card):
-                logger.info(f"AI-Hints: Triggering pre-generation for next card {next_card.id}")
-                # Use a timer or taskman to run generation to avoid blocking
-                mw.taskman.run_on_main(lambda: generate_hints(is_manual=False, card=next_card, is_pregen=True))
-            else:
-                logger.debug(f"AI-Hints pre-gen: card {next_card.id} already has hints.")
+            logger.info(f"AI-Hints: Triggering pre-generation for card {next_card.id} (buffer prepared={prepared_count}/{pregen_limit})")
+            # Use taskman to run generation on main thread
+            mw.taskman.run_on_main(lambda: generate_hints(is_manual=False, card=next_card, is_pregen=True))
         except Exception as e:
             logger.debug(f"AI-Hints pre-gen error in task: {e}")
 

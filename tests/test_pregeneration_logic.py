@@ -70,6 +70,7 @@ class TestPregeneration(unittest.TestCase):
         self.config = {
             "auto_generate_new": True,
             "pre_generate_next": True,
+            "pre_generate_count": 1,
             "ai_provider": "openai",
             "target_fields": ["Front", "Back"],
             "storage_mode": "json"

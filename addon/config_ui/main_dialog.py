@@ -244,6 +244,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         )
         self.pre_generate_next_cb.setChecked(c.get("pre_generate_next", True))
         self.pre_generate_next_cb.setEnabled(auto_gen_on)
+        self.pre_generate_count_spin.setValue(c.get("pre_generate_count", 3))
+        self.pre_generate_count_spin.setEnabled(auto_gen_on and self.pre_generate_next_cb.isChecked())
         
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", True))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
@@ -834,6 +836,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["auto_regenerate_if_old_version"] = self.auto_regenerate_old_version_cb.isChecked()
             new_config["auto_regenerate_min_version"] = self.auto_regenerate_min_version_edit.text().strip()
             new_config["pre_generate_next"] = self.pre_generate_next_cb.isChecked()
+            new_config["pre_generate_count"] = self.pre_generate_count_spin.value()
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
             new_config["do_not_auto_collapse"] = self.do_not_auto_collapse_cb.isChecked()

@@ -73,6 +73,9 @@ To force AnkiDroid to load the new script:
 2. **Force-Close the App**: Swipe AnkiDroid away from your phone's **Recent Apps** list. This terminates the persistent WebView session and clears the cache.
 3. **Reopen AnkiDroid**: Open the app and review a card. The clean desktop-style UI will render perfectly.
 
+> [!TIP]
+> **Quick Script Force-Refresh:** Sometimes after an update, in order to guarantee loading the absolute latest Javascript template, go to **Tools -> Add-ons -> AI-Hints -> Config -> Mobile Support**, first click **Remove from All Note Types** to clean the old assets, and then click **One-Click Install: Setup All Note Types** again to install the fresh script. Then sync your devices.
+
 ### 🧹 Clean Uninstallation
 If you want to remove AI-Hints from mobile:
 1. Go to the **Mobile Support** tab and click **Remove from All Note Types**.
@@ -124,6 +127,11 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
  
+### May 31, 2026 (v2.6.3)
+- **Configurable N-Card Pregeneration Buffer**: Implemented an upcoming review queue peeking engine that maintains a configurable buffer of pregenerated hints (up to `N` cards, defaulting to `3`) in the background. Added a visual spinner in the General configuration tab to easily customize your pregeneration buffer size to prevent lagging during rapid reviews.
+- **Interactive Ko-fi Support Widget**: Restored the beautiful interactive script-based Ko-fi widget in the "Support Authors" tab via an embedded `AnkiWebView`, allowing users to directly support the addon with a native experience.
+- **Cloze Answer-Side Detection Heuristic**: Fixed a bug where correct options failed to highlight and hints remained collapsed on the back/answer side of Cloze deletion cards on mobile (AnkiDroid/AnkiMobile) or when the Python addon is not running. Implemented a robust, client-side HTML heuristic that identifies the answer side when all `.cloze` elements have been revealed (i.e., none of them contain the `[...]` placeholder).
+
 ### May 30, 2026 (v2.6.2)
 - **Compact Dynamic Sizing**: Scaled option and hint lists down to 80% (`0.8em`) of the native card font size to ensure compact, perfectly proportioned, and responsive layout across all templates.
 - **AnkiDroid Cloze Ordinal Sync**: Fixed mobile synced reviewer always showing `c1` data on AnkiDroid/AnkiMobile. Correctly extracts active cloze index (`card1`, `card2`, etc.) directly from `document.body` classes when the Python backend is absent.
