@@ -116,7 +116,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions and technical detail
 MIT
 
 <img width="2083" height="1188" alt="Screenshot_20260507_215546" src="https://github.com/user-attachments/assets/b3b54ab4-fefb-44cf-85c4-3cf02b7cbe88" />
-
+<img width="1920" height="1025" alt="Screenshot_20260601_002447" src="https://github.com/user-attachments/assets/90a4fea1-bd1d-4dc8-8052-218b017b6131" />
 <img width="337" height="750" alt="image" src="https://github.com/user-attachments/assets/1965d9f5-c353-423d-8721-c7581aecae82" />
 
 Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon” architecture. This means that while the Desktop requires the Python addon to generate data, the mobile devices only need the data itself and a lightweight JavaScript renderer to display it.
