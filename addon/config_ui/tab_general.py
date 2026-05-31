@@ -109,7 +109,6 @@ class GeneralTabMixin:
         )
         pregen_row.addWidget(self.pre_generate_next_cb)
 
-        from aqt.qt import QSpinBox
         pregen_row.addWidget(QLabel("Buffer size:"))
         self.pre_generate_count_spin = QSpinBox()
         self.pre_generate_count_spin.setRange(1, 10)

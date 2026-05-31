@@ -116,18 +116,15 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions and technical detail
 MIT
 
 <img width="2083" height="1188" alt="Screenshot_20260507_215546" src="https://github.com/user-attachments/assets/b3b54ab4-fefb-44cf-85c4-3cf02b7cbe88" />
-<img width="1117" height="1073" alt="Screenshot_20260507_215620" src="https://github.com/user-attachments/assets/02e4401e-acf4-4669-88d2-76c28f007d26" />
-<img width="1117" height="1189" alt="Screenshot_20260507_215646" src="https://github.com/user-attachments/assets/84404bbc-3316-4dc6-ba9a-51e129589aca" />
-<img width="1117" height="1189" alt="Screenshot_20260507_215709" src="https://github.com/user-attachments/assets/0d41d057-0ca9-4415-b5c9-5a09a19c0798" />
-<img width="1117" height="1189" alt="Screenshot_20260507_215713" src="https://github.com/user-attachments/assets/51dc0bba-234e-4a9b-a2cb-638cb7b17e08" />
-Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon” architecture. This means that while the Desktop requires the Python addon to generate data, the mobile devices only need the data itself and a lightweight JavaScript renderer to display it.
 
 <img width="337" height="750" alt="image" src="https://github.com/user-attachments/assets/1965d9f5-c353-423d-8721-c7581aecae82" />
+
+Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon” architecture. This means that while the Desktop requires the Python addon to generate data, the mobile devices only need the data itself and a lightweight JavaScript renderer to display it.
 
 
 ## Changelog
  
-### May 31, 2026 (v2.6.3)
+### May 31, 2026 (v2.7.0)
 - **Configurable N-Card Pregeneration Buffer**: Implemented an upcoming review queue peeking engine that maintains a configurable buffer of pregenerated hints (up to `N` cards, defaulting to `3`) in the background. Added a visual spinner in the General configuration tab to easily customize your pregeneration buffer size to prevent lagging during rapid reviews.
 - **Interactive Ko-fi Support Widget**: Restored the beautiful interactive script-based Ko-fi widget in the "Support Authors" tab via an embedded `AnkiWebView`, allowing users to directly support the addon with a native experience.
 - **Cloze Answer-Side Detection Heuristic**: Fixed a bug where correct options failed to highlight and hints remained collapsed on the back/answer side of Cloze deletion cards on mobile (AnkiDroid/AnkiMobile) or when the Python addon is not running. Implemented a robust, client-side HTML heuristic that identifies the answer side when all `.cloze` elements have been revealed (i.e., none of them contain the `[...]` placeholder).
