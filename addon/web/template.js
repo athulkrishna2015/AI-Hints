@@ -54,6 +54,20 @@
     }
 
     function isAnswerSide() {
+        // 1. Check cloze blanks (for Cloze cards on mobile/desktop without Python)
+        const clozes = document.querySelectorAll('.cloze');
+        if (clozes.length > 0) {
+            let hasBlank = false;
+            for (let i = 0; i < clozes.length; i++) {
+                if (clozes[i].textContent.includes('[...]')) {
+                    hasBlank = true;
+                    break;
+                }
+            }
+            if (!hasBlank) return true;
+        }
+
+        // 2. Standard template fallback
         return !!document.getElementById('answer') || !!document.querySelector('.answer') || !!document.querySelector('#answer') || document.body.classList.contains('answer') || (window.aiHintsUiConfig && window.aiHintsUiConfig.is_answer_side);
     }
 

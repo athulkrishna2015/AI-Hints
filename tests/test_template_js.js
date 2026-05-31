@@ -6,7 +6,7 @@ const path = require('path');
  * Mock DOM Environment Factory
  */
 function createMockDOM(env) {
-    const { isAddonActive, hasData, isAnswerSide } = env;
+    const { isAddonActive, hasData, isAnswerSide, clozes } = env;
     
     let renderedBlocks = [];
     let jsonBlocks = [];
@@ -112,6 +112,7 @@ function createMockDOM(env) {
     global.document = {
         head: { appendChild: () => {} },
         body: { 
+            className: '',
             classList: { contains: () => false },
             appendChild: (el) => { renderedBlocks.push(el); }
         },
@@ -133,6 +134,9 @@ function createMockDOM(env) {
                 };
                 renderedBlocks.forEach(search);
                 return btns;
+            }
+            if (selector === '.cloze') {
+                return (clozes || []).map(txt => ({ textContent: txt, className: 'cloze' }));
             }
             return [];
         },
@@ -393,5 +397,40 @@ const shuffledItems = shuffleContainer.querySelector('.ai-hints-list').querySele
 const shuffledHighlighted = shuffledItems.filter(li => li.className === 'ai-hints-correct');
 if (shuffledHighlighted.length !== 1) throw new Error("Exactly one shuffled option should keep the correct class");
 if (shuffledHighlighted[0].innerHTML !== "Correct") throw new Error("The pre-shuffle first option should remain highlighted after shuffle");
+
+console.log("\n--- TEST 15: CLOZE FRONT SIDE DETECTION (contains [...]) ---");
+global.window.aiHintsCurrentCard = { id: 'cloze_front', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const clozeFrontTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: false, clozes: ["[...] under Article 213"] });
+clozeFrontTest.addJsonBlock(
+    {
+        hints: ["Test hint"],
+        options: ["Opt A", "Opt B"],
+        correct_answer: "Opt A"
+    },
+    { 'data-ai-hints-card-id': 'cloze_front', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const clozeFrontContainer = clozeFrontTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const clozeFrontHighlighted = clozeFrontContainer.querySelector('.ai-hints-list').querySelectorAll('li').filter(li => li.className === 'ai-hints-correct');
+if (clozeFrontHighlighted.length !== 0) throw new Error("No option should be highlighted on the front side of a cloze card");
+
+console.log("\n--- TEST 16: CLOZE BACK SIDE DETECTION (does NOT contain [...]) ---");
+global.window.aiHintsCurrentCard = { id: 'cloze_back', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const clozeBackTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: false, clozes: ["The Governor of a state under Article 213"] });
+clozeBackTest.addJsonBlock(
+    {
+        hints: ["Test hint"],
+        options: ["The Governor of a state", "Opt B"],
+        correct_answer: "The Governor of a state"
+    },
+    { 'data-ai-hints-card-id': 'cloze_back', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const clozeBackContainer = clozeBackTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const clozeBackHighlighted = clozeBackContainer.querySelector('.ai-hints-list').querySelectorAll('li').filter(li => li.className === 'ai-hints-correct');
+if (clozeBackHighlighted.length !== 1) throw new Error("The correct option should be highlighted on the back side of a cloze card via the cloze text heuristic");
+if (clozeBackHighlighted[0].innerHTML !== "The Governor of a state") throw new Error("The matching option should be highlighted");
 
 console.log("\nALL JS TESTS PASSED."); process.exit(0);

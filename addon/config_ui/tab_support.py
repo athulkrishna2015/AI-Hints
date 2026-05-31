@@ -16,6 +16,7 @@ from aqt.qt import (
     QPixmap,
     Qt,
 )
+from aqt.webview import AnkiWebView
 from .widgets import ADDON_PACKAGE
 
 class SupportTabMixin:
@@ -51,24 +52,28 @@ class SupportTabMixin:
         scroll.setWidget(scroll_content)
         layout.addWidget(scroll)
 
-        # Support Button (Replacing heavy AnkiWebView widget)
-        self.support_btn = QPushButton("☕ Support me on Ko-fi")
-        self.support_btn.setFixedWidth(200)
-        self.support_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.support_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #72a4f2;
-                color: white;
-                font-weight: bold;
-                border-radius: 5px;
-                padding: 8px;
-            }
-            QPushButton:hover {
-                background-color: #5d8edb;
-            }
-        """)
-        self.support_btn.clicked.connect(lambda: openLink("https://ko-fi.com/D1D01W6NQT"))
-        layout.addWidget(self.support_btn, 0, Qt.AlignmentFlag.AlignCenter)
+        # Ko-fi Widget (Embedded Script via AnkiWebView)
+        self.support_webview = AnkiWebView(self.support_tab)
+        self.support_webview.setFixedHeight(42)
+        kofi_html = """
+        <html>
+        <head>
+        <style>
+          body { background-color: transparent; margin: 0; padding: 0; overflow: hidden; text-align: center; line-height: 42px; }
+          .kofi-button-col { display: inline-block; vertical-align: middle; }
+        </style>
+        </head>
+        <body>
+        <script type='text/javascript' src='https://storage.ko-fi.com/cdn/widget/Widget_2.js'></script>
+        <script type='text/javascript'>
+          kofiwidget2.init('Support me on Ko-fi', '#72a4f2', 'D1D01W6NQT');
+          kofiwidget2.draw();
+        </script>
+        </body>
+        </html>
+        """
+        self.support_webview.setHtml(kofi_html)
+        layout.addWidget(self.support_webview)
 
         base_path = os.path.dirname(os.path.dirname(__file__))
 
