@@ -61,6 +61,38 @@ class AdvancedTabMixin:
         maint_group.setLayout(maint_layout)
         adv_layout.addWidget(maint_group)
 
+        # Visual Styling Group
+        style_group = QGroupBox("Visual Styling")
+        style_layout = QFormLayout()
+        
+        self.font_size_combo = QComboBox()
+        self.font_size_combo.setEditable(True)
+        self.font_size_combo.addItems([
+            "inherit",
+            "0.75em",
+            "0.8em",
+            "0.85em",
+            "0.9em",
+            "0.95em",
+            "1.0em",
+            "1.1em",
+            "1.2em",
+            "12px",
+            "13px",
+            "14px",
+            "15px",
+            "16px",
+            "18px"
+        ])
+        self.font_size_combo.setToolTip(
+            "Configure the text size for AI hints and multiple-choice options.<br/>"
+            "By default, select <b>inherit</b> to match the exact font size of your card fields.<br/>"
+            "Or enter/select a custom value (e.g. 14px, 0.9em, 1.1em)."
+        )
+        style_layout.addRow("AI Hints & Options Font Size:", self.font_size_combo)
+        style_group.setLayout(style_layout)
+        adv_layout.addWidget(style_group)
+
         # Model Blacklist Management Group
         blacklist_group = QGroupBox("Model Cooldowns & Blacklist")
         blacklist_layout = QVBoxLayout()

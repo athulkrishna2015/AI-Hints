@@ -303,6 +303,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         if hasattr(self, "cooldown_spin"):
             self.cooldown_spin.setValue(c.get("model_cooldown_minutes", 5))
+            
+        if hasattr(self, "font_size_combo"):
+            font_size = c.get("hints_font_size", "")
+            if not font_size:
+                font_size = "inherit"
+            self.font_size_combo.setCurrentText(font_size)
         
         if hasattr(self, "refresh_blacklist_list"):
             self.refresh_blacklist_list()
@@ -872,6 +878,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["disabled_fallback_models"] = self.disabled_fallback_models_data
             if hasattr(self, "cooldown_spin"):
                 new_config["model_cooldown_minutes"] = self.cooldown_spin.value()
+                
+            if hasattr(self, "font_size_combo"):
+                font_size = self.font_size_combo.currentText().strip()
+                if font_size == "inherit":
+                    font_size = ""
+                new_config["hints_font_size"] = font_size
 
             # Mobile Config
             new_config["mobile_use_emojis"] = self.mobile_emojis_cb.isChecked()

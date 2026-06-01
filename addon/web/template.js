@@ -11,7 +11,7 @@
 
     // 1. Configuration & Styling
     const STYLES = `
-        .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; font-size: 0.8em; }
+        .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; font-size: inherit; }
         .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; }
         .ai-hints-content-active { display: block; border: 1px dashed #aaa; background-color: rgba(128,128,128,0.06); }
         .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
@@ -365,7 +365,11 @@
         if (!document.getElementById('ai-hints-unified-styles')) {
             const s = document.createElement('style');
             s.id = 'ai-hints-unified-styles';
-            s.textContent = STYLES;
+            let finalStyles = STYLES;
+            if (uiCfg && uiCfg.hints_font_size) {
+                finalStyles += `\n.ai-hints-container { font-size: ${uiCfg.hints_font_size} !important; }`;
+            }
+            s.textContent = finalStyles;
             document.head.appendChild(s);
         }
 
@@ -714,7 +718,18 @@
         });
     };
     window.aiHintsSetup = (card, hints) => { 
-        const setupKey = JSON.stringify({ card: card || null, hints: hints || null });
+        let calcId = card ? card.id : 'temp';
+        const ord = card ? card.ord : getCardOrd();
+        if (calcId === 'temp') {
+            const firstJson = document.querySelector('.ai-hints-json');
+            if (firstJson) {
+                calcId = 'h' + hashCode(firstJson.textContent);
+            } else {
+                const qa = document.getElementById('qa') || document.body;
+                calcId = 'h' + hashCode(qa.innerText || qa.textContent || '');
+            }
+        }
+        const setupKey = JSON.stringify({ card: { id: String(calcId), ord: ord }, hints: hints || null });
         const currentAnswerState = isAnswerSide();
         const existingContainer = document.querySelector('.ai-hints-container');
         const hasData = hints != null || document.querySelector('.ai-hints-json');

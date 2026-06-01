@@ -522,7 +522,8 @@ def on_webview_will_set_content(web_content, context):
         "review_token": _review_token,
         "is_generating": card.id in _generating_card_ids if card else False,
         "shortcuts": config.get("shortcuts", {}),
-        "is_answer_side": is_answer
+        "is_answer_side": is_answer,
+        "hints_font_size": config.get("hints_font_size", "")
     })
 
     if config.get("auto_show_hints", False) or config.get("auto_show_options", False):
@@ -546,6 +547,11 @@ def on_webview_will_set_content(web_content, context):
     # Explicitly clear stale setup keys to prevent data from previous card bleeding into this one.
     state_js = f"""
 <script>
+(function() {{
+    // Instantly wipe stale hints/options containers from previous card reviews
+    document.querySelectorAll('.ai-hints-container, .ai-hints-container-rendered').forEach(e => e.remove());
+    document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+}})();
 window.aiHintsLastSetupKey = undefined;
 window.aiHintsSetupToken = undefined;
 window.aiHintsCurrentCard = {card_payload};
