@@ -57,6 +57,18 @@ class AdvancedTabMixin:
         unicode_btn_layout.addStretch()
         unicode_btn_layout.addWidget(self.format_unicode_btn)
         maint_layout.addLayout(unicode_btn_layout)
+
+        maint_layout.addWidget(QLabel("Remove legacy, raw/naked JSON text blocks left behind by older versions or failed edits, while preserving your fresh, wrapped AI data."))
+        
+        self.clean_naked_json_btn = QPushButton("🧹 Purge Stale Naked JSON Blocks")
+        self.clean_naked_json_btn.setToolTip("Scan your entire collection and safely remove only the un-wrapped, raw JSON text blocks.")
+        self.clean_naked_json_btn.setStyleSheet("padding: 4px 10px;")
+        self.clean_naked_json_btn.clicked.connect(self.on_clean_naked_json)
+        
+        naked_btn_layout = QHBoxLayout()
+        naked_btn_layout.addStretch()
+        naked_btn_layout.addWidget(self.clean_naked_json_btn)
+        maint_layout.addLayout(naked_btn_layout)
         
         maint_group.setLayout(maint_layout)
         adv_layout.addWidget(maint_group)

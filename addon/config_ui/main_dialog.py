@@ -1252,6 +1252,121 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         dialog.exec()
 
+    def on_clean_naked_json(self):
+        """Scans all notes and safely removes raw, naked JSON blocks not wrapped in AI div containers."""
+        from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox
+        from aqt.utils import askUser, showInfo
+        import json
+        import html
+        import re
+
+        if not askUser("This will scan your entire collection and safely remove only legacy, un-wrapped ('naked/raw') JSON text blocks, while keeping the proper wrapped AI data completely untouched.\n\nContinue?"):
+            return
+
+        nids = mw.col.find_notes("")
+        total = len(nids)
+        if total == 0:
+            showInfo("Your collection is empty!")
+            return
+
+        progress = QProgressDialog("Scanning and purging naked JSON blocks...", "Cancel", 0, total, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(200)
+
+        changed_count = 0
+        div_pattern = re.compile(
+            r'<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+
+        def find_json_candidates(text):
+            candidates = []
+            start = -1
+            depth = 0
+            for i, char in enumerate(text):
+                if char == '{':
+                    if depth == 0:
+                        start = i
+                    depth += 1
+                elif char == '}':
+                    if depth > 0:
+                        depth -= 1
+                        if depth == 0 and start != -1:
+                            candidates.append((start, i + 1, text[start:i+1]))
+            return candidates
+
+        for i, nid in enumerate(nids):
+            if progress.wasCanceled():
+                break
+            progress.setValue(i)
+            progress.setLabelText(f"Scanning note {i+1} of {total}...")
+            QApplication.processEvents()
+
+            try:
+                note = mw.col.get_note(nid)
+                note_changed = False
+
+                for f_name in note.keys():
+                    field_val = note[f_name]
+                    if not isinstance(field_val, str) or '{' not in field_val:
+                        continue
+
+                    wrapped_ranges = [(m.start(), m.end()) for m in div_pattern.finditer(field_val)]
+                    candidates = find_json_candidates(field_val)
+                    if not candidates:
+                        continue
+
+                    field_changed = False
+                    for start_idx, end_idx, candidate in reversed(candidates):
+                        # Verify if this candidate is wrapped inside any ai-hints divs
+                        is_wrapped = any(w_start <= start_idx and end_idx <= w_end for w_start, w_end in wrapped_ranges)
+                        if is_wrapped:
+                            continue
+
+                        # Clean candidate of HTML tags and unescape for validation
+                        clean_candidate = re.sub(r'<[^>]+>', '', candidate)
+                        clean_candidate = html.unescape(clean_candidate).strip()
+
+                        try:
+                            parsed = json.loads(clean_candidate)
+                            if isinstance(parsed, dict):
+                                is_ai_hints = False
+                                if "hints" in parsed or "options" in parsed or "correct_answer" in parsed:
+                                    is_ai_hints = True
+                                elif any(isinstance(val, dict) and ("hints" in val or "options" in val) for val in parsed.values()):
+                                    is_ai_hints = True
+
+                                if is_ai_hints:
+                                    # Purge the naked JSON block and its surrounding whitespace/BR tags
+                                    left_str = field_val[:start_idx]
+                                    right_str = field_val[end_idx:]
+
+                                    left_str = re.sub(r'(?:<br\s*/?>|\s|&nbsp;)+$', '', left_str, flags=re.IGNORECASE)
+                                    right_str = re.sub(r'^(?:<br\s*/?>|\s|&nbsp;)+', '', right_str, flags=re.IGNORECASE)
+
+                                    field_val = left_str + right_str
+                                    field_changed = True
+                        except Exception:
+                            pass
+
+                    if field_changed:
+                        field_val = re.sub(r'(?:<br\s*/?>|\s|&nbsp;)+$', '', field_val, flags=re.IGNORECASE)
+                        note[f_name] = field_val.strip()
+                        note_changed = True
+
+                if note_changed:
+                    mw.col.update_note(note)
+                    changed_count += 1
+
+            except Exception as note_err:
+                logger.error(f"Error purging naked JSON from note {nid}: {note_err}")
+
+        progress.setValue(total)
+        showInfo(
+            f"🎉 Purge Complete!\n\n"
+            f"Successfully scanned your collection and cleaned naked JSON blocks from {changed_count} notes."
+        )
+
 # --- Module Global Lifecycle functions ---
 _config_dialog_instance = None
 
