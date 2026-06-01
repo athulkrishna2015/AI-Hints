@@ -562,6 +562,12 @@ window.aiHintsUiConfig = {ui_payload};
     web_content.body += state_js
 
 def _trigger_frontend_setup(card=None, web=None):
+    # Detect if 'card' is actually an Anki context (e.g. Reviewer, Previewer instance) rather than a Card object
+    if card is not None and not hasattr(card, "note"):
+        card, extracted_web = _get_card_and_web_from_context(card)
+        if extracted_web:
+            web = extracted_web
+
     if card is None:
         card = getattr(mw.reviewer, "card", None)
     
