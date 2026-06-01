@@ -153,7 +153,7 @@ class AdvancedTabMixin:
                 
             item_text = f"{provider.capitalize()} - {model} ({time_str})"
             item = QListWidgetItem(item_text)
-            item.setData(Qt.ItemData.UserRole, (provider, model))
+            item.setData(Qt.ItemDataRole.UserRole, (provider, model))
             self.blacklist_list.addItem(item)
             
         if expired_keys:
@@ -177,7 +177,7 @@ class AdvancedTabMixin:
         if not curr_item:
             return
             
-        data = curr_item.data(Qt.ItemData.UserRole)
+        data = curr_item.data(Qt.ItemDataRole.UserRole)
         if data:
             provider, model = data
             from ..ai_client import FAILED_MODELS_CACHE
