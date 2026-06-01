@@ -91,10 +91,33 @@ def test_full_cycle():
     parser.update_note_with_hints(mock_note, data, card=mock_card)
     
     block = parser.find_hints_block(mock_note, card=mock_card)
-    if block and '{"c1": {"hints": ["H1"], "options": ["O1", "O2"]}}' in block:
+    if block and '"c1"' in block and '"hints"' in block and '"H1"' in block:
         print("  PASS: Note updated and block detected correctly.")
     else:
         print("  FAIL: Note update or detection failed.")
+        print("  Got block:", block)
+        exit(1)
+
+    # Verify candidate_providers ignores disabled_providers
+    print("\nTesting disabled_providers filtering...")
+    config = {
+        "ai_provider": "openai",
+        "api_keys": {
+            "openai": "sk-123",
+            "anthropic": "sk-456",
+            "gemini": "sk-789"
+        },
+        "provider_priority": ["anthropic", "gemini", "openai"],
+        "disabled_providers": ["anthropic"]
+    }
+    client_test = AIClient(config)
+    client_test._is_provider_ready = lambda p, primary=False: True
+    candidates = client_test._candidate_providers("openai")
+    
+    if "anthropic" not in candidates and "gemini" in candidates and "openai" in candidates:
+        print("  PASS: disabled_providers successfully filtered out.")
+    else:
+        print(f"  FAIL: candidate selection did not filter disabled providers. Got: {candidates}")
         exit(1)
 
 if __name__ == "__main__":

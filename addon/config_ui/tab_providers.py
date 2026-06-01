@@ -137,56 +137,8 @@ class ProvidersTabMixin:
         prov_content = QWidget()
         self.prov_layout = QFormLayout(prov_content)
         
-        provider_urls = {
-            "openai": "https://platform.openai.com/api-keys",
-            "anthropic": "https://console.anthropic.com/",
-            "gemini": "https://aistudio.google.com/app/apikey",
-            "groq": "https://console.groq.com/keys",
-            "deepseek": "https://platform.deepseek.com/api_keys",
-            "openrouter": "https://openrouter.ai/keys",
-            "mistral": "https://console.mistral.ai/api-keys/",
-            "together": "https://api.together.xyz/settings/api-keys",
-            "huggingface": "https://huggingface.co/settings/tokens",
-            "sambanova": "https://cloud.sambanova.ai/apis",
-            "cerebras": "https://cloud.cerebras.ai/",
-            "grok": "https://console.x.ai/",
-            "nvidia": "https://build.nvidia.com/explore/discover"
-        }
-        
         self.api_key_edits = {}
         self.model_edits = {}
-        
-        free_providers = ["gemini", "groq", "openrouter", "huggingface", "sambanova", "cerebras"]
-        free_group = QGroupBox("Free / Freemium Providers")
-        free_layout = QFormLayout()
-        for p in free_providers:
-            edit = QLineEdit()
-            edit.setEchoMode(QLineEdit.EchoMode.Password)
-            self.api_key_edits[p] = edit
-            
-            url = provider_urls.get(p)
-            label_text = f"<a href='{url}' style='color: #008CBA; text-decoration: none;'>{p.capitalize()} API Key:</a>" if url else f"{p.capitalize()} API Key:"
-            label = QLabel(label_text)
-            label.setOpenExternalLinks(True)
-            free_layout.addRow(label, edit)
-        free_group.setLayout(free_layout)
-        self.prov_layout.addRow(free_group)
-        
-        paid_providers = ["openai", "anthropic", "deepseek", "mistral", "together", "nvidia", "grok"]
-        paid_group = QGroupBox("Paid Providers")
-        paid_layout = QFormLayout()
-        for p in paid_providers:
-            edit = QLineEdit()
-            edit.setEchoMode(QLineEdit.EchoMode.Password)
-            self.api_key_edits[p] = edit
-            
-            url = provider_urls.get(p)
-            label_text = f"<a href='{url}' style='color: #008CBA; text-decoration: none;'>{p.capitalize()} API Key:</a>" if url else f"{p.capitalize()} API Key:"
-            label = QLabel(label_text)
-            label.setOpenExternalLinks(True)
-            paid_layout.addRow(label, edit)
-        paid_group.setLayout(paid_layout)
-        self.prov_layout.addRow(paid_group)
 
         # Antigravity Proxy Group
         ag_group = QGroupBox("Antigravity Cloud Proxy (Native Daemon)")
@@ -304,12 +256,25 @@ class ProvidersTabMixin:
         self.local_api_key_edit = QLineEdit()
         self.local_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.local_api_key_edit.setToolTip("Provide auth key if running a secured local relay (usually blank for localhost).")
+        
+        local_key_btn = QPushButton("👁️")
+        local_key_btn.setToolTip("Toggle API Key visibility")
+        local_key_btn.setFixedWidth(30)
+        local_key_btn.setStyleSheet("padding: 2px;")
+        local_key_btn.clicked.connect(lambda checked=False, e=self.local_api_key_edit: e.setEchoMode(
+            QLineEdit.EchoMode.Normal if e.echoMode() == QLineEdit.EchoMode.Password else QLineEdit.EchoMode.Password
+        ))
+        
+        local_key_layout = QHBoxLayout()
+        local_key_layout.addWidget(self.local_api_key_edit, 1)
+        local_key_layout.addWidget(local_key_btn)
+
         self.local_fallback_cb = QCheckBox("Use Local AI as fallback")
         self.local_fallback_cb.setToolTip("Automatically attempt connection to the local instance below if all cloud endpoints time out or report failures.")
         local_layout.addRow(self.local_fallback_cb)
         local_layout.addRow("Base URL:", self.local_url_edit)
         local_layout.addRow("Model Name:", self.local_model_layout)
-        local_layout.addRow("API Key (optional):", self.local_api_key_edit)
+        local_layout.addRow("API Key (optional):", local_key_layout)
         local_group.setLayout(local_layout)
         self.prov_layout.addRow(local_group)
 

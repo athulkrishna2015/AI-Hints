@@ -97,35 +97,130 @@ class CustomProviderDialog(QDialog):
             return
         self.accept()
 
+PROVIDER_URLS = {
+    "openai": "https://platform.openai.com/api-keys",
+    "anthropic": "https://console.anthropic.com/",
+    "gemini": "https://aistudio.google.com/app/apikey",
+    "groq": "https://console.groq.com/keys",
+    "deepseek": "https://platform.deepseek.com/api_keys",
+    "openrouter": "https://openrouter.ai/keys",
+    "mistral": "https://console.mistral.ai/api-keys/",
+    "together": "https://api.together.xyz/settings/api-keys",
+    "huggingface": "https://huggingface.co/settings/tokens",
+    "sambanova": "https://cloud.sambanova.ai/apis",
+    "cerebras": "https://cloud.cerebras.ai/",
+    "grok": "https://console.x.ai/",
+    "nvidia": "https://build.nvidia.com/explore/discover"
+}
+
 class ProviderRowWidget(QWidget):
     def __init__(self, provider, parent_dialog):
         super().__init__()
         self.provider = provider
         self.parent_dialog = parent_dialog
         
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 2, 0, 2)
+        # Give the widget a styled frame/border to group the provider settings beautifully
+        self.setStyleSheet("""
+            ProviderRowWidget {
+                background-color: rgba(0, 0, 0, 0.02);
+                border: 1px solid rgba(0, 0, 0, 0.08);
+                border-radius: 6px;
+            }
+        """)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(4)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+
+        # 1. Top row: Checkbox, Name, API Key, Eye button, Up/Down reorder buttons
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(6)
+
+        # Checkbox
+        self.enabled_cb = QCheckBox()
+        disabled_list = parent_dialog.config.get("disabled_providers", [])
+        self.enabled_cb.setChecked(provider not in disabled_list)
+        self.enabled_cb.setToolTip(f"Enable or disable fallback to {provider.capitalize()}")
+        top_layout.addWidget(self.enabled_cb)
+
+        # Label/Title
+        self.label = QLabel(f"<b>{provider.capitalize()}</b>")
+        self.label.setMinimumWidth(80)
+        top_layout.addWidget(self.label)
         
-        # Label
-        self.label = QLabel(f"{provider.capitalize()} model:")
-        self.label.setMinimumWidth(150)
-        layout.addWidget(self.label)
+        # API Key Label (Clickable link if URL exists)
+        url = PROVIDER_URLS.get(provider)
+        if url:
+            key_label_text = f"<a href='{url}' style='color: #008CBA; text-decoration: none;'>API Key:</a>"
+        else:
+            key_label_text = "API Key:"
         
+        self.key_label = QLabel(key_label_text)
+        self.key_label.setOpenExternalLinks(True)
+        self.key_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        top_layout.addWidget(self.key_label)
+
+        # API Key Input field
+        self.key_edit = QLineEdit()
+        self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.key_edit.setPlaceholderText("Enter API Key...")
+        
+        # Load existing API key
+        keys = parent_dialog.config.get("api_keys", {}) or {}
+        self.key_edit.setText(keys.get(provider, ""))
+        top_layout.addWidget(self.key_edit, 1)
+
+        # Register key edit in parent_dialog dict for backwards compatibility/saving!
+        if not hasattr(parent_dialog, "api_key_edits"):
+            parent_dialog.api_key_edits = {}
+        parent_dialog.api_key_edits[provider] = self.key_edit
+
+        # Eye Button
+        self.eye_btn = QPushButton("👁️")
+        self.eye_btn.setToolTip("Toggle API Key visibility")
+        self.eye_btn.setFixedWidth(30)
+        self.eye_btn.setStyleSheet("padding: 2px;")
+        self.eye_btn.clicked.connect(lambda checked=False, e=self.key_edit: e.setEchoMode(
+            QLineEdit.EchoMode.Normal if e.echoMode() == QLineEdit.EchoMode.Password else QLineEdit.EchoMode.Password
+        ))
+        top_layout.addWidget(self.eye_btn)
+
+        # Up button
+        self.up_btn = QPushButton("▲")
+        self.up_btn.setFixedWidth(30)
+        self.up_btn.setStyleSheet("padding: 2px;")
+        self.up_btn.clicked.connect(lambda: self.parent_dialog.move_provider_row(self, -1))
+        top_layout.addWidget(self.up_btn)
+
+        # Down button
+        self.down_btn = QPushButton("▼")
+        self.down_btn.setFixedWidth(30)
+        self.down_btn.setStyleSheet("padding: 2px;")
+        self.down_btn.clicked.connect(lambda: self.parent_dialog.move_provider_row(self, 1))
+        top_layout.addWidget(self.down_btn)
+
+        main_layout.addLayout(top_layout)
+
+        # 2. Bottom row: Active Model label, Model Selection combo box, Fetch, Test, Fallbacks
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setSpacing(6)
+
+        # Indent spacer to align with top inputs
+        indent_spacer = QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        bottom_layout.addItem(indent_spacer)
+
+        self.model_label = QLabel("Active Model:")
+        self.model_label.setStyleSheet("color: #555;")
+        bottom_layout.addWidget(self.model_label)
+
         # Combobox
         self.edit = QComboBox()
         self.edit.setEditable(True)
         self.edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        
+
         # Build priority-ordered suggestion list
-        # 1. Start with the default recommended model
         default = DEFAULT_MODELS.get(provider, "")
-        
-        # 2. Add fallback models (these are explicitly ordered by quality in ai_client.py)
-        # We import them locally to avoid circular dependencies if any
-        from ..ai_client import MODEL_FALLBACKS, MODEL_SUGGESTIONS
         fallbacks = MODEL_FALLBACKS.get(provider, [])
-        
-        # 3. Add other general suggestions
         suggestions = MODEL_SUGGESTIONS.get(provider, [])
         
         all_items = []
@@ -141,39 +236,48 @@ class ProviderRowWidget(QWidget):
         for m in suggestions: _add_if_new(m)
             
         self.edit.addItems(all_items)
-        layout.addWidget(self.edit)
-        
+        bottom_layout.addWidget(self.edit, 1)
+
         # Fetch button
         self.fetch_btn = QPushButton("Fetch")
-        self.fetch_btn.setFixedWidth(85)
+        self.fetch_btn.setFixedWidth(75)
+        self.fetch_btn.setStyleSheet("padding: 2px;")
         self.fetch_btn.setToolTip(f"Fetch latest models from {provider.capitalize()} API (requires API key)")
         self.fetch_btn.clicked.connect(lambda: self.parent_dialog.on_fetch_models(self.provider, self.edit))
-        layout.addWidget(self.fetch_btn)
-        
+        bottom_layout.addWidget(self.fetch_btn)
+
         # Test button
         self.test_btn = QPushButton("Test")
-        self.test_btn.setFixedWidth(75)
+        self.test_btn.setFixedWidth(65)
+        self.test_btn.setStyleSheet("padding: 2px;")
         self.test_btn.setToolTip(f"Run a test generation with the selected {provider.capitalize()} model")
         self.test_btn.clicked.connect(lambda: self.parent_dialog.on_test_model(self.provider, self.edit))
-        layout.addWidget(self.test_btn)
-        
-        # Up button
-        self.up_btn = QPushButton("▲")
-        self.up_btn.setFixedWidth(45)
-        self.up_btn.clicked.connect(lambda: self.parent_dialog.move_provider_row(self, -1))
-        layout.addWidget(self.up_btn)
-        
-        # Down button
-        self.down_btn = QPushButton("▼")
-        self.down_btn.setFixedWidth(45)
-        self.down_btn.clicked.connect(lambda: self.parent_dialog.move_provider_row(self, 1))
-        layout.addWidget(self.down_btn)
-        
+        bottom_layout.addWidget(self.test_btn)
+
         # Fallbacks button
         self.fallbacks_btn = QPushButton("Fallbacks")
+        self.fallbacks_btn.setFixedWidth(90)
+        self.fallbacks_btn.setStyleSheet("padding: 2px;")
         self.fallbacks_btn.setToolTip(f"Configure and prioritize fallback models for {provider.capitalize()}")
         self.fallbacks_btn.clicked.connect(self.on_fallbacks_clicked)
-        layout.addWidget(self.fallbacks_btn)
+        bottom_layout.addWidget(self.fallbacks_btn)
+
+        main_layout.addLayout(bottom_layout)
+        
+        self.enabled_cb.toggled.connect(self.on_enabled_toggled)
+        self.on_enabled_toggled(self.enabled_cb.isChecked())
+
+    def on_enabled_toggled(self, checked):
+        self.key_edit.setEnabled(checked)
+        self.eye_btn.setEnabled(checked)
+        self.key_label.setEnabled(checked)
+        self.model_label.setEnabled(checked)
+        self.edit.setEnabled(checked)
+        self.fetch_btn.setEnabled(checked)
+        self.test_btn.setEnabled(checked)
+        self.up_btn.setEnabled(checked)
+        self.down_btn.setEnabled(checked)
+        self.fallbacks_btn.setEnabled(checked)
 
     def on_fallbacks_clicked(self):
         from .tab_providers import FallbackOrderDialog

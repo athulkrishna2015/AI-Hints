@@ -864,12 +864,17 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["mobile_setup_completed"] = self.config.get("mobile_setup_completed", False)
 
             priority = []
+            disabled = []
             for i in range(self.models_layout.count()):
                 item = self.models_layout.itemAt(i)
                 if not item: continue
                 w = item.widget()
-                if isinstance(w, ProviderRowWidget): priority.append(w.provider)
+                if isinstance(w, ProviderRowWidget):
+                    priority.append(w.provider)
+                    if hasattr(w, "enabled_cb") and not w.enabled_cb.isChecked():
+                        disabled.append(w.provider)
             new_config["provider_priority"] = priority
+            new_config["disabled_providers"] = disabled
             mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(new_config))
             try:
                 from ..proxy_manager import proxy_manager

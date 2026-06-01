@@ -351,18 +351,25 @@ class AIClient:
             custom_provider_config = {}
         custom_providers = list(custom_provider_config.keys())
         
+        # Filter out disabled providers
+        disabled = self.config.get("disabled_providers")
+        if not isinstance(disabled, list):
+            disabled = []
+
         # Use custom priority list if configured, otherwise use default order
         priority = self.config.get("provider_priority")
         if not isinstance(priority, list):
             priority = PROVIDER_ORDER + custom_providers
             
+        priority = [p for p in priority if p not in disabled]
+            
         candidates = []
 
-        if self._is_provider_ready(primary_provider, primary=True):
+        if primary_provider not in disabled and self._is_provider_ready(primary_provider, primary=True):
             candidates.append(primary_provider)
         else:
             logger.warning(
-                f"AI-Hints: Primary provider '{primary_provider}' is not configured; checking fallbacks."
+                f"AI-Hints: Primary provider '{primary_provider}' is not configured or is disabled; checking fallbacks."
             )
 
         for provider in priority:
