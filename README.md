@@ -87,10 +87,11 @@ If you want to remove AI-Hints from mobile:
 
 Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configuration window.
 
-- **General Tab**: Select your provider, MCQ options count, and storage mode.
-- **AI Providers Tab**: Enter API keys, change models, or configure custom endpoints.
+- **General Tab**: Select your default provider, MCQ options count, and database storage mode.
+- **AI Providers Tab**: Unified settings where each provider is grouped into a clean card layout containing its API Key (with eye visibility 👁️ toggles), active model selection, Up/Down priority sorting, dynamic fetch and test features, and checkbox toggles to **completely disable fallbacks** to specific providers.
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
-- **Advanced Tab**: System prompts, Note Type field selectors, and Raw JSON Editor.
+- **Advanced Tab**: Customize your system prompt, migrate hints inside your collection, use maintenance cleanups, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist** (view active cooldown remaining times, lift specific model bans, and customize the standard failure cooldown duration down to 5 minutes).
+- **Scrollbar Support**: Smooth scrollbars automatically wrap the Advanced, Mobile, and Batch tabs, ensuring the GUI scales perfectly to fit compact laptops and high-DPI screens.
 
 ## Get Your API Keys
 
