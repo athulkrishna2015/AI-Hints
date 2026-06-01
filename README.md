@@ -125,6 +125,13 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
  
+### June 1, 2026 (v2.8.0)
+- **Unified Providers Layout**: Merged the API keys groups and priority rows into a clean, card-like block layout. You can now configure keys (with eye toggles 👁️), active models, and priority-order in a single location, removing redundant provider lists.
+- **Enable/Disable Providers**: Added checkbox toggles next to each provider in the priority list to easily turn them off completely. Disabled providers are bypassed during standard generation and fallbacks even if their API keys are configured.
+- **Manage Fallback Models**: Made fallback models inside the "Fallbacks" priority dialog checkable, allowing users to temporarily disable specific models from the fallback tree without removing them.
+- **Model Blacklist & Cooldowns Manager**: Introduced a new management UI under the **Advanced** tab that displays active cooldown remaining times, permits clearing specific or all model failures, and allows configuring the standard failure lockout duration down to **5 minutes** (from the previous 1-hour hard default).
+- **Responsive Scrollbar Support**: Added smooth scrollareas wrapping the Advanced, Mobile, and Batch tabs, ensuring the config dialog stays perfectly usable and readable on compact screen sizes and high-DPI displays.
+
 ### June 1, 2026 (v2.7.1)
 - **Cloze Custom Hint Detection**: Fixed a bug where cloze deletions with custom hints (like `{{c1::Shankari Prasad::case}}` which renders as `[case]` on the front side) failed to be identified as the card's front side. The template's client-side heuristic now robustly detects all active cloze deletions (both standard `[...]` and custom bracketed hints like `[case]` or `[year]`) on the front side of cards.
 
