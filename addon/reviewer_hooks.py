@@ -361,23 +361,24 @@ def _push_hint_data_to_frontend(web, card, data, is_manual=True) -> bool:
             function applyHints() {{
                 attempts += 1;
                 var current = isCurrentCard();
-                if (current === false) return;
 
-                if (window.aiHintsUiConfig) {{
-                    window.aiHintsUiConfig.is_generating = false;
+                if (current) {{
+                    if (window.aiHintsUiConfig) {{
+                        window.aiHintsUiConfig.is_generating = false;
+                    }}
+                    if (typeof window.aiHintsUpdateData === 'function') {{
+                        window.aiHintsUpdateData(hintData, isManual);
+                        return;
+                    }}
+                    if (typeof window.aiHintsSetup === 'function') {{
+                        window.aiHintsSetup(card, hintData);
+                        return;
+                    }}
                 }}
 
-                if (current && typeof window.aiHintsUpdateData === 'function') {{
-                    window.aiHintsUpdateData(hintData, isManual);
-                    return;
+                if (attempts < 60) {{
+                    setTimeout(applyHints, 50);
                 }}
-
-                if (typeof window.aiHintsSetup === 'function') {{
-                    window.aiHintsSetup(card, hintData);
-                    return;
-                }}
-
-                if (attempts < 40) setTimeout(applyHints, 50);
             }}
 
             applyHints();
