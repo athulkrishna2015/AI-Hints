@@ -125,6 +125,9 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
  
+### June 1, 2026 (v2.8.1)
+- **Qt Namespace Bug Fix**: Fixed a critical `AttributeError` crash (`type object 'Qt' has no attribute 'ItemData'`) when opening the Config GUI under newer PyQt6/PyQt5 environments, correcting it to the proper `Qt.ItemDataRole` namespace.
+
 ### June 1, 2026 (v2.8.0)
 - **Unified Providers Layout**: Merged the API keys groups and priority rows into a clean, card-like block layout. You can now configure keys (with eye toggles 👁️), active models, and priority-order in a single location, removing redundant provider lists.
 - **Enable/Disable Providers**: Added checkbox toggles next to each provider in the priority list to easily turn them off completely. Disabled providers are bypassed during standard generation and fallbacks even if their API keys are configured.
