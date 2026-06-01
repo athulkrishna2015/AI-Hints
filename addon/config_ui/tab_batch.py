@@ -8,7 +8,7 @@ class BatchTabMixin:
     def _create_batch_tab(self):
         """Constructs the Tab 5: Batch Generation UI"""
         tab = QWidget()
-        layout = QVBoxLayout(tab)
+        layout = QVBoxLayout()
         
         # -- 1. START GROUP --
         start_group = QGroupBox("Start New Batch Generation")
@@ -176,6 +176,16 @@ class BatchTabMixin:
         layout.addStretch()
         
         self._on_batch_method_changed()
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_content.setLayout(layout)
+        scroll.setWidget(scroll_content)
+        
+        main_layout = QVBoxLayout(tab)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
         
         return tab
 

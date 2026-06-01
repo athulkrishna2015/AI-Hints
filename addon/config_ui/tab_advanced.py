@@ -115,7 +115,16 @@ class AdvancedTabMixin:
         
         adv_layout.addStretch()
         
-        self.advanced_tab.setLayout(adv_layout)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_content.setLayout(adv_layout)
+        scroll.setWidget(scroll_content)
+        
+        main_layout = QVBoxLayout(self.advanced_tab)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+        
         return self.advanced_tab
 
     def refresh_blacklist_list(self):

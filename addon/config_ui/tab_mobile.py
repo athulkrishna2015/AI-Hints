@@ -10,7 +10,7 @@ from ..logger import logger
 class MobileTabMixin:
     def _create_mobile_tab(self):
         self.mobile_tab = QWidget()
-        layout = QVBoxLayout(self.mobile_tab)
+        layout = QVBoxLayout()
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(15)
 
@@ -85,6 +85,16 @@ class MobileTabMixin:
 
         layout.addWidget(group)
         layout.addStretch()
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_content.setLayout(layout)
+        scroll.setWidget(scroll_content)
+        
+        main_layout = QVBoxLayout(self.mobile_tab)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
 
         return self.mobile_tab
 
