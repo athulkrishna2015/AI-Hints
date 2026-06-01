@@ -562,18 +562,25 @@ window.aiHintsUiConfig = {ui_payload};
     web_content.body += state_js
 
 def _trigger_frontend_setup(card=None, web=None):
+    logger.info(f"AI-Hints: _trigger_frontend_setup called. Input card={type(card).__name__} (has note={hasattr(card, 'note')})")
+    
     # Detect if 'card' is actually an Anki context (e.g. Reviewer, Previewer instance) rather than a Card object
     if card is not None and not hasattr(card, "note"):
+        orig_card = card
         card, extracted_web = _get_card_and_web_from_context(card)
         if extracted_web:
             web = extracted_web
+        logger.info(f"AI-Hints: Extracted Card={type(card).__name__ if card else None} from context {type(orig_card).__name__}")
 
     if card is None:
         card = getattr(mw.reviewer, "card", None)
+        logger.info(f"AI-Hints: Fallback to mw.reviewer.card yields Card={type(card).__name__ if card else None}")
     
     if not card:
+        logger.info("AI-Hints: _trigger_frontend_setup aborted: no active card found.")
         return
     if _reviewer_is_ending:
+        logger.info("AI-Hints: _trigger_frontend_setup aborted: reviewer is ending.")
         return
 
     if web is None:
@@ -634,6 +641,7 @@ def _trigger_frontend_setup(card=None, web=None):
         logger.debug(f"AI-Hints: _trigger_frontend_setup hint lookup failed: {e}")
 
     hint_data_json = json.dumps(hint_data)  # null if no data
+    logger.info(f"AI-Hints: _trigger_frontend_setup evaluating JS for Card ID: {card.id}, Ord: {card.ord}, has_hints={hint_data is not None}")
     if web:
         _safe_web_eval(web, f"""
             (function() {{
