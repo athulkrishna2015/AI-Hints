@@ -302,7 +302,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.raw_editor.setPlainText(json.dumps(c, indent=4))
         
         if hasattr(self, "cooldown_spin"):
-            self.cooldown_spin.setValue(c.get("model_cooldown_minutes", 60))
+            self.cooldown_spin.setValue(c.get("model_cooldown_minutes", 5))
         
         if hasattr(self, "refresh_blacklist_list"):
             self.refresh_blacklist_list()
