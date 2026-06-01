@@ -715,6 +715,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not askUser("This will scan your entire collection and move any AI data blocks from secondary fields to the <b>first field</b> of each note to ensure they render correctly during review.\n\nContinue?"):
             return
 
+        mw.checkpoint("Migrate AI Data")
+
         from ..card_parser import CardParser
         parser = CardParser(storage_mode=self.config.get("storage_mode", "json"))
         
@@ -802,6 +804,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 self._migration_running = False
                 self.migrate_btn.setEnabled(True)
                 self.migrate_btn.setText("🚀 Move all AI data to the first field")
+                
+                mw.reset()
                 
                 if stopped:
                     self.mig_status_label.setText(f"🛑 Stopped. Moved {m} notes.")
@@ -992,6 +996,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not askUser("This will scan your entire collection and convert any legacy AI hints JSON data with hex escape codes (like \\uXXXX) into readable text and apply pretty formatting.\n\nContinue?"):
             return
 
+        mw.checkpoint("Convert Unicode Escapes")
+
         parser = CardParser(
             storage_mode=self.config.get("storage_mode", "json"),
             mathjax_format=self.config.get("mathjax_format", "delimiters"),
@@ -1027,6 +1033,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 logger.error(f"Error converting note {nid} Unicode escapes: {note_err}")
 
         progress.setValue(total)
+        mw.reset()
         showInfo(
             f"🎉 Conversion Complete!\n\n"
             f"Successfully updated and pretty-printed AI hints in {changed_count} notes."
@@ -1185,6 +1192,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
 
         def do_clean():
+            mw.checkpoint("Clean Orphaned Hints")
             cleaned_count = 0
             
             for item in orphaned_hints:
@@ -1242,6 +1250,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     cleaned_count += 1
 
             dialog.accept()
+            mw.reset()
             QMessageBox.information(
                 self, "Cleanup Complete",
                 f"🎉 Successfully cleaned up orphaned AI hints from {cleaned_count} notes!"
@@ -1262,6 +1271,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         if not askUser("This will scan your entire collection and safely remove only legacy, un-wrapped ('naked/raw') JSON text blocks, while keeping the proper wrapped AI data completely untouched.\n\nContinue?"):
             return
+
+        mw.checkpoint("Purge Naked JSON Blocks")
 
         nids = mw.col.find_notes("")
         total = len(nids)
@@ -1362,6 +1373,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 logger.error(f"Error purging naked JSON from note {nid}: {note_err}")
 
         progress.setValue(total)
+        mw.reset()
         showInfo(
             f"🎉 Purge Complete!\n\n"
             f"Successfully scanned your collection and cleaned naked JSON blocks from {changed_count} notes."

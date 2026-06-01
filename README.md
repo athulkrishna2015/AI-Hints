@@ -124,7 +124,11 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 
 ## Changelog
- 
+
+### June 1, 2026 (v2.8.2)
+- **Purge Stale Naked JSON Blocks**: Added a new graphical maintenance tool under the **Advanced** tab to safely scan your collection and purge unwrapped raw JSON text blocks while keeping correctly wrapped AI-Hints data completely untouched.
+- **Full Undo Checkpointing & UI Refreshes**: Wrapped all database-modifying maintenance tools (Migrate Data, Convert Unicode Escapes, Clean Orphans, and Purge Naked JSON) in standard Anki undo checkpoints (`mw.checkpoint`) with full support for database restoration (`Ctrl+Z`) and UI live refreshes (`mw.reset()`).
+
 ### June 1, 2026 (v2.8.1)
 - **Qt Namespace Bug Fix**: Fixed a critical `AttributeError` crash (`type object 'Qt' has no attribute 'ItemData'`) when opening the Config GUI under newer PyQt6/PyQt5 environments, correcting it to the proper `Qt.ItemDataRole` namespace.
 
