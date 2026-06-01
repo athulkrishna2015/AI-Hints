@@ -124,6 +124,9 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
  
+### June 1, 2026 (v2.7.1)
+- **Cloze Custom Hint Detection**: Fixed a bug where cloze deletions with custom hints (like `{{c1::Shankari Prasad::case}}` which renders as `[case]` on the front side) failed to be identified as the card's front side. The template's client-side heuristic now robustly detects all active cloze deletions (both standard `[...]` and custom bracketed hints like `[case]` or `[year]`) on the front side of cards.
+
 ### May 31, 2026 (v2.7.0)
 - **Configurable N-Card Pregeneration Buffer**: Implemented an upcoming review queue peeking engine that maintains a configurable buffer of pregenerated hints (up to `N` cards, defaulting to `3`) in the background. Added a visual spinner in the General configuration tab to easily customize your pregeneration buffer size to prevent lagging during rapid reviews.
 - **Interactive Ko-fi Support Widget**: Restored the beautiful interactive script-based Ko-fi widget in the "Support Authors" tab via an embedded `AnkiWebView`, allowing users to directly support the addon with a native experience.

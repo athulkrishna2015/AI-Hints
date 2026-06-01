@@ -59,7 +59,8 @@
         if (clozes.length > 0) {
             let hasBlank = false;
             for (let i = 0; i < clozes.length; i++) {
-                if (clozes[i].textContent.includes('[...]')) {
+                const txt = clozes[i].textContent.trim();
+                if (txt.includes('[...]') || (txt.startsWith('[') && txt.endsWith(']'))) {
                     hasBlank = true;
                     break;
                 }

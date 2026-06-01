@@ -433,4 +433,21 @@ const clozeBackHighlighted = clozeBackContainer.querySelector('.ai-hints-list').
 if (clozeBackHighlighted.length !== 1) throw new Error("The correct option should be highlighted on the back side of a cloze card via the cloze text heuristic");
 if (clozeBackHighlighted[0].innerHTML !== "The Governor of a state") throw new Error("The matching option should be highlighted");
 
+console.log("\n--- TEST 17: CLOZE FRONT SIDE DETECTION WITH CUSTOM HINTS (e.g. [case]) ---");
+global.window.aiHintsCurrentCard = { id: 'cloze_front_hint', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const clozeFrontHintTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: false, clozes: ["[case]"] });
+clozeFrontHintTest.addJsonBlock(
+    {
+        hints: ["Test hint"],
+        options: ["Shankari Prasad", "Golak Nath"],
+        correct_answer: "Shankari Prasad"
+    },
+    { 'data-ai-hints-card-id': 'cloze_front_hint', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const clozeFrontHintContainer = clozeFrontHintTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const clozeFrontHintHighlighted = clozeFrontHintContainer.querySelector('.ai-hints-list').querySelectorAll('li').filter(li => li.className === 'ai-hints-correct');
+if (clozeFrontHintHighlighted.length !== 0) throw new Error("No option should be highlighted on the front side of a cloze card containing a custom hint like [case]");
+
 console.log("\nALL JS TESTS PASSED."); process.exit(0);
