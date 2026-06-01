@@ -120,5 +120,25 @@ def test_full_cycle():
         print(f"  FAIL: candidate selection did not filter disabled providers. Got: {candidates}")
         exit(1)
 
+    # Verify disabled fallback models are filtered
+    print("\nTesting disabled_fallback_models filtering...")
+    config2 = {
+        "api_keys": {"openai": "sk-123"},
+        "model_fallbacks": {
+            "openai": ["gpt-4o", "o1-mini", "gpt-4o-mini"]
+        },
+        "disabled_fallback_models": {
+            "openai": ["o1-mini"]
+        }
+    }
+    client_test2 = AIClient(config2)
+    client_test2._normalize_model = lambda p, m: m
+    fallback_models = client_test2._models_for_provider("openai", "gpt-4o")
+    if "o1-mini" not in fallback_models and "gpt-4o-mini" in fallback_models:
+        print("  PASS: disabled_fallback_models successfully filtered out.")
+    else:
+        print(f"  FAIL: disabled fallback models not filtered. Got: {fallback_models}")
+        exit(1)
+
 if __name__ == "__main__":
     test_full_cycle()

@@ -284,6 +284,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.ag_enable_cb.setChecked(ag_cfg.get("enabled", False))
             
         self.model_fallbacks_data = c.get("model_fallbacks", {}).copy()
+        disabled_models = c.get("disabled_fallback_models", {}) or {}
+        if not isinstance(disabled_models, dict):
+            disabled_models = {}
+        self.disabled_fallback_models_data = disabled_models.copy()
             
         local = c.get("local_endpoint", {}) or {}
         self.local_url_edit.setText(local.get("base_url", ""))
@@ -296,6 +300,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
         self.raw_editor.setPlainText(json.dumps(c, indent=4))
+        
+        if hasattr(self, "cooldown_spin"):
+            self.cooldown_spin.setValue(c.get("model_cooldown_minutes", 60))
+        
+        if hasattr(self, "refresh_blacklist_list"):
+            self.refresh_blacklist_list()
 
     def copy_to_clipboard(self, text):
         QApplication.clipboard().setText(text)
@@ -414,6 +424,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
     def _on_tab_changed_tracker(self, index):
         global LAST_ACTIVE_TAB_INDEX
         LAST_ACTIVE_TAB_INDEX = index
+        if index == 2 and hasattr(self, "refresh_blacklist_list"):
+            self.refresh_blacklist_list()
         if hasattr(self, 'config'):
              self.config["last_active_tab"] = index
              try: mw.addonManager.writeConfig(ADDON_PACKAGE, self.config)
@@ -857,6 +869,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["system_prompt"] = self.system_prompt_edit.toPlainText()
             new_config["custom_providers"] = self.custom_providers_data
             new_config["model_fallbacks"] = self.model_fallbacks_data
+            new_config["disabled_fallback_models"] = self.disabled_fallback_models_data
+            if hasattr(self, "cooldown_spin"):
+                new_config["model_cooldown_minutes"] = self.cooldown_spin.value()
 
             # Mobile Config
             new_config["mobile_use_emojis"] = self.mobile_emojis_cb.isChecked()

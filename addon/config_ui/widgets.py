@@ -210,7 +210,7 @@ class ProviderRowWidget(QWidget):
         bottom_layout.addItem(indent_spacer)
 
         self.model_label = QLabel("Active Model:")
-        self.model_label.setStyleSheet("color: #555;")
+        self.model_label.setStyleSheet("font-weight: bold;")
         bottom_layout.addWidget(self.model_label)
 
         # Combobox
@@ -293,4 +293,9 @@ class ProviderRowWidget(QWidget):
         if dlg.exec():
             new_fallbacks = dlg.get_ordered_list()
             self.parent_dialog.model_fallbacks_data[self.provider] = new_fallbacks
+            
+            # Save disabled fallback models
+            new_disabled = dlg.get_disabled_list()
+            self.parent_dialog.disabled_fallback_models_data[self.provider] = new_disabled
+            
             tooltip(f"Updated fallback priority for {self.provider.capitalize()}")

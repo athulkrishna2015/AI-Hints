@@ -947,6 +947,9 @@ class AIClient:
             return _NETWORK_STATE["online"]
         return _check_network_online()
 
+    def _cooldown_seconds(self) -> float:
+        return self.config.get("model_cooldown_minutes", 60) * 60
+
     def _mark_model_failed(self, provider: str, model: str, delay_seconds: float = None):
         """Records a model failure and sets a cooldown timer."""
         # Only blacklist if we are actually online. If the network is down, 
@@ -956,7 +959,7 @@ class AIClient:
             return
 
         if delay_seconds is None:
-            delay_seconds = MODEL_COOLDOWN_SECONDS
+            delay_seconds = self._cooldown_seconds()
             
         expiry = time.time() + delay_seconds
         FAILED_MODELS_CACHE[(provider, model)] = expiry
@@ -1037,15 +1040,16 @@ class AIClient:
         Calculates cooldown delay.
         If it's a rate limit (429), the delay increases with each consecutive hit: 1h, 2h, 3h...
         """
+        cooldown_sec = self._cooldown_seconds()
         if getattr(error, "code", None) != 429:
-            return MODEL_COOLDOWN_SECONDS
+            return cooldown_sec
             
         key = (provider, model)
         streak = RATE_LIMIT_STREAK.get(key, 0) + 1
         RATE_LIMIT_STREAK[key] = streak
         
-        # delay = 1h * streak (1h, 2h, 3h...)
-        delay = MODEL_COOLDOWN_SECONDS * streak
+        # delay = cooldown * streak
+        delay = cooldown_sec * streak
         logger.info(f"AI-Hints: Rate limit hit for {provider}/{model}. Streak: {streak}. New delay: {delay/3600:.1f} hours.")
         return delay
 
@@ -1061,11 +1065,17 @@ class AIClient:
             *MODEL_FALLBACKS.get(provider, []),
         ]
 
+        disabled_models = self.config.get("disabled_fallback_models", {}).get(provider, [])
+        if not isinstance(disabled_models, list):
+            disabled_models = []
+
         models = []
         seen = set()
         for candidate in candidates:
+            if candidate in disabled_models:
+                continue
             model = self._normalize_model(provider, candidate)
-            if not model or model in seen:
+            if not model or model in seen or model in disabled_models:
                 continue
             seen.add(model)
             

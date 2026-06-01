@@ -6,7 +6,6 @@ from .widgets import ProviderRowWidget
 class FallbackOrderDialog(QDialog):
     def __init__(self, parent, provider, current_list, suggestions):
         super().__init__(parent)
-        # parent is typically the main ConfigDialog (which contains on_fetch_models)
         self.main_dialog = parent
         self.provider = provider
         
@@ -18,15 +17,19 @@ class FallbackOrderDialog(QDialog):
         
         info_label = QLabel(
             "Configure the list of models to try if the primary model fails.<br/>"
-            "The add-on will attempt these models in order from top to bottom."
+            "Uncheck a model to temporarily disable fallback to it."
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
         layout.addWidget(info_label)
         
         self.list_widget = QListWidget()
+        disabled_models = getattr(parent, "disabled_fallback_models_data", {}).get(provider, [])
         for m in current_list:
-            self.list_widget.addItem(m)
+            item = QListWidgetItem(m)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked if m in disabled_models else Qt.CheckState.Checked)
+            self.list_widget.addItem(item)
         layout.addWidget(self.list_widget)
         
         # Action buttons
@@ -76,25 +79,20 @@ class FallbackOrderDialog(QDialog):
         layout.addWidget(dlg_btns)
 
     def on_test_clicked(self):
-        # Bridge to main dialog's tester
         if hasattr(self.main_dialog, "on_test_model"):
             self.main_dialog.on_test_model(self.provider, self.add_edit)
 
     def on_test_from_list(self):
-        """Tests the model currently selected in the QListWidget."""
         curr_item = self.list_widget.currentItem()
         if not curr_item or not hasattr(self.main_dialog, "on_test_model"):
             return
             
-        # We need a combobox for on_test_model to work as it expects a widget with currentText()
         temp_cb = QComboBox()
         temp_cb.addItem(curr_item.text())
         
-        # Temporarily disable the list test button while testing
         self.list_test_btn.setEnabled(False)
         self.main_dialog.on_test_model(self.provider, temp_cb)
         
-        # Re-enable after a short delay (the test is async)
         QTimer.singleShot(3000, lambda: self.list_test_btn.setEnabled(True))
 
     def move_item(self, delta):
@@ -115,15 +113,25 @@ class FallbackOrderDialog(QDialog):
         text = self.add_edit.currentText().strip()
         if not text: return
         
-        # Don't add duplicates
         existing = [self.list_widget.item(i).text() for i in range(self.list_widget.count())]
         if text in existing: return
         
-        self.list_widget.addItem(text)
+        item = QListWidgetItem(text)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(Qt.CheckState.Checked)
+        self.list_widget.addItem(item)
         self.add_edit.setCurrentText("")
 
     def get_ordered_list(self):
         return [self.list_widget.item(i).text() for i in range(self.list_widget.count())]
+
+    def get_disabled_list(self):
+        disabled = []
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            if item.checkState() == Qt.CheckState.Unchecked:
+                disabled.append(item.text())
+        return disabled
 
 
 class ProvidersTabMixin:

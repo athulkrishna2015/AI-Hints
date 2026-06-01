@@ -61,6 +61,42 @@ class AdvancedTabMixin:
         maint_group.setLayout(maint_layout)
         adv_layout.addWidget(maint_group)
 
+        # Model Blacklist Management Group
+        blacklist_group = QGroupBox("Model Cooldowns & Blacklist")
+        blacklist_layout = QVBoxLayout()
+        blacklist_layout.addWidget(QLabel("When an AI model fails or hits a rate limit, it is temporarily blacklisted to avoid repeated failures. You can view and clear them here."))
+        
+        # Cooldown duration setting
+        cooldown_setting_layout = QHBoxLayout()
+        cooldown_setting_layout.addWidget(QLabel("Default Failure Cooldown (Minutes):"))
+        self.cooldown_spin = QSpinBox()
+        self.cooldown_spin.setRange(1, 1440)  # 1 minute to 24 hours
+        self.cooldown_spin.setToolTip("Set the standard duration a model is disabled for after experiencing a failure or rate limit.")
+        cooldown_setting_layout.addWidget(self.cooldown_spin)
+        cooldown_setting_layout.addStretch()
+        blacklist_layout.addLayout(cooldown_setting_layout)
+
+        self.blacklist_list = QListWidget()
+        self.blacklist_list.setMinimumHeight(120)
+        blacklist_layout.addWidget(self.blacklist_list)
+        
+        bl_btn_layout = QHBoxLayout()
+        self.remove_bl_btn = QPushButton("Remove Selected")
+        self.remove_bl_btn.setToolTip("Immediately clears the cooldown for the selected model so it can be attempted again.")
+        self.remove_bl_btn.clicked.connect(self.on_remove_selected_blacklist)
+        
+        self.clear_bl_btn = QPushButton("Clear All Cooldowns")
+        self.clear_bl_btn.setToolTip("Clears cooldowns/blacklist for all models.")
+        self.clear_bl_btn.clicked.connect(self.on_clear_all_blacklist)
+        
+        bl_btn_layout.addWidget(self.remove_bl_btn)
+        bl_btn_layout.addWidget(self.clear_bl_btn)
+        bl_btn_layout.addStretch()
+        blacklist_layout.addLayout(bl_btn_layout)
+        
+        blacklist_group.setLayout(blacklist_layout)
+        adv_layout.addWidget(blacklist_group)
+
         # Raw Editor Toggle
         self.raw_toggle = QPushButton("Show Raw JSON Editor")
         self.raw_toggle.setCheckable(True)
@@ -81,3 +117,73 @@ class AdvancedTabMixin:
         
         self.advanced_tab.setLayout(adv_layout)
         return self.advanced_tab
+
+    def refresh_blacklist_list(self):
+        if not hasattr(self, "blacklist_list"):
+            return
+        self.blacklist_list.clear()
+        import time
+        from ..ai_client import FAILED_MODELS_CACHE
+        now = time.time()
+        
+        expired_keys = []
+        for (provider, model), expiry in list(FAILED_MODELS_CACHE.items()):
+            remaining = expiry - now
+            if remaining <= 0:
+                expired_keys.append((provider, model))
+                continue
+            
+            mins = int(remaining // 60)
+            secs = int(remaining % 60)
+            if mins > 60:
+                hours = mins // 60
+                mins = mins % 60
+                time_str = f"{hours}h {mins}m remaining"
+            else:
+                time_str = f"{mins}m {secs}s remaining"
+                
+            item_text = f"{provider.capitalize()} - {model} ({time_str})"
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.ItemData.UserRole, (provider, model))
+            self.blacklist_list.addItem(item)
+            
+        if expired_keys:
+            for k in expired_keys:
+                if k in FAILED_MODELS_CACHE:
+                    del FAILED_MODELS_CACHE[k]
+            self._save_blacklist_locally()
+
+    def _save_blacklist_locally(self):
+        try:
+            from ..ai_client import BLACKLIST_FILE, FAILED_MODELS_CACHE
+            import json
+            serializable = {f"{p}|{m}": e for (p, m), e in FAILED_MODELS_CACHE.items()}
+            with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
+                json.dump(serializable, f)
+        except Exception:
+            pass
+
+    def on_remove_selected_blacklist(self):
+        curr_item = self.blacklist_list.currentItem()
+        if not curr_item:
+            return
+            
+        data = curr_item.data(Qt.ItemData.UserRole)
+        if data:
+            provider, model = data
+            from ..ai_client import FAILED_MODELS_CACHE
+            from ..logger import tooltip
+            if (provider, model) in FAILED_MODELS_CACHE:
+                del FAILED_MODELS_CACHE[(provider, model)]
+                self._save_blacklist_locally()
+                tooltip(f"Cleared cooldown for {provider.capitalize()} - {model}")
+                self.refresh_blacklist_list()
+                
+    def on_clear_all_blacklist(self):
+        from ..ai_client import FAILED_MODELS_CACHE
+        from ..logger import tooltip
+        if FAILED_MODELS_CACHE:
+            FAILED_MODELS_CACHE.clear()
+            self._save_blacklist_locally()
+            tooltip("Cleared all model cooldowns/blacklist")
+            self.refresh_blacklist_list()
