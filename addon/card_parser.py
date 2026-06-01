@@ -653,6 +653,8 @@ class CardParser:
             
             new_val = current_val
             field_cleared = False
+            
+            # 1. Clean standard div container blocks
             matches = list(pattern.finditer(current_val))
             # Work backwards to avoid offset issues
             for match in reversed(matches):
@@ -685,6 +687,64 @@ class CardParser:
                     # Replace the entire matched block (including surrounding <br>/whitespace) with a single newline or nothing
                     new_val = new_val[:match.start()] + new_val[match.end():]
                     field_cleared = True
+
+            # 2. Clean naked/raw JSON strings left behind by older versions or failures
+            def find_json_candidates(text):
+                candidates = []
+                start = -1
+                depth = 0
+                for i, char in enumerate(text):
+                    if char == '{':
+                        if depth == 0:
+                            start = i
+                        depth += 1
+                    elif char == '}':
+                        if depth > 0:
+                            depth -= 1
+                            if depth == 0 and start != -1:
+                                candidates.append((start, i + 1, text[start:i+1]))
+                return candidates
+
+            import json
+            for start_idx, end_idx, candidate in reversed(find_json_candidates(new_val)):
+                try:
+                    # Clean candidate of internal HTML tags for parsing safety
+                    clean_candidate = re.sub(r'<[^>]+>', '', candidate)
+                    parsed = json.loads(clean_candidate)
+                    if isinstance(parsed, dict):
+                        is_ai_hints = False
+                        is_keyed = False
+                        if "hints" in parsed or "options" in parsed or "correct_answer" in parsed:
+                            is_ai_hints = True
+                        elif any(isinstance(val, dict) and ("hints" in val or "options" in val) for val in parsed.values()):
+                            is_ai_hints = True
+                            is_keyed = True
+                        
+                        if is_ai_hints:
+                            if is_keyed:
+                                if card_key and card_key in parsed:
+                                    del parsed[card_key]
+                                    if parsed:
+                                        # Re-serialize and replace inner content
+                                        new_payload = json.dumps(parsed, indent=2)
+                                        new_val = new_val[:start_idx] + new_payload + new_val[end_idx:]
+                                        field_cleared = True
+                                        continue
+                                else:
+                                    # Key not in payload, do not touch this block
+                                    continue
+                            
+                            # Otherwise full removal including surrounding whitespace/HTML linebreaks
+                            left_str = new_val[:start_idx]
+                            right_str = new_val[end_idx:]
+                            
+                            left_str = re.sub(r'(?:<br\s*/?>|\s|&nbsp;)+$', '', left_str, flags=re.IGNORECASE)
+                            right_str = re.sub(r'^(?:<br\s*/?>|\s|&nbsp;)+', '', right_str, flags=re.IGNORECASE)
+                            
+                            new_val = left_str + right_str
+                            field_cleared = True
+                except Exception:
+                    pass
             
             if field_cleared:
                 # Systematic cleanup of multiple <br> tags at the end of the field
