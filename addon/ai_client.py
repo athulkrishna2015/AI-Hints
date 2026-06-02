@@ -472,11 +472,11 @@ class AIClient:
                 if e.code in [404, 429, 500, 503]:
                     delay = self._extract_retry_delay(provider_name, model, e, body)
                     self._mark_model_failed(provider_name, model, delay)
-                    break
+                    continue
             except Exception as e:
                 logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
                 self._mark_model_failed(provider_name, model)
-                break
+                continue
         return {"hints": [], "options": []}
 
     def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
@@ -585,13 +585,11 @@ class AIClient:
                 if e.code in [404, 429, 500, 503]:
                     delay = self._extract_retry_delay(provider, model, e, body)
                     self._mark_model_failed(provider, model, delay)
-                    # Break to move to the next provider immediately.
-                    break
+                    continue
             except Exception as e:
                 logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
                 self._mark_model_failed(provider, model)
-                # On generic exceptions (timeouts, connection errors), skip this provider entirely
-                break
+                continue
         return {"hints": [], "options": []}
 
     def _call_anthropic(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
@@ -632,11 +630,11 @@ class AIClient:
                 if e.code in [404, 429, 500, 503]:
                     delay = self._extract_retry_delay("anthropic", model, e, body)
                     self._mark_model_failed("anthropic", model, delay)
-                    break
+                    continue
             except Exception as e:
                 logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
                 self._mark_model_failed("anthropic", model)
-                break
+                continue
         return {"hints": [], "options": []}
 
     def _call_gemini(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
@@ -697,11 +695,11 @@ class AIClient:
                 if e.code in [404, 429, 500, 503]:
                     delay = self._extract_retry_delay("gemini", model, e, body)
                     self._mark_model_failed("gemini", model, delay)
-                    break
+                    continue
             except Exception as e:
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
                 self._mark_model_failed("gemini", model)
-                break
+                continue
         return {"hints": [], "options": []}
 
     def submit_gemini_batch(self, batch_requests: List[Dict]) -> Dict:
