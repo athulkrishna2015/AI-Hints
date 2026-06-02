@@ -355,8 +355,8 @@ class AIClient:
         disabled = self.config.get("disabled_providers")
         if not isinstance(disabled, list):
             disabled = []
-        for p in disabled:
-            logger.info(f"AI-Hints: Filtering out disabled provider '{p}' (user filter).")
+        if disabled:
+            logger.info(f"AI-Hints: Filtering out disabled providers: {', '.join(disabled)}")
 
         # Use custom priority list if configured, otherwise use default order
         priority = self.config.get("provider_priority")

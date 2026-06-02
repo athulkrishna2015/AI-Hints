@@ -127,6 +127,7 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ### June 2, 2026 (v2.8.4)
 - **Fixed Model Fallbacks Logic**: Corrected a critical logic issue where the model fallback tree was cut short upon any specific model's failure (e.g. rate limit, 503 service unavailable, or connection timeout), jumping immediately to the next provider instead of retrying with other valid fallback models for the same provider as intended.
+- **Consolidated Redundant Logging**: Replaced noisy, multi-line disabled provider filter logs with a single combined log line, dramatically reducing log clutter and spam during generation and pre-generation cycles.
 
 ### June 2, 2026 (v2.8.3)
 - **Critical Fix: Settings Saving & Persisting Bug**: Resolved a severe packaging issue where the crucial `config.json` template was accidentally omitted from AnkiWeb packages, causing settings to fail to persist and resetting user preferences, API keys, and models.
