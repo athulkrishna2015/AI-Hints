@@ -130,12 +130,16 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
                 file_path = Path(root) / file
                 
                 # Check if file matches gitignore rules
-                if is_ignored(file_path, root_dir, gitignore_patterns):
+                if is_ignored(file_path, root_dir, gitignore_patterns) and file != "config.json":
                     continue
                 
                 # Skip proxy binaries by matching prefix (since these are built binary artifacts)
                 # Keep only what is not gitignored or is actual source
                 if any(file.startswith(n) for n in ['antigravity-proxy-linux', 'antigravity-proxy-windows', 'antigravity-proxy-darwin']):
+                    continue
+                
+                # Exclude local runtime state, configuration, and log files
+                if file in ['meta.json', 'batch_state.json', 'blacklist.json'] or file.endswith('.log') or '.log.' in file:
                     continue
                 
                 # Calculate the path relative to the 'addon/' folder 

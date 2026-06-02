@@ -125,6 +125,10 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### June 2, 2026 (v2.8.3)
+- **Critical Fix: Settings Saving & Persisting Bug**: Resolved a severe packaging issue where the crucial `config.json` template was accidentally omitted from AnkiWeb packages, causing settings to fail to persist and resetting user preferences, API keys, and models.
+- **Excluded Local Configs/Credentials from Releases**: Strictly barred local development `meta.json` files, logs, and temporary state databases from being bundled in release builds, fully protecting user security and privacy during upgrades.
+
 ### June 1, 2026 (v2.8.2)
 - **Purge Stale Naked JSON Blocks**: Added a new graphical maintenance tool under the **Advanced** tab to safely scan your collection and purge unwrapped raw JSON text blocks while keeping correctly wrapped AI-Hints data completely untouched.
 - **Full Undo Checkpointing & UI Refreshes**: Wrapped all database-modifying maintenance tools (Migrate Data, Convert Unicode Escapes, Clean Orphans, and Purge Naked JSON) in standard Anki undo checkpoints (`mw.checkpoint`) with full support for database restoration (`Ctrl+Z`) and UI live refreshes (`mw.reset()`).
