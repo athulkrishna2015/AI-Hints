@@ -366,6 +366,7 @@ def _push_hint_data_to_frontend(web, card, data, is_manual=True) -> bool:
             function applyHints() {{
                 attempts += 1;
                 var current = isCurrentCard();
+                if (current === false) return;
 
                 if (current) {{
                     if (window.aiHintsUiConfig) {{
@@ -529,7 +530,8 @@ def on_webview_will_set_content(web_content, context):
         "is_generating": card.id in _generating_card_ids if card else False,
         "shortcuts": config.get("shortcuts", {}),
         "is_answer_side": is_answer,
-        "hints_font_size": config.get("hints_font_size", "")
+        "hints_font_size": config.get("hints_font_size", ""),
+        "answer_display_position": config.get("answer_display_position", "between")
     })
 
     if config.get("auto_show_hints", False) or config.get("auto_show_options", False):
@@ -661,10 +663,13 @@ def _trigger_frontend_setup(card=None, web=None):
                         window.aiHintsSetup(data, hintData);
                     }}
                 }}
+                var attempts = 0;
                 function trySetup() {{
+                    if (window.aiHintsSetupToken !== token) return;
+                    attempts += 1;
                     if (typeof window.aiHintsSetup === 'function') {{
                         applySetup();
-                    }} else {{
+                    }} else if (attempts < 40) {{
                         setTimeout(trySetup, 50);
                     }}
                 }}

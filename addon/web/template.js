@@ -630,10 +630,14 @@
 
                 // Inject into page
                 const qa = document.getElementById('qa');
-                const target = document.querySelector('ai-hints') || (block ? block.nextSibling : qa ? qa.lastChild : null);
+                const target = document.querySelector('ai-hints');
+                const displayPosition = uiCfg.answer_display_position || 'between';
                 if (target && target.tagName === 'AI-HINTS') {
                     target.innerHTML = ''; // Ensure placeholder is clean
                     target.appendChild(container);
+                } else if (onAnswer && displayPosition === 'bottom' && qa) {
+                    // On answer side, if configured, append at the very bottom of the card
+                    qa.appendChild(container);
                 } else if (block && block.parentNode) {
                     block.parentNode.insertBefore(container, block.nextSibling);
                 } else if (qa) {
@@ -767,8 +771,12 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init());
     else init();
     
+    if (window.aiHintsInterval) {
+        clearInterval(window.aiHintsInterval);
+        window.aiHintsInterval = null;
+    }
+    
     if (!isAddonActive) {
-        if (window.aiHintsInterval) clearInterval(window.aiHintsInterval);
         window.aiHintsInterval = setInterval(() => {
             // Detect card change in standalone mode (no Python to trigger setup)
             const currentId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
