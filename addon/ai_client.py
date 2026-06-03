@@ -1328,3 +1328,10 @@ class AIClient:
         except Exception:
             return ""
         return body[:4000]
+
+def is_model_blacklisted(provider: str, model: str) -> bool:
+    try:
+        client = AIClient(None)
+        return client._is_model_failed(provider, model)
+    except Exception:
+        return False

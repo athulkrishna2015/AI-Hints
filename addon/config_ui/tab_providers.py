@@ -266,6 +266,28 @@ class FallbackOrderDialog(QDialog):
 
 
 class ProvidersTabMixin:
+    def update_special_blacklist_status(self, provider, combobox, status_label):
+        model = combobox.currentText().strip()
+        status_info = PERSISTENT_TEST_STATUSES.get(provider)
+        if status_info:
+            status_text, tooltip_text, style_color, tested_model = status_info
+            if tested_model == model:
+                status_label.setText(status_text)
+                status_label.setToolTip(tooltip_text)
+                status_label.setStyleSheet(f"font-weight: bold; color: {style_color}; margin-left: 5px;")
+                return
+            else:
+                PERSISTENT_TEST_STATUSES.pop(provider, None)
+                
+        from ..ai_client import is_model_blacklisted
+        if model and is_model_blacklisted(provider, model):
+            status_label.setText("🚫 Blacklisted")
+            status_label.setToolTip("This model is currently blacklisted on cooldown due to recent failures.")
+            status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+        else:
+            status_label.setText("")
+            status_label.setToolTip("")
+
     def _create_providers_tab(self):
         """Constructs the Tab 2: AI Providers UI"""
         self.providers_tab = QWidget()
@@ -342,13 +364,8 @@ class ProvidersTabMixin:
         self.ag_test_status_label = QLabel("")
         self.ag_test_status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
         
-        # Restore persistent status if any
-        ag_status_info = PERSISTENT_TEST_STATUSES.get("antigravity")
-        if ag_status_info:
-            status_text, tooltip_text, style_color = ag_status_info
-            self.ag_test_status_label.setText(status_text)
-            self.ag_test_status_label.setToolTip(tooltip_text)
-            self.ag_test_status_label.setStyleSheet(f"font-weight: bold; color: {style_color}; margin-left: 5px;")
+        self.ag_model_edit.currentTextChanged.connect(lambda: self.update_special_blacklist_status("antigravity", self.ag_model_edit, self.ag_test_status_label))
+        self.update_special_blacklist_status("antigravity", self.ag_model_edit, self.ag_test_status_label)
             
         self.ag_model_test_btn.clicked.connect(lambda: self.on_test_model("antigravity", self.ag_model_edit, status_label=self.ag_test_status_label))
 
@@ -403,13 +420,8 @@ class ProvidersTabMixin:
         self.local_test_status_label = QLabel("")
         self.local_test_status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
         
-        # Restore persistent status if any
-        local_status_info = PERSISTENT_TEST_STATUSES.get("local")
-        if local_status_info:
-            status_text, tooltip_text, style_color = local_status_info
-            self.local_test_status_label.setText(status_text)
-            self.local_test_status_label.setToolTip(tooltip_text)
-            self.local_test_status_label.setStyleSheet(f"font-weight: bold; color: {style_color}; margin-left: 5px;")
+        self.local_model_edit.currentTextChanged.connect(lambda: self.update_special_blacklist_status("local", self.local_model_edit, self.local_test_status_label))
+        self.update_special_blacklist_status("local", self.local_model_edit, self.local_test_status_label)
             
         self.local_test_btn.clicked.connect(lambda: self.on_test_model("local", self.local_model_edit, status_label=self.local_test_status_label))
 

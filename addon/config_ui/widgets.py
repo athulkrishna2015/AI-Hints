@@ -269,13 +269,8 @@ class ProviderRowWidget(QWidget):
         self.status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
         bottom_layout.addWidget(self.status_label)
 
-        # Restore persistent status if any
-        status_info = PERSISTENT_TEST_STATUSES.get(provider)
-        if status_info:
-            status_text, tooltip_text, style_color = status_info
-            self.status_label.setText(status_text)
-            self.status_label.setToolTip(tooltip_text)
-            self.status_label.setStyleSheet(f"font-weight: bold; color: {style_color}; margin-left: 5px;")
+        self.edit.currentTextChanged.connect(self.update_blacklist_status)
+        self.update_blacklist_status()
 
         self.test_btn.clicked.connect(lambda: self.parent_dialog.on_test_model(self.provider, self.edit, status_label=self.status_label))
 
@@ -295,6 +290,29 @@ class ProviderRowWidget(QWidget):
         self.up_btn.setEnabled(checked)
         self.down_btn.setEnabled(checked)
         self.fallbacks_btn.setEnabled(checked)
+
+    def update_blacklist_status(self):
+        model = self.edit.currentText().strip()
+        status_info = PERSISTENT_TEST_STATUSES.get(self.provider)
+        if status_info:
+            status_text, tooltip_text, style_color, tested_model = status_info
+            if tested_model == model:
+                self.status_label.setText(status_text)
+                self.status_label.setToolTip(tooltip_text)
+                self.status_label.setStyleSheet(f"font-weight: bold; color: {style_color}; margin-left: 5px;")
+                return
+            else:
+                # User changed the model, clear stale persistent status
+                PERSISTENT_TEST_STATUSES.pop(self.provider, None)
+                
+        from ..ai_client import is_model_blacklisted
+        if model and is_model_blacklisted(self.provider, model):
+            self.status_label.setText("🚫 Blacklisted")
+            self.status_label.setToolTip("This model is currently blacklisted on cooldown due to recent failures.")
+            self.status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+        else:
+            self.status_label.setText("")
+            self.status_label.setToolTip("")
 
     def on_fallbacks_clicked(self):
         from .tab_providers import FallbackOrderDialog

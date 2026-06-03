@@ -526,7 +526,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not model_name:
             if status_label:
                 st, tt, col = "❌ No Model", "Please select or enter a model name first.", "red"
-                PERSISTENT_TEST_STATUSES[provider] = (st, tt, col)
+                PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, "")
                 status_label.setText(st)
                 status_label.setToolTip(tt)
                 status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
@@ -538,7 +538,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not api_key and provider not in ["local", "antigravity"]:
             if status_label:
                 st, tt, col = "❌ No API Key", "Please enter an API key first.", "red"
-                PERSISTENT_TEST_STATUSES[provider] = (st, tt, col)
+                PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
                 status_label.setText(st)
                 status_label.setToolTip(tt)
                 status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
@@ -591,7 +591,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         opts_count = len(res.get("options", []))
                         if status_label:
                             st, tt, col = "✅ Success", f"Working!\nGenerated {hints_count} hints and {opts_count} options.", "green"
-                            PERSISTENT_TEST_STATUSES[provider] = (st, tt, col)
+                            PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
                             status_label.setText(st)
                             status_label.setToolTip(tt)
                             status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
@@ -602,7 +602,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     else:
                         if status_label:
                             st, tt, col = "❌ Failed", "The provider returned an empty response. Check API key, model name, balance.", "red"
-                            PERSISTENT_TEST_STATUSES[provider] = (st, tt, col)
+                            PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
                             status_label.setText(st)
                             status_label.setToolTip(tt)
                             status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
@@ -618,7 +618,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     err_msg = str(e).split("\n")[0]
                     if status_label:
                         st, tt, col = "❌ Failed", f"Error: {err_msg}", "red"
-                        PERSISTENT_TEST_STATUSES[provider] = (st, tt, col)
+                        PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
                         status_label.setText(st)
                         status_label.setToolTip(tt)
                         status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
@@ -710,11 +710,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     detail = str(e).split("\n")[0]
                     
                 # Update UI to result
-                def _end(c=combobox, s=status_label, st=status, d=detail):
+                def _end(c=combobox, s=status_label, st=status, d=detail, m=model_name):
                     c.setEnabled(True)
                     if s:
                         color = "green" if "Success" in st else "red"
-                        PERSISTENT_TEST_STATUSES[provider] = (st, d, color)
+                        PERSISTENT_TEST_STATUSES[provider] = (st, d, color, m)
                         s.setText(st)
                         s.setToolTip(d)
                         s.setStyleSheet(f"font-weight: bold; color: {color}; margin-left: 5px;")
