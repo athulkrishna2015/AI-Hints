@@ -574,6 +574,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             tooltip(f"Testing {provider.capitalize()} model: {model_name}...")
 
         def _run_test():
+            from ..logger import log_context
+            log_context.source = "model_test"
             try:
                 # Use a simple test prompt
                 test_front = "What is the capital of France?"
@@ -654,6 +656,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         # Run tests sequentially in a background thread
         import threading
         def _runner():
+            from ..logger import log_context
+            log_context.source = "model_test"
             for provider, combobox, status_label in targets:
                 # Only test if configured/enabled
                 api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""

@@ -173,6 +173,8 @@ class FallbackOrderDialog(QDialog):
         from ..ai_client import AIClient
         
         def _runner():
+            from ..logger import log_context
+            log_context.source = "model_test"
             for i, model in enumerate(models):
                 # Update item state to Testing
                 def _update_testing(idx=i, name=model):

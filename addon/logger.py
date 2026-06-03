@@ -1,6 +1,16 @@
 import logging
 import os
+import threading
 from logging.handlers import RotatingFileHandler
+
+log_context = threading.local()
+
+class ContextFilter(logging.Filter):
+    def filter(self, record):
+        source = getattr(log_context, "source", None)
+        if source:
+            record.msg = f"[{source.upper()}] {record.msg}"
+        return True
 
 def get_logger():
     logger = logging.getLogger("AI-Hints")
@@ -12,6 +22,7 @@ def get_logger():
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         logger.addHandler(handler)
+        logger.addFilter(ContextFilter())
     return logger
 
 logger = get_logger()
