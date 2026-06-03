@@ -1,6 +1,7 @@
 import os
 from aqt import mw
 from aqt.qt import *
+from ..logger import info, tooltip
 from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS, MODEL_FALLBACKS
 from .widgets import ProviderRowWidget, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS
 
