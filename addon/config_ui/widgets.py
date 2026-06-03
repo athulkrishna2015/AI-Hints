@@ -251,7 +251,6 @@ class ProviderRowWidget(QWidget):
         self.test_btn.setFixedWidth(65)
         self.test_btn.setStyleSheet("padding: 2px;")
         self.test_btn.setToolTip(f"Run a test generation with the selected {provider.capitalize()} model")
-        self.test_btn.clicked.connect(lambda: self.parent_dialog.on_test_model(self.provider, self.edit))
         bottom_layout.addWidget(self.test_btn)
 
         # Fallbacks button
@@ -261,6 +260,13 @@ class ProviderRowWidget(QWidget):
         self.fallbacks_btn.setToolTip(f"Configure and prioritize fallback models for {provider.capitalize()}")
         self.fallbacks_btn.clicked.connect(self.on_fallbacks_clicked)
         bottom_layout.addWidget(self.fallbacks_btn)
+
+        # Status Label
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
+        bottom_layout.addWidget(self.status_label)
+
+        self.test_btn.clicked.connect(lambda: self.parent_dialog.on_test_model(self.provider, self.edit, status_label=self.status_label))
 
         main_layout.addLayout(bottom_layout)
         
