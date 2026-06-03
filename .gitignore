@@ -15,7 +15,7 @@ addon/blacklist.json
 scratch
 addon/bin/antigravity-proxy-*
 addon/bin/antigravity-accounts.json
-config.json
+/config.json
 antigravity-accounts.json
 .antigravitycli/
 **/.antigravitycli/

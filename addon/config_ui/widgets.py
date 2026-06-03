@@ -8,6 +8,9 @@ from ..ai_client import DEFAULT_MODELS, MODEL_FALLBACKS, PROVIDER_ORDER, MODEL_S
 # Resolve the top-level addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
 ADDON_PACKAGE = __name__.split(".")[0]
 
+PERSISTENT_TEST_STATUSES = {}
+FETCH_CANCELLATIONS = {}
+
 class CustomProviderDialog(QDialog):
     def __init__(self, parent, name="", data=None, config=None):
         super().__init__(parent)
@@ -243,7 +246,7 @@ class ProviderRowWidget(QWidget):
         self.fetch_btn.setFixedWidth(75)
         self.fetch_btn.setStyleSheet("padding: 2px;")
         self.fetch_btn.setToolTip(f"Fetch latest models from {provider.capitalize()} API (requires API key)")
-        self.fetch_btn.clicked.connect(lambda: self.parent_dialog.on_fetch_models(self.provider, self.edit))
+        self.fetch_btn.clicked.connect(lambda: self.parent_dialog.on_fetch_models(self.provider, self.edit, fetch_btn=self.fetch_btn))
         bottom_layout.addWidget(self.fetch_btn)
 
         # Test button
@@ -265,6 +268,14 @@ class ProviderRowWidget(QWidget):
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
         bottom_layout.addWidget(self.status_label)
+
+        # Restore persistent status if any
+        status_info = PERSISTENT_TEST_STATUSES.get(provider)
+        if status_info:
+            status_text, tooltip_text, style_color = status_info
+            self.status_label.setText(status_text)
+            self.status_label.setToolTip(tooltip_text)
+            self.status_label.setStyleSheet(f"font-weight: bold; color: {style_color}; margin-left: 5px;")
 
         self.test_btn.clicked.connect(lambda: self.parent_dialog.on_test_model(self.provider, self.edit, status_label=self.status_label))
 
@@ -295,13 +306,18 @@ class ProviderRowWidget(QWidget):
         # We also want to provide some smart suggestions for adding new ones
         suggestions = MODEL_SUGGESTIONS.get(self.provider, [])
         
-        dlg = FallbackOrderDialog(self.parent_dialog, self.provider, current_fallbacks, suggestions)
-        if dlg.exec():
-            new_fallbacks = dlg.get_ordered_list()
+        self.fallback_dialog = FallbackOrderDialog(self.parent_dialog, self.provider, current_fallbacks, suggestions)
+        self.fallback_dialog.setWindowFlag(Qt.WindowType.Window, True)
+        self.fallback_dialog.setWindowModality(Qt.WindowModality.NonModal)
+        
+        def _save_data():
+            new_fallbacks = self.fallback_dialog.get_ordered_list()
             self.parent_dialog.model_fallbacks_data[self.provider] = new_fallbacks
             
             # Save disabled fallback models
-            new_disabled = dlg.get_disabled_list()
+            new_disabled = self.fallback_dialog.get_disabled_list()
             self.parent_dialog.disabled_fallback_models_data[self.provider] = new_disabled
-            
             tooltip(f"Updated fallback priority for {self.provider.capitalize()}")
+            
+        self.fallback_dialog.accepted.connect(_save_data)
+        self.fallback_dialog.show()

@@ -2,7 +2,7 @@ import os
 from aqt import mw
 from aqt.qt import *
 from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS, MODEL_FALLBACKS
-from .widgets import ProviderRowWidget
+from .widgets import ProviderRowWidget, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS
 
 class FallbackOrderDialog(QDialog):
     def __init__(self, parent, provider, current_list, suggestions):
@@ -53,6 +53,11 @@ class FallbackOrderDialog(QDialog):
         self.list_test_btn.setToolTip("Test all models in the list sequentially.")
         self.list_test_btn.clicked.connect(self.on_test_from_list)
         
+        self.list_fetch_btn = QPushButton("Fetch All")
+        self.list_fetch_btn.setFixedWidth(80)
+        self.list_fetch_btn.setToolTip("Fetch available models from this provider's API.")
+        self.list_fetch_btn.clicked.connect(self.on_fetch_from_list)
+        
         self.restore_btn = QPushButton("Restore Defaults")
         self.restore_btn.setToolTip("Reset the list back to code defaults.")
         self.restore_btn.clicked.connect(self.restore_defaults)
@@ -61,6 +66,7 @@ class FallbackOrderDialog(QDialog):
         btn_layout.addWidget(self.down_btn)
         btn_layout.addWidget(self.remove_btn)
         btn_layout.addWidget(self.list_test_btn)
+        btn_layout.addWidget(self.list_fetch_btn)
         btn_layout.addWidget(self.restore_btn)
         layout.addLayout(btn_layout)
         
@@ -70,6 +76,88 @@ class FallbackOrderDialog(QDialog):
         dlg_btns.rejected.connect(self.reject)
         layout.addWidget(dlg_btns)
 
+    def on_fetch_from_list(self):
+        fetch_key = f"{self.provider}_fallback"
+        if fetch_key in FETCH_CANCELLATIONS:
+            # User clicked again to Stop/Cancel
+            FETCH_CANCELLATIONS[fetch_key] = True
+            self.list_fetch_btn.setText("Fetch All")
+            return
+
+        FETCH_CANCELLATIONS[fetch_key] = False
+        self.list_fetch_btn.setText("Stop Fetch")
+        self.list_test_btn.setEnabled(False)
+        self.restore_btn.setEnabled(False)
+        
+        api_key = self.main_dialog.api_key_edits[self.provider].text().strip() if self.provider in self.main_dialog.api_key_edits else ""
+        if not api_key and self.provider not in ["local", "antigravity"]:
+            info(f"Please enter an API key for {self.provider.capitalize()} first.")
+            self.list_fetch_btn.setText("Fetch All")
+            self.list_test_btn.setEnabled(True)
+            self.restore_btn.setEnabled(True)
+            del FETCH_CANCELLATIONS[fetch_key]
+            return
+            
+        temp_config = self.main_dialog.config.copy()
+        if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+        temp_config["api_keys"][self.provider] = api_key
+        if self.provider == "local":
+            temp_config["local_endpoint"] = {
+                "base_url": self.main_dialog.local_url_edit.text().strip() or "http://localhost:11434/v1",
+                "api_key": self.main_dialog.local_api_key_edit.text().strip()
+            }
+            
+        import threading
+        from ..ai_client import AIClient
+        
+        tooltip(f"Fetching models for {self.provider.capitalize()}...")
+        
+        def _runner():
+            try:
+                if FETCH_CANCELLATIONS.get(fetch_key):
+                    return
+                client = AIClient(temp_config)
+                models = client.fetch_models(self.provider)
+                if FETCH_CANCELLATIONS.get(fetch_key):
+                    return
+                    
+                def _update_ui():
+                    if models:
+                        models_clean = sorted(list(set(models)))
+                        # Get existing model names in the list widget
+                        existing = [self.list_widget.item(j).data(Qt.ItemDataRole.UserRole) for j in range(self.list_widget.count())]
+                        existing_set = set(existing)
+                        
+                        added_count = 0
+                        for m in models_clean:
+                            if m and m not in existing_set:
+                                item = QListWidgetItem(m)
+                                item.setData(Qt.ItemDataRole.UserRole, m)
+                                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                                # Unchecked by default
+                                item.setCheckState(Qt.CheckState.Unchecked)
+                                self.list_widget.addItem(item)
+                                added_count += 1
+                                
+                        tooltip(f"Fetched {len(models_clean)} models ({added_count} new added).")
+                    else:
+                        info(f"Could not fetch models for {self.provider.capitalize()}. Check connection.")
+                mw.taskman.run_on_main(_update_ui)
+            except Exception as e:
+                def _fail_err():
+                    info(f"Error fetching models: {e}")
+                mw.taskman.run_on_main(_fail_err)
+            finally:
+                if fetch_key in FETCH_CANCELLATIONS:
+                    del FETCH_CANCELLATIONS[fetch_key]
+                def _enable():
+                    self.list_fetch_btn.setText("Fetch All")
+                    self.list_test_btn.setEnabled(True)
+                    self.restore_btn.setEnabled(True)
+                mw.taskman.run_on_main(_enable)
+                
+        threading.Thread(target=_runner, daemon=True).start()
+ 
     def on_test_from_list(self):
         self.list_test_btn.setEnabled(False)
         self.restore_btn.setEnabled(False)
@@ -120,10 +208,12 @@ class FallbackOrderDialog(QDialog):
                     err_msg = str(e).split("\n")[0]
                     status = f"❌ Error: {err_msg}"
                 
-                # Update item state to result
+                # Update item state to result and check the item if successful
                 def _update_result(idx=i, name=model, st=status):
                     item = self.list_widget.item(idx)
                     item.setText(f"{name} ({st})")
+                    if st == "✅ Working":
+                        item.setCheckState(Qt.CheckState.Checked)
                 mw.taskman.run_on_main(_update_result)
                 
             def _done():
@@ -242,7 +332,7 @@ class ProvidersTabMixin:
         self.ag_model_fetch_btn = QPushButton("Fetch")
         self.ag_model_fetch_btn.setFixedWidth(85)
         self.ag_model_fetch_btn.setToolTip("Fetch currently available backend models directly from the local proxy server (Must be running).")
-        self.ag_model_fetch_btn.clicked.connect(lambda: self.on_fetch_models("antigravity", self.ag_model_edit))
+        self.ag_model_fetch_btn.clicked.connect(lambda: self.on_fetch_models("antigravity", self.ag_model_edit, fetch_btn=self.ag_model_fetch_btn))
         
         self.ag_model_test_btn = QPushButton("Test")
         self.ag_model_test_btn.setFixedWidth(75)
@@ -251,6 +341,14 @@ class ProvidersTabMixin:
         self.ag_test_status_label = QLabel("")
         self.ag_test_status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
         
+        # Restore persistent status if any
+        ag_status_info = PERSISTENT_TEST_STATUSES.get("antigravity")
+        if ag_status_info:
+            status_text, tooltip_text, style_color = ag_status_info
+            self.ag_test_status_label.setText(status_text)
+            self.ag_test_status_label.setToolTip(tooltip_text)
+            self.ag_test_status_label.setStyleSheet(f"font-weight: bold; color: {style_color}; margin-left: 5px;")
+            
         self.ag_model_test_btn.clicked.connect(lambda: self.on_test_model("antigravity", self.ag_model_edit, status_label=self.ag_test_status_label))
 
         self.ag_model_layout.addWidget(self.ag_model_edit)
@@ -295,7 +393,7 @@ class ProvidersTabMixin:
         self.local_fetch_btn = QPushButton("Fetch")
         self.local_fetch_btn.setFixedWidth(85)
         self.local_fetch_btn.setToolTip("Fetch available models from the specified local Base URL")
-        self.local_fetch_btn.clicked.connect(lambda: self.on_fetch_models("local", self.local_model_edit))
+        self.local_fetch_btn.clicked.connect(lambda: self.on_fetch_models("local", self.local_model_edit, fetch_btn=self.local_fetch_btn))
         
         self.local_test_btn = QPushButton("Test")
         self.local_test_btn.setFixedWidth(75)
@@ -304,6 +402,14 @@ class ProvidersTabMixin:
         self.local_test_status_label = QLabel("")
         self.local_test_status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
         
+        # Restore persistent status if any
+        local_status_info = PERSISTENT_TEST_STATUSES.get("local")
+        if local_status_info:
+            status_text, tooltip_text, style_color = local_status_info
+            self.local_test_status_label.setText(status_text)
+            self.local_test_status_label.setToolTip(tooltip_text)
+            self.local_test_status_label.setStyleSheet(f"font-weight: bold; color: {style_color}; margin-left: 5px;")
+            
         self.local_test_btn.clicked.connect(lambda: self.on_test_model("local", self.local_model_edit, status_label=self.local_test_status_label))
 
         self.local_model_layout.addWidget(self.local_model_edit)
@@ -342,10 +448,10 @@ class ProvidersTabMixin:
         # Add Fetch All, Test All, and Restore Default buttons
         model_btns_layout = QHBoxLayout()
         
-        fetch_all_btn = QPushButton("Fetch All Available Models")
-        fetch_all_btn.setToolTip("Attempts to fetch latest models for all providers that have API keys.")
-        fetch_all_btn.clicked.connect(self.on_fetch_all_models)
-        model_btns_layout.addWidget(fetch_all_btn)
+        self.fetch_all_btn = QPushButton("Fetch All Available Models")
+        self.fetch_all_btn.setToolTip("Attempts to fetch latest models for all providers that have API keys.")
+        self.fetch_all_btn.clicked.connect(self.on_fetch_all_models)
+        model_btns_layout.addWidget(self.fetch_all_btn)
         
         test_all_btn = QPushButton("Test All Models")
         test_all_btn.setToolTip("Runs sequential test checks for all configured/enabled providers.")

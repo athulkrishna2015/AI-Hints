@@ -23,7 +23,7 @@ from .tab_logs import LogTabMixin
 from .tab_mobile import MobileTabMixin
 
 # Import Support Widgets
-from .widgets import CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE
+from .widgets import CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS
 
 LAST_ACTIVE_TAB_INDEX = 7  # Fallback static state
 
@@ -364,6 +364,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     if w: w.deleteLater()
 
             self.model_edits = {}
+            self.provider_widgets = {}
             for p in new_priority:
                 w = ProviderRowWidget(p, self)
                 if p in current_models_state:
@@ -371,6 +372,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 elif p in self.config.get("models", {}):
                     w.edit.setCurrentText(self.config["models"][p])
                 self.model_edits[p] = w.edit
+                self.provider_widgets[p] = w
                 self.models_layout.addWidget(w)
     def on_fetch_binary(self):
         try:
@@ -459,21 +461,75 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             showWarning(f"Deletion failed: {e}")
 
     def on_fetch_all_models(self):
-        tooltip("Starting batch model fetch...")
+        if getattr(self, "batch_fetch_active", False):
+            # Cancel all active fetches
+            for provider in list(self.active_batch_providers):
+                FETCH_CANCELLATIONS[f"{provider}_main"] = True
+            if hasattr(self, "fetch_all_btn"):
+                self.fetch_all_btn.setText("Fetch All Available Models")
+            self.batch_fetch_active = False
+            self.active_batch_providers.clear()
+            tooltip("Batch model fetch cancelled.")
+            return
+
+        # Determine which providers we will fetch for
+        providers_to_fetch = []
         for provider, combobox in self.model_edits.items():
-            self.on_fetch_models(provider, combobox, silent=True)
-        self.on_fetch_models("antigravity", self.ag_model_edit, silent=True)
-        self.on_fetch_models("local", self.local_model_edit, silent=True)
-        tooltip("Finished fetching models for all configured providers.")
+            api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
+            if api_key or provider in ["local", "antigravity"]:
+                providers_to_fetch.append((provider, combobox))
+        
+        # Also local and antigravity
+        if hasattr(self, 'local_model_edit'):
+            providers_to_fetch.append(("local", self.local_model_edit))
+        if hasattr(self, 'ag_model_edit'):
+            providers_to_fetch.append(("antigravity", self.ag_model_edit))
+        
+        if not providers_to_fetch:
+            tooltip("No providers configured to fetch.")
+            return
+            
+        self.batch_fetch_active = True
+        self.active_batch_providers = {provider for provider, _ in providers_to_fetch}
+        if hasattr(self, "fetch_all_btn"):
+            self.fetch_all_btn.setText("Stop Fetch All")
+        tooltip("Starting batch model fetch...")
+        
+        def _check_batch_done(provider_done):
+            if not getattr(self, "batch_fetch_active", False):
+                return
+            self.active_batch_providers.discard(provider_done)
+            if not self.active_batch_providers:
+                self.batch_fetch_active = False
+                if hasattr(self, "fetch_all_btn"):
+                    self.fetch_all_btn.setText("Fetch All Available Models")
+                tooltip("Finished fetching models for all configured providers.")
+                
+        for provider, combobox in providers_to_fetch:
+            # Clear cancel flag for this provider
+            FETCH_CANCELLATIONS[f"{provider}_main"] = False
+            
+            # Find the corresponding fetch button if it exists
+            fetch_btn = None
+            if provider == "local" and hasattr(self, "local_fetch_btn"):
+                fetch_btn = self.local_fetch_btn
+            elif provider == "antigravity" and hasattr(self, "ag_model_fetch_btn"):
+                fetch_btn = self.ag_model_fetch_btn
+            elif hasattr(self, "provider_widgets") and provider in self.provider_widgets:
+                fetch_btn = self.provider_widgets[provider].fetch_btn
+                
+            self.on_fetch_models(provider, combobox, silent=True, fetch_btn=fetch_btn, on_done_callback=_check_batch_done)
 
     def on_test_model(self, provider, combobox, status_label=None):
         """Runs a real-world test generation using the currently selected model."""
         model_name = combobox.currentText().strip()
         if not model_name:
             if status_label:
-                status_label.setText("❌ No Model")
-                status_label.setToolTip("Please select or enter a model name first.")
-                status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+                st, tt, col = "❌ No Model", "Please select or enter a model name first.", "red"
+                PERSISTENT_TEST_STATUSES[provider] = (st, tt, col)
+                status_label.setText(st)
+                status_label.setToolTip(tt)
+                status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
             else:
                 info(f"Please select or enter a model name for {provider.capitalize()} first.")
             return
@@ -481,9 +537,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
         if not api_key and provider not in ["local", "antigravity"]:
             if status_label:
-                status_label.setText("❌ No API Key")
-                status_label.setToolTip("Please enter an API key first.")
-                status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+                st, tt, col = "❌ No API Key", "Please enter an API key first.", "red"
+                PERSISTENT_TEST_STATUSES[provider] = (st, tt, col)
+                status_label.setText(st)
+                status_label.setToolTip(tt)
+                status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
             else:
                 info(f"Please enter an API key for {provider.capitalize()} first.")
             return
@@ -530,18 +588,22 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         hints_count = len(res.get("hints", []))
                         opts_count = len(res.get("options", []))
                         if status_label:
-                            status_label.setText("✅ Success")
-                            status_label.setToolTip(f"Working!\nGenerated {hints_count} hints and {opts_count} options.")
-                            status_label.setStyleSheet("font-weight: bold; color: green; margin-left: 5px;")
+                            st, tt, col = "✅ Success", f"Working!\nGenerated {hints_count} hints and {opts_count} options.", "green"
+                            PERSISTENT_TEST_STATUSES[provider] = (st, tt, col)
+                            status_label.setText(st)
+                            status_label.setToolTip(tt)
+                            status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
                         else:
                             info(f"✅ Success! {provider.capitalize()} is working.\n\n"
                                  f"Model: {model_name}\n"
                                  f"Result: Generated {hints_count} hints and {opts_count} options.")
                     else:
                         if status_label:
-                            status_label.setText("❌ Failed")
-                            status_label.setToolTip("The provider returned an empty response. Check API key, model name, balance.")
-                            status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+                            st, tt, col = "❌ Failed", "The provider returned an empty response. Check API key, model name, balance.", "red"
+                            PERSISTENT_TEST_STATUSES[provider] = (st, tt, col)
+                            status_label.setText(st)
+                            status_label.setToolTip(tt)
+                            status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
                         else:
                             info(f"❌ Test Failed for {provider.capitalize()}.\n\n"
                                  f"The provider returned an empty response. Check your API key, "
@@ -553,9 +615,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     combobox.setEnabled(True)
                     err_msg = str(e).split("\n")[0]
                     if status_label:
-                        status_label.setText("❌ Failed")
-                        status_label.setToolTip(f"Error: {err_msg}")
-                        status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+                        st, tt, col = "❌ Failed", f"Error: {err_msg}", "red"
+                        PERSISTENT_TEST_STATUSES[provider] = (st, tt, col)
+                        status_label.setText(st)
+                        status_label.setToolTip(tt)
+                        status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
                     else:
                         info(f"❌ Test Error ({provider.capitalize()}):\n\n{str(e)}")
                 mw.taskman.run_on_main(_fail)
@@ -645,12 +709,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 def _end(c=combobox, s=status_label, st=status, d=detail):
                     c.setEnabled(True)
                     if s:
+                        color = "green" if "Success" in st else "red"
+                        PERSISTENT_TEST_STATUSES[provider] = (st, d, color)
                         s.setText(st)
                         s.setToolTip(d)
-                        if "Success" in st:
-                            s.setStyleSheet("font-weight: bold; color: green; margin-left: 5px;")
-                        else:
-                            s.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+                        s.setStyleSheet(f"font-weight: bold; color: {color}; margin-left: 5px;")
                 mw.taskman.run_on_main(_end)
                 
             def _done_all():
@@ -659,12 +722,30 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             
         threading.Thread(target=_runner, daemon=True).start()
 
-    def on_fetch_models(self, provider, combobox, silent=False):
+    def on_fetch_models(self, provider, combobox, silent=False, fetch_btn=None, on_done_callback=None):
+        fetch_key = f"{provider}_main"
+        if fetch_key in FETCH_CANCELLATIONS:
+            # User clicked again to Stop/Cancel
+            FETCH_CANCELLATIONS[fetch_key] = True
+            if fetch_btn:
+                fetch_btn.setText("Fetch")
+            return
+            
+        FETCH_CANCELLATIONS[fetch_key] = False
+        if fetch_btn:
+            fetch_btn.setText("Stop Fetch")
+            
         api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
         if not api_key and provider not in ["local", "antigravity"]:
             if not silent:
                 info(f"Please enter an API key for {provider.capitalize()} first.")
+            if fetch_btn:
+                fetch_btn.setText("Fetch")
+            del FETCH_CANCELLATIONS[fetch_key]
+            if on_done_callback:
+                on_done_callback(provider)
             return
+            
         temp_config = self.config.copy()
         if "api_keys" not in temp_config: temp_config["api_keys"] = {}
         temp_config["api_keys"][provider] = api_key
@@ -673,46 +754,69 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
                 "api_key": self.local_api_key_edit.text().strip()
             }
+            
         client = AIClient(temp_config)
         combobox.setEnabled(False)
         if not silent: tooltip(f"Fetching models for {provider.capitalize()}...")
-        try:
-            models = client.fetch_models(provider)
-            if models:
-                current_text = combobox.currentText()
-                combobox.clear()
-                models = sorted(list(set(models)))
-                if current_text and current_text not in models: models.insert(0, current_text)
-                combobox.addItems(models)
-                if current_text: combobox.setCurrentText(current_text)
-                
-                # Update fallback list data with new fetched models (unchecked/disabled by default)
-                if hasattr(self, 'model_fallbacks_data') and hasattr(self, 'disabled_fallback_models_data'):
-                    current_fallbacks = self.model_fallbacks_data.get(provider, [])
-                    if not isinstance(current_fallbacks, list):
-                        current_fallbacks = list(current_fallbacks)
+        
+        import threading
+        def _runner():
+            try:
+                if FETCH_CANCELLATIONS.get(fetch_key):
+                    return
+                models = client.fetch_models(provider)
+                if FETCH_CANCELLATIONS.get(fetch_key):
+                    return
                     
-                    disabled_models = self.disabled_fallback_models_data.get(provider, [])
-                    if not isinstance(disabled_models, list):
-                        disabled_models = list(disabled_models)
+                def _done():
+                    if models:
+                        current_text = combobox.currentText()
+                        combobox.clear()
+                        clean_models = sorted(list(set(models)))
+                        if current_text and current_text not in clean_models: clean_models.insert(0, current_text)
+                        combobox.addItems(clean_models)
+                        if current_text: combobox.setCurrentText(current_text)
                         
-                    current_set = set(current_fallbacks)
-                    for m in models:
-                        if m and m not in current_set:
-                            current_fallbacks.append(m)
-                            disabled_models.append(m)
+                        # Update fallback list data
+                        if hasattr(self, 'model_fallbacks_data') and hasattr(self, 'disabled_fallback_models_data'):
+                            current_fallbacks = self.model_fallbacks_data.get(provider, [])
+                            if not isinstance(current_fallbacks, list):
+                                current_fallbacks = list(current_fallbacks)
                             
-                    self.model_fallbacks_data[provider] = current_fallbacks
-                    self.disabled_fallback_models_data[provider] = disabled_models
+                            disabled_models = self.disabled_fallback_models_data.get(provider, [])
+                            if not isinstance(disabled_models, list):
+                                disabled_models = list(disabled_models)
+                                
+                            current_set = set(current_fallbacks)
+                            for m in clean_models:
+                                if m and m not in current_set:
+                                    current_fallbacks.append(m)
+                                    disabled_models.append(m)
+                                    
+                            self.model_fallbacks_data[provider] = current_fallbacks
+                            self.disabled_fallback_models_data[provider] = disabled_models
+                        
+                        if not silent: tooltip(f"Found {len(clean_models)} models for {provider.capitalize()}")
+                    else:
+                        if not silent: info(f"Could not fetch models for {provider.capitalize()}. Check connection.")
+                mw.taskman.run_on_main(_done)
+            except Exception as e:
+                logger.error(f"Fetch error: {e}")
+                def _fail():
+                    if not silent: info(f"Error fetching models: {e}")
+                mw.taskman.run_on_main(_fail)
+            finally:
+                if fetch_key in FETCH_CANCELLATIONS:
+                    del FETCH_CANCELLATIONS[fetch_key]
+                def _enable():
+                    combobox.setEnabled(True)
+                    if fetch_btn:
+                        fetch_btn.setText("Fetch")
+                    if on_done_callback:
+                        on_done_callback(provider)
+                mw.taskman.run_on_main(_enable)
                 
-                if not silent: tooltip(f"Found {len(models)} models for {provider.capitalize()}")
-            else:
-                if not silent: info(f"Could not fetch models for {provider.capitalize()}. Check connection.")
-        except Exception as e:
-            logger.error(f"Fetch error: {e}")
-            if not silent: info(f"Error fetching models: {e}")
-        finally:
-            combobox.setEnabled(True)
+        threading.Thread(target=_runner, daemon=True).start()
 
     def on_add_custom(self):
         dlg = CustomProviderDialog(self)

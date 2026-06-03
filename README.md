@@ -125,6 +125,14 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### June 3, 2026 (v2.8.5)
+- **Inline Testing & Status Indicators**: Replaced disruptive popup alert boxes during model testing with real-time, color-coded inline status indicators (`⏳ Testing...`, `✅ Success`, `❌ Failed`) next to the dropdowns and inside the fallback list.
+- **Streamlined Fallback Priority Dialog**: Removed redundant manual model input boxes in the Fallbacks Priority window.
+- **Automatic Fallback Discovery via Fetch**: Fetching models now automatically populates new discovered backend models as disabled/unchecked candidates in the fallback priority list.
+- **Interactive Drag & Drop Reordering**: Enabled native internal drag-and-drop reordering inside the QListWidget for fallback priority lists, plus a **Restore Defaults** option to reset to factory defaults.
+- **Strict Fallback Tree Enforcement**: Updated the client backend to strictly follow user-visible priority lists, removing the hidden hardcoded fallback appends.
+- **Batch Testing Support**: Added a **Test All Models** button to sequentially test and report live status for all active/configured providers at once.
+
 ### June 2, 2026 (v2.8.4)
 - **Fixed Model Fallbacks Logic**: Corrected a critical logic issue where the model fallback tree was cut short upon any specific model's failure (e.g. rate limit, 503 service unavailable, or connection timeout), jumping immediately to the next provider instead of retrying with other valid fallback models for the same provider as intended.
 - **Consolidated Redundant Logging**: Replaced noisy, multi-line disabled provider filter logs with a single combined log line, dramatically reducing log clutter and spam during generation and pre-generation cycles.
