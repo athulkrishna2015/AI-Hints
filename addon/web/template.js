@@ -129,16 +129,16 @@
         
         let hasDelimiters = /\\\(|\\\[|\$\$|\$/.test(processed);
         if (hasDelimiters) {
-            processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, '<anki-mathjax block="true">$1</anki-mathjax>');
-            processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, '<anki-mathjax>$1</anki-mathjax>');
-            processed = processed.replace(/\$\$([\s\S]*?)\$\$/g, '<anki-mathjax block="true">$1</anki-mathjax>');
-            processed = processed.replace(/\$([\s\S]*?)\$/g, '<anki-mathjax>$1</anki-mathjax>');
+            processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, '<anki-mathjax class="tex2jax_process" block="true">$1</anki-mathjax>');
+            processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, '<anki-mathjax class="tex2jax_process">$1</anki-mathjax>');
+            processed = processed.replace(/\$\$([\s\S]*?)\$\$/g, '<anki-mathjax class="tex2jax_process" block="true">$1</anki-mathjax>');
+            processed = processed.replace(/\$([\s\S]*?)\$/g, '<anki-mathjax class="tex2jax_process">$1</anki-mathjax>');
             return processed;
         }
 
         const mathIndicators = /\\[A-Za-z]+|[\^\_]\{|\\int|\\sqrt|\\frac|\\sin|\\cos|\\omega|\\pi|\\lambda|\\theta|\\alpha|\\beta|\\gamma|\\delta|\\partial/;
         if (mathIndicators.test(processed) && !/<anki-mathjax/i.test(processed)) {
-            return '<anki-mathjax>' + processed + '</anki-mathjax>';
+            return '<anki-mathjax class="tex2jax_process">' + processed + '</anki-mathjax>';
         }
 
         return processed;
@@ -148,7 +148,7 @@
         if (!items || items.length === 0) return null;
         
         const section = document.createElement('div');
-        section.className = 'ai-hints-section';
+        section.className = 'ai-hints-section tex2jax_process';
         section.style.display = 'none';
 
         if (showTitle) {
