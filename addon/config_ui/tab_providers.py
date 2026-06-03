@@ -209,12 +209,10 @@ class FallbackOrderDialog(QDialog):
                     err_msg = str(e).split("\n")[0]
                     status = f"❌ Error: {err_msg}"
                 
-                # Update item state to result and check the item if successful
+                # Update item state to result
                 def _update_result(idx=i, name=model, st=status):
                     item = self.list_widget.item(idx)
                     item.setText(f"{name} ({st})")
-                    if st == "✅ Working":
-                        item.setCheckState(Qt.CheckState.Checked)
                 mw.taskman.run_on_main(_update_result)
                 
             def _done():
