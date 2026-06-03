@@ -32,11 +32,17 @@ class FallbackOrderDialog(QDialog):
         self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         
         disabled_models = getattr(parent, "disabled_fallback_models_data", {}).get(provider, [])
+        fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{provider}_fallback_statuses", {})
         for m in current_list:
-            item = QListWidgetItem(m)
+            item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, m)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Unchecked if m in disabled_models else Qt.CheckState.Checked)
+            status = fallback_statuses.get(m)
+            if status:
+                item.setText(f"{m} ({status})")
+            else:
+                item.setText(m)
             self.list_widget.addItem(item)
         layout.addWidget(self.list_widget)
         
@@ -130,13 +136,19 @@ class FallbackOrderDialog(QDialog):
                         existing_set = set(existing)
                         
                         added_count = 0
+                        fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_statuses", {})
                         for m in models_clean:
                             if m and m not in existing_set:
-                                item = QListWidgetItem(m)
+                                item = QListWidgetItem()
                                 item.setData(Qt.ItemDataRole.UserRole, m)
                                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                                 # Unchecked by default
                                 item.setCheckState(Qt.CheckState.Unchecked)
+                                status = fallback_statuses.get(m)
+                                if status:
+                                    item.setText(f"{m} ({status})")
+                                else:
+                                    item.setText(m)
                                 self.list_widget.addItem(item)
                                 added_count += 1
                                 
@@ -215,6 +227,9 @@ class FallbackOrderDialog(QDialog):
                 def _update_result(idx=i, name=model, st=status):
                     item = self.list_widget.item(idx)
                     item.setText(f"{name} ({st})")
+                    # Save to persistent statuses
+                    fallback_statuses = PERSISTENT_TEST_STATUSES.setdefault(f"{self.provider}_fallback_statuses", {})
+                    fallback_statuses[name] = st
                 mw.taskman.run_on_main(_update_result)
                 
             def _done():
@@ -244,11 +259,17 @@ class FallbackOrderDialog(QDialog):
     def restore_defaults(self):
         self.list_widget.clear()
         defaults = MODEL_FALLBACKS.get(self.provider, [])
+        fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_statuses", {})
         for m in defaults:
-            item = QListWidgetItem(m)
+            item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, m)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked)
+            status = fallback_statuses.get(m)
+            if status:
+                item.setText(f"{m} ({status})")
+            else:
+                item.setText(m)
             self.list_widget.addItem(item)
 
 
