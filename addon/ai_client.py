@@ -1088,7 +1088,7 @@ class AIClient:
             seen.add(model)
             
             # Skip if model is blacklisted
-            if self._is_model_failed(provider, model):
+            if getattr(log_context, "source", None) != "model_test" and self._is_model_failed(provider, model):
                 logger.debug(f"AI-Hints: Skipping blacklisted model {provider}/{model}.")
                 continue
                 
