@@ -32,6 +32,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
     
     def __init__(self, parent, card_ids=None):
         super().__init__(parent)
+        self.ui_initializing = True
         self.setWindowTitle("AI-Hints Configuration")
         self.setModal(False)
         self.setMinimumSize(600, 700)
@@ -69,6 +70,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.status_timer.timeout.connect(self.update_provider_status)
         
         self.tabs.currentChanged.connect(self.on_tab_changed)
+        self.ui_initializing = False
         # Defer initial tab handler so it runs AFTER the dialog is displayed.
         # Running it synchronously here would call load_log() (file I/O) on the
         # main thread during construction, causing Anki to freeze.

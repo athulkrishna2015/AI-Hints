@@ -301,7 +301,7 @@ class ProviderRowWidget(QWidget):
                 self.status_label.setToolTip(tooltip_text)
                 self.status_label.setStyleSheet(f"font-weight: bold; color: {style_color}; margin-left: 5px;")
                 return
-            else:
+            elif not getattr(self.parent_dialog, "ui_initializing", False):
                 # User changed the model, clear stale persistent status
                 PERSISTENT_TEST_STATUSES.pop(self.provider, None)
                 
