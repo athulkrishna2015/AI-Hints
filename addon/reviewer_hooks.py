@@ -59,9 +59,9 @@ def _apply_results_to_card(card, data, is_manual=True, web=None):
         data["_version"] = _ADDON_VERSION
         
     logger.info(
-        "AI-Hints applying data to card %s: %s",
+        "AI-Hints applying data to card %s (model: %s)",
         card.id,
-        json.dumps(data, ensure_ascii=False),
+        data.get("_model", "unknown"),
     )
         
     note = card.note()
@@ -1269,9 +1269,9 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
             if is_pregen:
                 if data and (data.get("hints") or data.get("options")):
                     logger.info(
-                        "AI-Hints pre-generation response for card %s: %s",
+                        "AI-Hints pre-generation response for card %s (model: %s)",
                         card_id,
-                        json.dumps(data, ensure_ascii=False),
+                        data.get("_model", "unknown"),
                     )
                     # If by the time it finished, the card is ALREADY on screen, 
                     # apply it immediately instead of just caching.
