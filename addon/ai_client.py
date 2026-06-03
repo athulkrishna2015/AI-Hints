@@ -1057,11 +1057,17 @@ class AIClient:
         if not isinstance(configured, dict):
             configured = {}
         configured_fallbacks = self._model_list(configured.get(provider, []))
-        candidates = [
-            primary_model or self._get_model(provider),
-            *self._model_list(extra_fallbacks),
-            *configured_fallbacks,
-        ]
+        from .logger import log_context
+        if getattr(log_context, "source", None) == "model_test":
+            candidates = [
+                primary_model or self._get_model(provider),
+            ]
+        else:
+            candidates = [
+                primary_model or self._get_model(provider),
+                *self._model_list(extra_fallbacks),
+                *configured_fallbacks,
+            ]
 
         disabled_models = self.config.get("disabled_fallback_models", {}).get(provider, [])
         if not isinstance(disabled_models, list):
