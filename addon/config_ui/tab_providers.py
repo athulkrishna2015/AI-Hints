@@ -543,18 +543,6 @@ class GlobalFallbackOrderDialog(QDialog):
         self.list_widget.setDropIndicatorShown(True)
         self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         
-        # Add a styled item delegate for better spacing and to prevent tooltip overlap
-        self.list_widget.setStyleSheet("""
-            QListWidget::item {
-                padding: 10px;
-                border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-            }
-            QListWidget::item:selected {
-                background-color: rgba(0, 140, 186, 0.1);
-                color: black;
-            }
-        """)
-
         self.tooltip_delegate = ToolTipDelegate(self.list_widget)
         self.list_widget.setItemDelegate(self.tooltip_delegate)
         
@@ -682,13 +670,7 @@ class GlobalFallbackOrderDialog(QDialog):
             active_m = self.main_dialog.config.get("models", {}).get(p, DEFAULT_MODELS.get(p, ""))
             if active_m:
                 defaults.append((p, active_m))
-            
-            # Use live data if available, otherwise fallback to global defaults
-            if hasattr(self.main_dialog, "model_fallbacks_data") and p in self.main_dialog.model_fallbacks_data:
-                fallbacks = self.main_dialog.model_fallbacks_data[p]
-            else:
-                fallbacks = self.main_dialog.config.get("model_fallbacks", {}).get(p, MODEL_FALLBACKS.get(p, []))
-            
+            fallbacks = self.main_dialog.config.get("model_fallbacks", {}).get(p, MODEL_FALLBACKS.get(p, []))
             for f in fallbacks:
                 if f != active_m:
                     defaults.append((p, f))
@@ -699,9 +681,105 @@ class GlobalFallbackOrderDialog(QDialog):
         for i in range(self.list_widget.count()):
             result.append(self.list_widget.item(i).data(Qt.ItemDataRole.UserRole))
         return result
+
+    def get_disabled_list(self):
+        disabled = []
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            if item.checkState() == Qt.CheckState.Unchecked:
+                disabled.append(item.data(Qt.ItemDataRole.UserRole))
+        return disabled
         
     def on_fetch_all(self):
-        self.main_dialog.on_fetch_all_models()
+        fetch_key = "global_fallback_fetch"
+        if fetch_key in FETCH_CANCELLATIONS:
+            FETCH_CANCELLATIONS[fetch_key] = True
+            self.list_fetch_btn.setText("Fetch All")
+            return
+            
+        FETCH_CANCELLATIONS[fetch_key] = False
+        self.list_fetch_btn.setText("Stop Fetch All")
+        self.list_test_btn.setEnabled(False)
+        self.restore_btn.setEnabled(False)
+        
+        # Determine which providers we will fetch for
+        providers_to_fetch = []
+        for provider, combobox in self.main_dialog.model_edits.items():
+            api_key = self.main_dialog.api_key_edits[provider].text().strip() if provider in self.main_dialog.api_key_edits else ""
+            if api_key or provider in ["local", "antigravity"]:
+                providers_to_fetch.append(provider)
+        
+        if "local" not in providers_to_fetch and hasattr(self.main_dialog, 'local_model_edit'):
+            providers_to_fetch.append("local")
+        if "antigravity" not in providers_to_fetch and hasattr(self.main_dialog, 'ag_model_edit'):
+            providers_to_fetch.append("antigravity")
+            
+        if not providers_to_fetch:
+            tooltip("No providers configured to fetch.")
+            self.list_fetch_btn.setText("Fetch All")
+            self.list_test_btn.setEnabled(True)
+            self.restore_btn.setEnabled(True)
+            return
+            
+        import threading
+        from ..ai_client import AIClient
+        
+        tooltip("Fetching models from all configured providers...")
+        
+        def _runner():
+            try:
+                for provider in providers_to_fetch:
+                    if FETCH_CANCELLATIONS.get(fetch_key):
+                        break
+                    
+                    api_key = self.main_dialog.api_key_edits[provider].text().strip() if provider in self.main_dialog.api_key_edits else ""
+                    temp_config = self.main_dialog.config.copy()
+                    if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+                    temp_config["api_keys"][provider] = api_key
+                    if provider == "local":
+                        temp_config["local_endpoint"] = {
+                            "base_url": self.main_dialog.local_url_edit.text().strip() or "http://localhost:11434/v1",
+                            "api_key": self.main_dialog.local_api_key_edit.text().strip()
+                        }
+                    
+                    client = AIClient(temp_config)
+                    models = client.fetch_models(provider)
+                    
+                    if FETCH_CANCELLATIONS.get(fetch_key):
+                        break
+                        
+                    if models:
+                        def _update_ui(p=provider, ms=models):
+                            existing = [self.list_widget.item(j).data(Qt.ItemDataRole.UserRole) for j in range(self.list_widget.count())]
+                            existing_set = set(existing)
+                            
+                            added_count = 0
+                            for m in sorted(list(set(ms))):
+                                if m and (p, m) not in existing_set:
+                                    item = QListWidgetItem()
+                                    item.setData(Qt.ItemDataRole.UserRole, (p, m))
+                                    item.setText(f"[{p.capitalize()}] {m}")
+                                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                                    item.setCheckState(Qt.CheckState.Unchecked)
+                                    self.list_widget.addItem(item)
+                                    added_count += 1
+                            if added_count > 0:
+                                tooltip(f"Added {added_count} new models for {p.capitalize()}.")
+                        mw.taskman.run_on_main(_update_ui)
+            except Exception as e:
+                def _fail(err=str(e)):
+                    info(f"Error during global fetch: {err}")
+                mw.taskman.run_on_main(_fail)
+            finally:
+                if fetch_key in FETCH_CANCELLATIONS:
+                    del FETCH_CANCELLATIONS[fetch_key]
+                def _enable():
+                    self.list_fetch_btn.setText("Fetch All")
+                    self.list_test_btn.setEnabled(True)
+                    self.restore_btn.setEnabled(True)
+                mw.taskman.run_on_main(_enable)
+                
+        threading.Thread(target=_runner, daemon=True).start()
         
     def on_test_all(self):
         test_key = "global_fallback_test"

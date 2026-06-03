@@ -123,22 +123,23 @@
         }
     }
 
+    // Helper to ensure mathematical formulas are parsed correctly by Anki's MathJax engine.
+    // If standard LaTeX delimiters are already present (like \(...\) in hints), we leave the text as-is.
+    // If the text is bare math/LaTeX (contains math operators but no delimiters), we wrap it in inline \( and \) tags.
     function convertMathDelimitersToTags(text) {
         if (!text) return "";
-        let processed = text;
+        let processed = text.trim();
         
+        // Return immediately if standard math delimiters are already present
         let hasDelimiters = /\\\(|\\\[|\$\$|\$/.test(processed);
         if (hasDelimiters) {
-            processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, '<anki-mathjax class="tex2jax_process" block="true">$1</anki-mathjax>');
-            processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, '<anki-mathjax class="tex2jax_process">$1</anki-mathjax>');
-            processed = processed.replace(/\$\$([\s\S]*?)\$\$/g, '<anki-mathjax class="tex2jax_process" block="true">$1</anki-mathjax>');
-            processed = processed.replace(/\$([\s\S]*?)\$/g, '<anki-mathjax class="tex2jax_process">$1</anki-mathjax>');
             return processed;
         }
 
+        // Auto-wrap bare LaTeX math in inline delimiters \( ... \) so MathJax recognizes it
         const mathIndicators = /\\[A-Za-z]+|[\^\_]\{|\\int|\\sqrt|\\frac|\\sin|\\cos|\\omega|\\pi|\\lambda|\\theta|\\alpha|\\beta|\\gamma|\\delta|\\partial/;
-        if (mathIndicators.test(processed) && !/<anki-mathjax/i.test(processed)) {
-            return '<anki-mathjax class="tex2jax_process">' + processed + '</anki-mathjax>';
+        if (mathIndicators.test(processed)) {
+            return '\\(' + processed + '\\)';
         }
 
         return processed;
@@ -148,6 +149,7 @@
         if (!items || items.length === 0) return null;
         
         const section = document.createElement('div');
+        // Add 'tex2jax_process' to bypass Anki's global 'tex2jax_ignore' card wrapper
         section.className = 'ai-hints-section tex2jax_process';
         section.style.display = 'none';
 
