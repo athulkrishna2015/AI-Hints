@@ -345,6 +345,10 @@ class AIClient:
         return bool(self._candidate_providers(primary))
 
     def _candidate_providers(self, primary_provider: str) -> List[str]:
+        from .logger import log_context
+        if getattr(log_context, "source", None) == "model_test":
+            return [primary_provider]
+
         custom_provider_config = self.config.get("custom_providers") or {}
         if not isinstance(custom_provider_config, dict):
             custom_provider_config = {}
