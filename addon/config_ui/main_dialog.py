@@ -685,6 +685,26 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 if current_text and current_text not in models: models.insert(0, current_text)
                 combobox.addItems(models)
                 if current_text: combobox.setCurrentText(current_text)
+                
+                # Update fallback list data with new fetched models (unchecked/disabled by default)
+                if hasattr(self, 'model_fallbacks_data') and hasattr(self, 'disabled_fallback_models_data'):
+                    current_fallbacks = self.model_fallbacks_data.get(provider, [])
+                    if not isinstance(current_fallbacks, list):
+                        current_fallbacks = list(current_fallbacks)
+                    
+                    disabled_models = self.disabled_fallback_models_data.get(provider, [])
+                    if not isinstance(disabled_models, list):
+                        disabled_models = list(disabled_models)
+                        
+                    current_set = set(current_fallbacks)
+                    for m in models:
+                        if m and m not in current_set:
+                            current_fallbacks.append(m)
+                            disabled_models.append(m)
+                            
+                    self.model_fallbacks_data[provider] = current_fallbacks
+                    self.disabled_fallback_models_data[provider] = disabled_models
+                
                 if not silent: tooltip(f"Found {len(models)} models for {provider.capitalize()}")
             else:
                 if not silent: info(f"Could not fetch models for {provider.capitalize()}. Check connection.")

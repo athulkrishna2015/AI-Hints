@@ -18,13 +18,18 @@ class FallbackOrderDialog(QDialog):
         
         info_label = QLabel(
             "Configure the list of models to try if the primary model fails.<br/>"
-            "Uncheck a model to temporarily disable fallback to it."
+            "Drag & Drop to reorder, or uncheck to temporarily disable fallback to it."
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
         layout.addWidget(info_label)
         
         self.list_widget = QListWidget()
+        self.list_widget.setDragEnabled(True)
+        self.list_widget.setAcceptDrops(True)
+        self.list_widget.setDropIndicatorShown(True)
+        self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        
         disabled_models = getattr(parent, "disabled_fallback_models_data", {}).get(provider, [])
         for m in current_list:
             item = QListWidgetItem(m)
@@ -59,35 +64,11 @@ class FallbackOrderDialog(QDialog):
         btn_layout.addWidget(self.restore_btn)
         layout.addLayout(btn_layout)
         
-        # Add new model section
-        add_layout = QHBoxLayout()
-        self.add_edit = QComboBox()
-        self.add_edit.setEditable(True)
-        self.add_edit.addItems(suggestions)
-        self.add_edit.setCurrentText("")
-        
-        self.add_btn = QPushButton("Add Model")
-        self.add_btn.clicked.connect(self.add_item)
-        
-        self.test_btn = QPushButton("Test")
-        self.test_btn.setFixedWidth(70)
-        self.test_btn.setToolTip("Test the model name in the box before adding.")
-        self.test_btn.clicked.connect(self.on_test_clicked)
-        
-        add_layout.addWidget(self.add_edit, 1)
-        add_layout.addWidget(self.test_btn)
-        add_layout.addWidget(self.add_btn)
-        layout.addLayout(add_layout)
-        
         # OK / Cancel
         dlg_btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         dlg_btns.accepted.connect(self.accept)
         dlg_btns.rejected.connect(self.reject)
         layout.addWidget(dlg_btns)
-
-    def on_test_clicked(self):
-        if hasattr(self.main_dialog, "on_test_model"):
-            self.main_dialog.on_test_model(self.provider, self.add_edit)
 
     def on_test_from_list(self):
         self.list_test_btn.setEnabled(False)
@@ -179,19 +160,7 @@ class FallbackOrderDialog(QDialog):
             item.setCheckState(Qt.CheckState.Checked)
             self.list_widget.addItem(item)
 
-    def add_item(self):
-        text = self.add_edit.currentText().strip()
-        if not text: return
-        
-        existing = [self.list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.list_widget.count())]
-        if text in existing: return
-        
-        item = QListWidgetItem(text)
-        item.setData(Qt.ItemDataRole.UserRole, text)
-        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        item.setCheckState(Qt.CheckState.Checked)
-        self.list_widget.addItem(item)
-        self.add_edit.setCurrentText("")
+
 
     def get_ordered_list(self):
         return [self.list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.list_widget.count())]
