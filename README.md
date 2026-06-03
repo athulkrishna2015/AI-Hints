@@ -126,13 +126,19 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
-### June 3, 2026 (v2.8.5)
-- **Advanced Global Fallback Priority (Global Flat List)**: Introduced a new global flat-list configuration dialog to custom-arrange model fallbacks across different providers. Features an interactive toggle switch (checkbox) to enable the global priority list, which dynamically grays out standard provider fallback widgets and configurations when active to prevent conflicting settings.
-- **Inline Testing & Status Indicators**: Replaced disruptive popup alert boxes during model testing with real-time, color-coded inline status indicators (`⏳ Testing...`, `✅ Success`, `❌ Failed`) next to the dropdowns and inside the fallback list.
-- **Streamlined Fallback Priority Dialog**: Removed redundant manual model input boxes in the Fallbacks Priority window.
-- **Automatic Fallback Discovery via Fetch**: Fetching models now automatically populates new discovered backend models as disabled/unchecked candidates in the fallback priority list, and dynamically loads them into the global list selector.
+### June 3, 2026 (v3.0.0)
+- **Major Architecture Overhaul**: Transitioned to a more robust background generation and UI synchronization engine.
+- **Advanced Global Fallback Priority (Global Flat List)**: Introduced a new global flat-list configuration dialog to custom-arrange model fallbacks across different providers. Features an interactive toggle switch to enable the global priority list, which dynamically manages fallback sequences across all your configured AI accounts.
+- **Dual-State Generation Animations**: The 'Generate' button now features two distinct pulsing states:
+    - **Blue Pulse**: Indicates the current card is actively generating. The button is temporarily disabled to prevent duplicate requests.
+    - **Green Pulse**: Indicates the AI is pre-generating upcoming cards in the background. The button remains **fully interactive**, allowing you to force-generate the current card without waiting for the background tasks.
+- **Continuous Buffer Refilling**: The pre-generation engine now automatically refills your configured buffer (e.g. 10 cards) in a background chain reaction, ensuring your next few minutes of review are always ready instantly.
+- **Smart Tooltip Positioning & Formatting**: 
+    - Replaced the large, obstructive test result overlays with mouse-relative tooltips that always appear to the right of your cursor, ensuring model names and checkboxes remain visible.
+    - Tooltips now use width-constrained HTML with word-wrapping and monospace fonts, making detailed AI JSON responses significantly easier to read.
+- **Improved UI Modality & Sync**: The Advanced Fallback dialog is now application-modal to prevent configuration conflicts, and it features a live "Fetch All" bridge that updates status indicators in real-time as background threads complete.
+- **Log Streamlining**: Dramatically reduced log noise by moving internal "Filtering out" and "Auto-show" messages to the DEBUG level, leaving the INFO log clear for actual generation progress.
 - **Interactive Drag & Drop Reordering**: Enabled native internal drag-and-drop reordering inside the QListWidget for fallback priority lists, plus a **Restore Defaults** option to reset to factory defaults.
-- **Strict Fallback Tree Enforcement**: Updated the client backend to strictly follow user-visible priority lists, removing the hidden hardcoded fallback appends.
 - **Batch Testing Support**: Added a **Test All Models** button to sequentially test and report live status for all active/configured providers at once.
 - **Dynamic Fetch and Stop Controls**: Implemented dynamic button text changes (`Fetch All` -> `Stop Fetch All` / `Test All` -> `Stop Test All`) for the fallback configuration windows, complete with background thread task cancellation.
 
