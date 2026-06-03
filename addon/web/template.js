@@ -126,10 +126,21 @@
     function convertMathDelimitersToTags(text) {
         if (!text) return "";
         let processed = text;
-        processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, '<anki-mathjax block="true">$1</anki-mathjax>');
-        processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, '<anki-mathjax>$1</anki-mathjax>');
-        processed = processed.replace(/\$\$([\s\S]*?)\$\$/g, '<anki-mathjax block="true">$1</anki-mathjax>');
-        processed = processed.replace(/\$([\s\S]*?)\$/g, '<anki-mathjax>$1</anki-mathjax>');
+        
+        let hasDelimiters = /\\\(|\\\[|\$\$|\$/.test(processed);
+        if (hasDelimiters) {
+            processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, '<anki-mathjax block="true">$1</anki-mathjax>');
+            processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, '<anki-mathjax>$1</anki-mathjax>');
+            processed = processed.replace(/\$\$([\s\S]*?)\$\$/g, '<anki-mathjax block="true">$1</anki-mathjax>');
+            processed = processed.replace(/\$([\s\S]*?)\$/g, '<anki-mathjax>$1</anki-mathjax>');
+            return processed;
+        }
+
+        const mathIndicators = /\\[A-Za-z]+|[\^\_]\{|\\int|\\sqrt|\\frac|\\sin|\\cos|\\omega|\\pi|\\lambda|\\theta|\\alpha|\\beta|\\gamma|\\delta|\\partial/;
+        if (mathIndicators.test(processed) && !/<anki-mathjax/i.test(processed)) {
+            return '<anki-mathjax>' + processed + '</anki-mathjax>';
+        }
+
         return processed;
     }
 
