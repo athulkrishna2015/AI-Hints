@@ -185,8 +185,8 @@ class BatchManager:
                 try:
                     status = client.get_gemini_batch_status(job_name)
                     state = status.get("state", "UNKNOWN")
-                    logger.info(f"AI-Hints Batch {job_name} current state: {state}")
-                    
+                    logger.debug(f"AI-Hints Batch {job_name} current state: {state}")
+
                     if state == "JOB_STATE_SUCCEEDED":
                         logger.info(f"AI-Hints Batch {job_name} has succeeded! Loading data...")
                         self._process_completed_batch(job_name, status)
@@ -377,7 +377,7 @@ class BatchManager:
         self.local_queue = [] # Clear remaining list
         self.last_run_stats = None
         self.save_state() # Persist full stop clearing cache
-        logger.info("Local Sequential Queue ABORT manually triggered by user.")
+        logger.debug("Local Sequential Queue ABORT manually triggered by user.")
         return True
 
     def stop_all(self):
@@ -470,8 +470,9 @@ class BatchManager:
                     if actual_model:
                         self.current_local_model = actual_model
 
-                    logger.info(
-                        "AI-Hints local queue response for card %s: %s",
+                    logger.info(f"AI-Hints local queue: Successful generation for card {cid} using {actual_model or 'unknown'}")
+                    logger.debug(
+                        "AI-Hints local queue response detail for card %s: %s",
                         cid,
                         json.dumps(resp_data, ensure_ascii=False),
                     )

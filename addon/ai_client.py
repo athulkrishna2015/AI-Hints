@@ -343,7 +343,7 @@ class AIClient:
                     result = self._call_provider(provider, system_prompt, prompt, override_model=model)
                     if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
                         result = self._ensure_correct_answer_option(result, back)
-                        logger.info(f"AI-Hints: Successful generation using: {provider}/{model}")
+                        logger.debug(f"AI-Hints: Successful generation using: {provider}/{model}")
                         return result
                 except Exception as e:
                     last_exception = e
@@ -371,7 +371,7 @@ class AIClient:
                 if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
                     result = self._ensure_correct_answer_option(result, back)
                     if provider != primary_provider:
-                        logger.info(f"AI-Hints: Fallback successful using provider: {provider}")
+                        logger.debug(f"AI-Hints: Fallback successful using provider: {provider}")
                     return result
             except Exception as e:
                 last_exception = e
@@ -586,7 +586,7 @@ class AIClient:
                 "response_format": {"type": "json_object"}
             }
             try:
-                logger.info(f"Calling OpenRouter with models array: {models}")
+                logger.debug(f"Calling OpenRouter with models array: {models}")
                 result = self._post_json(url, data, headers)
                 content = self._extract_content(result)
                 parsed = self._parse_json_result(content)
@@ -1151,9 +1151,9 @@ class AIClient:
 
     def _log_model_attempt(self, provider: str, model: str, models: List[str]) -> None:
         if models and model != models[0]:
-            logger.info(f"AI-Hints: Trying fallback model for {provider}: {model}")
+            logger.debug(f"AI-Hints: Trying fallback model for {provider}: {model}")
         else:
-            logger.info(f"AI-Hints: Calling {provider} with model: {model}")
+            logger.debug(f"AI-Hints: Calling {provider} with model: {model}")
 
     def _json_headers(self, api_key: str = "") -> Dict[str, str]:
         api_key = str(api_key or "").strip()
