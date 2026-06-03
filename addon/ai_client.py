@@ -404,8 +404,6 @@ class AIClient:
         disabled = self.config.get("disabled_providers")
         if not isinstance(disabled, list):
             disabled = []
-        if disabled:
-            logger.debug(f"AI-Hints: Filtering out disabled providers: {', '.join(disabled)}")
 
         # Use custom priority list if configured, otherwise use default order
         priority = self.config.get("provider_priority")
@@ -1127,13 +1125,11 @@ class AIClient:
         seen = set()
         for candidate in candidates:
             if getattr(log_context, "source", None) != "model_test" and candidate in disabled_models:
-                logger.debug(f"AI-Hints: Filtering out user-disabled fallback model {provider}/{candidate} (user filter).")
                 continue
             model = self._normalize_model(provider, candidate)
             if not model or model in seen:
                 continue
             if getattr(log_context, "source", None) != "model_test" and model in disabled_models:
-                logger.debug(f"AI-Hints: Filtering out user-disabled fallback model {provider}/{model} (user filter).")
                 continue
             seen.add(model)
             

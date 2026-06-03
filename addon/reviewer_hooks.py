@@ -58,7 +58,7 @@ def _apply_results_to_card(card, data, is_manual=True, web=None):
     if _ADDON_VERSION:
         data["_version"] = _ADDON_VERSION
         
-    logger.info(
+    logger.debug(
         "AI-Hints applying data to card %s (model: %s)",
         card.id,
         data.get("_model", "unknown"),
@@ -403,24 +403,24 @@ def _prepare_card_review_state(card):
     for cid in to_remove_cleared:
         _just_cleared_card_ids.discard(cid)
 
-def _set_frontend_generating(web, active, status=None, error_msg=None):
+def _set_frontend_generating(web, active, card_id=None, is_pregen=False, status=None, error_msg=None):
     if not web:
         return
     status_arg = json.dumps(status) if status is not None else "undefined"
     error_arg = json.dumps(error_msg) if error_msg is not None else "undefined"
+    card_id_arg = json.dumps(card_id) if card_id is not None else "undefined"
     _safe_web_eval(web, f"""
         (function() {{
             var active = {json.dumps(bool(active))};
+            var cardId = {card_id_arg};
+            var isPregen = {json.dumps(bool(is_pregen))};
             var status = {status_arg};
             var errorMsg = {error_arg};
             var attempts = 0;
             function applyState() {{
                 attempts += 1;
-                if (window.aiHintsUiConfig) {{
-                    window.aiHintsUiConfig.is_generating = active;
-                }}
                 if (typeof window.aiHintsSetGenerating === 'function') {{
-                    window.aiHintsSetGenerating(active, status, errorMsg);
+                    window.aiHintsSetGenerating(active, status, errorMsg, cardId, isPregen);
                     return;
                 }}
                 if (attempts < 20) setTimeout(applyState, 50);
@@ -528,6 +528,7 @@ def on_webview_will_set_content(web_content, context):
         "fix_latex": config.get("fix_latex", False),
         "review_token": _review_token,
         "is_generating": card.id in _generating_card_ids if card else False,
+        "is_pregenerating": any(cid != card.id for cid in _generating_card_ids) if card else False,
         "shortcuts": config.get("shortcuts", {}),
         "is_answer_side": is_answer,
         "hints_font_size": config.get("hints_font_size", ""),
@@ -535,7 +536,7 @@ def on_webview_will_set_content(web_content, context):
     })
 
     if config.get("auto_show_hints", False) or config.get("auto_show_options", False):
-        logger.info(
+        logger.debug(
             "Auto-show active for card %s (hints=%s, options=%s)",
             card.id if card else "unknown",
             config.get("auto_show_hints", False),
@@ -1243,16 +1244,15 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         logger.info("AI-Hints: Skipping generation for card %s as no content was found (likely a missing cloze).", card_id)
         return
 
-    logger.info(f"AI-Hints generating for card {card_id} (ord={card.ord}): Front='{front}', Back='{back}'")
-    logger.info("AI-Hints generation started for card %s using provider: %s (manual=%s, pregen=%s)", card_id, provider, is_manual, is_pregen)
+    logger.info(f"AI-Hints generating for card {card_id} (ord={card.ord}, manual={is_manual}, pregen={is_pregen}) using {provider}")
     
     if is_manual:
         # User explicitly asked for generation; clear any active emergency stop
         state.GLOBAL_STOP = False
 
-    # Trigger animation in frontend only if not pre-generating
-    if not is_pregen and web:
-        _set_frontend_generating(web, True)
+    # Trigger animation in frontend
+    if web:
+        _set_frontend_generating(web, True, card_id, is_pregen)
 
     def on_done(data):
         try:
@@ -1262,26 +1262,37 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
             if state.GLOBAL_STOP:
                 logger.info(f"AI-Hints: Generation aborted for card {card_id} via Emergency Stop signal.")
                 # Clear animation
-                if not is_pregen:
-                    _set_frontend_generating(web, False)
+                _set_frontend_generating(web, False, card_id, is_pregen)
                 return
 
             if is_pregen:
+                # If by the time it finished, the card is ALREADY on screen, 
+                # apply it immediately instead of just caching.
+                current_reviewer_card = getattr(mw.reviewer, "card", None)
+                is_on_screen = current_reviewer_card and current_reviewer_card.id == card_id
+                
                 if data and (data.get("hints") or data.get("options")):
-                    logger.info(
-                        "AI-Hints pre-generation response for card %s (model: %s)",
-                        card_id,
-                        data.get("_model", "unknown"),
-                    )
-                    # If by the time it finished, the card is ALREADY on screen, 
-                    # apply it immediately instead of just caching.
-                    current_reviewer_card = getattr(mw.reviewer, "card", None)
-                    if current_reviewer_card and current_reviewer_card.id == card_id:
-                         logger.info(f"AI-Hints: Pre-generation finished while card {card_id} is on screen. Applying immediately.")
+                    if is_on_screen:
+                         logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Applied immediately).")
+                         # IMPORTANT: Discard from generating set BEFORE refresh_current_card (via _apply_results_to_card)
+                         # so on_webview_will_set_content sees it as finished.
+                         _generating_card_ids.discard(card_id)
                          _apply_results_to_card(card, data, is_manual=False, web=web)
+                         # Explicitly clear frontend state as well for double safety
+                         _set_frontend_generating(web, False, card_id, is_pregen)
                     else:
                         _pregenerated_data[card_id] = data
-                        logger.info(f"AI-Hints: Pre-generation complete for card {card_id}. Cached in memory.")
+                        logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Cached in memory).")
+                        _set_frontend_generating(web, False, card_id, is_pregen)
+                else:
+                    # If pre-gen failed and it was on screen (upgraded to foreground), clear animation
+                    if is_on_screen:
+                        _set_frontend_generating(web, False, card_id, is_pregen, "Failed")
+                    else:
+                        _set_frontend_generating(web, False, card_id, is_pregen)
+                
+                # IMPORTANT: Trigger the NEXT pre-generation to fill the buffer
+                _trigger_next_pregeneration()
                 return
 
             # Only discard if the user moved to a DIFFERENT card.
@@ -1290,8 +1301,9 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
             current_reviewer_card = getattr(mw.reviewer, "card", None)
             if current_reviewer_card and current_reviewer_card.id != card.id:
                 logger.info("AI-Hints: User moved to another card. Discarding generated data to prevent database and undo conflicts.")
-                # Still need to clear the generating flag in the frontend if it's currently active
-                _set_frontend_generating(web, False)
+                # We MUST clear the generating state even if we discard the data, 
+                # otherwise the next card might inherit the 'is_generating' flag from aiHintsUiConfig.
+                _set_frontend_generating(web, False, card_id, is_pregen)
                 return
 
             if not data or (not data.get("hints") and not data.get("options")):
@@ -1302,7 +1314,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                 
                 # Safely update frontend to transition from animation -> feedback -> rest state
                 try:
-                    _set_frontend_generating(web, False, err_status, err_msg)
+                    _set_frontend_generating(web, False, card_id, is_pregen, err_status, err_msg)
                 except Exception:
                     pass
                 
@@ -1310,19 +1322,21 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                 # and previously caused recursion bugs by reading the lock before cleanup.
                 return
 
-            if _apply_results_to_card(card, data, is_manual=is_manual, web=web):
-                # IMPORTANT: Discard current card from generating set BEFORE trying to pre-gen next.
-                # Otherwise _trigger_next_pregeneration will see this card and abort.
-                _generating_card_ids.discard(card_id)
+            # Discard from generating set BEFORE applying results (which might refresh the card)
+            # so the UI state correctly reflects that we are done.
+            _generating_card_ids.discard(card_id)
 
+            if _apply_results_to_card(card, data, is_manual=is_manual, web=web):
                 # If we just finished the current card, and pre-generation is on, 
                 # try to pre-generate for the NEXT card now.
                 if not is_manual:
                     _trigger_next_pregeneration()
+                
+                # Double safety: clear animation for current card
+                _set_frontend_generating(web, False, card_id, is_pregen)
             else:
-                _generating_card_ids.discard(card_id)
                 try:
-                    _set_frontend_generating(web, False, "Failed")
+                    _set_frontend_generating(web, False, card_id, is_pregen, "Failed")
                 except Exception: pass
                 info("AI-Hints: No hints or options were generated.")
         finally:
@@ -1556,7 +1570,7 @@ def init_hooks():
         # 1. Check if we have pre-generated data for THIS card
         if card.id in _pregenerated_data:
             data = _pregenerated_data.pop(card.id)
-            logger.info(f"AI-Hints: Applying pre-generated data for card {card.id}")
+            logger.debug(f"AI-Hints: Applying pre-generated data for card {card.id}")
             _apply_results_to_card(card, data, is_manual=False)
             # Now that this card is done, pre-generate the NEXT one
             _trigger_next_pregeneration()

@@ -15,6 +15,7 @@ class LogTabMixin:
         filter_layout.addWidget(QLabel("Level:"))
         self.log_level_cb = QComboBox()
         self.log_level_cb.addItems(["ALL", "DEBUG", "INFO", "WARNING", "ERROR"])
+        self.log_level_cb.setCurrentText("INFO")
         self.log_level_cb.currentIndexChanged.connect(self.load_log)
         filter_layout.addWidget(self.log_level_cb)
         

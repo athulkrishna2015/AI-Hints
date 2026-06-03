@@ -30,7 +30,10 @@
         .nightMode .ai-hints-json-view { background: rgba(255,255,255,0.05); }
         .ai-hints-btn-generating { animation: ai-hints-pulse 1.5s ease-in-out infinite; background: linear-gradient(90deg, #f8fafc 0%, #dbeafe 50%, #f8fafc 100%); background-size: 200% 100%; color: #111827; border-color: #60a5fa; will-change: background-position; }
         .nightMode .ai-hints-btn-generating { background: linear-gradient(90deg, #172554 0%, #1d4ed8 50%, #172554 100%); background-size: 200% 100%; color: #ffffff; border-color: #93c5fd; will-change: background-position; }
+        .ai-hints-btn-pregenerating { animation: ai-hints-pregen-pulse 2s ease-in-out infinite; background: linear-gradient(90deg, #f0fdf4 0%, #dcfce7 50%, #f0fdf4 100%); background-size: 200% 100%; border-color: #86efac; will-change: background-position; }
+        .nightMode .ai-hints-btn-pregenerating { background: linear-gradient(90deg, #064e3b 0%, #166534 50%, #064e3b 100%); background-size: 200% 100%; border-color: #22c55e; }
         @keyframes ai-hints-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+        @keyframes ai-hints-pregen-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
     `;
 
     // 2. State & Helpers
@@ -522,15 +525,24 @@
                     const genBtn = document.createElement('button');
                     genBtn.className = 'ai-hints-btn';
                     genBtn.textContent = hasContent ? "Regenerate" : "Generate AI Hints";
+                    
                     if (uiCfg.is_generating) {
                         genBtn.textContent = "✨ Generating...";
                         genBtn.disabled = true;
                         genBtn.classList.add('ai-hints-btn-generating');
+                    } else if (uiCfg.is_pregenerating) {
+                        // Background pre-gen active for another card
+                        genBtn.classList.add('ai-hints-btn-pregenerating');
+                        genBtn.title = "Background pre-generation active...";
                     }
+                    
                     genBtn.onclick = (e) => {
                         if (e) { e.stopPropagation(); e.preventDefault(); }
                         genBtn.disabled = true;
                         genBtn.textContent = "✨ Generating...";
+                        // Switch to foreground style immediately
+                        genBtn.classList.remove('ai-hints-btn-pregenerating');
+                        genBtn.classList.add('ai-hints-btn-generating');
                         if (typeof pycmd === 'function') pycmd('ai_hints_generate');
                     };
                     btnBox.appendChild(genBtn);
@@ -655,7 +667,19 @@
 
     // API for Python
     window.aiHintsUpdateData = (data, isManualAction) => {
-        if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_generating = false;
+        // Only clear the global is_generating flag if this update actually came from a card 
+        // that belongs on the screen. Pre-generations should not touch the global flag.
+        const ord = getCardOrd();
+        const cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+        const dataCardId = (data && data._id) ? data._id : null;
+        const dataCardOrd = (data && data._ord !== undefined) ? data._ord : null;
+
+        const isCurrentCard = !dataCardId || (String(dataCardId) === String(cardId) && 
+                              (dataCardOrd === null || String(dataCardOrd) === String(ord)));
+
+        if (isCurrentCard && window.aiHintsUiConfig) {
+            window.aiHintsUiConfig.is_generating = false;
+        }
         init(data, isManualAction);
     };
     window.aiHintsClearData = () => { 
@@ -693,28 +717,63 @@
         
         init(); 
     };
-    window.aiHintsSetGenerating = (active, status, errorMsg) => {
-        if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_generating = !!active;
+    window.aiHintsSetGenerating = (active, status, errorMsg, cardId, isPregen) => {
+        const currentCardId = window.aiHintsCurrentCard ? String(window.aiHintsCurrentCard.id) : 'temp';
+        const strCardId = cardId ? String(cardId) : null;
+        const isThisCard = strCardId === currentCardId;
+        
+        window.aiHintsBackgroundGenerations = window.aiHintsBackgroundGenerations || new Set();
+        
+        if (active) {
+            if (isThisCard) {
+                if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_generating = true;
+            } else if (strCardId) {
+                window.aiHintsBackgroundGenerations.add(strCardId);
+                if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_pregenerating = true;
+            }
+        } else {
+            if (isThisCard) {
+                if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_generating = false;
+            }
+            if (strCardId) window.aiHintsBackgroundGenerations.delete(strCardId);
+            if (window.aiHintsUiConfig) {
+                // Background animation only if we have active background tasks
+                window.aiHintsUiConfig.is_pregenerating = (window.aiHintsBackgroundGenerations.size > 0);
+            }
+        }
+
+        const uiCfg = window.aiHintsUiConfig || {};
         let genBtns = document.querySelectorAll('.ai-hints-btn');
         if (active && genBtns.length === 0) {
             init();
             genBtns = document.querySelectorAll('.ai-hints-btn');
         }
+        
         genBtns.forEach(btn => {
-            if (btn.textContent.includes("AI Hints") || btn.textContent.includes("Regenerate") || btn.classList.contains('ai-hints-btn-generating')) {
-                if (active) {
+            if (btn.textContent.includes("AI Hints") || btn.textContent.includes("Regenerate") || 
+                btn.classList.contains('ai-hints-btn-generating') || btn.classList.contains('ai-hints-btn-pregenerating')) {
+                
+                if (uiCfg.is_generating) {
                     btn.disabled = true;
                     btn.textContent = "✨ Generating...";
+                    btn.classList.remove('ai-hints-btn-pregenerating');
                     btn.classList.add('ai-hints-btn-generating');
+                } else if (uiCfg.is_pregenerating) {
+                    btn.disabled = false;
+                    btn.classList.remove('ai-hints-btn-generating');
+                    btn.classList.add('ai-hints-btn-pregenerating');
                 } else {
                     btn.disabled = false;
                     btn.classList.remove('ai-hints-btn-generating');
-                    if (status === 'Failed' || status === 'Offline') {
+                    btn.classList.remove('ai-hints-btn-pregenerating');
+                    
+                    if (isThisCard && (status === 'Failed' || status === 'Offline')) {
                         const oldTxt = btn.textContent;
                         btn.textContent = "❌ " + (status || "Failed");
                         if (errorMsg) btn.title = errorMsg;
                         setTimeout(() => { btn.textContent = oldTxt; btn.title = ""; }, 3000);
-                    } else {
+                    } else if (!active) {
+                        // Just finished normally
                         init();
                     }
                 }
