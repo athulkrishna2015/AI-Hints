@@ -466,7 +466,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             for provider in list(self.active_batch_providers):
                 FETCH_CANCELLATIONS[f"{provider}_main"] = True
             if hasattr(self, "fetch_all_btn"):
-                self.fetch_all_btn.setText("Fetch All Available Models")
+                self.fetch_all_btn.setText("Fetch All")
             self.batch_fetch_active = False
             self.active_batch_providers.clear()
             tooltip("Batch model fetch cancelled.")
@@ -492,7 +492,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.batch_fetch_active = True
         self.active_batch_providers = {provider for provider, _ in providers_to_fetch}
         if hasattr(self, "fetch_all_btn"):
-            self.fetch_all_btn.setText("Stop Fetch All")
+            self.fetch_all_btn.setText("Stop Fetch")
         tooltip("Starting batch model fetch...")
         
         def _check_batch_done(provider_done):
@@ -502,7 +502,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             if not self.active_batch_providers:
                 self.batch_fetch_active = False
                 if hasattr(self, "fetch_all_btn"):
-                    self.fetch_all_btn.setText("Fetch All Available Models")
+                    self.fetch_all_btn.setText("Fetch All")
                 tooltip("Finished fetching models for all configured providers.")
                 
         for provider, combobox in providers_to_fetch:

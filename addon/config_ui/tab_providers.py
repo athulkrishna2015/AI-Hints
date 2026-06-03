@@ -448,17 +448,17 @@ class ProvidersTabMixin:
         # Add Fetch All, Test All, and Restore Default buttons
         model_btns_layout = QHBoxLayout()
         
-        self.fetch_all_btn = QPushButton("Fetch All Available Models")
+        self.fetch_all_btn = QPushButton("Fetch All")
         self.fetch_all_btn.setToolTip("Attempts to fetch latest models for all providers that have API keys.")
         self.fetch_all_btn.clicked.connect(self.on_fetch_all_models)
         model_btns_layout.addWidget(self.fetch_all_btn)
         
-        test_all_btn = QPushButton("Test All Models")
+        test_all_btn = QPushButton("Test All")
         test_all_btn.setToolTip("Runs sequential test checks for all configured/enabled providers.")
         test_all_btn.clicked.connect(self.on_test_all_models)
         model_btns_layout.addWidget(test_all_btn)
         
-        restore_models_btn = QPushButton("Restore Default Models")
+        restore_models_btn = QPushButton("Restore Defaults")
         restore_models_btn.setToolTip("Restores model names to factory defaults.")
         restore_models_btn.clicked.connect(self.on_restore_models_only)
         model_btns_layout.addWidget(restore_models_btn)
