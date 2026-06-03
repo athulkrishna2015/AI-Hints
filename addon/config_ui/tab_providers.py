@@ -1,6 +1,6 @@
 import os
 from aqt.qt import *
-from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS
+from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS, MODEL_FALLBACKS
 from .widgets import ProviderRowWidget
 
 class FallbackOrderDialog(QDialog):
@@ -46,10 +46,15 @@ class FallbackOrderDialog(QDialog):
         self.list_test_btn.setToolTip("Test the currently selected model in the list.")
         self.list_test_btn.clicked.connect(self.on_test_from_list)
         
+        self.restore_btn = QPushButton("Restore Defaults")
+        self.restore_btn.setToolTip("Reset the list back to code defaults.")
+        self.restore_btn.clicked.connect(self.restore_defaults)
+        
         btn_layout.addWidget(self.up_btn)
         btn_layout.addWidget(self.down_btn)
         btn_layout.addWidget(self.remove_btn)
         btn_layout.addWidget(self.list_test_btn)
+        btn_layout.addWidget(self.restore_btn)
         layout.addLayout(btn_layout)
         
         # Add new model section
@@ -108,6 +113,15 @@ class FallbackOrderDialog(QDialog):
         curr_row = self.list_widget.currentRow()
         if curr_row != -1:
             self.list_widget.takeItem(curr_row)
+
+    def restore_defaults(self):
+        self.list_widget.clear()
+        defaults = MODEL_FALLBACKS.get(self.provider, [])
+        for m in defaults:
+            item = QListWidgetItem(m)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked)
+            self.list_widget.addItem(item)
 
     def add_item(self):
         text = self.add_edit.currentText().strip()

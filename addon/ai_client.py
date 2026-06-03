@@ -202,7 +202,6 @@ MODEL_FALLBACKS = {
         "gemini-flash-lite-latest",
         "gemini-3.1-flash-lite-preview",
         "gemini-2.5-flash-lite",
-        "gemma-4-31b-it",
         "gemini-3.1-pro-preview",
         "gemini-3-pro-preview",
         "gemini-2.5-pro",
@@ -1062,7 +1061,6 @@ class AIClient:
             primary_model or self._get_model(provider),
             *self._model_list(extra_fallbacks),
             *configured_fallbacks,
-            *MODEL_FALLBACKS.get(provider, []),
         ]
 
         disabled_models = self.config.get("disabled_fallback_models", {}).get(provider, [])
