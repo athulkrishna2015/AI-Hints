@@ -1,4 +1,5 @@
 import os
+from aqt import mw
 from aqt.qt import *
 from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS, MODEL_FALLBACKS
 from .widgets import ProviderRowWidget
@@ -27,6 +28,7 @@ class FallbackOrderDialog(QDialog):
         disabled_models = getattr(parent, "disabled_fallback_models_data", {}).get(provider, [])
         for m in current_list:
             item = QListWidgetItem(m)
+            item.setData(Qt.ItemDataRole.UserRole, m)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Unchecked if m in disabled_models else Qt.CheckState.Checked)
             self.list_widget.addItem(item)
@@ -41,9 +43,9 @@ class FallbackOrderDialog(QDialog):
         self.remove_btn = QPushButton("Remove")
         self.remove_btn.clicked.connect(self.remove_item)
         
-        self.list_test_btn = QPushButton("Test")
+        self.list_test_btn = QPushButton("Test All")
         self.list_test_btn.setFixedWidth(70)
-        self.list_test_btn.setToolTip("Test the currently selected model in the list.")
+        self.list_test_btn.setToolTip("Test all models in the list sequentially.")
         self.list_test_btn.clicked.connect(self.on_test_from_list)
         
         self.restore_btn = QPushButton("Restore Defaults")
@@ -88,17 +90,70 @@ class FallbackOrderDialog(QDialog):
             self.main_dialog.on_test_model(self.provider, self.add_edit)
 
     def on_test_from_list(self):
-        curr_item = self.list_widget.currentItem()
-        if not curr_item or not hasattr(self.main_dialog, "on_test_model"):
-            return
-            
-        temp_cb = QComboBox()
-        temp_cb.addItem(curr_item.text())
-        
         self.list_test_btn.setEnabled(False)
-        self.main_dialog.on_test_model(self.provider, temp_cb)
+        self.restore_btn.setEnabled(False)
+        self.up_btn.setEnabled(False)
+        self.down_btn.setEnabled(False)
+        self.remove_btn.setEnabled(False)
         
-        QTimer.singleShot(3000, lambda: self.list_test_btn.setEnabled(True))
+        # Collect all models from items
+        models = [self.list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.list_widget.count())]
+        
+        import threading
+        from ..ai_client import AIClient
+        
+        def _runner():
+            for i, model in enumerate(models):
+                # Update item state to Testing
+                def _update_testing(idx=i, name=model):
+                    item = self.list_widget.item(idx)
+                    item.setText(f"{name} (⏳ Testing...)")
+                mw.taskman.run_on_main(_update_testing)
+                
+                status = "✅ Working"
+                try:
+                    # Prepare temporary config for this model
+                    temp_config = self.main_dialog.config.copy()
+                    api_key = self.main_dialog.api_key_edits[self.provider].text().strip() if self.provider in self.main_dialog.api_key_edits else ""
+                    if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+                    temp_config["api_keys"][self.provider] = api_key
+                    if "models" not in temp_config: temp_config["models"] = {}
+                    temp_config["models"][self.provider] = model
+                    
+                    if self.provider == "local":
+                        temp_config["local_endpoint"] = {
+                            "base_url": self.main_dialog.local_url_edit.text().strip() or "http://localhost:11434/v1",
+                            "api_key": self.main_dialog.local_api_key_edit.text().strip(),
+                            "model": model
+                        }
+                    if self.provider == "antigravity":
+                        temp_config["antigravity_proxy"] = {"enabled": True, "port": 3000}
+                        
+                    client = AIClient(temp_config)
+                    test_front = "What is the capital of France?"
+                    test_back = "Paris"
+                    res = client.generate_options(test_front, test_back, override_provider=self.provider)
+                    if not (res and (res.get("hints") or res.get("options"))):
+                        status = "❌ Empty"
+                except Exception as e:
+                    err_msg = str(e).split("\n")[0]
+                    status = f"❌ Error: {err_msg}"
+                
+                # Update item state to result
+                def _update_result(idx=i, name=model, st=status):
+                    item = self.list_widget.item(idx)
+                    item.setText(f"{name} ({st})")
+                mw.taskman.run_on_main(_update_result)
+                
+            def _done():
+                self.list_test_btn.setEnabled(True)
+                self.restore_btn.setEnabled(True)
+                self.up_btn.setEnabled(True)
+                self.down_btn.setEnabled(True)
+                self.remove_btn.setEnabled(True)
+            mw.taskman.run_on_main(_done)
+            
+        threading.Thread(target=_runner, daemon=True).start()
 
     def move_item(self, delta):
         curr_row = self.list_widget.currentRow()
@@ -119,6 +174,7 @@ class FallbackOrderDialog(QDialog):
         defaults = MODEL_FALLBACKS.get(self.provider, [])
         for m in defaults:
             item = QListWidgetItem(m)
+            item.setData(Qt.ItemDataRole.UserRole, m)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked)
             self.list_widget.addItem(item)
@@ -127,24 +183,25 @@ class FallbackOrderDialog(QDialog):
         text = self.add_edit.currentText().strip()
         if not text: return
         
-        existing = [self.list_widget.item(i).text() for i in range(self.list_widget.count())]
+        existing = [self.list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.list_widget.count())]
         if text in existing: return
         
         item = QListWidgetItem(text)
+        item.setData(Qt.ItemDataRole.UserRole, text)
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
         item.setCheckState(Qt.CheckState.Checked)
         self.list_widget.addItem(item)
         self.add_edit.setCurrentText("")
 
     def get_ordered_list(self):
-        return [self.list_widget.item(i).text() for i in range(self.list_widget.count())]
+        return [self.list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.list_widget.count())]
 
     def get_disabled_list(self):
         disabled = []
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
             if item.checkState() == Qt.CheckState.Unchecked:
-                disabled.append(item.text())
+                disabled.append(item.data(Qt.ItemDataRole.UserRole))
         return disabled
 
 
@@ -221,11 +278,16 @@ class ProvidersTabMixin:
         self.ag_model_test_btn = QPushButton("Test")
         self.ag_model_test_btn.setFixedWidth(75)
         self.ag_model_test_btn.setToolTip("Run a test generation via the local Antigravity Proxy.")
-        self.ag_model_test_btn.clicked.connect(lambda: self.on_test_model("antigravity", self.ag_model_edit))
+        
+        self.ag_test_status_label = QLabel("")
+        self.ag_test_status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
+        
+        self.ag_model_test_btn.clicked.connect(lambda: self.on_test_model("antigravity", self.ag_model_edit, status_label=self.ag_test_status_label))
 
         self.ag_model_layout.addWidget(self.ag_model_edit)
         self.ag_model_layout.addWidget(self.ag_model_fetch_btn)
         self.ag_model_layout.addWidget(self.ag_model_test_btn)
+        self.ag_model_layout.addWidget(self.ag_test_status_label)
         ag_layout.addRow("Active Model:", self.ag_model_layout)
         
         ag_layout.addRow(self.ag_enable_cb)
@@ -269,11 +331,16 @@ class ProvidersTabMixin:
         self.local_test_btn = QPushButton("Test")
         self.local_test_btn.setFixedWidth(75)
         self.local_test_btn.setToolTip("Run a test generation against your local AI endpoint.")
-        self.local_test_btn.clicked.connect(lambda: self.on_test_model("local", self.local_model_edit))
+        
+        self.local_test_status_label = QLabel("")
+        self.local_test_status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
+        
+        self.local_test_btn.clicked.connect(lambda: self.on_test_model("local", self.local_model_edit, status_label=self.local_test_status_label))
 
         self.local_model_layout.addWidget(self.local_model_edit)
         self.local_model_layout.addWidget(self.local_fetch_btn)
         self.local_model_layout.addWidget(self.local_test_btn)
+        self.local_model_layout.addWidget(self.local_test_status_label)
         
         self.local_api_key_edit = QLineEdit()
         self.local_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -303,13 +370,18 @@ class ProvidersTabMixin:
         model_group = QGroupBox("Model Names & Fallback Priority")
         model_main_layout = QVBoxLayout()
         
-        # Add Fetch All and Restore Default buttons
+        # Add Fetch All, Test All, and Restore Default buttons
         model_btns_layout = QHBoxLayout()
         
         fetch_all_btn = QPushButton("Fetch All Available Models")
         fetch_all_btn.setToolTip("Attempts to fetch latest models for all providers that have API keys.")
         fetch_all_btn.clicked.connect(self.on_fetch_all_models)
         model_btns_layout.addWidget(fetch_all_btn)
+        
+        test_all_btn = QPushButton("Test All Models")
+        test_all_btn.setToolTip("Runs sequential test checks for all configured/enabled providers.")
+        test_all_btn.clicked.connect(self.on_test_all_models)
+        model_btns_layout.addWidget(test_all_btn)
         
         restore_models_btn = QPushButton("Restore Default Models")
         restore_models_btn.setToolTip("Restores model names to factory defaults.")

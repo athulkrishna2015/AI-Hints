@@ -466,16 +466,26 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.on_fetch_models("local", self.local_model_edit, silent=True)
         tooltip("Finished fetching models for all configured providers.")
 
-    def on_test_model(self, provider, combobox):
+    def on_test_model(self, provider, combobox, status_label=None):
         """Runs a real-world test generation using the currently selected model."""
         model_name = combobox.currentText().strip()
         if not model_name:
-            info(f"Please select or enter a model name for {provider.capitalize()} first.")
+            if status_label:
+                status_label.setText("❌ No Model")
+                status_label.setToolTip("Please select or enter a model name first.")
+                status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+            else:
+                info(f"Please select or enter a model name for {provider.capitalize()} first.")
             return
 
         api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
         if not api_key and provider not in ["local", "antigravity"]:
-            info(f"Please enter an API key for {provider.capitalize()} first.")
+            if status_label:
+                status_label.setText("❌ No API Key")
+                status_label.setToolTip("Please enter an API key first.")
+                status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+            else:
+                info(f"Please enter an API key for {provider.capitalize()} first.")
             return
 
         # Prepare temporary config for the test
@@ -495,12 +505,15 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         if provider == "antigravity":
             temp_config["antigravity_proxy"] = {"enabled": True, "port": 3000}
-            # Note: We assume proxy is running for the test. 
-            # If not, the request will fail naturally.
 
         client = AIClient(temp_config)
         combobox.setEnabled(False)
-        tooltip(f"Testing {provider.capitalize()} model: {model_name}...")
+        if status_label:
+            status_label.setText("⏳ Testing...")
+            status_label.setToolTip(f"Testing model: {model_name}")
+            status_label.setStyleSheet("font-weight: bold; color: orange; margin-left: 5px;")
+        else:
+            tooltip(f"Testing {provider.capitalize()} model: {model_name}...")
 
         def _run_test():
             try:
@@ -516,23 +529,135 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     if res and (res.get("hints") or res.get("options")):
                         hints_count = len(res.get("hints", []))
                         opts_count = len(res.get("options", []))
-                        info(f"✅ Success! {provider.capitalize()} is working.\n\n"
-                             f"Model: {model_name}\n"
-                             f"Result: Generated {hints_count} hints and {opts_count} options.")
+                        if status_label:
+                            status_label.setText("✅ Success")
+                            status_label.setToolTip(f"Working!\nGenerated {hints_count} hints and {opts_count} options.")
+                            status_label.setStyleSheet("font-weight: bold; color: green; margin-left: 5px;")
+                        else:
+                            info(f"✅ Success! {provider.capitalize()} is working.\n\n"
+                                 f"Model: {model_name}\n"
+                                 f"Result: Generated {hints_count} hints and {opts_count} options.")
                     else:
-                        info(f"❌ Test Failed for {provider.capitalize()}.\n\n"
-                             f"The provider returned an empty response. Check your API key, "
-                             f"model name, and account balance.")
+                        if status_label:
+                            status_label.setText("❌ Failed")
+                            status_label.setToolTip("The provider returned an empty response. Check API key, model name, balance.")
+                            status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+                        else:
+                            info(f"❌ Test Failed for {provider.capitalize()}.\n\n"
+                                 f"The provider returned an empty response. Check your API key, "
+                                 f"model name, and account balance.")
                 mw.taskman.run_on_main(_done)
                 
             except Exception as e:
                 def _fail():
                     combobox.setEnabled(True)
-                    info(f"❌ Test Error ({provider.capitalize()}):\n\n{str(e)}")
+                    err_msg = str(e).split("\n")[0]
+                    if status_label:
+                        status_label.setText("❌ Failed")
+                        status_label.setToolTip(f"Error: {err_msg}")
+                        status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+                    else:
+                        info(f"❌ Test Error ({provider.capitalize()}):\n\n{str(e)}")
                 mw.taskman.run_on_main(_fail)
 
         import threading
         threading.Thread(target=_run_test, daemon=True).start()
+
+    def on_test_all_models(self):
+        """Runs test checks sequentially for all provider rows that are configured or enabled."""
+        tooltip("Starting batch model testing...")
+        
+        # Collect all rows (providers) and their associated widgets
+        targets = []
+        
+        # 1. Standard provider widgets
+        if hasattr(self, 'models_layout') and self.models_layout is not None:
+            for i in range(self.models_layout.count()):
+                item = self.models_layout.itemAt(i)
+                if not item: continue
+                w = item.widget()
+                if isinstance(w, ProviderRowWidget):
+                    targets.append((w.provider, w.edit, w.status_label))
+                    
+        # 2. Local AI widget
+        if hasattr(self, 'local_model_edit') and hasattr(self, 'local_test_status_label'):
+            targets.append(("local", self.local_model_edit, self.local_test_status_label))
+        
+        # 3. Antigravity widget
+        if hasattr(self, 'ag_model_edit') and hasattr(self, 'ag_test_status_label'):
+            targets.append(("antigravity", self.ag_model_edit, self.ag_test_status_label))
+        
+        # Run tests sequentially in a background thread
+        import threading
+        def _runner():
+            for provider, combobox, status_label in targets:
+                # Only test if configured/enabled
+                api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
+                if not api_key and provider not in ["local", "antigravity"]:
+                    continue
+                
+                # Update UI to Testing...
+                def _start(c=combobox, s=status_label):
+                    c.setEnabled(False)
+                    if s:
+                        s.setText("⏳ Testing...")
+                        s.setToolTip(f"Testing model: {c.currentText()}")
+                        s.setStyleSheet("font-weight: bold; color: orange; margin-left: 5px;")
+                mw.taskman.run_on_main(_start)
+                
+                model_name = combobox.currentText().strip()
+                status = "✅ Success"
+                detail = ""
+                
+                try:
+                    temp_config = self.config.copy()
+                    if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+                    temp_config["api_keys"][provider] = api_key
+                    if "models" not in temp_config: temp_config["models"] = {}
+                    temp_config["models"][provider] = model_name
+
+                    if provider == "local":
+                        temp_config["local_endpoint"] = {
+                            "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
+                            "api_key": self.local_api_key_edit.text().strip(),
+                            "model": model_name
+                        }
+                    
+                    if provider == "antigravity":
+                        temp_config["antigravity_proxy"] = {"enabled": True, "port": 3000}
+                        
+                    client = AIClient(temp_config)
+                    test_front = "What is the capital of France?"
+                    test_back = "Paris"
+                    res = client.generate_options(test_front, test_back, override_provider=provider)
+                    if not (res and (res.get("hints") or res.get("options"))):
+                        status = "❌ Failed"
+                        detail = "Returned empty response."
+                    else:
+                        hints_count = len(res.get("hints", []))
+                        opts_count = len(res.get("options", []))
+                        detail = f"Working!\nGenerated {hints_count} hints and {opts_count} options."
+                except Exception as e:
+                    status = "❌ Failed"
+                    detail = str(e).split("\n")[0]
+                    
+                # Update UI to result
+                def _end(c=combobox, s=status_label, st=status, d=detail):
+                    c.setEnabled(True)
+                    if s:
+                        s.setText(st)
+                        s.setToolTip(d)
+                        if "Success" in st:
+                            s.setStyleSheet("font-weight: bold; color: green; margin-left: 5px;")
+                        else:
+                            s.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
+                mw.taskman.run_on_main(_end)
+                
+            def _done_all():
+                tooltip("Finished batch model testing.")
+            mw.taskman.run_on_main(_done_all)
+            
+        threading.Thread(target=_runner, daemon=True).start()
 
     def on_fetch_models(self, provider, combobox, silent=False):
         api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
