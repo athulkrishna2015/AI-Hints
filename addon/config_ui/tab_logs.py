@@ -67,7 +67,7 @@ class LogTabMixin:
         
         layout.addLayout(filter_layout)
         
-        self.log_view = QPlainTextEdit()
+        self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse | 
@@ -117,7 +117,48 @@ class LogTabMixin:
             if search_filter:
                 lines = [l for l in lines if search_filter in l.lower()]
             
-            content = "".join(lines) if lines else "No entries matching the selected filters."
+            if not lines:
+                content = "No entries matching the selected filters."
+                content_html = "<i>No entries matching the selected filters.</i>"
+            else:
+                content = "".join(lines)
+                html_lines = []
+                for line in lines:
+                    stripped = line.rstrip("\r\n")
+                    escaped = stripped.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    
+                    color = None
+                    font_weight = "normal"
+                    
+                    if " - DEBUG - " in escaped:
+                        color = "#8a8a8a"  # gray
+                    elif " - WARNING - " in escaped:
+                        color = "#fd7e14"  # orange
+                        font_weight = "bold"
+                    elif " - ERROR - " in escaped or " - CRITICAL - " in escaped:
+                        color = "#d9534f"  # red
+                        font_weight = "bold"
+                    elif " - INFO - " in escaped:
+                        if "success" in escaped.lower():
+                            color = "#198754"  # green
+                            font_weight = "bold"
+                        elif "abort" in escaped.lower() or "stop" in escaped.lower() or "aborted" in escaped.lower():
+                            color = "#f0ad4e"  # orange-yellow
+                            font_weight = "bold"
+                    
+                    style = ""
+                    if color:
+                        style += f"color: {color};"
+                    if font_weight != "normal":
+                        style += f"font-weight: {font_weight};"
+                    
+                    if style:
+                        html_lines.append(f"<span style='{style}'>{escaped}</span>")
+                    else:
+                        html_lines.append(escaped)
+                
+                content_html = "<pre style='margin:0; font-family:monospace; white-space:pre-wrap;'>" + "<br/>".join(html_lines) + "</pre>"
+
             if self.log_view.toPlainText() == content:
                 return
             
@@ -127,12 +168,15 @@ class LogTabMixin:
                 return
 
             vbar = self.log_view.verticalScrollBar()
-            was_at_bottom = vbar.value() >= vbar.maximum() - 10
+            prev_value = vbar.value()
+            was_at_bottom = prev_value >= vbar.maximum() - 10
             
-            self.log_view.setPlainText(content)
+            self.log_view.setHtml(content_html)
             
             if was_at_bottom:
                 vbar.setValue(vbar.maximum())
+            else:
+                vbar.setValue(prev_value)
 
             # 🖍️ Apply Search Highlighting
             self._apply_search_highlighting(search_filter)

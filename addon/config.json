@@ -182,5 +182,6 @@
     "disabled_providers": [],
     "disabled_fallback_models": {},
     "model_cooldown_minutes": 5,
-    "hints_font_size": ""
+    "hints_font_size": "",
+    "batch_limit": 1000
 }

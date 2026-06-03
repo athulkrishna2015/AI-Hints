@@ -30,6 +30,7 @@ class BatchManager:
         # Live Runtime Diagnostic Hooks
         self.current_local_cid = None
         self.current_local_model = ""
+        self.current_local_provider = ""
         self.last_run_stats = None
         
         self.load_state()
@@ -99,6 +100,9 @@ class BatchManager:
             html_parts.append(f"<div style='font-size:12px; padding-bottom:4px;'>{status_txt} <b>Local Sequential Queue</b></div>")
             html_parts.append(f"📊 Progress: <b>{done}</b> / {self.local_queue_total} cards generated. ({remaining} left)<br/>")
             
+            if getattr(self, "current_local_provider", None):
+                 html_parts.append(f"🔌 Provider: <b>{self.current_local_provider}</b><br/>")
+
             if self.current_local_model:
                  html_parts.append(f"🤖 Model: <code>{self.current_local_model}</code><br/>")
                  
@@ -321,6 +325,7 @@ class BatchManager:
 
     def start_local_sequential_queue(self, card_ids: List[int] = None, config: Dict[str, Any] = None, provider_override: str = None):
         """Launches/Resumes a background thread loop to run sequential generation."""
+        state.GLOBAL_STOP = False
         if self.local_queue_active:
              info("⚠️ Another Local Queue is already active! Wait for it to finish.")
              return False
@@ -417,6 +422,7 @@ class BatchManager:
         
         # 🔍 Snapshot runtime model diagnostics for display
         target_prov = provider_override or config.get("ai_provider", "openai")
+        self.current_local_provider = target_prov.capitalize() if target_prov else "Unknown"
         try:
              models = client._models_for_provider(target_prov)
              self.current_local_model = models[0] if models else "Unknown"
@@ -465,10 +471,13 @@ class BatchManager:
                     resp_data = client.generate_options(front_txt, back_txt)
                 
                 if resp_data and (resp_data.get("hints") or resp_data.get("options")):
-                    # 🚀 Update diagnostic model name live from actual successful response
+                    # 🚀 Update diagnostic model/provider name live from actual successful response
                     actual_model = resp_data.get("_model")
                     if actual_model:
                         self.current_local_model = actual_model
+                    actual_provider = resp_data.get("_provider")
+                    if actual_provider:
+                        self.current_local_provider = actual_provider.capitalize()
 
                     logger.info(f"AI-Hints local queue: Successful generation for card {cid} using {actual_model or 'unknown'}")
                     logger.debug(
@@ -507,6 +516,7 @@ class BatchManager:
         self.local_queue_active = False
         self.current_local_cid = None
         self.current_local_model = ""
+        self.current_local_provider = ""
         
         # Only set completion stats if we actually finished naturally (didn't abort)
         if not self.local_queue:

@@ -1554,6 +1554,7 @@ def init_hooks():
         global _review_token, _reviewer_is_ending
         _reviewer_is_ending = False
         _review_token += 1
+        state.GLOBAL_STOP = False
         
         # Trigger frontend setup immediately.
         # The JS-side 'aiHintsSetup' is now smarter and will bail out if 

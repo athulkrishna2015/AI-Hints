@@ -108,6 +108,13 @@ class BatchTabMixin:
         batch_version_row.addStretch()
         s_layout.addRow(batch_version_row)
         
+        # 🔢 Batch Limit
+        self.batch_limit_spin = QSpinBox()
+        self.batch_limit_spin.setRange(1, 1000000)
+        self.batch_limit_spin.setValue(self.config.get("batch_limit", 1000))
+        self.batch_limit_spin.setSuffix(" cards")
+        s_layout.addRow("Batch Limit:", self.batch_limit_spin)
+        
         self.batch_regen_version_cb.toggled.connect(
             lambda enabled: self.batch_regen_min_version_edit.setEnabled(enabled)
         )
@@ -414,8 +421,9 @@ class BatchTabMixin:
                 info("No cards need hint generation (all selected have hints already).")
                 return
                 
-            chunked_ids = final_ids[:1000]
-            excess = len(final_ids) - 1000
+            limit = self.batch_limit_spin.value()
+            chunked_ids = final_ids[:limit]
+            excess = len(final_ids) - limit
             
             is_native = self.rb_native_async.isChecked()
             mode_str = "Native Cloud Batch" if is_native else "Local Background Queue"

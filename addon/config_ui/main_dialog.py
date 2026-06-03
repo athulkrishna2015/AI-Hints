@@ -1188,6 +1188,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     font_size = ""
                 new_config["hints_font_size"] = font_size
 
+            if hasattr(self, "batch_limit_spin"):
+                new_config["batch_limit"] = self.batch_limit_spin.value()
+
             # Mobile Config
             new_config["mobile_use_emojis"] = self.mobile_emojis_cb.isChecked()
             new_config["mobile_show_extra_buttons"] = self.mobile_extra_cb.isChecked()
