@@ -20,7 +20,7 @@ class LogTabMixin:
         
         filter_layout.addWidget(QLabel(" Source:"))
         self.log_source_cb = QComboBox()
-        self.log_source_cb.addItems(["ALL", "Antigravity Proxy", "Batch Processing", "Pre-generation", "Standard Addon"])
+        self.log_source_cb.addItems(["ALL", "Antigravity Proxy", "Batch Processing", "Pre-generation", "Model Testing", "Standard Addon"])
         self.log_source_cb.currentIndexChanged.connect(self.load_log)
         filter_layout.addWidget(self.log_source_cb)
         
@@ -108,8 +108,10 @@ class LogTabMixin:
                 lines = [l for l in lines if "Batch" in l or "Queue" in l]
             elif source_filter == "Pre-generation":
                 lines = [l for l in lines if "pre-generation" in l.lower() or "pregen" in l.lower()]
+            elif source_filter == "Model Testing":
+                lines = [l for l in lines if "[MODEL_TEST]" in l]
             elif source_filter == "Standard Addon":
-                lines = [l for l in lines if "[Proxy]" not in l]
+                lines = [l for l in lines if "[Proxy]" not in l and "[MODEL_TEST]" not in l]
             
             if search_filter:
                 lines = [l for l in lines if search_filter in l.lower()]

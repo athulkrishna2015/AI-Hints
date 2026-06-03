@@ -309,6 +309,52 @@ class AIClient:
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
 
+        # Check if we should use the advanced global priority list
+        global_priority = self.config.get("global_model_priority", [])
+        use_global = self.config.get("use_global_model_priority", False)
+        from .logger import log_context
+        is_test = getattr(log_context, "source", None) == "model_test"
+        
+        if use_global and global_priority and not override_provider and not is_test:
+            disabled_providers = self.config.get("disabled_providers") or []
+            disabled_fallback_models = self.config.get("disabled_fallback_models") or {}
+            
+            last_exception = None
+            for provider, model in global_priority:
+                if state.GLOBAL_STOP:
+                    logger.info(f"AI-Hints: Generation aborted via Emergency Stop signal (global loop).")
+                    return {"hints": [], "options": []}
+                
+                # Skip if provider is disabled
+                if provider in disabled_providers:
+                    continue
+                # Skip if model is disabled
+                if model in disabled_fallback_models.get(provider, []):
+                    continue
+                # Skip if provider is not ready
+                if not self._is_provider_ready(provider, primary=True):
+                    continue
+                # Skip if model is blacklisted on cooldown
+                if self._is_model_failed(provider, model):
+                    continue
+                
+                try:
+                    logger.info(f"AI-Hints: Calling {provider} with model: {model} (via global priority)")
+                    result = self._call_provider(provider, system_prompt, prompt, override_model=model)
+                    if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
+                        result = self._ensure_correct_answer_option(result, back)
+                        logger.info(f"AI-Hints: Successful generation using: {provider}/{model}")
+                        return result
+                except Exception as e:
+                    last_exception = e
+                    logger.error(f"Global fallback model {provider}/{model} failed: {e}")
+                    continue
+            
+            if last_exception:
+                raise last_exception
+            return {"hints": [], "options": []}
+
+        # Otherwise fallback to standard provider-based priority logic
         all_potential = self._candidate_providers(primary_provider)
         if not all_potential:
             logger.error("AI-Hints: No configured AI provider is ready.")
@@ -359,7 +405,7 @@ class AIClient:
         if not isinstance(disabled, list):
             disabled = []
         if disabled:
-            logger.info(f"AI-Hints: Filtering out disabled providers: {', '.join(disabled)}")
+            logger.debug(f"AI-Hints: Filtering out disabled providers: {', '.join(disabled)}")
 
         # Use custom priority list if configured, otherwise use default order
         priority = self.config.get("provider_priority")
@@ -414,20 +460,20 @@ class AIClient:
 
         return bool(self._api_key_for(provider))
 
-    def _call_provider(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
+    def _call_provider(self, provider: str, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
         custom_providers = self.config.get("custom_providers") or {}
         if not isinstance(custom_providers, dict):
             custom_providers = {}
         if provider == "anthropic":
-            return self._call_anthropic(system_prompt, prompt)
+            return self._call_anthropic(system_prompt, prompt, override_model=override_model)
         elif provider == "gemini":
-            return self._call_gemini(system_prompt, prompt)
+            return self._call_gemini(system_prompt, prompt, override_model=override_model)
         elif provider in custom_providers:
-            return self._call_custom_provider(provider, system_prompt, prompt)
+            return self._call_custom_provider(provider, system_prompt, prompt, override_model=override_model)
         else:
-            return self._call_openai_compatible(provider, system_prompt, prompt)
+            return self._call_openai_compatible(provider, system_prompt, prompt, override_model=override_model)
 
-    def _call_custom_provider(self, provider_name: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
+    def _call_custom_provider(self, provider_name: str, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
         custom_providers = self.config.get("custom_providers") or {}
         if not isinstance(custom_providers, dict):
             custom_providers = {}
@@ -446,7 +492,7 @@ class AIClient:
         headers = self._json_headers(api_key)
         headers.update(custom_headers)
 
-        models = self._models_for_provider(provider_name, custom_cfg.get("model", ""), custom_cfg.get("model_fallbacks", []))
+        models = [override_model] if override_model else self._models_for_provider(provider_name, custom_cfg.get("model", ""), custom_cfg.get("model_fallbacks", []))
         for model in models:
             if state.GLOBAL_STOP:
                 break
@@ -482,9 +528,9 @@ class AIClient:
                 continue
         return {"hints": [], "options": []}
 
-    def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
+    def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
         api_key = self._api_key_for(provider)
-        models = self._models_for_provider(provider)
+        models = [override_model] if override_model else self._models_for_provider(provider)
         
         base_url = "https://api.openai.com/v1"
         if provider == "deepseek":
@@ -503,7 +549,7 @@ class AIClient:
                 local_cfg = {}
             base_url = local_cfg.get("base_url", "http://localhost:11434/v1")
             api_key = str(local_cfg.get("api_key", "") or api_key).strip()
-            models = self._models_for_provider(provider, local_cfg.get("model", "") or DEFAULT_MODELS["local"])
+            models = [override_model] if override_model else self._models_for_provider(provider, local_cfg.get("model", "") or DEFAULT_MODELS["local"])
         elif provider == "antigravity":
             ag_cfg = self.config.get("antigravity_proxy") or {}
             if not isinstance(ag_cfg, dict):
@@ -511,7 +557,7 @@ class AIClient:
             port = ag_cfg.get("port", 3000)
             base_url = f"http://localhost:{port}/v1"
             api_key = "antigravity"
-            models = self._models_for_provider(provider, DEFAULT_MODELS["antigravity"])
+            models = [override_model] if override_model else self._models_for_provider(provider, DEFAULT_MODELS["antigravity"])
         elif provider == "mistral":
             base_url = "https://api.mistral.ai/v1"
         elif provider == "huggingface":
@@ -595,9 +641,9 @@ class AIClient:
                 continue
         return {"hints": [], "options": []}
 
-    def _call_anthropic(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
+    def _call_anthropic(self, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
         api_key = self._api_key_for("anthropic")
-        models = self._models_for_provider("anthropic")
+        models = [override_model] if override_model else self._models_for_provider("anthropic")
         url = "https://api.anthropic.com/v1/messages"
         
         headers = self._json_headers()
@@ -640,9 +686,9 @@ class AIClient:
                 continue
         return {"hints": [], "options": []}
 
-    def _call_gemini(self, system_prompt: str, prompt: str) -> Dict[str, List[str]]:
+    def _call_gemini(self, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
         api_key = self._api_key_for("gemini")
-        models = self._models_for_provider("gemini")
+        models = [override_model] if override_model else self._models_for_provider("gemini")
 
         headers = self._json_headers()
         headers["x-goog-api-key"] = api_key
@@ -1080,14 +1126,14 @@ class AIClient:
         models = []
         seen = set()
         for candidate in candidates:
-            if candidate in disabled_models:
-                logger.info(f"AI-Hints: Filtering out user-disabled fallback model {provider}/{candidate} (user filter).")
+            if getattr(log_context, "source", None) != "model_test" and candidate in disabled_models:
+                logger.debug(f"AI-Hints: Filtering out user-disabled fallback model {provider}/{candidate} (user filter).")
                 continue
             model = self._normalize_model(provider, candidate)
             if not model or model in seen:
                 continue
-            if model in disabled_models:
-                logger.info(f"AI-Hints: Filtering out user-disabled fallback model {provider}/{model} (user filter).")
+            if getattr(log_context, "source", None) != "model_test" and model in disabled_models:
+                logger.debug(f"AI-Hints: Filtering out user-disabled fallback model {provider}/{model} (user filter).")
                 continue
             seen.add(model)
             

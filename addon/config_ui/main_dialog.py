@@ -291,6 +291,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not isinstance(disabled_models, dict):
             disabled_models = {}
         self.disabled_fallback_models_data = disabled_models.copy()
+        self.global_model_priority_data = list(c.get("global_model_priority", []))
+        self.advanced_fallback_cb.setChecked(c.get("use_global_model_priority", False))
+        self.update_fallback_ui_states()
             
         local = c.get("local_endpoint", {}) or {}
         self.local_url_edit.setText(local.get("base_url", ""))
@@ -302,6 +305,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.local_fallback_cb.setChecked(local.get("enabled", False))
         
         self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
+        
+        from .tab_providers import DEFAULT_TEST_QUESTION, DEFAULT_TEST_ANSWER
+        self.test_question_edit.setText(c.get("test_question_front", DEFAULT_TEST_QUESTION))
+        self.test_answer_edit.setText(c.get("test_question_back", DEFAULT_TEST_ANSWER))
+        
         self.raw_editor.setPlainText(json.dumps(c, indent=4))
         
         if hasattr(self, "cooldown_spin"):
@@ -376,6 +384,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 self.model_edits[p] = w.edit
                 self.provider_widgets[p] = w
                 self.models_layout.addWidget(w)
+            
+            # Link self.ag_model_edit to the newly created antigravity edit combobox
+            if "antigravity" in self.model_edits:
+                self.ag_model_edit = self.model_edits["antigravity"]
     def on_fetch_binary(self):
         try:
             from ..proxy_manager import proxy_manager
@@ -469,6 +481,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 FETCH_CANCELLATIONS[f"{provider}_main"] = True
             if hasattr(self, "fetch_all_btn"):
                 self.fetch_all_btn.setText("Fetch All")
+            if hasattr(self, "global_fallback_dlg") and self.global_fallback_dlg:
+                self.global_fallback_dlg.list_fetch_btn.setText("Fetch All")
             self.batch_fetch_active = False
             self.active_batch_providers.clear()
             tooltip("Batch model fetch cancelled.")
@@ -494,7 +508,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.batch_fetch_active = True
         self.active_batch_providers = {provider for provider, _ in providers_to_fetch}
         if hasattr(self, "fetch_all_btn"):
-            self.fetch_all_btn.setText("Stop Fetch")
+            self.fetch_all_btn.setText("Stop Fetch All")
+        if hasattr(self, "global_fallback_dlg") and self.global_fallback_dlg:
+            self.global_fallback_dlg.list_fetch_btn.setText("Stop Fetch All")
         tooltip("Starting batch model fetch...")
         
         def _check_batch_done(provider_done):
@@ -505,6 +521,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 self.batch_fetch_active = False
                 if hasattr(self, "fetch_all_btn"):
                     self.fetch_all_btn.setText("Fetch All")
+                if hasattr(self, "global_fallback_dlg") and self.global_fallback_dlg:
+                    self.global_fallback_dlg.list_fetch_btn.setText("Fetch All")
                 tooltip("Finished fetching models for all configured providers.")
                 
         for provider, combobox in providers_to_fetch:
@@ -579,9 +597,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             from ..logger import log_context
             log_context.source = "model_test"
             try:
-                # Use a simple test prompt
-                test_front = "What is the capital of France?"
-                test_back = "Paris"
+                # Use the configured custom test prompt
+                from .tab_providers import DEFAULT_TEST_QUESTION, DEFAULT_TEST_ANSWER
+                test_front = self.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION
+                test_back = self.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
                 
                 # We use generate_options directly to test the full pipeline
                 res = client.generate_options(test_front, test_back, override_provider=provider)
@@ -589,10 +608,17 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 def _done():
                     combobox.setEnabled(True)
                     if res and (res.get("hints") or res.get("options")):
-                        hints_count = len(res.get("hints", []))
-                        opts_count = len(res.get("options", []))
+                        import json
+                        formatted_res = json.dumps(res, indent=2, ensure_ascii=False)
                         if status_label:
-                            st, tt, col = "✅ Success", f"Working!\nGenerated {hints_count} hints and {opts_count} options.", "green"
+                            st, tt, col = "✅ Success", (
+                                f"<div style='width: 450px;'>"
+                                f"<b>Question:</b> {test_front}<br/>"
+                                f"<b>Answer:</b> {test_back}<br/><br/>"
+                                f"<b>Model Response:</b><br/>"
+                                f"<pre style='font-family: monospace; font-size: 11px; white-space: pre-wrap; word-wrap: break-word;'>{formatted_res}</pre>"
+                                f"</div>"
+                            ), "green"
                             PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
                             status_label.setText(st)
                             status_label.setToolTip(tt)
@@ -600,10 +626,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         else:
                             info(f"✅ Success! {provider.capitalize()} is working.\n\n"
                                  f"Model: {model_name}\n"
-                                 f"Result: Generated {hints_count} hints and {opts_count} options.")
+                                 f"Result: Generated {len(res.get('hints', []))} hints and {len(res.get('options', []))} options.")
                     else:
                         if status_label:
-                            st, tt, col = "❌ Failed", "The provider returned an empty response. Check API key, model name, balance.", "red"
+                            st, tt, col = "❌ Failed", f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/>The provider returned an empty response. Check API key, model name, balance.</div>", "red"
                             PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
                             status_label.setText(st)
                             status_label.setToolTip(tt)
@@ -617,9 +643,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             except Exception as e:
                 def _fail():
                     combobox.setEnabled(True)
-                    err_msg = str(e).split("\n")[0]
                     if status_label:
-                        st, tt, col = "❌ Failed", f"Error: {err_msg}", "red"
+                        st, tt, col = "❌ Failed", f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/><b>Error:</b> {str(e)}</div>", "red"
                         PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
                         status_label.setText(st)
                         status_label.setToolTip(tt)
@@ -651,9 +676,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if hasattr(self, 'local_model_edit') and hasattr(self, 'local_test_status_label'):
             targets.append(("local", self.local_model_edit, self.local_test_status_label))
         
-        # 3. Antigravity widget
-        if hasattr(self, 'ag_model_edit') and hasattr(self, 'ag_test_status_label'):
-            targets.append(("antigravity", self.ag_model_edit, self.ag_test_status_label))
+        # Antigravity is handled under step 1 (Standard provider priority list row)
         
         # Run tests sequentially in a background thread
         import threading
@@ -697,19 +720,27 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         temp_config["antigravity_proxy"] = {"enabled": True, "port": 3000}
                         
                     client = AIClient(temp_config)
-                    test_front = "What is the capital of France?"
-                    test_back = "Paris"
+                    from .tab_providers import DEFAULT_TEST_QUESTION, DEFAULT_TEST_ANSWER
+                    test_front = self.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION
+                    test_back = self.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
                     res = client.generate_options(test_front, test_back, override_provider=provider)
                     if not (res and (res.get("hints") or res.get("options"))):
                         status = "❌ Failed"
-                        detail = "Returned empty response."
+                        detail = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/>Returned empty response.</div>"
                     else:
-                        hints_count = len(res.get("hints", []))
-                        opts_count = len(res.get("options", []))
-                        detail = f"Working!\nGenerated {hints_count} hints and {opts_count} options."
+                        import json
+                        formatted_res = json.dumps(res, indent=2, ensure_ascii=False)
+                        detail = (
+                            f"<div style='width: 450px;'>"
+                            f"<b>Question:</b> {test_front}<br/>"
+                            f"<b>Answer:</b> {test_back}<br/><br/>"
+                            f"<b>Model Response:</b><br/>"
+                            f"<pre style='font-family: monospace; font-size: 11px; white-space: pre-wrap; word-wrap: break-word;'>{formatted_res}</pre>"
+                            f"</div>"
+                        )
                 except Exception as e:
                     status = "❌ Failed"
-                    detail = str(e).split("\n")[0]
+                    detail = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/><b>Error:</b> {str(e)}</div>"
                     
                 # Update UI to result
                 def _end(c=combobox, s=status_label, st=status, d=detail, m=model_name):
@@ -802,6 +833,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                             self.model_fallbacks_data[provider] = current_fallbacks
                             self.disabled_fallback_models_data[provider] = disabled_models
                         
+                        # Refresh global fallback dialog if active
+                        if hasattr(self, "global_fallback_dlg") and self.global_fallback_dlg:
+                            try:
+                                self.global_fallback_dlg.refresh_statuses()
+                            except: pass
+
                         if not silent: tooltip(f"Found {len(clean_models)} models for {provider.capitalize()}")
                     else:
                         if not silent: info(f"Could not fetch models for {provider.capitalize()}. Check connection.")
@@ -1138,6 +1175,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["custom_providers"] = self.custom_providers_data
             new_config["model_fallbacks"] = self.model_fallbacks_data
             new_config["disabled_fallback_models"] = self.disabled_fallback_models_data
+            new_config["global_model_priority"] = self.global_model_priority_data
+            new_config["use_global_model_priority"] = self.advanced_fallback_cb.isChecked()
+            new_config["test_question_front"] = self.test_question_edit.text().strip()
+            new_config["test_question_back"] = self.test_answer_edit.text().strip()
             if hasattr(self, "cooldown_spin"):
                 new_config["model_cooldown_minutes"] = self.cooldown_spin.value()
                 

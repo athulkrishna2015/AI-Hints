@@ -324,11 +324,16 @@ class ProviderRowWidget(QWidget):
         # We also want to provide some smart suggestions for adding new ones
         suggestions = MODEL_SUGGESTIONS.get(self.provider, [])
         
-        self.fallback_dialog = FallbackOrderDialog(self.parent_dialog, self.provider, current_fallbacks, suggestions)
+        active_model = self.edit.currentText().strip()
+        self.fallback_dialog = FallbackOrderDialog(self.parent_dialog, self.provider, active_model, current_fallbacks, suggestions)
         self.fallback_dialog.setWindowFlag(Qt.WindowType.Window, True)
         self.fallback_dialog.setWindowModality(Qt.WindowModality.NonModal)
         
         def _save_data():
+            new_active = self.fallback_dialog.get_active_model()
+            if new_active:
+                self.edit.setCurrentText(new_active)
+                
             new_fallbacks = self.fallback_dialog.get_ordered_list()
             self.parent_dialog.model_fallbacks_data[self.provider] = new_fallbacks
             

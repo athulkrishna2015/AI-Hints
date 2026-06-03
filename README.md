@@ -18,6 +18,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Edit Field Compatibility**: Improved compatibility with "Edit Field During Review Native" — UI updates now pause while you are typing to prevent focus loss.
 - **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next provider.
 - **Model Fallbacks**: Each provider has its own **intelligence-ranked fallback hierarchy** to automatically retry next-best models before switching to a different provider.
+- **Advanced Global Fallback**: Optionally configure and enable a flat, global priority sequence to mix-and-match fallback models across different providers in any custom order.
 - **Multi-Cloze Support**: Optimized for cards with multiple cloze deletions of the same ID.
 - **Smart LaTeX Normalization**: Powered by the bundled `ai-latex-fixer` library for robust math formula rendering.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
@@ -126,12 +127,14 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 ## Changelog
 
 ### June 3, 2026 (v2.8.5)
+- **Advanced Global Fallback Priority (Global Flat List)**: Introduced a new global flat-list configuration dialog to custom-arrange model fallbacks across different providers. Features an interactive toggle switch (checkbox) to enable the global priority list, which dynamically grays out standard provider fallback widgets and configurations when active to prevent conflicting settings.
 - **Inline Testing & Status Indicators**: Replaced disruptive popup alert boxes during model testing with real-time, color-coded inline status indicators (`⏳ Testing...`, `✅ Success`, `❌ Failed`) next to the dropdowns and inside the fallback list.
 - **Streamlined Fallback Priority Dialog**: Removed redundant manual model input boxes in the Fallbacks Priority window.
-- **Automatic Fallback Discovery via Fetch**: Fetching models now automatically populates new discovered backend models as disabled/unchecked candidates in the fallback priority list.
+- **Automatic Fallback Discovery via Fetch**: Fetching models now automatically populates new discovered backend models as disabled/unchecked candidates in the fallback priority list, and dynamically loads them into the global list selector.
 - **Interactive Drag & Drop Reordering**: Enabled native internal drag-and-drop reordering inside the QListWidget for fallback priority lists, plus a **Restore Defaults** option to reset to factory defaults.
 - **Strict Fallback Tree Enforcement**: Updated the client backend to strictly follow user-visible priority lists, removing the hidden hardcoded fallback appends.
 - **Batch Testing Support**: Added a **Test All Models** button to sequentially test and report live status for all active/configured providers at once.
+- **Dynamic Fetch and Stop Controls**: Implemented dynamic button text changes (`Fetch All` -> `Stop Fetch All` / `Test All` -> `Stop Test All`) for the fallback configuration windows, complete with background thread task cancellation.
 
 ### June 2, 2026 (v2.8.4)
 - **Fixed Model Fallbacks Logic**: Corrected a critical logic issue where the model fallback tree was cut short upon any specific model's failure (e.g. rate limit, 503 service unavailable, or connection timeout), jumping immediately to the next provider instead of retrying with other valid fallback models for the same provider as intended.
