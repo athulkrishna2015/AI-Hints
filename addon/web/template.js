@@ -123,6 +123,16 @@
         }
     }
 
+    function convertMathDelimitersToTags(text) {
+        if (!text) return "";
+        let processed = text;
+        processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, '<anki-mathjax block="true">$1</anki-mathjax>');
+        processed = processed.replace(/\\\(([\s\S]*?)\\\)/g, '<anki-mathjax>$1</anki-mathjax>');
+        processed = processed.replace(/\$\$([\s\S]*?)\$\$/g, '<anki-mathjax block="true">$1</anki-mathjax>');
+        processed = processed.replace(/\$([\s\S]*?)\$/g, '<anki-mathjax>$1</anki-mathjax>');
+        return processed;
+    }
+
     function renderSection(parent, title, items, isCorrectFn, seed, showTitle, correctIndex) {
         if (!items || items.length === 0) return null;
         
@@ -141,7 +151,7 @@
         list.className = title.toLowerCase().includes('hint') ? 'ai-hints-hint-list' : 'ai-hints-list';
         const listItems = items.map((text, index) => {
             const li = document.createElement('li');
-            li.innerHTML = text;
+            li.innerHTML = convertMathDelimitersToTags(text);
             if ((correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text))) {
                 li.className = 'ai-hints-correct';
             }
