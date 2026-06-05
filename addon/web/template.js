@@ -114,6 +114,26 @@
         return array;
     }
 
+    function escapeHtml(text) {
+        if (!text) return "";
+        let escaped = text
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+        return escaped
+            .replace(/&lt;b&gt;/gi, "<b>")
+            .replace(/&lt;\/b&gt;/gi, "</b>")
+            .replace(/&lt;i&gt;/gi, "<i>")
+            .replace(/&lt;\/i&gt;/gi, "</i>")
+            .replace(/&lt;u&gt;/gi, "<u>")
+            .replace(/&lt;\/u&gt;/gi, "</u>")
+            .replace(/&lt;code&gt;/gi, "<code>")
+            .replace(/&lt;\/code&gt;/gi, "</code>")
+            .replace(/&lt;strong&gt;/gi, "<strong>")
+            .replace(/&lt;\/strong&gt;/gi, "</strong>")
+            .replace(/&lt;em&gt;/gi, "<em>")
+            .replace(/&lt;\/em&gt;/gi, "</em>");
+    }
+
     function renderMath(el) {
         if (typeof MathJax !== 'undefined') {
             try {
@@ -164,7 +184,7 @@
         list.className = title.toLowerCase().includes('hint') ? 'ai-hints-hint-list' : 'ai-hints-list';
         const listItems = items.map((text, index) => {
             const li = document.createElement('li');
-            li.innerHTML = convertMathDelimitersToTags(text);
+            li.innerHTML = convertMathDelimitersToTags(escapeHtml(text));
             if ((correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text))) {
                 li.className = 'ai-hints-correct';
             }
@@ -770,14 +790,14 @@
         window.aiHintsBackgroundGenerations = window.aiHintsBackgroundGenerations || new Set();
         
         if (active) {
-            if (isThisCard) {
+            if (isThisCard || !strCardId) {
                 if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_generating = true;
             } else if (strCardId) {
                 window.aiHintsBackgroundGenerations.add(strCardId);
                 if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_pregenerating = true;
             }
         } else {
-            if (isThisCard) {
+            if (isThisCard || !strCardId) {
                 if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_generating = false;
             }
             if (strCardId) window.aiHintsBackgroundGenerations.delete(strCardId);

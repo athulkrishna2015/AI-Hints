@@ -377,7 +377,7 @@ eval(scriptContent);
 const highlightContainer = highlightTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
 const highlightedItems = highlightContainer.querySelector('.ai-hints-list').querySelectorAll('li').filter(li => li.className === 'ai-hints-correct');
 if (highlightedItems.length !== 1) throw new Error("Exactly one correct option should be highlighted on the back side");
-if (highlightedItems[0].innerHTML !== "\\( x < y \\)") throw new Error("The normalized matching option should be highlighted");
+if (highlightedItems[0].innerHTML !== "\\( x &lt; y \\)") throw new Error("The normalized matching option should be highlighted");
 
 console.log("\n--- TEST 14: FIRST OPTION CORRECT MARKER SURVIVES SHUFFLE ---");
 global.window.aiHintsCurrentCard = { id: 'shuffle_card', ord: 0 };
@@ -449,5 +449,25 @@ eval(scriptContent);
 const clozeFrontHintContainer = clozeFrontHintTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
 const clozeFrontHintHighlighted = clozeFrontHintContainer.querySelector('.ai-hints-list').querySelectorAll('li').filter(li => li.className === 'ai-hints-correct');
 if (clozeFrontHintHighlighted.length !== 0) throw new Error("No option should be highlighted on the front side of a cloze card containing a custom hint like [case]");
+
+console.log("\n--- TEST 18: HTML CODE TAGS ARE ESCAPED IN OPTIONS ---");
+global.window.aiHintsCurrentCard = { id: 'html_escape_card', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true };
+const htmlEscapeTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: true });
+htmlEscapeTest.addJsonBlock(
+    {
+        hints: ["Test html"],
+        options: ["<a href=\"url\">My Page</a>", "<b>Bold Text</b>"],
+        correct_answer: "<a href=\"url\">My Page</a>"
+    },
+    { 'data-ai-hints-card-id': 'html_escape_card', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const htmlEscapeContainer = htmlEscapeTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const htmlEscapeItems = htmlEscapeContainer.querySelector('.ai-hints-list').querySelectorAll('li');
+const hasEscapedLink = htmlEscapeItems.some(item => item.innerHTML.indexOf('&lt;a') !== -1);
+const hasPreservedBold = htmlEscapeItems.some(item => item.innerHTML.indexOf('<b>Bold') !== -1);
+if (!hasEscapedLink) throw new Error("HTML tags in options should be escaped to display as text");
+if (!hasPreservedBold) throw new Error("Safe formatting tags should be preserved in options");
 
 console.log("\nALL JS TESTS PASSED."); process.exit(0);
