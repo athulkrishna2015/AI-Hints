@@ -219,8 +219,7 @@
     function normalizeAnswerText(value) {
         let text = decodeHtmlEntities(value)
             .replace(/<br\s*\/?>/gi, ' ')
-            .replace(/<\/?(?:anki-mathjax|mjx-container|span|div|p|b|strong|em|i)[^>]*>/gi, ' ')
-            .replace(/<[^>]*>/g, ' ')
+            .replace(/<\/?(?:anki-mathjax|mjx-container|span|div|p|b|strong|em|i|u|code)[^>]*>/gi, ' ')
             .replace(/\u00a0/g, ' ')
             .replace(/[“”]/g, '"')
             .replace(/[‘’]/g, "'")

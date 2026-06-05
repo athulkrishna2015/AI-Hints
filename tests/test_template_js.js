@@ -470,4 +470,28 @@ const hasPreservedBold = htmlEscapeItems.some(item => item.innerHTML.indexOf('<b
 if (!hasEscapedLink) throw new Error("HTML tags in options should be escaped to display as text");
 if (!hasPreservedBold) throw new Error("Safe formatting tags should be preserved in options");
 
+console.log("\n--- TEST 19: ONLY THE CORRECT HTML CODE TAG OPTION IS HIGHLIGHTED ---");
+global.window.aiHintsCurrentCard = { id: 'html_correct_card', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true };
+const htmlCorrectTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: true });
+htmlCorrectTest.addJsonBlock(
+    {
+        hints: ["Test HTML"],
+        options: [
+            "<a href=\"url\">link text</a>",
+            "<a src=\"url\">link text</a>",
+            "<link href=\"url\">link text</link>",
+            "<url href=\"link text\">link text</url>"
+        ],
+        correct_answer: "<a href=\"url\">link text</a>"
+    },
+    { 'data-ai-hints-card-id': 'html_correct_card', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const htmlCorrectContainer = htmlCorrectTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const htmlCorrectItems = htmlCorrectContainer.querySelector('.ai-hints-list').querySelectorAll('li');
+const highlightedCorrect = htmlCorrectItems.filter(li => li.className === 'ai-hints-correct');
+if (highlightedCorrect.length !== 1) throw new Error("Exactly one correct HTML option should be highlighted");
+if (highlightedCorrect[0].innerHTML.indexOf('&lt;a href=') === -1) throw new Error("The highlighted option should be the correct escaped anchor tag");
+
 console.log("\nALL JS TESTS PASSED."); process.exit(0);
