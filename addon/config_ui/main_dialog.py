@@ -1491,9 +1491,24 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 return
             item_data = orphaned_hints[selected_row]
             note_id = item_data["note_id"]
+            query = f"nid:{note_id}"
             from aqt import dialogs
             browser = dialogs.open("Browser", mw)
-            browser.search_for_note_by_id(note_id)
+            try:
+                browser.search_for(query)
+            except AttributeError:
+                try:
+                    browser.search(query)
+                except (AttributeError, TypeError):
+                    try:
+                        try: browser.form.searchEdit.lineEdit().setText(query)
+                        except AttributeError: browser.form.searchEdit.setText(query)
+                        try: browser.search() 
+                        except (AttributeError, TypeError): browser.onSearchActivated()
+                    except Exception: pass
+            browser.setFocus()
+            browser.activateWindow()
+            browser.raise_()
 
         def on_selection_changed():
             show_btn.setEnabled(list_widget.currentRow() >= 0)
