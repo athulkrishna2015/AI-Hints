@@ -71,7 +71,7 @@ class BatchTabMixin:
              all_decks = mw.col.decks.all_names()
              self.batch_deck_chooser.addItems(all_decks)
              # Pre-select current active deck in main window
-             curr = mw.col.decks.current().get('name', '')
+             curr = getattr(self, "selected_deck_name", None) or mw.col.decks.current().get('name', '')
              if curr in all_decks:
                   self.batch_deck_chooser.setCurrentText(curr)
         except: pass
@@ -270,6 +270,21 @@ class BatchTabMixin:
             if self.batch_list_view.textCursor().hasSelection():
                 return
 
+            if hasattr(self, "selected_card_ids") and self.selected_card_ids and not batch_manager.local_queue_active:
+                count = len(self.selected_card_ids)
+                selection_html = (
+                    f"<div style='font-size:12px; padding-bottom:4px;'>"
+                    f"<span style='color:#0d6efd;'><b>📋 PENDING SELECTION</b></span>"
+                    f"</div>"
+                    f"Ready to process <b>{count}</b> selected cards from browser.<br/>"
+                    f"<i>Click 'Initiate Queue' or 'Start' to begin.</i><br/>"
+                    f"<hr style='border:0; border-top:1px solid #ccc; margin:8px 0;'/>"
+                )
+                if summary and "No active batch jobs" not in summary:
+                    summary = selection_html + summary
+                else:
+                    summary = selection_html
+
             if not summary:
                   self.batch_list_view.setHtml("<i>(Ready to initialize)</i>")
             else:
@@ -317,13 +332,56 @@ class BatchTabMixin:
 
     def on_stop_local_queue(self):
         from ..batch_manager import batch_manager
-        if not batch_manager.local_queue_active and not batch_manager.local_queue:
-             info("There is no local sequential queue currently running or saved.")
+        has_pending = hasattr(self, "selected_card_ids") and self.selected_card_ids
+        if not batch_manager.local_queue_active and not batch_manager.local_queue and not has_pending:
+             info("There is no active queue, saved queue, or pending selection.")
              return
-        if askUser("Are you sure you want to STOP and CLEAR the local sequential queue?\n\nRemaining queued cards will be discarded."):
+             
+        confirm_msg = "Are you sure you want to STOP and CLEAR the local sequential queue?\n\nRemaining queued cards will be discarded."
+        if has_pending and not batch_manager.local_queue_active and not batch_manager.local_queue:
+             confirm_msg = "Discard the pending card selection from the browser?"
+             
+        if askUser(confirm_msg):
              batch_manager.stop_local_queue()
+             self.selected_card_ids = None
+             self.batch_deck_chooser.setEnabled(True)
+             self.batch_deck_chooser.setEditable(False)
+             self._refresh_deck_list()
              self._refresh_batch_controls()
              self.update_batch_status_tab()
+
+    def _refresh_deck_list(self):
+        try:
+            current_text = self.batch_deck_chooser.currentText()
+            self.batch_deck_chooser.clear()
+            all_decks = mw.col.decks.all_names()
+            self.batch_deck_chooser.addItems(all_decks)
+            if current_text in all_decks:
+                self.batch_deck_chooser.setCurrentText(current_text)
+            else:
+                curr = mw.col.decks.current().get('name', '')
+                if curr in all_decks:
+                    self.batch_deck_chooser.setCurrentText(curr)
+        except: pass
+
+    def set_selected_deck(self, deck_name):
+        """External hook to select a specific deck in the Batch tab."""
+        self.selected_deck_name = deck_name
+        self.selected_card_ids = None
+        
+        self.batch_deck_chooser.setEnabled(True)
+        self.batch_deck_chooser.setEditable(False)
+        self._refresh_deck_list()
+        
+        all_decks = []
+        try:
+            all_decks = mw.col.decks.all_names()
+        except: pass
+        
+        if deck_name in all_decks:
+            self.batch_deck_chooser.setCurrentText(deck_name)
+            
+        self.update_batch_status_tab()
 
     def update_batch_ui_for_selection(self):
         """Called when external cards are passed into the dialog from browser."""
@@ -341,6 +399,8 @@ class BatchTabMixin:
         if not self.rb_native_async.isChecked():
             self.rb_local_queue.setChecked(True)
             self._on_batch_method_changed()
+
+        self.update_batch_status_tab()
 
     def on_start_config_batch(self):
         from ..batch_manager import batch_manager
@@ -470,6 +530,10 @@ class BatchTabMixin:
                     provider_override=prov_override
                 )
                 if started:
+                    self.selected_card_ids = None
+                    self.batch_deck_chooser.setEnabled(True)
+                    self.batch_deck_chooser.setEditable(False)
+                    self._refresh_deck_list()
                     QTimer.singleShot(1500, self.update_batch_status_tab)
                 return
 
@@ -516,8 +580,14 @@ class BatchTabMixin:
                         jname = resp.get("name")
                         if jname:
                             batch_manager.register_job(jname, actual_cids)
-                            mw.taskman.run_on_main(lambda jn=jname: info(f"✅ Cloud Batch Initiated: {jn}\nMonitoring setup."))
-                            mw.taskman.run_on_main(self.update_batch_status_tab)
+                            def _on_success():
+                                self.selected_card_ids = None
+                                self.batch_deck_chooser.setEnabled(True)
+                                self.batch_deck_chooser.setEditable(False)
+                                self._refresh_deck_list()
+                                self.update_batch_status_tab()
+                                info(f"✅ Cloud Batch Initiated: {jname}\nMonitoring setup.")
+                            mw.taskman.run_on_main(_on_success)
                         else:
                             mw.taskman.run_on_main(lambda: info("Unknown transmission fault. No tracking ID returned."))
                     except Exception as e:

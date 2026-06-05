@@ -36,7 +36,7 @@ classes = ['QDialog', 'QWidget', 'QVBoxLayout', 'QHBoxLayout', 'QLabel',
            'QScrollArea', 'QGroupBox', 'QFormLayout', 'QSpinBox', 'QDialogButtonBox',
            'QPixmap', 'Qt', 'QApplication', 'QSizePolicy', 'QTimer', 'QTabWidget',
            'QListWidget', 'QListWidgetItem', 'QDesktopServices', 'QUrl', 'QProgressBar',
-           'QDialogButtonBox']
+           'QDialogButtonBox', 'QStyledItemDelegate']
 for cls in classes:
     setattr(mock_qt, cls, MagicMock)
 

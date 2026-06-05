@@ -30,7 +30,7 @@ LAST_ACTIVE_TAB_INDEX = 7  # Fallback static state
 class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin, 
                    ShortcutsTabMixin, BatchTabMixin, SupportTabMixin, LogTabMixin, MobileTabMixin):
     
-    def __init__(self, parent, card_ids=None):
+    def __init__(self, parent, card_ids=None, deck_name=None):
         super().__init__(parent)
         self.ui_initializing = True
         self.setWindowTitle("AI-Hints Configuration")
@@ -39,6 +39,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.addon_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
         self.selected_card_ids = card_ids
+        self.selected_deck_name = deck_name
         self.config = self._normalize_config(mw.addonManager.getConfig(ADDON_PACKAGE) or {})
         
         # Load default config for restoration
@@ -1685,7 +1686,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 # --- Module Global Lifecycle functions ---
 _config_dialog_instance = None
 
-def on_config_dialog(parent=None, tab_index=None, card_ids=None):
+def on_config_dialog(parent=None, tab_index=None, card_ids=None, deck_name=None):
     global _config_dialog_instance
     dialog_parent = parent or mw
     if _config_dialog_instance is not None:
@@ -1695,13 +1696,15 @@ def on_config_dialog(parent=None, tab_index=None, card_ids=None):
                      _config_dialog_instance.tabs.setCurrentIndex(tab_index)
                  if card_ids is not None:
                      _config_dialog_instance.set_selected_cards(card_ids)
+                 if deck_name is not None:
+                     _config_dialog_instance.set_selected_deck(deck_name)
                  _config_dialog_instance.raise_()
                  _config_dialog_instance.activateWindow()
                  return
         except (RuntimeError, AttributeError): 
             _config_dialog_instance = None
 
-    _config_dialog_instance = ConfigDialog(dialog_parent, card_ids=card_ids)
+    _config_dialog_instance = ConfigDialog(dialog_parent, card_ids=card_ids, deck_name=deck_name)
     _config_dialog_instance.setWindowFlag(Qt.WindowType.Window, True)
     _config_dialog_instance.setWindowModality(Qt.WindowModality.NonModal)
     

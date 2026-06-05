@@ -892,6 +892,34 @@ def on_browser_context_menu(browser, menu):
     act_batch_ui.triggered.connect(
         lambda _checked=False, b=browser: on_config_dialog(mw, tab_index=4, card_ids=_selected_browser_card_ids(b))
     )
+
+def on_deck_browser_context_menu(menu, did) -> None:
+    from aqt.qt import QAction
+    action = QAction("✨ Batch Generation...", menu)
+    
+    def on_triggered() -> None:
+        from aqt.operations import QueryOp
+        
+        def get_deck_name(col) -> str:
+            try:
+                from anki.decks import DeckId
+                return col.decks.name(DeckId(did))
+            except:
+                return col.decks.name(did)
+                
+        def on_success(deck_name: str) -> None:
+            if deck_name:
+                from .config_ui import on_config_dialog
+                on_config_dialog(mw, tab_index=4, deck_name=deck_name)
+                
+        QueryOp(
+            parent=mw,
+            op=get_deck_name,
+            success=on_success,
+        ).run_in_background()
+        
+    action.triggered.connect(on_triggered)
+    menu.addAction(action)
     
 
 def update_bottom_bar_button(card=None):
@@ -1537,6 +1565,7 @@ def init_hooks():
     gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
     gui_hooks.webview_did_receive_js_message.append(on_webview_did_receive_js_message)
     gui_hooks.browser_will_show_context_menu.append(on_browser_context_menu)
+    gui_hooks.deck_browser_will_show_options_menu.append(on_deck_browser_context_menu)
     gui_hooks.state_shortcuts_will_change.append(on_state_shortcuts_will_change)
     
     # Initialize background tracking layer for ongoing batch processing jobs
