@@ -16,6 +16,8 @@ class BatchManager:
     def __init__(self):
         self.jobs = {} # Format: { job_name: { "created_at": time, "card_ids": [] } }
         self.timer = None
+        self.card_attempts = {}
+        self.active_providers = []
         self._polling_lock = threading.Lock()
         
         # Sequential Queue Runtime State
@@ -434,6 +436,7 @@ class BatchManager:
         """Core iterative engine thread that drives the sequential queue."""
         logger.info(f"STARTING local sequential queue for {self.local_queue_total} cards.")
         
+        self.card_attempts = {}
         self.active_threads_status = {}
         if not hasattr(self, "_db_lock"):
              self._db_lock = threading.RLock()
@@ -455,6 +458,7 @@ class BatchManager:
              target_prov = provider_override or config.get("ai_provider", "openai")
              providers = [target_prov]
              
+        self.active_providers = providers
         logger.info(f"Running batch queue with providers: {providers}")
         
         threads = []
@@ -487,6 +491,21 @@ class BatchManager:
               pass
 
         mw.taskman.run_on_main(_finished_notify)
+
+    def _handle_card_failure(self, cid: int, provider: str):
+        failed_provs = self.card_attempts.setdefault(cid, [])
+        if provider not in failed_provs:
+            failed_provs.append(provider)
+            
+        all_failed = all(p in failed_provs for p in self.active_providers)
+        with self._db_lock:
+            if all_failed:
+                logger.warning(f"Card {cid} failed on all active providers {self.active_providers}. Counting as error.")
+                self.local_queue_errors += 1
+            else:
+                logger.info(f"Card {cid} failed on {provider}. Requeuing for other providers to try.")
+                self.local_queue.insert(0, cid)
+                self.save_state()
 
     def _run_local_queue_thread(self, provider: str, client: AIClient, parser: CardParser, config: Dict):
         from .reviewer_hooks import _get_card_from_collection
@@ -534,11 +553,47 @@ class BatchManager:
                  continue
 
             cid = None
+            should_break = False
+            should_sleep = False
             with self._db_lock:
                 if not self.local_queue:
-                    break
-                cid = self.local_queue.pop(0)
-                self.save_state()
+                    any_processing = False
+                    for prov, status_info in self.active_threads_status.items():
+                        if prov != provider and status_info.get("cid") is not None:
+                            any_processing = True
+                            break
+                    if not any_processing:
+                        should_break = True
+                    else:
+                        should_sleep = True
+                else:
+                    # Find first card that this provider hasn't failed yet
+                    found_idx = -1
+                    for idx, candidate_cid in enumerate(self.local_queue):
+                        failed_provs = self.card_attempts.get(candidate_cid, [])
+                        if provider not in failed_provs:
+                            found_idx = idx
+                            break
+                    
+                    if found_idx != -1:
+                        cid = self.local_queue.pop(found_idx)
+                        self.save_state()
+                    else:
+                        # All remaining cards in the queue have been tried and failed by this provider.
+                        # Sleep and try again later
+                        should_sleep = True
+
+            if should_break:
+                break
+
+            if should_sleep:
+                self.active_threads_status[provider] = {
+                    "model": current_model,
+                    "cid": None,
+                    "status": "⏳ Waiting for peers"
+                }
+                time.sleep(2)
+                continue
 
             if not cid:
                 break
@@ -619,12 +674,10 @@ class BatchManager:
 
                     mw.taskman.run_on_main(lambda c=cid, d=resp_data: _apply_on_main(c, d))
                 else:
-                    with self._db_lock:
-                        self.local_queue_errors += 1
+                    self._handle_card_failure(cid, provider)
             except Exception as e:
                 logger.error(f"Local Queue thread ({provider}) error on card {cid}: {e}")
-                with self._db_lock:
-                    self.local_queue_errors += 1
+                self._handle_card_failure(cid, provider)
 
             time.sleep(1.5)
 

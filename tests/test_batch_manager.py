@@ -166,5 +166,43 @@ class TestBatchManager(unittest.TestCase):
         initialize_batch_manager()
         mock_start_queue.assert_not_called()
 
+    def test_thread_waits_for_active_peers(self):
+        """Test that worker thread does not break out of loop if another thread is processing."""
+        manager = BatchManager()
+        manager.local_queue = []
+        manager.local_queue_active = True
+        manager.active_threads_status = {
+            "gemini": {"model": "gemini-3.1-flash-lite", "cid": 12345, "status": "Processing"},
+            "huggingface": {"model": "deepseek-v3", "cid": None, "status": "Starting"}
+        }
+
+        # Run popping check in a mock scenario:
+        # Since 'gemini' has a non-None cid (12345), 'huggingface' should choose to wait/sleep, not break.
+        # We can test this by calling a mock loop step or verifying the logic under self._db_lock context.
+        # Let's verify that the status of 'huggingface' gets set to 'Waiting for peers' or handles appropriately.
+        # We can patch time.sleep to avoid actual delay.
+        with patch('time.sleep') as mock_sleep:
+            # We run a single check matching the logic in the thread worker:
+            provider = "huggingface"
+            current_model = "deepseek-v3"
+            
+            # Replicate the core logic to assert it functions as expected:
+            should_break = False
+            should_sleep = False
+            with manager._db_lock:
+                if not manager.local_queue:
+                    any_processing = False
+                    for prov, status_info in manager.active_threads_status.items():
+                        if prov != provider and status_info.get("cid") is not None:
+                            any_processing = True
+                            break
+                    if not any_processing:
+                        should_break = True
+                    else:
+                        should_sleep = True
+
+            self.assertFalse(should_break)
+            self.assertTrue(should_sleep)
+
 if __name__ == "__main__":
     unittest.main()

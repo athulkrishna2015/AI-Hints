@@ -128,10 +128,9 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
-### June 5, 2026 (v3.1.2)
-- **Fix Thread Hang/Deadlock on Queue Completion**: Fixed a bug where rate-limited or blacklisted provider threads remained stuck in infinite sleep/cooldown loops after the batch queue was fully processed, preventing the queue from finishing. Threads now check if the queue is empty and exit cleanly.
-
 ### June 5, 2026 (v3.1.1)
+- **Batch Queue Handover & Peer Coordination**: Modified concurrent queue threads to wait for peers when the queue is empty. This prevents race conditions where late-failed/requeued cards are left unattended, ensuring active threads successfully hand over failed cards to other working providers.
+- **Fix Thread Hang/Deadlock on Queue Completion**: Fixed a bug where rate-limited or blacklisted provider threads remained stuck in infinite sleep/cooldown loops after the batch queue was fully processed, preventing the queue from finishing. Threads now check if the queue is empty and exit cleanly.
 - **Batch Queue Rate-Limit Handling**: Modified sequential batch queue worker threads to pause/sleep when a provider is rate-limited or blacklisted, preventing it from popping and immediately failing pending cards in the queue.
 - **Provider Isolation in Diagnostic Tests**: Enforced `only_this_provider=True` during manual connection and model testing to isolate provider checks, preventing successful fallback routing from misrepresenting status.
 - **Hugging Face Compatibility Fix**: Removed the `response_format` JSON parameter from Hugging Face API requests to prevent structured-outputs `400 Bad Request` errors on non-supporting endpoints.
