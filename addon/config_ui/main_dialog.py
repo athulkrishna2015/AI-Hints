@@ -609,7 +609,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 test_back = self.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
                 
                 # We use generate_options directly to test the full pipeline
-                res = client.generate_options(test_front, test_back, override_provider=provider)
+                res = client.generate_options(test_front, test_back, override_provider=provider, only_this_provider=True)
                 
                 def _done():
                     combobox.setEnabled(True)
@@ -729,7 +729,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     from .tab_providers import DEFAULT_TEST_QUESTION, DEFAULT_TEST_ANSWER
                     test_front = self.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION
                     test_back = self.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
-                    res = client.generate_options(test_front, test_back, override_provider=provider)
+                    res = client.generate_options(test_front, test_back, override_provider=provider, only_this_provider=True)
                     if not (res and (res.get("hints") or res.get("options"))):
                         status = "❌ Failed"
                         detail = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/>Returned empty response.</div>"

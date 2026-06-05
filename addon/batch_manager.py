@@ -504,6 +504,17 @@ class BatchManager:
                  time.sleep(1)
                  continue
 
+            # Check if this provider has any available models (not blacklisted)
+            try:
+                available_models = client._models_for_provider(provider)
+            except Exception:
+                available_models = []
+            
+            if not available_models:
+                # Sleep and check again later, do not pop a card!
+                time.sleep(2)
+                continue
+
             cid = None
             with self._db_lock:
                 if not self.local_queue:

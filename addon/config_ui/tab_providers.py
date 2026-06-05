@@ -290,7 +290,7 @@ class FallbackOrderDialog(QDialog):
                     test_back = self.main_dialog.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
                     if TEST_CANCELLATIONS.get(test_key):
                         break
-                    res = client.generate_options(test_front, test_back, override_provider=self.provider)
+                    res = client.generate_options(test_front, test_back, override_provider=self.provider, only_this_provider=True)
                     if TEST_CANCELLATIONS.get(test_key):
                         break
                     error_msg = None
@@ -842,7 +842,7 @@ class GlobalFallbackOrderDialog(QDialog):
                     test_back = self.main_dialog.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
                     if TEST_CANCELLATIONS.get(test_key):
                         break
-                    res = client.generate_options(test_front, test_back, override_provider=provider)
+                    res = client.generate_options(test_front, test_back, override_provider=provider, only_this_provider=True)
                     if TEST_CANCELLATIONS.get(test_key):
                         break
                     if not (res and (res.get("hints") or res.get("options"))):
