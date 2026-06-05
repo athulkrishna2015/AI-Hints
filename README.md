@@ -128,6 +128,12 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### June 5, 2026 (v3.1.1)
+- **Batch Queue Rate-Limit Handling**: Modified sequential batch queue worker threads to pause/sleep when a provider is rate-limited or blacklisted, preventing it from popping and immediately failing pending cards in the queue.
+- **Provider Isolation in Diagnostic Tests**: Enforced `only_this_provider=True` during manual connection and model testing to isolate provider checks, preventing successful fallback routing from misrepresenting status.
+- **Hugging Face Compatibility Fix**: Removed the `response_format` JSON parameter from Hugging Face API requests to prevent structured-outputs `400 Bad Request` errors on non-supporting endpoints.
+- **GUI Thread Status Tracking**: Added detailed thread status labels (`⏳ Rate Limited / Cooldown`, `⏸️ Paused`, `Processing`, etc.) in the active concurrent threads list to ensure better diagnostic visibility.
+
 ### June 5, 2026 (v3.1.0)
 - **Manual Regeneration UI Refresh**: Fixed the post-regeneration display issue by forcing a clean card refresh on manual regeneration, guaranteeing the card is redrawn with the newly generated elements embedded.
 - **Persistent JSON Panel State**: Stored the JSON panel's open status in persistent session storage (`state.showJson`), preventing the panel from closing automatically when background pre-generation status updates trigger container re-renders.
