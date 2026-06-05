@@ -128,7 +128,16 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
-### June 5, 2026 (v3.0.2 - Dev)
+### June 5, 2026 (v3.1.0)
+- **Manual Regeneration UI Refresh**: Fixed the post-regeneration display issue by forcing a clean card refresh on manual regeneration, guaranteeing the card is redrawn with the newly generated elements embedded.
+- **Persistent JSON Panel State**: Stored the JSON panel's open status in persistent session storage (`state.showJson`), preventing the panel from closing automatically when background pre-generation status updates trigger container re-renders.
+- **MCQ Formatting & Structural Symmetry**: Enforced MCQ best practices, options symmetry, distractor formatting rules, and mathematical sign balance directly in the AI client's generation prompts.
+- **Card Review State Resets**: Fixed a bug where option/hint elements remained expanded during card review retries/fails. The front side of the card now resets states to user defaults when rendering.
+- **UI & Logging Enhancements**:
+  - Render clickable URLs (turning plain text log links into functional HTML anchors) in the logs tab.
+  - Replaced intrusive toast notifications with tooltip-style hover errors when prioritizing API connection tests.
+  - Propagated detailed HTTP error messages down to provider testing outputs to assist in configuring providers.
+  - Kept provider registration URLs clickable even when the provider checkbox is disabled.
 - **Concurrent Multi-Provider Batch Generation**: Added concurrent multi-provider generation with single-provider fallback queues in the batch manager to process queues faster.
 - **Deck Browser Cogwheel Integration**: Added batch generation option directly in the deck browser cogwheel menu with updated queue selection status UI.
 - **Thread-Safety & Deadlock Prevention**: Fixed background thread-safety database access and stopped queue deadlock, added auto-saving of configuration on batch start, fixed NoneType error in fallback models retrieval, and added model success info logs.
