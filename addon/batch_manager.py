@@ -498,9 +498,19 @@ class BatchManager:
              current_model = "Unknown"
 
         logger.info(f"AI-Hints Thread for {provider} started.")
+        self.active_threads_status[provider] = {
+            "model": current_model,
+            "cid": None,
+            "status": "Starting"
+        }
 
         while self.local_queue_active:
             if self.local_queue_paused:
+                 self.active_threads_status[provider] = {
+                     "model": current_model,
+                     "cid": None,
+                     "status": "⏸️ Paused"
+                 }
                  time.sleep(1)
                  continue
 
@@ -511,9 +521,14 @@ class BatchManager:
                 available_models = []
             
             if not available_models:
-                # Sleep and check again later, do not pop a card!
-                time.sleep(2)
-                continue
+                 self.active_threads_status[provider] = {
+                     "model": current_model,
+                     "cid": None,
+                     "status": "⏳ Rate Limited / Cooldown"
+                 }
+                 # Sleep and check again later, do not pop a card!
+                 time.sleep(2)
+                 continue
 
             cid = None
             with self._db_lock:
@@ -527,7 +542,8 @@ class BatchManager:
 
             self.active_threads_status[provider] = {
                 "model": current_model,
-                "cid": cid
+                "cid": cid,
+                "status": "Processing"
             }
 
             try:
