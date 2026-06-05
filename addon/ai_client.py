@@ -271,7 +271,7 @@ class AIClient:
     def __init__(self, config: Dict[str, Any]):
         self.config = config or {}
 
-    def generate_options(self, front: str, back: str, override_provider: str = None) -> Dict[str, List[str]]:
+    def generate_options(self, front: str, back: str, override_provider: str = None, only_this_provider: bool = False) -> Dict[str, List[str]]:
         primary_provider = override_provider or self.config.get("ai_provider", "openai")
         system_prompt = (self.config.get("system_prompt", "") or "").strip()
         count = self._options_count()
@@ -355,7 +355,10 @@ class AIClient:
             return {"hints": [], "options": []}
 
         # Otherwise fallback to standard provider-based priority logic
-        all_potential = self._candidate_providers(primary_provider)
+        if only_this_provider:
+            all_potential = [primary_provider] if self._is_provider_ready(primary_provider, primary=True) else []
+        else:
+            all_potential = self._candidate_providers(primary_provider)
         if not all_potential:
             logger.error("AI-Hints: No configured AI provider is ready.")
             return {"hints": [], "options": []}

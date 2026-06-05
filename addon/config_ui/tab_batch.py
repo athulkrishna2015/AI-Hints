@@ -115,6 +115,12 @@ class BatchTabMixin:
         self.batch_limit_spin.setSuffix(" cards")
         s_layout.addRow("Batch Limit:", self.batch_limit_spin)
         
+        # 🧵 Multithreading
+        self.batch_multithread_cb = QCheckBox("Concurrent Multi-Provider Generation (Multithreaded)")
+        self.batch_multithread_cb.setToolTip("Generates cards in parallel using all of your ready and enabled providers. Bypasses provider overrides.")
+        self.batch_multithread_cb.setChecked(self.config.get("multithread_providers", False))
+        s_layout.addRow(self.batch_multithread_cb)
+        
         self.batch_regen_version_cb.toggled.connect(
             lambda enabled: self.batch_regen_min_version_edit.setEnabled(enabled)
         )
@@ -506,6 +512,7 @@ class BatchTabMixin:
                  model_override = chosen_model
             
             config = self.config.copy()
+            config["multithread_providers"] = self.batch_multithread_cb.isChecked()
             target_prov = prov_override or config.get("ai_provider", "openai")
             
             if model_override:

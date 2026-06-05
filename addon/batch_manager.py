@@ -33,6 +33,9 @@ class BatchManager:
         self.current_local_provider = ""
         self.last_run_stats = None
         
+        self.active_threads_status = {}
+        self._db_lock = threading.Lock()
+        
         self.load_state()
 
     def load_state(self):
@@ -68,25 +71,28 @@ class BatchManager:
             self.jobs = {}
 
     def save_state(self):
-        try:
-            # Package combined persisted bundle
-            payload = {
-                "native_jobs": self.jobs,
-                "local_cache": {
-                    "queue": self.local_queue,
-                    "total": self.local_queue_total,
-                    "errors": self.local_queue_errors,
-                    "active": self.local_queue_active,
-                    "paused": self.local_queue_paused,
-                    "config": getattr(self, "saved_config", {}),
-                    "provider": getattr(self, "saved_provider", None),
-                    "last_run_stats": self.last_run_stats
+        if not hasattr(self, "_db_lock"):
+            self._db_lock = threading.Lock()
+        with self._db_lock:
+            try:
+                # Package combined persisted bundle
+                payload = {
+                    "native_jobs": self.jobs,
+                    "local_cache": {
+                        "queue": self.local_queue,
+                        "total": self.local_queue_total,
+                        "errors": self.local_queue_errors,
+                        "active": self.local_queue_active,
+                        "paused": self.local_queue_paused,
+                        "config": getattr(self, "saved_config", {}),
+                        "provider": getattr(self, "saved_provider", None),
+                        "last_run_stats": self.last_run_stats
+                    }
                 }
-            }
-            with open(STATE_FILE, "w", encoding="utf-8") as f:
-                json.dump(payload, f, indent=2)
-        except Exception as e:
-            logger.error(f"AI-Hints BatchManager failed save: {e}")
+                with open(STATE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, indent=2)
+            except Exception as e:
+                logger.error(f"AI-Hints BatchManager failed save: {e}")
 
     def get_status_summary(self) -> str:
         """Builds rich contextual HTML summary of queue activity."""
@@ -100,15 +106,23 @@ class BatchManager:
             html_parts.append(f"<div style='font-size:12px; padding-bottom:4px;'>{status_txt} <b>Local Sequential Queue</b></div>")
             html_parts.append(f"📊 Progress: <b>{done}</b> / {self.local_queue_total} cards generated. ({remaining} left)<br/>")
             
-            if getattr(self, "current_local_provider", None):
-                 html_parts.append(f"🔌 Provider: <b>{self.current_local_provider}</b><br/>")
+            if getattr(self, "active_threads_status", None):
+                 html_parts.append("<div style='margin-top:6px; font-size:11px;'>")
+                 html_parts.append("<b>Active Concurrent Threads:</b><br/>")
+                 for prov, info in self.active_threads_status.items():
+                      cid_link = f"<a href='browse:cid:{info['cid']}' style='color: #007bff;'>[Card {info['cid']}]</a>" if info['cid'] else "None"
+                      html_parts.append(f"• 🔌 <b>{prov.capitalize()}</b> ({info['model']}): Processing {cid_link}<br/>")
+                 html_parts.append("</div>")
+            else:
+                 if getattr(self, "current_local_provider", None):
+                      html_parts.append(f"🔌 Provider: <b>{self.current_local_provider}</b><br/>")
 
-            if self.current_local_model:
-                 html_parts.append(f"🤖 Model: <code>{self.current_local_model}</code><br/>")
-                 
-            if self.current_local_cid:
-                 # Explicitly provide HTML clickable navigation link
-                 html_parts.append(f"🔎 Currently Processing: <a href='browse:cid:{self.current_local_cid}' style='color: #007bff;'>[View Card {self.current_local_cid}]</a><br/>")
+                 if self.current_local_model:
+                      html_parts.append(f"🤖 Model: <code>{self.current_local_model}</code><br/>")
+                      
+                 if self.current_local_cid:
+                      # Explicitly provide HTML clickable navigation link
+                      html_parts.append(f"🔎 Currently Processing: <a href='browse:cid:{self.current_local_cid}' style='color: #007bff;'>[View Card {self.current_local_cid}]</a><br/>")
             
             html_parts.append("<hr style='border:0; border-top:1px solid #ccc; margin:8px 0;'/>")
 
@@ -413,112 +427,45 @@ class BatchManager:
         """Core iterative engine thread that drives the sequential queue."""
         logger.info(f"STARTING local sequential queue for {self.local_queue_total} cards.")
         
-        # Instantiate client and parser fresh in this thread environment
+        self.active_threads_status = {}
+        if not hasattr(self, "_db_lock"):
+             self._db_lock = threading.Lock()
+             
         client = AIClient(config)
-        parser = CardParser(
-            config.get("storage_mode", "json")
-
-        )
+        parser = CardParser(config.get("storage_mode", "json"))
         
-        # 🔍 Snapshot runtime model diagnostics for display
-        target_prov = provider_override or config.get("ai_provider", "openai")
-        self.current_local_provider = target_prov.capitalize() if target_prov else "Unknown"
-        try:
-             models = client._models_for_provider(target_prov)
-             self.current_local_model = models[0] if models else "Unknown"
-        except: self.current_local_model = "Unknown"
+        use_multithread = config.get("multithread_providers", False)
         
-        from .reviewer_hooks import _get_card_from_collection
+        if use_multithread and (not provider_override or provider_override == "Standard Config (Follows Fallback Matrix)"):
+             primary = config.get("ai_provider", "openai")
+             providers = client._candidate_providers(primary)
+             if not providers:
+                  logger.error("No configured providers are ready for multithreading.")
+                  self.local_queue_active = False
+                  self.save_state()
+                  return
+        else:
+             target_prov = provider_override or config.get("ai_provider", "openai")
+             providers = [target_prov]
+             
+        logger.info(f"Running batch queue with providers: {providers}")
         
-        # Loop until empty or deactivated
-        while self.local_queue and self.local_queue_active:
-            # 🚦 GATE CHECK: If user paused, idle wait without consuming
-            if self.local_queue_paused:
-                 time.sleep(1)
-                 continue
-                 
-            if not self.local_queue:
-                 continue
-
-            cid = self.local_queue[0] # Peek first
-            self.current_local_cid = cid # Post to diagnostic hook
-            
-            try:
-                card = _get_card_from_collection(cid)
-                if not card:
-                    if self.local_queue:
-                        self.local_queue.pop(0)
-                        self.save_state() # Persist skip
-                    continue
-                
-                # 1. Prep input
-                front_txt, back_txt = parser.get_note_content(card.note(), card)
-                if not front_txt and not back_txt:
-                    logger.info(f"AI-Hints local queue: Skipping card {cid} as no content was found (likely a missing cloze).")
-                    if self.local_queue:
-                        self.local_queue.pop(0)
-                        self.save_state()
-                    continue
-
-                final_sys = config.get("system_prompt", "")
-                final_usr = f"FRONT:\n{front_txt}\n\nBACK:\n{back_txt}"
-                
-                # 2. Execute standard generation path (respects fallbacks automatically)
-                # We enforce provider override if explicitly requested
-                if provider_override and provider_override != "Standard Config (Follows Fallback Matrix)":
-                    resp_data = client.generate_options(front_txt, back_txt, override_provider=provider_override)
-                else:
-                    resp_data = client.generate_options(front_txt, back_txt)
-                
-                if resp_data and (resp_data.get("hints") or resp_data.get("options")):
-                    # 🚀 Update diagnostic model/provider name live from actual successful response
-                    actual_model = resp_data.get("_model")
-                    if actual_model:
-                        self.current_local_model = actual_model
-                    actual_provider = resp_data.get("_provider")
-                    if actual_provider:
-                        self.current_local_provider = actual_provider.capitalize()
-
-                    logger.info(f"AI-Hints local queue: Successful generation for card {cid} using {actual_model or 'unknown'}")
-                    logger.debug(
-                        "AI-Hints local queue response detail for card %s: %s",
-                        cid,
-                        json.dumps(resp_data, ensure_ascii=False),
-                    )
-                    # 3. Apply directly to db using our concurrent-safe update method!
-                    def _apply_on_main(note, d, c):
-                        # Apply directly inside main thread loop to avoid col collisions
-                        if parser.update_note_with_hints(note, d, card=c, skip_if_exists=True):
-                            mw.col.update_note(note)
-                            return True
-                        return False
-
-                    # We need to execute write inside the main UI loop for Anki safety
-                    note = card.note()
-                    mw.taskman.run_on_main(lambda n=note, d=resp_data, c=card: _apply_on_main(n, d, c))
-                    
-                else:
-                    self.local_queue_errors += 1
-                    
-            except Exception as e:
-                logger.error(f"Local Queue Card Error {cid}: {e}")
-                self.local_queue_errors += 1
-            
-            # Pop and cycle
-            if self.local_queue:
-                self.local_queue.pop(0)
-                self.save_state() # Continuous checkpointing!
-            
-            # Dynamic pacing to respect generic rate limits (e.g. 1.5s per generation)
-            time.sleep(1.5)
-
-        # Completion Cleanup
+        threads = []
+        for prov in providers:
+             t = threading.Thread(
+                  target=self._run_local_queue_thread,
+                  args=(prov, client, parser, config),
+                  daemon=True
+             )
+             threads.append(t)
+             t.start()
+             
+        for t in threads:
+             t.join()
+             
         self.local_queue_active = False
-        self.current_local_cid = None
-        self.current_local_model = ""
-        self.current_local_provider = ""
+        self.active_threads_status = {}
         
-        # Only set completion stats if we actually finished naturally (didn't abort)
         if not self.local_queue:
             self.last_run_stats = {
                 "total": self.local_queue_total,
@@ -526,14 +473,91 @@ class BatchManager:
                 "time": time.time()
             }
             
-        self.save_state() # Confirm final wipe of local cache from disk
+        self.save_state()
         logger.info(f"FINISHED local sequential queue. Total={self.local_queue_total}, Errors={self.local_queue_errors}")
         
         def _finished_notify():
-              # Auto-save deck silently upon completion
               pass
 
         mw.taskman.run_on_main(_finished_notify)
+
+    def _run_local_queue_thread(self, provider: str, client: AIClient, parser: CardParser, config: Dict):
+        from .reviewer_hooks import _get_card_from_collection
+        
+        try:
+             models = client._models_for_provider(provider)
+             current_model = models[0] if models else "Unknown"
+        except:
+             current_model = "Unknown"
+
+        logger.info(f"AI-Hints Thread for {provider} started.")
+
+        while self.local_queue_active:
+            if self.local_queue_paused:
+                 time.sleep(1)
+                 continue
+
+            cid = None
+            with self._db_lock:
+                if not self.local_queue:
+                    break
+                cid = self.local_queue.pop(0)
+                self.save_state()
+
+            if not cid:
+                break
+
+            self.active_threads_status[provider] = {
+                "model": current_model,
+                "cid": cid
+            }
+
+            try:
+                with self._db_lock:
+                    card = _get_card_from_collection(cid)
+                    if card:
+                        note = card.note()
+                        front_txt, back_txt = parser.get_note_content(note, card)
+                    else:
+                        front_txt, back_txt = None, None
+
+                if not card or (not front_txt and not back_txt):
+                    continue
+
+                resp_data = client.generate_options(
+                    front_txt, 
+                    back_txt, 
+                    override_provider=provider, 
+                    only_this_provider=True
+                )
+
+                if resp_data and (resp_data.get("hints") or resp_data.get("options")):
+                    actual_model = resp_data.get("_model")
+                    if actual_model:
+                        self.active_threads_status[provider]["model"] = actual_model
+                    
+                    def _apply_on_main(note_obj, data_dict, card_obj):
+                        if parser.update_note_with_hints(note_obj, data_dict, card=card_obj, skip_if_exists=True):
+                            mw.col.update_note(note_obj)
+                            return True
+                        return False
+
+                    mw.taskman.run_on_main(lambda n=card.note(), d=resp_data, c=card: _apply_on_main(n, d, c))
+                else:
+                    with self._db_lock:
+                        self.local_queue_errors += 1
+            except Exception as e:
+                logger.error(f"Local Queue thread ({provider}) error on card {cid}: {e}")
+                with self._db_lock:
+                    self.local_queue_errors += 1
+
+            time.sleep(1.5)
+
+        if provider in self.active_threads_status:
+            try:
+                del self.active_threads_status[provider]
+            except: pass
+        logger.info(f"AI-Hints Thread for {provider} stopped.")
 
 # Global instance singleton
 batch_manager = BatchManager()

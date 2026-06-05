@@ -1191,6 +1191,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
             if hasattr(self, "batch_limit_spin"):
                 new_config["batch_limit"] = self.batch_limit_spin.value()
+                
+            if hasattr(self, "batch_multithread_cb"):
+                new_config["multithread_providers"] = self.batch_multithread_cb.isChecked()
 
             # Mobile Config
             new_config["mobile_use_emojis"] = self.mobile_emojis_cb.isChecked()
