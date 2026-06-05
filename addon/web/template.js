@@ -411,6 +411,10 @@
             state.options = globalState.options;
         } else {
             state = persistence.get(stateKey) || { hints: false, options: false, seed: Date.now(), cleared: false };
+            if (!onAnswer) {
+                state.hints = !!uiCfg.auto_show_hints;
+                state.options = !!uiCfg.auto_show_options;
+            }
         }
 
         const isFirstLoad = !persistence.get(stateKey);
