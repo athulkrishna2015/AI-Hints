@@ -618,7 +618,7 @@ class AIClient:
                     {"role": "user", "content": prompt}
                 ],
             }
-            if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "together", "sambanova", "cerebras", "nvidia", "huggingface"]:
+            if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "together", "sambanova", "cerebras", "nvidia"]:
                 data["response_format"] = {"type": "json_object"}
 
             try:
