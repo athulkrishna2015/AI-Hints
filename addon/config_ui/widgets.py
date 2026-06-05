@@ -282,7 +282,6 @@ class ProviderRowWidget(QWidget):
     def on_enabled_toggled(self, checked):
         self.key_edit.setEnabled(checked)
         self.eye_btn.setEnabled(checked)
-        self.key_label.setEnabled(checked)
         self.model_label.setEnabled(checked)
         self.edit.setEnabled(checked)
         self.fetch_btn.setEnabled(checked)

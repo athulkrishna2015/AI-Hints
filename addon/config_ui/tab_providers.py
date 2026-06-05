@@ -293,8 +293,10 @@ class FallbackOrderDialog(QDialog):
                     res = client.generate_options(test_front, test_back, override_provider=self.provider)
                     if TEST_CANCELLATIONS.get(test_key):
                         break
+                    error_msg = None
                     if not (res and (res.get("hints") or res.get("options"))):
                         status = "❌ Empty"
+                        error_msg = "Empty response"
                         tooltip_text = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/>The provider returned an empty response.</div>"
                     else:
                         import json
@@ -310,7 +312,8 @@ class FallbackOrderDialog(QDialog):
                         )
                 except Exception as e:
                     status = "❌ Error"
-                    tooltip_text = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/><b>Error:</b> {str(e)}</div>"
+                    error_msg = str(e)
+                    tooltip_text = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/><b>Error:</b> {error_msg}</div>"
                 
                 if TEST_CANCELLATIONS.get(test_key):
                     break

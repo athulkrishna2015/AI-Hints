@@ -1,4 +1,5 @@
 import os
+import re
 from aqt.qt import *
 from aqt.utils import askUser
 from ..logger import logger, info, tooltip
@@ -67,11 +68,14 @@ class LogTabMixin:
         
         layout.addLayout(filter_layout)
         
-        self.log_view = QTextEdit()
+        self.log_view = QTextBrowser()
         self.log_view.setReadOnly(True)
+        self.log_view.setOpenExternalLinks(True)
         self.log_view.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse | 
-            Qt.TextInteractionFlag.TextSelectableByKeyboard
+            Qt.TextInteractionFlag.TextSelectableByKeyboard |
+            Qt.TextInteractionFlag.LinksAccessibleByMouse |
+            Qt.TextInteractionFlag.LinksAccessibleByKeyboard
         )
         self.log_view.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         layout.addWidget(self.log_view)
@@ -126,6 +130,11 @@ class LogTabMixin:
                 for line in lines:
                     stripped = line.rstrip("\r\n")
                     escaped = stripped.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    escaped = re.sub(
+                        r'(https?://[^\s<>"]+)',
+                        r'<a href="\1" style="color: #0d6efd; text-decoration: underline;">\1</a>',
+                        escaped
+                    )
                     
                     color = None
                     font_weight = "normal"
