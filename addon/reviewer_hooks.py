@@ -78,17 +78,9 @@ def _apply_results_to_card(card, data, is_manual=True, web=None):
         # Update UI if we are still on the card in this webview
         if web:
             try:
-                if not is_manual:
-                    # Force a clean card refresh for automatic applications to guarantee
-                    # Anki compiles the new card HTML with the hints already embedded.
-                    refresh_current_card(card=card, web=web)
-                else:
-                    if not _push_hint_data_to_frontend(web, card, data, is_manual):
-                        raise RuntimeError("webview not available for direct update")
+                refresh_current_card(card=card, web=web)
             except Exception as e:
-                logger.error(f"AI-Hints direct web update failed: {e}")
-                if not _reviewer_is_ending and not _qt_object_is_deleted(web):
-                    refresh_current_card(card=card, web=web)
+                logger.error(f"AI-Hints card refresh failed: {e}")
         
         if is_manual and config.get("show_in_popup", False):
             global _popup_dialog_instance

@@ -406,11 +406,11 @@
         let state;
         if (doNotCollapse) {
             const globalState = persistence.get('global_state') || { hints: !!uiCfg.auto_show_hints, options: !!uiCfg.auto_show_options };
-            state = persistence.get(stateKey) || { hints: globalState.hints, options: globalState.options, seed: Date.now(), cleared: false };
+            state = persistence.get(stateKey) || { hints: globalState.hints, options: globalState.options, seed: Date.now(), cleared: false, showJson: false };
             state.hints = globalState.hints;
             state.options = globalState.options;
         } else {
-            state = persistence.get(stateKey) || { hints: false, options: false, seed: Date.now(), cleared: false };
+            state = persistence.get(stateKey) || { hints: false, options: false, seed: Date.now(), cleared: false, showJson: false };
             if (!onAnswer) {
                 state.hints = !!uiCfg.auto_show_hints;
                 state.options = !!uiCfg.auto_show_options;
@@ -650,19 +650,31 @@
                     };
                     btnBox.appendChild(refBtn);
 
+                    if (state.showJson && data) {
+                        const view = document.createElement('pre');
+                        view.className = 'ai-hints-json-view';
+                        view.textContent = JSON.stringify(data, null, 2);
+                        container.appendChild(view);
+                    }
+
                     const jsonBtn = document.createElement('button');
                     jsonBtn.className = 'ai-hints-btn';
                     jsonBtn.textContent = labels.json;
                     jsonBtn.onclick = (e) => {
                         if (e) { e.stopPropagation(); e.preventDefault(); }
                         let view = container.querySelector('.ai-hints-json-view');
-                        if (view) view.remove();
+                        if (view) {
+                            view.remove();
+                            state.showJson = false;
+                        }
                         else {
                             view = document.createElement('pre');
                             view.className = 'ai-hints-json-view';
                             view.textContent = JSON.stringify(data, null, 2);
                             container.appendChild(view);
+                            state.showJson = true;
                         }
+                        saveState();
                     };
                     btnBox.appendChild(jsonBtn);
                 }
