@@ -406,14 +406,20 @@
         let state;
         if (doNotCollapse) {
             const globalState = persistence.get('global_state') || { hints: !!uiCfg.auto_show_hints, options: !!uiCfg.auto_show_options };
-            state = persistence.get(stateKey) || { hints: globalState.hints, options: globalState.options, seed: Date.now(), cleared: false, showJson: false };
+            state = persistence.get(stateKey) || { hints: globalState.hints, options: globalState.options, seed: Math.floor(Math.random() * 1000000), cleared: false, showJson: false };
             state.hints = globalState.hints;
             state.options = globalState.options;
+            if (!onAnswer) {
+                state.seed = Math.floor(Math.random() * 1000000);
+                persistence.save(stateKey, state);
+            }
         } else {
-            state = persistence.get(stateKey) || { hints: false, options: false, seed: Date.now(), cleared: false, showJson: false };
+            state = persistence.get(stateKey) || { hints: false, options: false, seed: Math.floor(Math.random() * 1000000), cleared: false, showJson: false };
             if (!onAnswer) {
                 state.hints = !!uiCfg.auto_show_hints;
                 state.options = !!uiCfg.auto_show_options;
+                state.seed = Math.floor(Math.random() * 1000000);
+                persistence.save(stateKey, state);
             }
         }
 
