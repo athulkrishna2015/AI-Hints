@@ -521,6 +521,9 @@ class BatchManager:
                 available_models = []
             
             if not available_models:
+                 with self._db_lock:
+                     if not self.local_queue:
+                         break
                  self.active_threads_status[provider] = {
                      "model": current_model,
                      "cid": None,

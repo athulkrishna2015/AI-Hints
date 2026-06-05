@@ -128,6 +128,9 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### June 5, 2026 (v3.1.2)
+- **Fix Thread Hang/Deadlock on Queue Completion**: Fixed a bug where rate-limited or blacklisted provider threads remained stuck in infinite sleep/cooldown loops after the batch queue was fully processed, preventing the queue from finishing. Threads now check if the queue is empty and exit cleanly.
+
 ### June 5, 2026 (v3.1.1)
 - **Batch Queue Rate-Limit Handling**: Modified sequential batch queue worker threads to pause/sleep when a provider is rate-limited or blacklisted, preventing it from popping and immediately failing pending cards in the queue.
 - **Provider Isolation in Diagnostic Tests**: Enforced `only_this_provider=True` during manual connection and model testing to isolate provider checks, preventing successful fallback routing from misrepresenting status.
