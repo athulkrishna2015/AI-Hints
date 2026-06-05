@@ -34,7 +34,7 @@ class BatchManager:
         self.last_run_stats = None
         
         self.active_threads_status = {}
-        self._db_lock = threading.Lock()
+        self._db_lock = threading.RLock()
         
         self.load_state()
 
@@ -72,7 +72,7 @@ class BatchManager:
 
     def save_state(self):
         if not hasattr(self, "_db_lock"):
-            self._db_lock = threading.Lock()
+            self._db_lock = threading.RLock()
         with self._db_lock:
             try:
                 # Package combined persisted bundle
@@ -106,10 +106,17 @@ class BatchManager:
             html_parts.append(f"<div style='font-size:12px; padding-bottom:4px;'>{status_txt} <b>Local Sequential Queue</b></div>")
             html_parts.append(f"📊 Progress: <b>{done}</b> / {self.local_queue_total} cards generated. ({remaining} left)<br/>")
             
+            active_threads = {}
             if getattr(self, "active_threads_status", None):
+                try:
+                    active_threads = dict(self.active_threads_status)
+                except Exception:
+                    pass
+
+            if active_threads:
                  html_parts.append("<div style='margin-top:6px; font-size:11px;'>")
                  html_parts.append("<b>Active Concurrent Threads:</b><br/>")
-                 for prov, info in self.active_threads_status.items():
+                 for prov, info in active_threads.items():
                       cid_link = f"<a href='browse:cid:{info['cid']}' style='color: #007bff;'>[Card {info['cid']}]</a>" if info['cid'] else "None"
                       html_parts.append(f"• 🔌 <b>{prov.capitalize()}</b> ({info['model']}): Processing {cid_link}<br/>")
                  html_parts.append("</div>")
@@ -429,7 +436,7 @@ class BatchManager:
         
         self.active_threads_status = {}
         if not hasattr(self, "_db_lock"):
-             self._db_lock = threading.Lock()
+             self._db_lock = threading.RLock()
              
         client = AIClient(config)
         parser = CardParser(config.get("storage_mode", "json"))
@@ -513,16 +520,40 @@ class BatchManager:
             }
 
             try:
-                with self._db_lock:
-                    card = _get_card_from_collection(cid)
-                    if card:
-                        note = card.note()
-                        front_txt, back_txt = parser.get_note_content(note, card)
-                    else:
-                        front_txt, back_txt = None, None
+                # Retrieve the card payload strictly on Anki's main thread to prevent thread-safety/segfault issues
+                payload = {"front": None, "back": None, "exists": False, "error": None}
+                evt = threading.Event()
 
-                if not card or (not front_txt and not back_txt):
+                def _fetch():
+                    try:
+                        card = _get_card_from_collection(cid)
+                        if card:
+                            note = card.note()
+                            front, back = parser.get_note_content(note, card)
+                            payload["front"] = front
+                            payload["back"] = back
+                            payload["exists"] = True
+                        else:
+                            payload["exists"] = False
+                    except Exception as e:
+                        payload["error"] = str(e)
+                    finally:
+                        evt.set()
+
+                mw.taskman.run_on_main(_fetch)
+                evt.wait()
+
+                if payload["error"]:
+                    logger.error(f"Error fetching card {cid} content: {payload['error']}")
+                    with self._db_lock:
+                        self.local_queue_errors += 1
                     continue
+
+                if not payload["exists"] or (not payload["front"] and not payload["back"]):
+                    continue
+
+                front_txt = payload["front"]
+                back_txt = payload["back"]
 
                 resp_data = client.generate_options(
                     front_txt, 
@@ -536,13 +567,27 @@ class BatchManager:
                     if actual_model:
                         self.active_threads_status[provider]["model"] = actual_model
                     
-                    def _apply_on_main(note_obj, data_dict, card_obj):
-                        if parser.update_note_with_hints(note_obj, data_dict, card=card_obj, skip_if_exists=True):
-                            mw.col.update_note(note_obj)
-                            return True
-                        return False
+                    def _apply_on_main(cid_val, data_dict):
+                        try:
+                            card = _get_card_from_collection(cid_val)
+                            if not card:
+                                return
+                            note = card.note()
+                            # Fetch current toggles from active config
+                            config_current = mw.addonManager.getConfig(os.path.basename(ADDON_PATH)) or {}
+                            toggles = {
+                                "show_hints_button": config_current.get("show_hints_button", True),
+                                "show_options_button": config_current.get("show_options_button", True)
+                            }
+                            if parser.update_note_with_hints(note, data_dict, toggles, card, skip_if_exists=True):
+                                mw.col.update_note(note)
+                                if mw.reviewer and mw.reviewer.card and mw.reviewer.card.id == cid_val:
+                                    from .reviewer_hooks import refresh_current_card
+                                    refresh_current_card()
+                        except Exception as ex:
+                            logger.error(f"Error applying results for card {cid_val} on main: {ex}")
 
-                    mw.taskman.run_on_main(lambda n=card.note(), d=resp_data, c=card: _apply_on_main(n, d, c))
+                    mw.taskman.run_on_main(lambda c=cid, d=resp_data: _apply_on_main(c, d))
                 else:
                     with self._db_lock:
                         self.local_queue_errors += 1

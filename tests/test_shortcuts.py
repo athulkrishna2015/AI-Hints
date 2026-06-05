@@ -27,7 +27,7 @@ classes = ['QDialog', 'QWidget', 'QVBoxLayout', 'QHBoxLayout', 'QLabel',
            'QScrollArea', 'QGroupBox', 'QFormLayout', 'QSpinBox', 'QDialogButtonBox',
            'QPixmap', 'Qt', 'QApplication', 'QSizePolicy', 'QTimer', 'QTabWidget',
            'QListWidget', 'QListWidgetItem', 'QDesktopServices', 'QUrl', 'QProgressBar',
-           'QDialogButtonBox', 'QFrame', 'QIcon', 'QSize', 'QMovie']
+           'QDialogButtonBox', 'QFrame', 'QIcon', 'QSize', 'QMovie', 'QStyledItemDelegate', 'QEvent']
 for cls in classes:
     setattr(aqt.qt, cls, MagicMock)
 

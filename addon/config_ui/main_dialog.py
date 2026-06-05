@@ -324,6 +324,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         if hasattr(self, "refresh_blacklist_list"):
             self.refresh_blacklist_list()
+            
+        if hasattr(self, "batch_limit_spin"):
+            self.batch_limit_spin.setValue(c.get("batch_limit", 1000))
+        if hasattr(self, "batch_multithread_cb"):
+            self.batch_multithread_cb.setChecked(c.get("multithread_providers", False))
 
     def copy_to_clipboard(self, text):
         QApplication.clipboard().setText(text)

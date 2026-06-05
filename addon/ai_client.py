@@ -1032,6 +1032,7 @@ class AIClient:
 
     def _on_model_success(self, provider: str, model: str):
         """Resets the rate limit streak when a model successfully responds."""
+        logger.info(f"AI-Hints: Successful generation response from {provider} using model {model}.")
         key = (provider, model)
         if key in RATE_LIMIT_STREAK:
             logger.debug(f"AI-Hints: Resetting rate limit streak for {provider}/{model} after success.")
@@ -1120,7 +1121,8 @@ class AIClient:
                 *configured_fallbacks,
             ]
 
-        disabled_models = self.config.get("disabled_fallback_models", {}).get(provider, [])
+        disabled_fallback = self.config.get("disabled_fallback_models") or {}
+        disabled_models = disabled_fallback.get(provider, [])
         if not isinstance(disabled_models, list):
             disabled_models = []
 

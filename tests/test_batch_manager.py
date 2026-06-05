@@ -6,10 +6,36 @@ from unittest.mock import MagicMock, patch
 from types import ModuleType
 
 # Mock aqt before importing batch_manager
-mock_aqt = MagicMock()
-sys.modules['aqt'] = mock_aqt
-mock_qt = ModuleType('aqt.qt')
-sys.modules['aqt.qt'] = mock_qt
+from types import ModuleType
+aqt = ModuleType('aqt')
+sys.modules['aqt'] = aqt
+aqt.qt = MagicMock()
+sys.modules['aqt.qt'] = aqt.qt
+aqt.utils = MagicMock()
+sys.modules['aqt.utils'] = aqt.utils
+aqt.webview = MagicMock()
+sys.modules['aqt.webview'] = aqt.webview
+aqt.theme = MagicMock()
+sys.modules['aqt.theme'] = aqt.theme
+aqt.colors = MagicMock()
+sys.modules['aqt.colors'] = aqt.colors
+aqt.gui_hooks = MagicMock()
+sys.modules['aqt.gui_hooks'] = aqt.gui_hooks
+aqt.operations = MagicMock()
+sys.modules['aqt.operations'] = aqt.operations
+aqt.operations.deck = MagicMock()
+sys.modules['aqt.operations.deck'] = aqt.operations.deck
+aqt.mw = MagicMock()
+sys.modules['aqt.mw'] = aqt.mw
+
+classes = ['QDialog', 'QWidget', 'QVBoxLayout', 'QHBoxLayout', 'QLabel', 
+           'QLineEdit', 'QPushButton', 'QComboBox', 'QCheckBox', 'QTextEdit',
+           'QScrollArea', 'QGroupBox', 'QFormLayout', 'QSpinBox', 'QDialogButtonBox',
+           'QPixmap', 'Qt', 'QApplication', 'QSizePolicy', 'QTimer', 'QTabWidget',
+           'QListWidget', 'QListWidgetItem', 'QDesktopServices', 'QUrl', 'QProgressBar',
+           'QDialogButtonBox', 'QStyledItemDelegate', 'QEvent']
+for cls in classes:
+    setattr(aqt.qt, cls, MagicMock)
 
 class Dummy:
     def __init__(self, *args, **kwargs): pass
@@ -17,7 +43,7 @@ class Dummy:
     def start(self, *args): pass
     def stop(self): pass
 
-setattr(mock_qt, 'QTimer', Dummy)
+setattr(aqt.qt, 'QTimer', Dummy)
 
 # Setup paths
 sys.dont_write_bytecode = True

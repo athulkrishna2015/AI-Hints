@@ -501,6 +501,10 @@ class BatchTabMixin:
             if not askUser(confirm_msg + "\n\nProceed with execution?"):
                 return
             
+            # Save configuration automatically to persist all settings from UI to disk before starting
+            if hasattr(self, "save_config"):
+                self.save_config(close=False)
+            
             combo_idx = self.batch_provider_cb.currentIndex()
             prov_override = None
             if combo_idx > 0:
