@@ -1,5 +1,6 @@
 # AI-Hints Anki Add-on
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/D1D01W6NQT)
 AI-Hints is a powerful Anki add-on that uses Artificial Intelligence to generate helpful hints or multiple-choice options for your flashcards during review. It helps simulate real exam conditions by including the correct answer alongside plausible distractors even for open-ended cards.
 
 Install from [anki web ](https://ankiweb.net/shared/info/2119980872)
@@ -113,7 +114,6 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 ## Development
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions and technical details.
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/D1D01W6NQT)
 
 ## License
 
@@ -127,6 +127,11 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 
 ## Changelog
+
+### June 5, 2026 (v3.1.2)
+- **Fix Browser Search Bug in Config UI**: Fixed an `AttributeError` that occurred when clicking "Show Card" on orphaned hints, by utilizing a robust, version-agnostic browser search call.
+- **Refresh Options Randomization on Review Retries**: Modified option-shuffling to generate and persist a new random seed on the card's front side, ensuring that options are reshuffled on every review retry while maintaining layout consistency between front and back sides of the same review.
+- **HTML Code Tag Options Highlight Fix**: Corrected answer normalization to preserve code-containing HTML tags like `<a>`, `<link>`, and `<url>` (while still stripping formatting wrappers). This prevents different HTML code options from being normalized to the same text and mistakenly highlighted as correct.
 
 ### June 5, 2026 (v3.1.1)
 - **Batch Queue Handover & Peer Coordination**: Modified concurrent queue threads to wait for peers when the queue is empty. This prevents race conditions where late-failed/requeued cards are left unattended, ensuring active threads successfully hand over failed cards to other working providers.
