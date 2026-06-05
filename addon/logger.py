@@ -34,14 +34,21 @@ class SharedState:
 state = SharedState()
 
 def clear_log_file():
-    """Wipes the log file content."""
+    """Wipes the log file content and removes backup logs."""
     addon_dir = os.path.dirname(__file__)
     log_file = os.path.join(addon_dir, "ai_hints.log")
+    log_backup = os.path.join(addon_dir, "ai_hints.log.1")
     try:
         if os.path.exists(log_file):
             with open(log_file, "w", encoding="utf-8") as f:
                 f.write("")
             logger.info("Log file cleared on startup.")
+        if os.path.exists(log_backup):
+            try:
+                os.remove(log_backup)
+            except Exception as e:
+                with open(log_backup, "w", encoding="utf-8") as f:
+                    f.write("")
     except Exception as e:
         print(f"AI-Hints: Failed to clear log file: {e}")
 
