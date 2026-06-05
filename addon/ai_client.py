@@ -519,6 +519,9 @@ class AIClient:
             except urllib.error.HTTPError as e:
                 body = self._read_http_error(e)
                 logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e} - {body}")
+                from .logger import log_context
+                if getattr(log_context, "source", None) == "model_test":
+                    raise Exception(f"{e} - {body}")
                 if e.code in [404, 429, 500, 503]:
                     delay = self._extract_retry_delay(provider_name, model, e, body)
                     self._mark_model_failed(provider_name, model, delay)
@@ -632,6 +635,9 @@ class AIClient:
             except urllib.error.HTTPError as e:
                 body = self._read_http_error(e)
                 logger.error(f"AI-Hints Error ({provider}, model {model}): {e} - {body}")
+                from .logger import log_context
+                if getattr(log_context, "source", None) == "model_test":
+                    raise Exception(f"{e} - {body}")
                 if e.code in [404, 429, 500, 503]:
                     delay = self._extract_retry_delay(provider, model, e, body)
                     self._mark_model_failed(provider, model, delay)
@@ -677,6 +683,9 @@ class AIClient:
             except urllib.error.HTTPError as e:
                 body = self._read_http_error(e)
                 logger.error(f"AI-Hints Error (Anthropic, model {model}): {e} - {body}")
+                from .logger import log_context
+                if getattr(log_context, "source", None) == "model_test":
+                    raise Exception(f"{e} - {body}")
                 if e.code in [404, 429, 500, 503]:
                     delay = self._extract_retry_delay("anthropic", model, e, body)
                     self._mark_model_failed("anthropic", model, delay)
@@ -740,7 +749,9 @@ class AIClient:
             except urllib.error.HTTPError as e:
                 body = self._read_http_error(e)
                 logger.error(f"AI-Hints Error (Gemini, model {model}): {e} - {body}")
-
+                from .logger import log_context
+                if getattr(log_context, "source", None) == "model_test":
+                    raise Exception(f"{e} - {body}")
                 # Mark model as failed if it's a rate limit or server error
                 if e.code in [404, 429, 500, 503]:
                     delay = self._extract_retry_delay("gemini", model, e, body)
