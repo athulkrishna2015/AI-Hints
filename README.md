@@ -48,8 +48,10 @@ The add-on features a multi-tiered, intelligence-driven fallback system. If your
 
 ## Batch Generation & Resumption
 
-The "Local Sequential Queue" is designed for heavy-duty background processing with maximum reliability:
+The batch generation queue is designed for heavy-duty background processing with maximum reliability:
 
+- **Concurrent Multi-Provider Generation**: Leverages multiple AI providers concurrently to process batches significantly faster, with independent fallback queues per provider.
+- **Deck Browser Cogwheel Option**: Start batch generation for any deck directly from the deck browser's options menu.
 - **Continuous Checkpointing**: The add-on saves its progress to disk (`batch_state.json`) after *every single card* processed. 
 - **Accidental Quit Protection**: If you close Anki or it crashes mid-batch, your progress is preserved.
 - **Non-Blocking Background Execution**: The process runs in a dedicated background thread, allowing you to study or browse while it works.
@@ -125,6 +127,20 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 
 ## Changelog
+
+### June 5, 2026 (v3.0.2 - Dev)
+- **Concurrent Multi-Provider Batch Generation**: Added concurrent multi-provider generation with single-provider fallback queues in the batch manager to process queues faster.
+- **Deck Browser Cogwheel Integration**: Added batch generation option directly in the deck browser cogwheel menu with updated queue selection status UI.
+- **Thread-Safety & Deadlock Prevention**: Fixed background thread-safety database access and stopped queue deadlock, added auto-saving of configuration on batch start, fixed NoneType error in fallback models retrieval, and added model success info logs.
+- **Startup Backup Log Cleanup**: Modified startup log clearing to also clean or delete backup log files (`ai_hints.log.1`).
+
+### June 4, 2026 (v3.0.1)
+- **Enhanced MathJax and LaTeX Rendering**:
+  - Dynamically convert LaTeX math delimiters to `<anki-mathjax>` tags in the reviewer template for proper typesetting.
+  - Added support for bare LaTeX equations without delimiters up to 1000 characters.
+  - Added `tex2jax_process` class to math tags and containers to bypass Anki's global MathJax ignore wrapper.
+  - Fixed MathJax math formula rendering in reviewer template.
+- **Improved Fallback Fetch Logic**: Updated the fallback fetch logic.
 
 ### June 3, 2026 (v3.0.0)
 - **Major Architecture Overhaul**: Transitioned to a more robust background generation and UI synchronization engine.
