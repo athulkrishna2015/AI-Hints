@@ -128,6 +128,10 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### June 6, 2026 (v3.1.3)
+- **Fix Copy-Paste Cloze Contamination**: Implemented a deep answer-matching validation check that compares the stored `correct_answer` inside the hidden JSON payload against the actual text of active cloze deletions on the note, instantly purging mismatched/copied cloze data.
+- **Time-Gated Auto-Regeneration**: Added support for automatically regenerating hints that are older than a specific date/time. Configurable in the General settings tab (`auto_regenerate_if_old_time` and `auto_regenerate_min_time`).
+
 ### June 5, 2026 (v3.1.2)
 - **Fix Browser Search Bug in Config UI**: Fixed an `AttributeError` that occurred when clicking "Show Card" on orphaned hints, by utilizing a robust, version-agnostic browser search call.
 - **Refresh Options Randomization on Review Retries**: Modified option-shuffling to generate and persist a new random seed on the card's front side, ensuring that options are reshuffled on every review retry while maintaining layout consistency between front and back sides of the same review.

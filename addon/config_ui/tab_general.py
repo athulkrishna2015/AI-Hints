@@ -106,14 +106,14 @@ class GeneralTabMixin:
         self.auto_regenerate_old_time_cb = QCheckBox("└─ Regenerate if Generated Time < ")
         self.auto_regenerate_old_time_cb.setToolTip(
             "Automatically regenerate hints for cards whose stored generation time is older than the time you specify. "
-            "Requires Auto Generate to be active. Format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS."
+            "Requires Auto Generate to be active. Format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS. Leave empty or uncheck to disable."
         )
         self.auto_regenerate_old_time_cb.setStyleSheet("margin-left: 15px;")
         self.auto_regenerate_min_time_edit = QLineEdit()
         self.auto_regenerate_min_time_edit.setPlaceholderText("e.g. 2026-06-06")
         self.auto_regenerate_min_time_edit.setFixedWidth(120)
         self.auto_regenerate_min_time_edit.setToolTip(
-            "Cards generated before this date/time will be regenerated automatically. Format: YYYY-MM-DD [HH:MM:SS]."
+            "Cards generated before this date/time will be regenerated automatically. Format: YYYY-MM-DD [HH:MM:SS]. Leave empty to disable."
         )
         time_container = QWidget()
         time_row = QHBoxLayout(time_container)
