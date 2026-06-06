@@ -103,6 +103,27 @@ class GeneralTabMixin:
         version_row.addStretch()
         show_layout.addRow(version_container)
 
+        self.auto_regenerate_old_time_cb = QCheckBox("└─ Regenerate if Generated Time < ")
+        self.auto_regenerate_old_time_cb.setToolTip(
+            "Automatically regenerate hints for cards whose stored generation time is older than the time you specify. "
+            "Requires Auto Generate to be active. Format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS."
+        )
+        self.auto_regenerate_old_time_cb.setStyleSheet("margin-left: 15px;")
+        self.auto_regenerate_min_time_edit = QLineEdit()
+        self.auto_regenerate_min_time_edit.setPlaceholderText("e.g. 2026-06-06")
+        self.auto_regenerate_min_time_edit.setFixedWidth(120)
+        self.auto_regenerate_min_time_edit.setToolTip(
+            "Cards generated before this date/time will be regenerated automatically. Format: YYYY-MM-DD [HH:MM:SS]."
+        )
+        time_container = QWidget()
+        time_row = QHBoxLayout(time_container)
+        time_row.setContentsMargins(15, 0, 0, 0)
+        time_row.setSpacing(5)
+        time_row.addWidget(self.auto_regenerate_old_time_cb)
+        time_row.addWidget(self.auto_regenerate_min_time_edit)
+        time_row.addStretch()
+        show_layout.addRow(time_container)
+
         pregen_container = QWidget()
         pregen_row = QHBoxLayout(pregen_container)
         pregen_row.setContentsMargins(0, 0, 0, 0)
@@ -130,6 +151,10 @@ class GeneralTabMixin:
             self.auto_regenerate_min_version_edit.setEnabled(
                 enabled and self.auto_regenerate_old_version_cb.isChecked()
             )
+            self.auto_regenerate_old_time_cb.setEnabled(enabled)
+            self.auto_regenerate_min_time_edit.setEnabled(
+                enabled and self.auto_regenerate_old_time_cb.isChecked()
+            )
             self.pre_generate_next_cb.setEnabled(enabled)
             self.pre_generate_count_spin.setEnabled(enabled and self.pre_generate_next_cb.isChecked())
             if not enabled:
@@ -143,6 +168,11 @@ class GeneralTabMixin:
         )
         self.auto_regenerate_old_version_cb.toggled.connect(
             lambda checked: self.auto_regenerate_min_version_edit.setEnabled(
+                checked and self.auto_generate_new_cb.isChecked()
+            )
+        )
+        self.auto_regenerate_old_time_cb.toggled.connect(
+            lambda checked: self.auto_regenerate_min_time_edit.setEnabled(
                 checked and self.auto_generate_new_cb.isChecked()
             )
         )

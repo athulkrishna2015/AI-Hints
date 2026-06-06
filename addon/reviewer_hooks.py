@@ -1428,7 +1428,10 @@ def _card_saved_version(card) -> str:
         import re
         import html as _html
         note = card.note()
-        for field_val in getattr(note, "fields", []):
+        fields = getattr(note, "fields", [])
+        if not fields and hasattr(note, "values"):
+            fields = list(note.values())
+        for field_val in fields:
             if not isinstance(field_val, str):
                 continue
             m = re.search(
@@ -1467,6 +1470,74 @@ def _version_less_than(v1: str, v2: str) -> bool:
         except Exception:
             return (0, 0, 0)
     return _parse(v1) < _parse(v2)
+
+def _card_saved_generation_time(card) -> str:
+    """Return the generation time string stored inside the card's JSON block (in format %Y-%m-%d %H:%M:%S).
+    Returns an empty string if no generation time was recorded.
+    """
+    if not card:
+        return ""
+    cached = _cached_hints_for_card(card)
+    if cached:
+        data = cached.get("data") or {}
+        time_str = data.get("_generated_at", "")
+        if time_str:
+            return str(time_str)
+    try:
+        import re
+        import html as _html
+        note = card.note()
+        fields = getattr(note, "fields", [])
+        if not fields and hasattr(note, "values"):
+            fields = list(note.values())
+        for field_val in fields:
+            if not isinstance(field_val, str):
+                continue
+            m = re.search(
+                r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
+                field_val, re.DOTALL | re.IGNORECASE
+            )
+            if m:
+                raw = _html.unescape(m.group(1) or "")
+                try:
+                    parsed = json.loads(raw)
+                    card_ord = getattr(card, "ord", None)
+                    if card_ord is not None:
+                        card_key = f"c{card_ord + 1}"
+                        if isinstance(parsed, dict) and card_key in parsed:
+                            parsed = parsed[card_key]
+                    return str(parsed.get("_generated_at", ""))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return ""
+
+def _time_less_than(t1: str, t2: str) -> bool:
+    """Return True if time string t1 is strictly older than t2.
+    Supports %Y-%m-%d %H:%M:%S and partial formats.
+    """
+    if not t1 or not t2:
+        return False
+    t1_clean = t1.strip().replace("T", " ")
+    t2_clean = t2.strip().replace("T", " ")
+    from datetime import datetime
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            dt1 = datetime.strptime(t1_clean, fmt)
+            dt2 = datetime.strptime(t2_clean, fmt)
+            return dt1 < dt2
+        except ValueError:
+            pass
+    min_len = min(len(t1_clean), len(t2_clean))
+    if min_len >= 10:
+        try:
+            dt1 = datetime.strptime(t1_clean[:min_len], "%Y-%m-%d %H:%M:%S"[:min_len])
+            dt2 = datetime.strptime(t2_clean[:min_len], "%Y-%m-%d %H:%M:%S"[:min_len])
+            return dt1 < dt2
+        except ValueError:
+            pass
+    return t1_clean < t2_clean
 
 def trigger_js_click(text_contains: str, emoji: str) -> None:
     web = getattr(mw.reviewer, "web", None)
@@ -1629,8 +1700,26 @@ def init_hooks():
                         card.id, saved_ver, min_ver
                     )
 
-            if needs_generation or force_regen or regen_old:
-                logger.info(f"AI-Hints: Auto-generating hints for card {card.id} (force_regen={force_regen}, regen_old={regen_old}).")
+            # Time-gated regeneration: regenerate if the generation time stored on
+            # the card is older than the configured minimum generation time.
+            regen_old_time = False
+            if (
+                not force_regen
+                and not regen_old
+                and config.get("auto_regenerate_if_old_time", False)
+                and card_has_hints(card)
+            ):
+                min_time = config.get("auto_regenerate_min_time", "").strip()
+                saved_time = _card_saved_generation_time(card)
+                if min_time and _time_less_than(saved_time, min_time):
+                    regen_old_time = True
+                    logger.info(
+                        "AI-Hints: Card %s saved generation time '%s' < min '%s'; queuing regeneration.",
+                        card.id, saved_time, min_time
+                    )
+
+            if needs_generation or force_regen or regen_old or regen_old_time:
+                logger.info(f"AI-Hints: Auto-generating hints for card {card.id} (force_regen={force_regen}, regen_old={regen_old}, regen_old_time={regen_old_time}).")
                 generate_hints(is_manual=False, card=card)
             else:
                 # Current card is already good. Pre-generate the NEXT one.

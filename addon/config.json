@@ -171,6 +171,8 @@
     "auto_regenerate_all": false,
     "auto_regenerate_if_old_version": false,
     "auto_regenerate_min_version": "",
+    "auto_regenerate_if_old_time": false,
+    "auto_regenerate_min_time": "",
     "antigravity_proxy": {
         "enabled": false,
         "port": 3000

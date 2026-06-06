@@ -97,6 +97,33 @@ class CardParserTests(unittest.TestCase):
         self.assertIsNotNone(parser.find_hints_block(note, FakeCard(1, 0)))
         self.assertIsNone(parser.find_hints_block(note, FakeCard(2, 1)))
 
+    def test_purges_mismatched_correct_answer_for_active_cloze(self):
+        parser = CardParser(storage_mode="json")
+        note = FakeNote(
+            "Cloze",
+            {
+                "Text": "{{c1::A}} and {{c2::B}}",
+                "Back": "",
+            },
+        )
+        
+        initial_data = {
+            "c1": {"hints": ["h1"], "options": ["o1"], "correct_answer": "A"},
+            "c2": {"hints": ["h2"], "options": ["o2"], "correct_answer": "Different"}
+        }
+        note["Text"] += "\n\n" + parser.build_hints_block(initial_data)
+        
+        parser.update_note_with_hints(
+            note,
+            {"hints": ["h1new"], "options": ["o1new"], "correct_answer": "A"},
+            card=FakeCard(1, 0)
+        )
+        
+        payload = json_payload_from_field(note["Text"])
+        self.assertIn("c1", payload)
+        self.assertEqual(payload["c1"]["hints"], ["h1new"])
+        self.assertNotIn("c2", payload)
+
     def test_html_mode_escapes_non_math_tags(self):
         parser = CardParser(storage_mode="html")
 

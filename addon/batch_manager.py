@@ -271,6 +271,10 @@ class BatchManager:
                     from .reviewer_hooks import _ADDON_VERSION # Safe late import
                     if _ADDON_VERSION:
                         data["_version"] = _ADDON_VERSION
+                    data["_provider"] = "gemini"
+                    gemini_models = client._models_for_provider("gemini")
+                    data["_model"] = gemini_models[0] if gemini_models else "gemini-2.5-flash-lite"
+                    data["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                     parsed_results[str(key)] = data
             except Exception as e:
                 logger.error(f"AI-Hints: Failed to extract one response item in batch {job_name} (key={key}): {e}")

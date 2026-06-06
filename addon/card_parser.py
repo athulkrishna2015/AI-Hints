@@ -366,7 +366,7 @@ class CardParser:
             current_val = str(current_val or "")
         
         if self.storage_mode == "json":
-            new_val = self._update_json_block_in_field(current_val, data, card_key, toggles, card)
+            new_val = self._update_json_block_in_field(current_val, data, card_key, toggles, card, note)
         else:
             content_block = self.build_hints_block(data, toggles, card)
             new_val = self._replace_or_append_block(current_val, content_block, card)
@@ -374,7 +374,7 @@ class CardParser:
         note[field_name] = new_val
         return True
 
-    def _update_json_block_in_field(self, current_val: str, new_data: Dict[str, List[str]], card_key: Optional[str], toggles: Dict[str, bool], card=None) -> str:
+    def _update_json_block_in_field(self, current_val: str, new_data: Dict[str, List[str]], card_key: Optional[str], toggles: Dict[str, bool], card=None, note=None) -> str:
         # 1. First, try to find ANY existing block (JSON or HTML) that matches THIS specific card.
         # This is the most surgical update.
         pattern = re.compile(
@@ -402,6 +402,24 @@ class CardParser:
                                        parsed = {"c1": parsed}
                                   else:
                                        parsed = {}
+                             
+                             # Purge any obsolete/polluted cloze keys
+                             active_clozes = self._get_active_clozes_map(note, current_val)
+                             if active_clozes:
+                                 for k in list(parsed.keys()):
+                                     if re.fullmatch(r"c\d+", k):
+                                         if k not in active_clozes:
+                                             del parsed[k]
+                                         else:
+                                             # Key is active, check if correct_answer matches the cloze text
+                                             card_data = parsed[k]
+                                             if isinstance(card_data, dict) and "correct_answer" in card_data:
+                                                 stored_ans = card_data["correct_answer"]
+                                                 if isinstance(stored_ans, str):
+                                                     cleaned_stored = "".join(re.sub(r'<[^>]+>', '', html.unescape(stored_ans)).split()).lower()
+                                                     if cleaned_stored not in active_clozes[k]:
+                                                         del parsed[k]
+                             
                              parsed[card_key] = new_data
                         else:
                              parsed.update(new_data)
@@ -426,6 +444,22 @@ class CardParser:
                         raw_payload = match.group(1)
                         parsed = self._parse_json_payload(raw_payload)
                         if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
+                            # Purge any obsolete/polluted cloze keys
+                            active_clozes = self._get_active_clozes_map(note, current_val)
+                            if active_clozes:
+                                for k in list(parsed.keys()):
+                                    if re.fullmatch(r"c\d+", k):
+                                        if k not in active_clozes:
+                                            del parsed[k]
+                                        else:
+                                            card_data = parsed[k]
+                                            if isinstance(card_data, dict) and "correct_answer" in card_data:
+                                                stored_ans = card_data["correct_answer"]
+                                                if isinstance(stored_ans, str):
+                                                    cleaned_stored = "".join(re.sub(r'<[^>]+>', '', html.unescape(stored_ans)).split()).lower()
+                                                    if cleaned_stored not in active_clozes[k]:
+                                                        del parsed[k]
+
                             # It's a keyed block but didn't match card_id/ord (maybe card was generated without scope)
                             # We update it anyway to keep all hints in one block.
                             parsed[card_key] = new_data
@@ -801,8 +835,46 @@ class CardParser:
         match = re.search(rf'\b{re.escape(name)}\s*=\s*["\']([^"\']*)["\']', block, flags=re.IGNORECASE)
         return html.unescape(match.group(1)) if match else ""
 
+    def _get_active_clozes_map(self, note=None, current_val: str = "") -> Dict[str, set]:
+        cloze_map = {}
+        
+        def clean_text(text: str) -> str:
+            text = re.sub(r'<[^>]+>', '', text)
+            text = html.unescape(text)
+            return "".join(text.split()).lower()
+
+        fields_to_scan = []
+        if note:
+            if hasattr(note, "items"):
+                for f_name, f_val in note.items():
+                    if isinstance(f_val, str):
+                        fields_to_scan.append(f_val)
+            elif hasattr(note, "fields"):
+                for f_val in note.fields:
+                    if isinstance(f_val, str):
+                        fields_to_scan.append(f_val)
+        else:
+            fields_to_scan.append(current_val)
+
+        for field in fields_to_scan:
+            for match in re.finditer(r'\{\{c(\d+)::(.*?)\}\}', field, re.DOTALL):
+                c_num = match.group(1)
+                content = match.group(2)
+                replacement = content.split("::")[0]
+                c_key = f"c{c_num}"
+                if c_key not in cloze_map:
+                    cloze_map[c_key] = set()
+                cloze_map[c_key].add(clean_text(replacement))
+                
+        return cloze_map
+
     def _parse_json_payload(self, raw_payload: str) -> Any:
-        return json.loads(html.unescape(raw_payload or ""))
+        if not raw_payload:
+            return {}
+        # Clean up any HTML line breaks, divs, p tags, or styling tags that Anki's editor might have inserted
+        cleaned = raw_payload.replace("&nbsp;", " ").replace("\xa0", " ")
+        cleaned = re.sub(r'</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>', '\n', cleaned)
+        return json.loads(html.unescape(cleaned))
 
     def _is_keyed_payload(self, payload: Dict[str, Any]) -> bool:
         if not isinstance(payload, dict):
@@ -915,6 +987,27 @@ class CardParser:
                     is_flat = not self._is_keyed_payload(parsed)
                     if is_flat:
                         parsed = {"c1": parsed}
+                    else:
+                        # Purge any obsolete/polluted cloze keys
+                        active_clozes = self._get_active_clozes_map(note)
+                        if active_clozes:
+                            purged = False
+                            for k in list(parsed.keys()):
+                                if re.fullmatch(r"c\d+", k):
+                                    if k not in active_clozes:
+                                        del parsed[k]
+                                        purged = True
+                                    else:
+                                        card_data = parsed[k]
+                                        if isinstance(card_data, dict) and "correct_answer" in card_data:
+                                            stored_ans = card_data["correct_answer"]
+                                            if isinstance(stored_ans, str):
+                                                cleaned_stored = "".join(re.sub(r'<[^>]+>', '', html.unescape(stored_ans)).split()).lower()
+                                                if cleaned_stored not in active_clozes[k]:
+                                                    del parsed[k]
+                                                    purged = True
+                            if purged:
+                                note_changed = True
                         
                     # 2. Serialize to pretty format
                     formatted_payload = self.serialize_json_payload(parsed)

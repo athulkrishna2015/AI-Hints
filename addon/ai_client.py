@@ -514,6 +514,7 @@ class AIClient:
                     self._on_model_success(provider_name, model)
                     parsed["_provider"] = provider_name
                     parsed["_model"] = model
+                    parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                     return parsed
                 logger.warning(f"AI-Hints: Custom provider {provider_name} model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -600,6 +601,7 @@ class AIClient:
                     actual_model = result.get("model", "openrouter-auto")
                     parsed["_provider"] = "openrouter"
                     parsed["_model"] = actual_model
+                    parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                     return parsed
                 logger.warning("AI-Hints: OpenRouter models array returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -630,6 +632,7 @@ class AIClient:
                     self._on_model_success(provider, model)
                     parsed["_provider"] = provider
                     parsed["_model"] = model
+                    parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                     return parsed
                 logger.warning(f"AI-Hints: {provider} model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -678,6 +681,7 @@ class AIClient:
                     self._on_model_success("anthropic", model)
                     parsed["_provider"] = "anthropic"
                     parsed["_model"] = model
+                    parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                     return parsed
                 logger.warning(f"AI-Hints: Anthropic model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
@@ -744,6 +748,7 @@ class AIClient:
                     self._on_model_success("gemini", model)
                     parsed["_provider"] = "gemini"
                     parsed["_model"] = model
+                    parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                     return parsed
                 logger.warning(f"AI-Hints: Gemini model '{model}' returned no parseable hints/options.")
             except urllib.error.HTTPError as e:
