@@ -128,7 +128,13 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
-### June 6, 2026 (v3.1.3)
+### June 7, 2026 (v3.2.0)
+- **Automatic Multi-Pass Batch Verification**: Introduced a "chain-reaction" verification loop that automatically identifies and retries cards that failed to generate hints. The system now performs up to 10 sequential passes until the entire requested batch is complete, ensuring maximum reliability against transient network or API errors.
+- **Enhanced Collection Maintenance Logging**: Added explicit, high-level `INFO` logging for all collection-wide tools in the **Advanced** tab. You can now track the start, progress (including user cancellations), and final summary of AI Data Migrations, Unicode Escape Conversions, Orphaned Hints Cleanups, and Naked JSON Purges directly in the **Logs** tab.
+- **Finalized Log Streamlining**: Demoted low-level operational logs (like raw JSON payloads and internal polling status) to the `DEBUG` level. This keeps the standard `INFO` view focused exclusively on card generation milestones and significant configuration changes.
+- **Improved Batch Status Summary**: Updated the Batch tab to display real-time pass tracking (e.g., `Pass #2`) and overall success statistics across the entire verification cycle.
+
+### June 4, 2026 (v3.0.1)
 - **Fix Copy-Paste Cloze Contamination**: Implemented a deep answer-matching validation check that compares the stored `correct_answer` inside the hidden JSON payload against the actual text of active cloze deletions on the note, instantly purging mismatched/copied cloze data.
 - **Time-Gated Auto-Regeneration**: Added support for automatically regenerating hints that are older than a specific date/time. Configurable in the General settings tab (`auto_regenerate_if_old_time` and `auto_regenerate_min_time`).
 
