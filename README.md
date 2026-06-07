@@ -52,6 +52,7 @@ The add-on features a multi-tiered, intelligence-driven fallback system. If your
 The batch generation queue is designed for heavy-duty background processing with maximum reliability:
 
 - **Concurrent Multi-Provider Generation**: Leverages multiple AI providers concurrently to process batches significantly faster, with independent fallback queues per provider.
+- **Granular Queue Management**: View the next 5 pending cards in the queue directly in the Batch tab status. Includes individual **[✖ Discard]** buttons to surgically remove cards from the current batch.
 - **Deck Browser Cogwheel Option**: Start batch generation for any deck directly from the deck browser's options menu.
 - **Continuous Checkpointing**: The add-on saves its progress to disk (`batch_state.json`) after *every single card* processed. 
 - **Accidental Quit Protection**: If you close Anki or it crashes mid-batch, your progress is preserved.
@@ -94,7 +95,7 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 - **General Tab**: Select your default provider, MCQ options count, and database storage mode.
 - **AI Providers Tab**: Unified settings where each provider is grouped into a clean card layout containing its API Key (with eye visibility 👁️ toggles), active model selection, Up/Down priority sorting, dynamic fetch and test features, and checkbox toggles to **completely disable fallbacks** to specific providers.
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
-- **Advanced Tab**: Customize your system prompt, migrate hints inside your collection, use maintenance cleanups, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist** (view active cooldown remaining times, lift specific model bans, and customize the standard failure cooldown duration down to 5 minutes).
+- **Advanced Tab**: Customize your system prompt, migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist**.
 - **Scrollbar Support**: Smooth scrollbars automatically wrap the Advanced, Mobile, and Batch tabs, ensuring the GUI scales perfectly to fit compact laptops and high-DPI screens.
 
 ## Get Your API Keys
@@ -127,6 +128,15 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 
 ## Changelog
+
+### June 8, 2026 (v3.3.0)
+- **Granular Batch Queue Control**: You can now see the next 5 cards in the pending batch queue directly in the status area, with individual **[✖ Discard]** buttons to remove specific cards without stopping the whole process.
+- **Deck-Specific Maintenance Scoping**: Added a searchable deck selector to the **Advanced** tab. All maintenance tools (Migration, Unicode Fixer, Orphan Cleanup, and Naked JSON Purge) can now be scoped to a specific deck or run on the entire collection.
+- **"👻 Convert HTML to Hidden JSON" Tool**: Introduced a new heuristic parser that can "read" visible legacy HTML hint boxes (including those in Malayalam and other complex languages) and convert them into the optimized, invisible JSON format to clean up your editor.
+- **Aggressive Consolidation Logic**: Enhanced the core saving engine to prevent "stacked boxes" caused by race conditions during multi-threaded generation. It now forces data to merge into a single, keyed JSON block.
+- **3-Level Log Rotation**: Implemented a robust 3-level log rotation system (`ai_hints.log`, `.1`, `.2`). Logs now automatically rotate on every Anki startup, ensuring each session starts with a fresh log file while preserving recent history.
+- **Improved UI Clarity**: Renamed the "Stop Queue" button to **"Stop & Discard Queue"** to better reflect its full action of halting the process and clearing the remaining items.
+- **Stability Fixes**: Resolved several `AttributeError` crashes in the configuration UI and improved frontend randomization robustness for card re-shows and background data pushes.
 
 ### June 7, 2026 (v3.2.0)
 - **Automatic Multi-Pass Batch Verification**: Introduced a "chain-reaction" verification loop that automatically identifies and retries cards that failed to generate hints. The system now performs up to 10 sequential passes until the entire requested batch is complete, ensuring maximum reliability against transient network or API errors.
