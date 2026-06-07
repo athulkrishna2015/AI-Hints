@@ -1041,6 +1041,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.mig_status_label.setText("Initializing migration...")
         self.mig_stop_btn.setEnabled(True)
         
+        logger.info("AI-Hints: Starting collection-wide migration to move AI data to first fields.")
+        
         def _task():
             moved = 0
             # Get all note IDs
@@ -1049,6 +1051,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             
             for i, nid in enumerate(nids):
                 if self._migration_stop_requested:
+                    logger.info(f"AI-Hints: Migration STOPPED by user. Processed {i} notes, moved {moved}.")
                     break
                     
                 try:
@@ -1121,6 +1124,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     self.mig_status_label.setText(f"🛑 Stopped. Moved {m} notes.")
                     info(f"Migration stopped.\n\nProcessed until stop, moved AI data in {m} notes.")
                 else:
+                    logger.info(f"AI-Hints: Migration COMPLETED. Successfully moved AI data in {m} notes.")
                     self.mig_progress_bar.setValue(100)
                     self.mig_status_label.setText(f"✅ Complete! Moved {m} notes.")
                     info(f"✅ Migration Complete!\n\nMoved AI data in {m} notes to their first fields.")
@@ -1342,9 +1346,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         progress.setMinimumDuration(200)
 
         changed_count = 0
+        logger.info("AI-Hints: Starting collection-wide conversion of Unicode escapes in JSON blocks.")
 
         for i, nid in enumerate(nids):
             if progress.wasCanceled():
+                logger.info(f"AI-Hints: Unicode conversion CANCELLED by user. Processed {i} notes, updated {changed_count}.")
                 break
             progress.setValue(i)
             progress.setLabelText(f"Converting note {i+1} of {total}...")
@@ -1360,6 +1366,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         progress.setValue(total)
         mw.reset()
+        logger.info(f"AI-Hints: Unicode conversion COMPLETED. Successfully updated and pretty-printed AI hints in {changed_count} notes.")
         showInfo(
             f"🎉 Conversion Complete!\n\n"
             f"Successfully updated and pretty-printed AI hints in {changed_count} notes."
@@ -1385,9 +1392,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         progress.setMinimumDuration(200)
 
         orphaned_hints = []
+        logger.info("AI-Hints: Starting collection-wide scan for orphaned AI hints.")
 
         for i, nid in enumerate(nids):
             if progress.wasCanceled():
+                logger.info(f"AI-Hints: Orphaned hints scan CANCELLED by user. Processed {i} notes.")
                 return
             progress.setValue(i)
             progress.setLabelText(f"Scanning note {i+1} of {total}...")
@@ -1441,6 +1450,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 logger.error(f"Error scanning note {nid} for orphans: {e}")
 
         progress.setValue(total)
+        logger.info(f"AI-Hints: Orphaned hints scan COMPLETED. Found orphans in {len(orphaned_hints)} notes.")
 
         if not orphaned_hints:
             QMessageBox.information(self, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
@@ -1535,6 +1545,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         def do_clean():
             mw.checkpoint("Clean Orphaned Hints")
             cleaned_count = 0
+            logger.info(f"AI-Hints: Starting cleanup of orphaned hints in {len(orphaned_hints)} notes.")
             
             for item in orphaned_hints:
                 note = item["note"]
@@ -1592,6 +1603,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
             dialog.accept()
             mw.reset()
+            logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
             QMessageBox.information(
                 self, "Cleanup Complete",
                 f"🎉 Successfully cleaned up orphaned AI hints from {cleaned_count} notes!"
@@ -1626,6 +1638,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         progress.setMinimumDuration(200)
 
         changed_count = 0
+        logger.info("AI-Hints: Starting collection-wide purge of naked JSON blocks.")
         div_pattern = re.compile(
             r'<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>',
             flags=re.DOTALL | re.IGNORECASE,
@@ -1649,6 +1662,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         for i, nid in enumerate(nids):
             if progress.wasCanceled():
+                logger.info(f"AI-Hints: Naked JSON purge CANCELLED by user. Processed {i} notes, cleaned {changed_count}.")
                 break
             progress.setValue(i)
             progress.setLabelText(f"Scanning note {i+1} of {total}...")
@@ -1715,6 +1729,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         progress.setValue(total)
         mw.reset()
+        logger.info(f"AI-Hints: Naked JSON purge COMPLETED. Successfully cleaned naked JSON blocks from {changed_count} notes.")
         showInfo(
             f"🎉 Purge Complete!\n\n"
             f"Successfully scanned your collection and cleaned naked JSON blocks from {changed_count} notes."
