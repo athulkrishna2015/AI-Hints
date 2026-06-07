@@ -1061,27 +1061,47 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     note = mw.col.get_note(nid)
                     fields = list(note.keys())
                     if len(fields) < 2:
-                        continue
-                        
-                    first_field = fields[0]
-                    other_fields = fields[1:]
+                        # Even if only one field, check if it needs consolidation/conversion
+                        first_field = fields[0]
+                        other_fields = []
+                    else:
+                        first_field = fields[0]
+                        other_fields = fields[1:]
                     
                     # 1. Extract all blocks from all fields
                     all_blocks = parser._extract_all_hints_from_fields(note)
                     if not all_blocks:
                         continue
                         
-                    # 2. Check if any blocks are NOT in the first field
+                    # 2. Check if migration/consolidation is needed
+                    # - Are there blocks in secondary fields?
+                    # - Are there multiple blocks in total?
                     blocks_in_others = []
                     for f in other_fields:
                         blocks = parser._extract_hints_from_field(note[f], None)
                         if blocks:
                             blocks_in_others.extend(blocks)
                     
-                    if not blocks_in_others:
-                        continue
+                    # Consolidation triggers:
+                    # - Data in other fields
+                    # - Multiple blocks total (even if all in first field)
+                    if not blocks_in_others and len(all_blocks) <= 1:
+                        # Check format: if single block is HTML but we want JSON, convert anyway
+                        if parser.storage_mode == "json":
+                            first_field_val = note[first_field]
+                            if "ai-hints-container" in first_field_val:
+                                pass # proceed to migrate/convert
+                            else:
+                                continue
+                        else:
+                            continue
                     
-                    logger.debug(f"Migrating note {nid}: found {len(blocks_in_others)} blocks in secondary fields.")
+                    if blocks_in_others:
+                        logger.debug(f"Migrating note {nid}: found {len(blocks_in_others)} blocks in secondary fields.")
+                    elif len(all_blocks) > 1:
+                        logger.debug(f"Consolidating note {nid}: found {len(all_blocks)} blocks in first field.")
+                    else:
+                        logger.debug(f"Converting note {nid}: converting HTML block to JSON.")
                         
                     # 3. If found, we clear ALL fields and re-inject into the first field
                     parser._remove_all_hints_from_fields(note)
@@ -1140,6 +1160,102 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         import threading
         threading.Thread(target=_task, daemon=True).start()
+
+    def on_convert_html_to_json(self):
+        """Specific maintenance task to convert all visible HTML hint blocks to hidden JSON."""
+        if self._migration_running:
+            return
+
+        query = self._get_maint_search_query()
+        scope_str = "your entire collection" if not query else f"the deck '{self.maint_deck_cb.currentText()}'"
+
+        if not askUser(f"This will scan {scope_str} and find any visible HTML AI hint blocks and convert them into invisible JSON data to clean up your editor.\n\nContinue?"):
+            return
+
+        mw.checkpoint("Convert HTML to JSON")
+
+        from ..card_parser import CardParser
+        # Force JSON mode for this task
+        parser = CardParser(storage_mode="json")
+        
+        self._migration_running = True
+        self._migration_stop_requested = False
+        
+        self.html_to_json_btn.setEnabled(False)
+        self.html_to_json_btn.setText("🔄 Converting...")
+        
+        self.mig_progress_box.setVisible(True)
+        self.mig_progress_bar.setValue(0)
+        self.mig_status_label.setText("Starting conversion...")
+        self.mig_stop_btn.setEnabled(True)
+        
+        logger.info(f"AI-Hints: Starting HTML to JSON conversion for {scope_str}.")
+        
+        def _task():
+            converted = 0
+            nids = mw.col.find_notes(query)
+            total = len(nids)
+            
+            for i, nid in enumerate(nids):
+                if self._migration_stop_requested: break
+                try:
+                    note = mw.col.get_note(nid)
+                    first_field = list(note.keys())[0]
+                    
+                    # Look specifically for HTML blocks
+                    first_field_val = note[first_field]
+                    if "ai-hints-container" not in first_field_val:
+                        # Check other fields too
+                        other_has = False
+                        for f in list(note.keys())[1:]:
+                            if "ai-hints-container" in note[f]:
+                                other_has = True
+                                break
+                        if not other_has: continue
+
+                    # 1. Extract all blocks (parser now supports HTML extraction)
+                    all_blocks = parser._extract_all_hints_from_fields(note)
+                    if not all_blocks: continue
+                    
+                    # 2. Clear and Re-inject as JSON into first field
+                    parser._remove_all_hints_from_fields(note)
+                    all_blocks.sort(key=lambda x: x.get("card_key", "") if x.get("card_key") else "")
+                    
+                    current_val = note[first_field]
+                    for block in all_blocks:
+                        data = block["data"]
+                        card_key = block.get("card_key")
+                        toggles = block.get("toggles", {})
+                        current_val = parser._update_json_block_in_field(current_val, data, card_key, toggles)
+                            
+                    note[first_field] = current_val
+                    mw.col.update_note(note)
+                    converted += 1
+                    
+                    if i % 10 == 0 or i == total - 1:
+                        def _prog(v=i, t=total, c=converted):
+                            pct = int((v + 1) / t * 100) if t > 0 else 0
+                            self.mig_progress_bar.setValue(pct)
+                            self.mig_status_label.setText(f"Converting: {v+1}/{t} (Fixed: {c})")
+                        mw.taskman.run_on_main(_prog)
+                except Exception as e:
+                    logger.error(f"HTML-to-JSON error on note {nid}: {e}")
+                    
+            def _done(c=converted, stopped=self._migration_stop_requested):
+                self._migration_running = False
+                self.html_to_json_btn.setEnabled(True)
+                self.html_to_json_btn.setText("👻 Convert HTML to Hidden JSON")
+                mw.reset()
+                self.mig_progress_bar.setValue(100)
+                self.mig_status_label.setText(f"✅ Fixed {c} notes.")
+                info(f"Conversion Complete!\n\nSuccessfully hid hint blocks in {c} notes.")
+                if not stopped:
+                    QTimer.singleShot(5000, lambda: self.mig_progress_box.setVisible(False))
+            mw.taskman.run_on_main(_done)
+
+        import threading
+        threading.Thread(target=_task, daemon=True).start()
+
 
     def move_provider_row(self, row_widget, delta):
         curr_index = self.models_layout.indexOf(row_widget)

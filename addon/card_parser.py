@@ -579,41 +579,12 @@ class CardParser:
 
     def _extract_all_hints_from_fields(self, note) -> List[Dict[str, Any]]:
         """Scans all fields and returns a list of parsed data objects with metadata."""
-        raw_blocks = self.find_all_hints_blocks(note)
-        extracted = []
-        
-        for block in raw_blocks:
-            # Extract payload
-            match = re.search(r'>(.*?)</div>', block, re.DOTALL)
-            if not match:
-                continue
-            
-            raw_payload = match.group(1)
-            try:
-                parsed = self._parse_json_payload(raw_payload)
-            except Exception:
-                continue
-
-            # Extract toggles and addon ID
-            toggles = {}
-            if 'data-ai-show-hints="true"' in block: toggles["hints"] = True
-            if 'data-ai-show-options="true"' in block: toggles["options"] = True
-            
-            if self._is_keyed_payload(parsed):
-                for card_key, data in parsed.items():
-                    extracted.append({
-                        "data": data,
-                        "card_key": card_key,
-                        "toggles": toggles
-                    })
-            else:
-                # Universal/Legacy block
-                extracted.append({
-                    "data": parsed,
-                    "card_key": None,
-                    "toggles": toggles
-                })
-        return extracted
+        all_data = []
+        for f_name in note.keys():
+            data = self._extract_hints_from_field(note[f_name])
+            if data:
+                all_data.extend(data)
+        return all_data
 
     def _extract_hints_from_field(self, field_val: str, card_key: Optional[str] = None) -> List[Dict[str, Any]]:
         """Extracts AI data from a single field string."""
@@ -632,23 +603,62 @@ class CardParser:
             if not inner_match:
                 continue
             
+            content = inner_match.group(1)
+            parsed = None
             try:
-                parsed = self._parse_json_payload(inner_match.group(1))
+                parsed = self._parse_json_payload(content)
             except Exception:
-                continue
+                # Fallback: Attempt to extract from HTML structure
+                parsed = self._extract_data_from_html_block(block)
                 
+            if not parsed:
+                continue
+
+            # Determine the key for this block if possible
+            # We check the block attributes directly
+            block_ord = self._data_attr(block, "data-ai-hints-card-ord")
+            current_card_key = card_key
+            if not current_card_key and block_ord is not None:
+                current_card_key = f"c{int(block_ord) + 1}"
+
             if self._is_keyed_payload(parsed):
-                if card_key:
-                    if card_key in parsed:
-                        extracted.append({"data": parsed[card_key], "card_key": card_key})
+                if current_card_key:
+                    if current_card_key in parsed:
+                        extracted.append({"data": parsed[current_card_key], "card_key": current_card_key, "toggles": self._extract_toggles_from_block(block)})
                 else:
                     for k, v in parsed.items():
-                        extracted.append({"data": v, "card_key": k})
+                        extracted.append({"data": v, "card_key": k, "toggles": self._extract_toggles_from_block(block)})
             else:
-                if not card_key:
-                    extracted.append({"data": parsed, "card_key": None})
+                extracted.append({"data": parsed, "card_key": current_card_key, "toggles": self._extract_toggles_from_block(block)})
                     
         return extracted
+
+    def _extract_data_from_html_block(self, block_html: str) -> Optional[Dict[str, List[str]]]:
+        """Heuristic extraction of hint/option data from rendered HTML containers."""
+        hints = []
+        options = []
+        
+        # Extract hints
+        hint_list_match = re.search(r'class=["\']ai-hints-hint-list["\'][^>]*>(.*?)</ul>', block_html, re.DOTALL)
+        if hint_list_match:
+            hints = [re.sub(r'<[^>]+>', '', li).strip() for li in re.findall(r'<li>(.*?)</li>', hint_list_match.group(1), re.DOTALL)]
+            
+        # Extract options
+        opt_list_match = re.search(r'class=["\']ai-hints-list["\'][^>]*>(.*?)</ul>', block_html, re.DOTALL)
+        if opt_list_match:
+            options = [re.sub(r'<[^>]+>', '', li).strip() for li in re.findall(r'<li>(.*?)</li>', opt_list_match.group(1), re.DOTALL)]
+            
+        if not hints and not options:
+            return None
+            
+        return {"hints": hints, "options": options}
+
+    def _extract_toggles_from_block(self, block_html: str) -> Dict[str, bool]:
+        """Reads data attributes for visibility toggles."""
+        return {
+            "show_hints_button": self._data_attr(block_html, "data-show-hints") != "false",
+            "show_options_button": self._data_attr(block_html, "data-show-options") != "false"
+        }
 
     def _remove_all_hints_from_fields(self, note) -> bool:
         """Forcefully removes all AI hints blocks from all fields of the note."""

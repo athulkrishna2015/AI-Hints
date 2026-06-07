@@ -111,6 +111,11 @@ class AdvancedTabMixin:
         self.migrate_btn.clicked.connect(self.on_migrate_data)
         maint_layout.addWidget(self.migrate_btn)
 
+        self.html_to_json_btn = QPushButton("👻 Convert HTML to Hidden JSON")
+        self.html_to_json_btn.setToolTip("Finds visible HTML hint blocks and converts them into optimized, invisible JSON data to clean up your editor.")
+        self.html_to_json_btn.clicked.connect(self.on_convert_html_to_json)
+        maint_layout.addWidget(self.html_to_json_btn)
+
         self.unicode_btn = QPushButton("🔣 Convert Unicode Escapes")
         self.unicode_btn.setToolTip("Finds JSON blocks with escaped characters (e.g. \\u00e9) and converts them to readable text.")
         self.unicode_btn.clicked.connect(self.on_convert_unicode_escapes)
