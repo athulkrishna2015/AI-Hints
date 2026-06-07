@@ -435,15 +435,24 @@ class CardParser:
                 new_block = self.build_hints_block({card_key: new_data} if card_key else new_data, toggles, card)
                 return current_val[:match.start()] + new_block + current_val[match.end():]
 
-        # Priority 2: Update ANY universal keyed block found in the note
+        # Priority 2: Update ANY universal or legacy block found in the note
         if card_key:
             for match in matches:
                 block_html = match.group(0)
+                
+                # If it's a JSON block, parse and merge
                 if self.json_class in block_html:
                     try:
                         raw_payload = match.group(1)
                         parsed = self._parse_json_payload(raw_payload)
-                        if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
+                        if isinstance(parsed, dict):
+                            # Ensure it's keyed format
+                            if not self._is_keyed_payload(parsed):
+                                if "hints" in parsed or "options" in parsed:
+                                    parsed = {"c1": parsed}
+                                else:
+                                    parsed = {}
+                            
                             # Purge any obsolete/polluted cloze keys
                             active_clozes = self._get_active_clozes_map(note, current_val)
                             if active_clozes:
@@ -460,8 +469,7 @@ class CardParser:
                                                     if cleaned_stored not in active_clozes[k]:
                                                         del parsed[k]
 
-                            # It's a keyed block but didn't match card_id/ord (maybe card was generated without scope)
-                            # We update it anyway to keep all hints in one block.
+                            # Merge data
                             parsed[card_key] = new_data
                             new_payload = self.serialize_json_payload(parsed)
                             new_attrs = self._build_attrs(toggles, None) # keep universal
@@ -469,6 +477,22 @@ class CardParser:
                             return current_val[:match.start()] + new_block + current_val[match.end():]
                     except:
                         pass
+                
+                # If it's an HTML block, extract its data, convert to JSON, and merge!
+                elif self.container_class in block_html:
+                    legacy_data = self._extract_data_from_html_block(block_html)
+                    if legacy_data:
+                        # Determine its original key
+                        block_ord = self._data_attr(block_html, "data-ai-hints-card-ord")
+                        legacy_key = f"c{int(block_ord) + 1}" if block_ord else "c1"
+                        
+                        parsed = {legacy_key: legacy_data}
+                        parsed[card_key] = new_data
+                        
+                        new_payload = self.serialize_json_payload(parsed)
+                        new_attrs = self._build_attrs(toggles, None) # universal
+                        new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
+                        return current_val[:match.start()] + new_block + current_val[match.end():]
 
         # 3. No match found: Append new block
         payload = {card_key: new_data} if card_key else new_data
