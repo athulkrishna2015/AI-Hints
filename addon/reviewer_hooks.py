@@ -1662,12 +1662,19 @@ def init_hooks():
         
         # 1. Check if we have pre-generated data for THIS card
         if card.id in _pregenerated_data:
-            data = _pregenerated_data.pop(card.id)
-            logger.debug(f"AI-Hints: Applying pre-generated data for card {card.id}")
-            _apply_results_to_card(card, data, is_manual=False)
-            # Now that this card is done, pre-generate the NEXT one
-            _trigger_next_pregeneration()
-            return
+            # Skip applying pre-generated data if we just undid something.
+            # This handles cases where Anki's state is still resolving.
+            if time.time() - _last_undo_time < 0.5:
+                logger.info(f"AI-Hints: Skipping pre-gen application for {card.id} due to recent undo.")
+                # We still pop it so it doesn't get applied on the next show either
+                _pregenerated_data.pop(card.id, None)
+            else:
+                data = _pregenerated_data.pop(card.id)
+                logger.debug(f"AI-Hints: Applying pre-generated data for card {card.id}")
+                _apply_results_to_card(card, data, is_manual=False)
+                # Now that this card is done, pre-generate the NEXT one
+                _trigger_next_pregeneration()
+                return
 
         if config.get("auto_generate_new", False) and card:
             # Skip auto-generation if we just undid something
@@ -1746,8 +1753,18 @@ def init_hooks():
         
         if mw.reviewer and mw.reviewer.card:
             card = mw.reviewer.card
+            logger.info(f"AI-Hints: Handling Undo for card {card.id}. Clearing caches.")
+            
+            # Clear everything that could hold 'future' data for this card
             _forget_generated_hints(card)
+            _pregenerated_data.pop(card.id, None)
+            _just_generated_card_ids.discard(card.id)
+            _just_cleared_card_ids.discard(card.id)
+            
+            # Explicitly force UI refresh for this card to clear any 'Generating' state 
+            # or stale hints from the view that was just undone.
             _trigger_frontend_setup(card)
+            
             # Anki already refreshes the card face on undo; 
             # calling refresh_current_card here can cause 'UndoEmpty' warnings 
             # and redundant auto-generation loops.
