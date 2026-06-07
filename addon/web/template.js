@@ -420,29 +420,43 @@
 
         const stateKey = 'state_' + cardId + '_' + ord;
         const persistence = getPersistence();
+        const savedState = persistence.get(stateKey);
+        const isFirstLoad = !savedState;
         const doNotCollapse = !!uiCfg.do_not_auto_collapse || (mobileCfg && !!mobileCfg.doNotAutoCollapse);
 
-        let state;
-        if (doNotCollapse) {
-            const globalState = persistence.get('global_state') || { hints: !!uiCfg.auto_show_hints, options: !!uiCfg.auto_show_options };
-            state = persistence.get(stateKey) || { hints: globalState.hints, options: globalState.options, seed: Math.floor(Math.random() * 1000000), cleared: false, showJson: false };
-            state.hints = globalState.hints;
-            state.options = globalState.options;
-            if (!onAnswer) {
-                state.seed = Math.floor(Math.random() * 1000000);
-                persistence.save(stateKey, state);
-            }
-        } else {
-            state = persistence.get(stateKey) || { hints: false, options: false, seed: Math.floor(Math.random() * 1000000), cleared: false, showJson: false };
-            if (!onAnswer) {
+        let state = savedState || { 
+            hints: false, 
+            options: false, 
+            seed: Math.floor(Math.random() * 1000000), 
+            cleared: false, 
+            showJson: false 
+        };
+
+        // Handle auto-show defaults for first load
+        if (isFirstLoad) {
+            if (doNotCollapse) {
+                const globalState = persistence.get('global_state') || { 
+                    hints: !!uiCfg.auto_show_hints, 
+                    options: !!uiCfg.auto_show_options 
+                };
+                state.hints = globalState.hints;
+                state.options = globalState.options;
+            } else {
                 state.hints = !!uiCfg.auto_show_hints;
                 state.options = !!uiCfg.auto_show_options;
-                state.seed = Math.floor(Math.random() * 1000000);
-                persistence.save(stateKey, state);
             }
         }
 
-        const isFirstLoad = !persistence.get(stateKey);
+        if (!onAnswer) {
+            // ONLY generate a new seed if this is the very first time we see this card face
+            // OR if the user explicitly clicked "Regenerate" (isManualAction === true).
+            // This prevents options from jumping if init() is called multiple times 
+            // (e.g. initial load + background push from Python).
+            if (isFirstLoad || isManualAction === true) {
+                state.seed = Math.floor(Math.random() * 1000000);
+            }
+            persistence.save(stateKey, state);
+        }
 
         if (state.cleared && !isAddonActive) {
             // If cleared in this session, ensure static boxes remain hidden and return
