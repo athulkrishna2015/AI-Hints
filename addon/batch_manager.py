@@ -137,6 +137,22 @@ class BatchManager:
                       # Explicitly provide HTML clickable navigation link
                       html_parts.append(f"🔎 Currently Processing: <a href='browse:cid:{self.current_local_cid}' style='color: #007bff;'>[View Card {self.current_local_cid}]</a><br/>")
             
+            if self.local_queue:
+                 html_parts.append("<div style='margin-top:6px; font-size:11px;'>")
+                 html_parts.append("<b>Pending in Queue (Next 5):</b><br/>")
+                 # Use a copy to avoid thread safety issues while iterating
+                 with self._db_lock:
+                     queue_snapshot = list(self.local_queue[:5])
+                     total_remaining = len(self.local_queue)
+                 
+                 for cid in queue_snapshot:
+                      html_parts.append(f"• <a href='browse:cid:{cid}' style='color: #007bff;'>[Card {cid}]</a>")
+                      html_parts.append(f" <a href='discard:cid:{cid}' style='color: #dc3545; text-decoration: none;'>[✖ Discard]</a><br/>")
+                 
+                 if total_remaining > 5:
+                      html_parts.append(f"<i>... and {total_remaining - 5} more.</i>")
+                 html_parts.append("</div>")
+
             html_parts.append("<hr style='border:0; border-top:1px solid #ccc; margin:8px 0;'/>")
 
         elif self.local_queue:
@@ -145,6 +161,21 @@ class BatchManager:
             done = self.local_queue_total - remaining
             html_parts.append(f"💾 <b style='color:#fd7e14;'>Saved Dormant Queue</b> ({remaining} cards pending)<br/>")
             html_parts.append(f"Completed so far: {done} / {self.local_queue_total} total.<br/>")
+            
+            if self.local_queue:
+                 html_parts.append("<div style='margin-top:6px; font-size:11px;'>")
+                 html_parts.append("<b>Pending in Queue (Next 5):</b><br/>")
+                 with self._db_lock:
+                     queue_snapshot = list(self.local_queue[:5])
+                 
+                 for cid in queue_snapshot:
+                      html_parts.append(f"• <a href='browse:cid:{cid}' style='color: #007bff;'>[Card {cid}]</a>")
+                      html_parts.append(f" <a href='discard:cid:{cid}' style='color: #dc3545; text-decoration: none;'>[✖ Discard]</a><br/>")
+                 
+                 if remaining > 5:
+                      html_parts.append(f"<i>... and {remaining - 5} more.</i>")
+                 html_parts.append("</div>")
+
             html_parts.append("<i>Click 'Resume Saved Queue' below to restart.</i><br/><br/>")
             
         elif self.last_run_stats:
@@ -440,6 +471,15 @@ class BatchManager:
         self.local_queue_paused = pause_state
         self.save_state()
         logger.info(f"Local Queue Pause set to: {pause_state}")
+
+    def discard_from_queue(self, cid: int):
+        """Removes a specific card ID from the queue."""
+        with self._db_lock:
+            if cid in self.local_queue:
+                self.local_queue.remove(cid)
+                self.save_state()
+                return True
+        return False
 
     def _run_local_queue(self, config: Dict, provider_override: str):
         """Core iterative engine thread that drives the sequential queue."""

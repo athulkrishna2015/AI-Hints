@@ -421,6 +421,15 @@
         const stateKey = 'state_' + cardId + '_' + ord;
         const persistence = getPersistence();
         const savedState = persistence.get(stateKey);
+        
+        // Track if this is a 'Fresh' card show by checking if the ID/Ord changed 
+        // since the last time init() was called in this WebView session.
+        // This is transient and NOT in persistence, so it resets when card changes.
+        const isFreshCardShow = (window.aiHintsLastInitCardId !== String(cardId) || 
+                                 window.aiHintsLastInitOrd !== String(ord));
+        window.aiHintsLastInitCardId = String(cardId);
+        window.aiHintsLastInitOrd = String(ord);
+
         const isFirstLoad = !savedState;
         const doNotCollapse = !!uiCfg.do_not_auto_collapse || (mobileCfg && !!mobileCfg.doNotAutoCollapse);
 
@@ -448,11 +457,13 @@
         }
 
         if (!onAnswer) {
-            // ONLY generate a new seed if this is the very first time we see this card face
-            // OR if the user explicitly clicked "Regenerate" (isManualAction === true).
-            // This prevents options from jumping if init() is called multiple times 
-            // (e.g. initial load + background push from Python).
-            if (isFirstLoad || isManualAction === true) {
+            // Generate a NEW seed if:
+            // 1. We just arrived at this card from a different one (isFreshCardShow).
+            // 2. This is the very first time we see this card in persistence (isFirstLoad).
+            // 3. The user explicitly clicked "Regenerate" (isManualAction).
+            // This ensures re-shows in the same session get fresh randomization, 
+            // while preventing 'jumping' during background pushes on the same card view.
+            if (isFreshCardShow || isFirstLoad || isManualAction === true) {
                 state.seed = Math.floor(Math.random() * 1000000);
             }
             persistence.save(stateKey, state);

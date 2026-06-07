@@ -161,7 +161,7 @@ class BatchTabMixin:
         except Exception: pass
         self.batch_run_btn.clicked.connect(self.on_batch_control_clicked)
         
-        self.stop_local_btn = QPushButton("🛑 Stop Queue")
+        self.stop_local_btn = QPushButton("🛑 Stop & Discard Queue")
         self.stop_local_btn.setAutoDefault(False)
         self.stop_local_btn.setMinimumHeight(30)
         self.stop_local_btn.setStyleSheet("color: #dc3545; font-weight: bold;")
@@ -321,6 +321,16 @@ class BatchTabMixin:
              browser.setFocus()
              browser.activateWindow()
              browser.raise_()
+        
+        elif url.startswith("discard:"):
+             try:
+                  cid = int(url.split(":")[2])
+                  from ..batch_manager import batch_manager
+                  if batch_manager.discard_from_queue(cid):
+                       tooltip(f"🗑️ Card {cid} discarded from queue.")
+                       self.update_batch_status_tab()
+             except Exception as e:
+                  logger.error(f"Failed to discard card from batch UI: {e}")
 
     def on_batch_control_clicked(self):
         from ..batch_manager import batch_manager

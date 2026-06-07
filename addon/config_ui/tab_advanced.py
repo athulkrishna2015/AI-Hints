@@ -7,6 +7,12 @@ class AdvancedTabMixin:
         self.advanced_tab = QWidget()
         adv_layout = QVBoxLayout()
         
+        # 0. System Prompt (at top)
+        adv_layout.addWidget(QLabel("System Prompt:"))
+        self.system_prompt_edit = QTextEdit()
+        self.system_prompt_edit.setToolTip("Customize the core AI persona instructions defining generation constraints, math syntaxes, and output layout.")
+        adv_layout.addWidget(self.system_prompt_edit)
+
         # 1. AI Content Storage Options
         storage_group = QGroupBox("AI Data Storage")
         storage_layout = QFormLayout()
@@ -55,8 +61,24 @@ class AdvancedTabMixin:
         
         blacklist_group.setLayout(blacklist_layout)
         adv_layout.addWidget(blacklist_group)
+
+        # 3. Visual Styling Group
+        style_group = QGroupBox("Visual Styling")
+        style_layout = QFormLayout()
         
-        # 3. Unicode and Maintenance Tools
+        self.font_size_combo = QComboBox()
+        self.font_size_combo.setEditable(True)
+        self.font_size_combo.addItems([
+            "inherit",
+            "0.75em", "0.8em", "0.85em", "0.9em", "0.95em", "1.0em", "1.1em", "1.2em",
+            "12px", "13px", "14px", "15px", "16px", "18px"
+        ])
+        self.font_size_combo.setToolTip("Set the font size for AI hints and options.")
+        style_layout.addRow("Hints Font Size:", self.font_size_combo)
+        style_group.setLayout(style_layout)
+        adv_layout.addWidget(style_group)
+        
+        # 4. Unicode and Maintenance Tools
         maint_group = QGroupBox("Maintenance Tools")
         maint_layout = QVBoxLayout()
         
@@ -83,21 +105,20 @@ class AdvancedTabMixin:
         maint_group.setLayout(maint_layout)
         adv_layout.addWidget(maint_group)
 
-        # Migration progress (hidden by default)
-        self.mig_progress_box = QGroupBox("Migration Progress")
-        self.mig_progress_box.setVisible(False)
-        mig_p_layout = QVBoxLayout()
-        self.mig_progress_bar = QProgressBar()
-        mig_p_layout.addWidget(self.mig_progress_bar)
-        self.mig_status_label = QLabel("Scanning collection...")
-        mig_p_layout.addWidget(self.mig_status_label)
+        # 5. Raw Editor Toggle
+        self.raw_toggle = QPushButton("Show Raw JSON Editor")
+        self.raw_toggle.setCheckable(True)
+        self.raw_toggle.setToolTip("Directly inspect and write the raw serialization JSON for fine-grained control.")
         
-        self.mig_stop_btn = QPushButton("Stop Migration")
-        self.mig_stop_btn.clicked.connect(self.on_stop_migration)
-        mig_p_layout.addWidget(self.mig_stop_btn)
+        raw_btn_layout = QHBoxLayout()
+        raw_btn_layout.addStretch()
+        raw_btn_layout.addWidget(self.raw_toggle)
+        adv_layout.addLayout(raw_btn_layout)
         
-        self.mig_progress_box.setLayout(mig_p_layout)
-        adv_layout.addWidget(self.mig_progress_box)
+        self.raw_editor = QTextEdit()
+        self.raw_editor.setVisible(False)
+        self.raw_toggle.toggled.connect(self.raw_editor.setVisible)
+        adv_layout.addWidget(self.raw_editor)
 
         adv_layout.addStretch()
         
