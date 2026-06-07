@@ -6,167 +6,109 @@ class AdvancedTabMixin:
         """Constructs the Tab 3: Advanced UI"""
         self.advanced_tab = QWidget()
         adv_layout = QVBoxLayout()
-
-        # System Prompt (at top)
-        adv_layout.addWidget(QLabel("System Prompt:"))
-        self.system_prompt_edit = QTextEdit()
-        self.system_prompt_edit.setToolTip("Customize the core AI persona instructions defining generation constraints, math syntaxes, and output layout.")
-        adv_layout.addWidget(self.system_prompt_edit)
-
-        # Migration Section
-        mig_group = QGroupBox("Migration Tools")
-        mig_layout = QVBoxLayout()
-        mig_layout.addWidget(QLabel("AI-Hints now saves data exclusively to the <b>first field</b> of every card to ensure visibility on the front side."))
         
-        self.migrate_btn = QPushButton("🚀 Move all AI data to the first field")
-        self.migrate_btn.setToolTip("Searches all fields in your entire collection and moves any AI-Hints data blocks to the first field of the note.")
-        self.migrate_btn.setStyleSheet("padding: 4px 10px;")
-        self.migrate_btn.clicked.connect(self.on_migrate_data)
+        # 1. AI Content Storage Options
+        storage_group = QGroupBox("AI Data Storage")
+        storage_layout = QFormLayout()
         
-        mig_btn_layout = QHBoxLayout()
-        mig_btn_layout.addStretch()
-        mig_btn_layout.addWidget(self.migrate_btn)
-        mig_layout.addLayout(mig_btn_layout)
+        self.storage_mode_cb = QComboBox()
+        self.storage_mode_cb.addItems(["JSON (Recommended)", "HTML (Legacy)"])
+        self.storage_mode_cb.setToolTip("How AI hints are stored in your cards. JSON is more robust.")
+        storage_layout.addRow("Storage Format:", self.storage_mode_cb)
         
-        mig_group.setLayout(mig_layout)
-        adv_layout.addWidget(mig_group)
+        storage_group.setLayout(storage_layout)
+        adv_layout.addWidget(storage_group)
 
-        # Maintenance Section
+        # 2. Model failure/blacklist management
+        blacklist_group = QGroupBox("Model Cooldowns & Blacklist")
+        blacklist_layout = QVBoxLayout()
+        
+        bl_info = QLabel("Models that fail repeatedly are temporarily blacklisted to prevent lag.")
+        bl_info.setWordWrap(True)
+        bl_info.setStyleSheet("color: #666; font-size: 11px;")
+        blacklist_layout.addWidget(bl_info)
+        
+        self.blacklist_list = QListWidget()
+        self.blacklist_list.setMinimumHeight(150)
+        blacklist_layout.addWidget(self.blacklist_list)
+        
+        bl_btns = QHBoxLayout()
+        self.clear_sel_bl_btn = QPushButton("Remove Selected")
+        self.clear_sel_bl_btn.clicked.connect(self.on_remove_selected_blacklist)
+        
+        self.clear_all_bl_btn = QPushButton("Clear All Cooldowns")
+        self.clear_all_bl_btn.clicked.connect(self.on_clear_all_blacklist)
+        
+        bl_btns.addWidget(self.clear_sel_bl_btn)
+        bl_btns.addWidget(self.clear_all_bl_btn)
+        blacklist_layout.addLayout(bl_btns)
+        
+        # Cooldown setting
+        cooldown_row = QHBoxLayout()
+        cooldown_row.addWidget(QLabel("Default Failure Lockout (mins):"))
+        self.cooldown_spin = QSpinBox()
+        self.cooldown_spin.setRange(1, 1440)
+        self.cooldown_spin.setValue(60)
+        cooldown_row.addWidget(self.cooldown_spin)
+        cooldown_row.addStretch()
+        blacklist_layout.addLayout(cooldown_row)
+        
+        blacklist_group.setLayout(blacklist_layout)
+        adv_layout.addWidget(blacklist_group)
+        
+        # 3. Unicode and Maintenance Tools
         maint_group = QGroupBox("Maintenance Tools")
         maint_layout = QVBoxLayout()
-        maint_layout.addWidget(QLabel("Scan for and clean up orphaned/empty hints that no longer correspond to any cards (e.g. if you removed a cloze deletion)."))
         
-        self.clean_orphans_btn = QPushButton("🧹 Scan & Clean Orphaned Hints")
-        self.clean_orphans_btn.setToolTip("Scans all cards to detect AI hints that do not correspond to any active cards and list them to remove that data.")
-        self.clean_orphans_btn.setStyleSheet("padding: 4px 10px;")
-        self.clean_orphans_btn.clicked.connect(self.on_scan_orphans)
-        
-        clean_btn_layout = QHBoxLayout()
-        clean_btn_layout.addStretch()
-        clean_btn_layout.addWidget(self.clean_orphans_btn)
-        maint_layout.addLayout(clean_btn_layout)
+        self.migrate_btn = QPushButton("📦 Migrate AI Data to First Fields")
+        self.migrate_btn.setToolTip("Moves AI hints from various fields into the first field (JSON format) for all notes.")
+        self.migrate_btn.clicked.connect(self.on_migrate_data)
+        maint_layout.addWidget(self.migrate_btn)
 
-        maint_layout.addWidget(QLabel("Convert all legacy unicode escape codes (like \\u0d38) into readable characters and pretty-print existing card JSON blocks."))
-        
-        self.format_unicode_btn = QPushButton("📝 Convert Unicode Escapes to Normal Text")
-        self.format_unicode_btn.setToolTip("Scan your entire collection and convert legacy JSON blocks with hex escapes (e.g. \\uXXXX) into clean, pretty-printed readable text.")
-        self.format_unicode_btn.setStyleSheet("padding: 4px 10px;")
-        self.format_unicode_btn.clicked.connect(self.on_convert_unicode_escapes)
-        
-        unicode_btn_layout = QHBoxLayout()
-        unicode_btn_layout.addStretch()
-        unicode_btn_layout.addWidget(self.format_unicode_btn)
-        maint_layout.addLayout(unicode_btn_layout)
+        self.unicode_btn = QPushButton("🔣 Convert Unicode Escapes")
+        self.unicode_btn.setToolTip("Finds JSON blocks with escaped characters (e.g. \\u00e9) and converts them to readable text.")
+        self.unicode_btn.clicked.connect(self.on_convert_unicode_escapes)
+        maint_layout.addWidget(self.unicode_btn)
 
-        maint_layout.addWidget(QLabel("Remove legacy, raw/naked JSON text blocks left behind by older versions or failed edits, while preserving your fresh, wrapped AI data."))
+        self.orphan_btn = QPushButton("🧹 Clean Orphaned Hints")
+        self.orphan_btn.setToolTip("Finds and removes AI hint data for clozes that no longer exist on the note.")
+        self.orphan_btn.clicked.connect(self.on_scan_orphans)
+        maint_layout.addWidget(self.orphan_btn)
         
-        self.clean_naked_json_btn = QPushButton("🧹 Purge Stale Naked JSON Blocks")
-        self.clean_naked_json_btn.setToolTip("Scan your entire collection and safely remove only the un-wrapped, raw JSON text blocks.")
-        self.clean_naked_json_btn.setStyleSheet("padding: 4px 10px;")
-        self.clean_naked_json_btn.clicked.connect(self.on_clean_naked_json)
-        
-        naked_btn_layout = QHBoxLayout()
-        naked_btn_layout.addStretch()
-        naked_btn_layout.addWidget(self.clean_naked_json_btn)
-        maint_layout.addLayout(naked_btn_layout)
+        self.purge_json_btn = QPushButton("🗑️ Purge Naked JSON Blocks")
+        self.purge_json_btn.setToolTip("Removes raw AI JSON that was accidentally pasted into fields without the div wrapper.")
+        self.purge_json_btn.clicked.connect(self.on_clean_naked_json)
+        maint_layout.addWidget(self.purge_json_btn)
         
         maint_group.setLayout(maint_layout)
         adv_layout.addWidget(maint_group)
 
-        # Visual Styling Group
-        style_group = QGroupBox("Visual Styling")
-        style_layout = QFormLayout()
+        # Migration progress (hidden by default)
+        self.mig_progress_box = QGroupBox("Migration Progress")
+        self.mig_progress_box.setVisible(False)
+        mig_p_layout = QVBoxLayout()
+        self.mig_progress_bar = QProgressBar()
+        mig_p_layout.addWidget(self.mig_progress_bar)
+        self.mig_status_label = QLabel("Scanning collection...")
+        mig_p_layout.addWidget(self.mig_status_label)
         
-        self.font_size_combo = QComboBox()
-        self.font_size_combo.setEditable(True)
-        self.font_size_combo.addItems([
-            "inherit",
-            "0.75em",
-            "0.8em",
-            "0.85em",
-            "0.9em",
-            "0.95em",
-            "1.0em",
-            "1.1em",
-            "1.2em",
-            "12px",
-            "13px",
-            "14px",
-            "15px",
-            "16px",
-            "18px"
-        ])
-        self.font_size_combo.setToolTip(
-            "Configure the text size for AI hints and multiple-choice options.<br/>"
-            "By default, select <b>inherit</b> to match the exact font size of your card fields.<br/>"
-            "Or enter/select a custom value (e.g. 14px, 0.9em, 1.1em)."
-        )
-        style_layout.addRow("AI Hints & Options Font Size:", self.font_size_combo)
-        style_group.setLayout(style_layout)
-        adv_layout.addWidget(style_group)
+        self.mig_stop_btn = QPushButton("Stop Migration")
+        self.mig_stop_btn.clicked.connect(self.on_stop_migration)
+        mig_p_layout.addWidget(self.mig_stop_btn)
+        
+        self.mig_progress_box.setLayout(mig_p_layout)
+        adv_layout.addWidget(self.mig_progress_box)
 
-        # Model Blacklist Management Group
-        blacklist_group = QGroupBox("Model Cooldowns & Blacklist")
-        blacklist_layout = QVBoxLayout()
-        blacklist_layout.addWidget(QLabel("When an AI model fails or hits a rate limit, it is temporarily blacklisted to avoid repeated failures. You can view and clear them here."))
-        
-        # Cooldown duration setting
-        cooldown_setting_layout = QHBoxLayout()
-        cooldown_setting_layout.addWidget(QLabel("Default Failure Cooldown (Minutes):"))
-        self.cooldown_spin = QSpinBox()
-        self.cooldown_spin.setRange(1, 1440)  # 1 minute to 24 hours
-        self.cooldown_spin.setToolTip("Set the standard duration a model is disabled for after experiencing a failure or rate limit.")
-        cooldown_setting_layout.addWidget(self.cooldown_spin)
-        cooldown_setting_layout.addStretch()
-        blacklist_layout.addLayout(cooldown_setting_layout)
-
-        self.blacklist_list = QListWidget()
-        self.blacklist_list.setMinimumHeight(120)
-        blacklist_layout.addWidget(self.blacklist_list)
-        
-        bl_btn_layout = QHBoxLayout()
-        self.remove_bl_btn = QPushButton("Remove Selected")
-        self.remove_bl_btn.setToolTip("Immediately clears the cooldown for the selected model so it can be attempted again.")
-        self.remove_bl_btn.clicked.connect(self.on_remove_selected_blacklist)
-        
-        self.clear_bl_btn = QPushButton("Clear All Cooldowns")
-        self.clear_bl_btn.setToolTip("Clears cooldowns/blacklist for all models.")
-        self.clear_bl_btn.clicked.connect(self.on_clear_all_blacklist)
-        
-        bl_btn_layout.addWidget(self.remove_bl_btn)
-        bl_btn_layout.addWidget(self.clear_bl_btn)
-        bl_btn_layout.addStretch()
-        blacklist_layout.addLayout(bl_btn_layout)
-        
-        blacklist_group.setLayout(blacklist_layout)
-        adv_layout.addWidget(blacklist_group)
-
-        # Raw Editor Toggle
-        self.raw_toggle = QPushButton("Show Raw JSON Editor")
-        self.raw_toggle.setCheckable(True)
-        self.raw_toggle.setToolTip("Directly inspect and write the raw serialization JSON for fine-grained control.")
-        self.raw_toggle.setStyleSheet("padding: 4px 10px;")
-        
-        raw_btn_layout = QHBoxLayout()
-        raw_btn_layout.addStretch()
-        raw_btn_layout.addWidget(self.raw_toggle)
-        adv_layout.addLayout(raw_btn_layout)
-        
-        self.raw_editor = QTextEdit()
-        self.raw_editor.setVisible(False)
-        self.raw_toggle.toggled.connect(self.raw_editor.setVisible)
-        adv_layout.addWidget(self.raw_editor)
-        
         adv_layout.addStretch()
         
+        # Wrap in scroll area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll_content = QWidget()
-        scroll_content.setLayout(adv_layout)
-        scroll.setWidget(scroll_content)
+        content = QWidget()
+        content.setLayout(adv_layout)
+        scroll.setWidget(content)
         
         main_layout = QVBoxLayout(self.advanced_tab)
-        main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
         
         return self.advanced_tab
@@ -176,7 +118,7 @@ class AdvancedTabMixin:
             return
         self.blacklist_list.clear()
         import time
-        from ..ai_client import FAILED_MODELS_CACHE
+        from ..ai_client import FAILED_MODELS_CACHE, RATE_LIMIT_STREAK
         now = time.time()
         
         expired_keys = []
@@ -204,15 +146,25 @@ class AdvancedTabMixin:
             for k in expired_keys:
                 if k in FAILED_MODELS_CACHE:
                     del FAILED_MODELS_CACHE[k]
+                if k in RATE_LIMIT_STREAK:
+                    del RATE_LIMIT_STREAK[k]
             self._save_blacklist_locally()
 
     def _save_blacklist_locally(self):
         try:
-            from ..ai_client import BLACKLIST_FILE, FAILED_MODELS_CACHE
+            from ..ai_client import BLACKLIST_FILE, FAILED_MODELS_CACHE, RATE_LIMIT_STREAK
             import json
-            serializable = {f"{p}|{m}": e for (p, m), e in FAILED_MODELS_CACHE.items()}
+            expiries = {f"{p}|{m}": e for (p, m), e in FAILED_MODELS_CACHE.items()}
+            streaks = {f"{p}|{m}": s for (p, m), s in RATE_LIMIT_STREAK.items()}
+            
+            data = {
+                "expiries": expiries,
+                "streaks": streaks,
+                "version": 2
+            }
+            
             with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
-                json.dump(serializable, f)
+                json.dump(data, f)
         except Exception:
             pass
 
@@ -224,19 +176,24 @@ class AdvancedTabMixin:
         data = curr_item.data(Qt.ItemDataRole.UserRole)
         if data:
             provider, model = data
-            from ..ai_client import FAILED_MODELS_CACHE
+            from ..ai_client import FAILED_MODELS_CACHE, RATE_LIMIT_STREAK
             from ..logger import tooltip
-            if (provider, model) in FAILED_MODELS_CACHE:
-                del FAILED_MODELS_CACHE[(provider, model)]
-                self._save_blacklist_locally()
-                tooltip(f"Cleared cooldown for {provider.capitalize()} - {model}")
-                self.refresh_blacklist_list()
+            key = (provider, model)
+            if key in FAILED_MODELS_CACHE:
+                del FAILED_MODELS_CACHE[key]
+            if key in RATE_LIMIT_STREAK:
+                del RATE_LIMIT_STREAK[key]
+            
+            self._save_blacklist_locally()
+            tooltip(f"Cleared cooldown and streak for {provider.capitalize()} - {model}")
+            self.refresh_blacklist_list()
                 
     def on_clear_all_blacklist(self):
-        from ..ai_client import FAILED_MODELS_CACHE
+        from ..ai_client import FAILED_MODELS_CACHE, RATE_LIMIT_STREAK
         from ..logger import tooltip
-        if FAILED_MODELS_CACHE:
+        if FAILED_MODELS_CACHE or RATE_LIMIT_STREAK:
             FAILED_MODELS_CACHE.clear()
+            RATE_LIMIT_STREAK.clear()
             self._save_blacklist_locally()
-            tooltip("Cleared all model cooldowns/blacklist")
+            tooltip("Cleared all model cooldowns and streaks")
             self.refresh_blacklist_list()

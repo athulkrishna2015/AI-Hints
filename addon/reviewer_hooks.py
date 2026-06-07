@@ -43,6 +43,15 @@ def _apply_results_to_card(card, data, is_manual=True, web=None):
     if not card or not data:
         return False
 
+    # Force reload fresh objects from the collection on the main thread 
+    # to ensure we are not working with stale/pre-Undo data.
+    try:
+        fresh_card = mw.col.get_card(card.id)
+        note = fresh_card.note()
+    except Exception as e:
+        logger.error(f"AI-Hints: Could not reload card {card.id} for saving: {e}")
+        return False
+
     if web is None:
         web = getattr(mw.reviewer, "web", None)
 
@@ -59,26 +68,24 @@ def _apply_results_to_card(card, data, is_manual=True, web=None):
         data["_version"] = _ADDON_VERSION
         
     logger.debug(
-        "AI-Hints applying data to card %s (model: %s)",
-        card.id,
-        data.get("_model", "unknown"),
+        f"AI-Hints: Applying data to card {fresh_card.id} (Note {note.id}, Ord {fresh_card.ord}, Model {data.get('_model', 'unknown')})"
     )
         
-    note = card.note()
     toggles = {
         "show_hints_button": config.get("show_hints_button", True),
         "show_options_button": config.get("show_options_button", True)
     }
     
-    if parser.update_note_with_hints(note, data, toggles, card):
+    if parser.update_note_with_hints(note, data, toggles, fresh_card):
+        logger.info(f"AI-Hints: Updating database for card {fresh_card.id} (Note {note.id}, Ord {fresh_card.ord}) with new hints.")
         mw.col.update_note(note)
-        _remember_generated_hints(card, data, toggles)
-        _just_generated_card_ids.add(card.id)
+        _remember_generated_hints(fresh_card, data, toggles)
+        _just_generated_card_ids.add(fresh_card.id)
         
         # Update UI if we are still on the card in this webview
         if web:
             try:
-                refresh_current_card(card=card, web=web)
+                refresh_current_card(card=fresh_card, web=web)
             except Exception as e:
                 logger.error(f"AI-Hints card refresh failed: {e}")
         
@@ -92,13 +99,15 @@ def _apply_results_to_card(card, data, is_manual=True, web=None):
         return True
     return False
 
-def _trigger_next_pregeneration():
+def _trigger_next_pregeneration(current_card_id=None):
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     if not config.get("auto_generate_new", False) or not config.get("pre_generate_next", True):
         return
 
-    # Don't pre-generate if the current card itself is actively generating
-    current_card_id = mw.reviewer.card.id if (mw.reviewer and mw.reviewer.card) else None
+    # Use provided ID or fallback to reviewer
+    if current_card_id is None:
+        current_card_id = mw.reviewer.card.id if (mw.reviewer and mw.reviewer.card) else None
+        
     if current_card_id and current_card_id in _generating_card_ids:
         logger.debug("AI-Hints pre-gen: Skipping because the current card is actively generating.")
         return
@@ -1262,6 +1271,10 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
     if not front and not back:
         _generating_card_ids.discard(card_id)
         logger.info("AI-Hints: Skipping generation for card %s as no content was found (likely a missing cloze).", card_id)
+        
+        # If this was a pre-generation, trigger the next one so the chain doesn't break
+        if is_pregen:
+            _trigger_next_pregeneration(card_id)
         return
 
     logger.info(f"AI-Hints generating for card {card_id} (ord={card.ord}, manual={is_manual}, pregen={is_pregen}) using {provider}")
@@ -1275,6 +1288,10 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         _set_frontend_generating(web, True, card_id, is_pregen)
 
     def on_done(data):
+        # ALWAYS discard from generating set immediately so other code (and UI refreshes)
+        # know this specific task is finished.
+        _generating_card_ids.discard(card_id)
+
         try:
             if not mw.col:
                 return
@@ -1285,18 +1302,21 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                 _set_frontend_generating(web, False, card_id, is_pregen)
                 return
 
+            # --- Undo Protection Shield (1.0s) ---
+            # If an Undo recently happened, discard ANY generation that finishes 
+            # to prevent 'future' data from overwriting the 'reverted' state.
+            if time.time() - _last_undo_time < 1.0:
+                logger.info(f"AI-Hints: Discarding finished generation for {card_id} due to recent Undo protection.")
+                _set_frontend_generating(web, False, card_id, is_pregen)
+                return
+
             if is_pregen:
-                # If by the time it finished, the card is ALREADY on screen, 
-                # apply it immediately instead of just caching.
                 current_reviewer_card = getattr(mw.reviewer, "card", None)
                 is_on_screen = current_reviewer_card and current_reviewer_card.id == card_id
                 
                 if data and (data.get("hints") or data.get("options")):
                     if is_on_screen:
                          logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Applied immediately).")
-                         # IMPORTANT: Discard from generating set BEFORE refresh_current_card (via _apply_results_to_card)
-                         # so on_webview_will_set_content sees it as finished.
-                         _generating_card_ids.discard(card_id)
                          _apply_results_to_card(card, data, is_manual=False, web=web)
                          # Explicitly clear frontend state as well for double safety
                          _set_frontend_generating(web, False, card_id, is_pregen)
@@ -1305,6 +1325,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                         logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Cached in memory).")
                         _set_frontend_generating(web, False, card_id, is_pregen)
                 else:
+                    logger.info(f"AI-Hints: Pre-generation for {card_id} failed or returned no data.")
                     # If pre-gen failed and it was on screen (upgraded to foreground), clear animation
                     if is_on_screen:
                         _set_frontend_generating(web, False, card_id, is_pregen, "Failed")
@@ -1312,17 +1333,14 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                         _set_frontend_generating(web, False, card_id, is_pregen)
                 
                 # IMPORTANT: Trigger the NEXT pre-generation to fill the buffer
-                _trigger_next_pregeneration()
+                _trigger_next_pregeneration(card_id)
                 return
 
-            # Only discard if the user moved to a DIFFERENT card.
-            # If mw.reviewer.card is None, it likely means Anki is closing or the user left the reviewer;
-            # in these cases, we still want to save the generated hints.
+            # --- Foreground / Standard Generation Path ---
+            # Identity Verification: verify the card is still the one on screen
             current_reviewer_card = getattr(mw.reviewer, "card", None)
             if current_reviewer_card and current_reviewer_card.id != card.id:
-                logger.info("AI-Hints: User moved to another card. Discarding generated data to prevent database and undo conflicts.")
-                # We MUST clear the generating state even if we discard the data, 
-                # otherwise the next card might inherit the 'is_generating' flag from aiHintsUiConfig.
+                logger.info(f"AI-Hints: Background generation finished for {card_id}, but user is now on {current_reviewer_card.id}. Discarding to prevent bleed.")
                 _set_frontend_generating(web, False, card_id, is_pregen)
                 return
 
@@ -1337,20 +1355,13 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                     _set_frontend_generating(web, False, card_id, is_pregen, err_status, err_msg)
                 except Exception:
                     pass
-                
-                # Do NOT refresh_current_card() here. It breaks DOM animations 
-                # and previously caused recursion bugs by reading the lock before cleanup.
                 return
-
-            # Discard from generating set BEFORE applying results (which might refresh the card)
-            # so the UI state correctly reflects that we are done.
-            _generating_card_ids.discard(card_id)
 
             if _apply_results_to_card(card, data, is_manual=is_manual, web=web):
                 # If we just finished the current card, and pre-generation is on, 
                 # try to pre-generate for the NEXT card now.
                 if not is_manual:
-                    _trigger_next_pregeneration()
+                    _trigger_next_pregeneration(card_id)
                 
                 # Double safety: clear animation for current card
                 _set_frontend_generating(web, False, card_id, is_pregen)
@@ -1360,7 +1371,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                 except Exception: pass
                 info("AI-Hints: No hints or options were generated.")
         finally:
-            # Safety discard in case of unexpected exceptions before our manual discards
+            # Final safety discard
             _generating_card_ids.discard(card_id)
 
     import threading
@@ -1673,7 +1684,7 @@ def init_hooks():
                 logger.debug(f"AI-Hints: Applying pre-generated data for card {card.id}")
                 _apply_results_to_card(card, data, is_manual=False)
                 # Now that this card is done, pre-generate the NEXT one
-                _trigger_next_pregeneration()
+                _trigger_next_pregeneration(card.id)
                 return
 
         if config.get("auto_generate_new", False) and card:
@@ -1730,7 +1741,7 @@ def init_hooks():
                 generate_hints(is_manual=False, card=card)
             else:
                 # Current card is already good. Pre-generate the NEXT one.
-                _trigger_next_pregeneration()
+                _trigger_next_pregeneration(card.id)
 
     gui_hooks.reviewer_did_show_question.append(on_show_question)
     gui_hooks.reviewer_did_show_answer.append(_trigger_frontend_setup)
@@ -1751,23 +1762,17 @@ def init_hooks():
         global _last_undo_time
         _last_undo_time = time.time()
         
+        # When Anki undos, it often reverts multiple notes/cards.
+        # To be safe, we clear ALL recently generated markers, caches and pre-gen buffers.
+        logger.info("AI-Hints: Handling Undo. Wiping all transient session data to prevent bleed.")
+        _just_generated_card_ids.clear()
+        _just_cleared_card_ids.clear()
+        _generated_hint_cache.clear() 
+        _pregenerated_data.clear() # FULL CLEAR on undo to prevent stale 'future' data from lingering
+        
         if mw.reviewer and mw.reviewer.card:
-            card = mw.reviewer.card
-            logger.info(f"AI-Hints: Handling Undo for card {card.id}. Clearing caches.")
-            
-            # Clear everything that could hold 'future' data for this card
-            _forget_generated_hints(card)
-            _pregenerated_data.pop(card.id, None)
-            _just_generated_card_ids.discard(card.id)
-            _just_cleared_card_ids.discard(card.id)
-            
-            # Explicitly force UI refresh for this card to clear any 'Generating' state 
-            # or stale hints from the view that was just undone.
-            _trigger_frontend_setup(card)
-            
-            # Anki already refreshes the card face on undo; 
-            # calling refresh_current_card here can cause 'UndoEmpty' warnings 
-            # and redundant auto-generation loops.
+            # Force UI setup for the restored card
+            _trigger_frontend_setup(mw.reviewer.card)
 
     gui_hooks.state_did_undo.append(on_undo)
     

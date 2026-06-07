@@ -198,7 +198,7 @@ class TestPregeneration(unittest.TestCase):
             self.mock_mw.taskman.run_on_main.reset_mock()
 
             # Trigger it
-            _trigger_next_pregeneration()
+            _trigger_next_pregeneration(None)
 
             # Capture the task
             task = mock_timer.singleShot.call_args[0][1]

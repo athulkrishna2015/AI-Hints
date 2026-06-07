@@ -1051,13 +1051,18 @@ class AIClient:
         """Resets the rate limit streak when a model successfully responds."""
         logger.info(f"AI-Hints: Successful generation response from {provider} using model {model}.")
         key = (provider, model)
+        needs_save = False
         if key in RATE_LIMIT_STREAK:
             logger.debug(f"AI-Hints: Resetting rate limit streak for {provider}/{model} after success.")
             del RATE_LIMIT_STREAK[key]
+            needs_save = True
         
         # If it was blacklisted, remove it
         if key in FAILED_MODELS_CACHE:
             del FAILED_MODELS_CACHE[key]
+            needs_save = True
+            
+        if needs_save:
             self._save_blacklist()
 
     def _is_model_failed(self, provider: str, model: str) -> bool:
@@ -1078,17 +1083,26 @@ class AIClient:
         return True
 
     def _save_blacklist(self):
-        """Persists the FAILED_MODELS_CACHE to disk."""
+        """Persists the FAILED_MODELS_CACHE and RATE_LIMIT_STREAK to disk."""
         try:
             # Convert tuple keys to strings for JSON
-            serializable = {f"{p}|{m}": e for (p, m), e in FAILED_MODELS_CACHE.items()}
+            expiries = {f"{p}|{m}": e for (p, m), e in FAILED_MODELS_CACHE.items()}
+            streaks = {f"{p}|{m}": s for (p, m), s in RATE_LIMIT_STREAK.items()}
+            
+            # Save as a nested structure
+            data = {
+                "expiries": expiries,
+                "streaks": streaks,
+                "version": 2
+            }
+            
             with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
-                json.dump(serializable, f)
+                json.dump(data, f)
         except Exception as e:
             logger.error(f"AI-Hints: Failed to save blacklist: {e}")
 
     def _load_blacklist(self):
-        """Loads the FAILED_MODELS_CACHE from disk."""
+        """Loads the FAILED_MODELS_CACHE and RATE_LIMIT_STREAK from disk."""
         if not os.path.exists(BLACKLIST_FILE):
             return
         try:
@@ -1096,10 +1110,28 @@ class AIClient:
                 data = json.load(f)
             
             now = time.time()
-            for key, expiry in data.items():
-                if "|" in key and expiry > now:
-                    provider, model = key.split("|", 1)
-                    FAILED_MODELS_CACHE[(provider, model)] = expiry
+            
+            # Check if it's the new format or old flat format
+            if isinstance(data, dict) and "expiries" in data:
+                # New format (version 2)
+                expiries = data.get("expiries", {})
+                streaks = data.get("streaks", {})
+                
+                for key, expiry in expiries.items():
+                    if "|" in key and expiry > now:
+                        provider, model = key.split("|", 1)
+                        FAILED_MODELS_CACHE[(provider, model)] = expiry
+                
+                for key, streak in streaks.items():
+                    if "|" in key:
+                        provider, model = key.split("|", 1)
+                        RATE_LIMIT_STREAK[(provider, model)] = streak
+            else:
+                # Old flat format (just expiries)
+                for key, expiry in data.items():
+                    if "|" in key and isinstance(expiry, (int, float)) and expiry > now:
+                        provider, model = key.split("|", 1)
+                        FAILED_MODELS_CACHE[(provider, model)] = expiry
         except Exception as e:
             logger.error(f"AI-Hints: Failed to load blacklist: {e}")
 
@@ -1115,6 +1147,9 @@ class AIClient:
         key = (provider, model)
         streak = RATE_LIMIT_STREAK.get(key, 0) + 1
         RATE_LIMIT_STREAK[key] = streak
+        
+        # Persist the updated streak immediately
+        self._save_blacklist()
         
         # delay = cooldown * streak
         delay = cooldown_sec * streak
