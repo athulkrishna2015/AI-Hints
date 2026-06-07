@@ -82,6 +82,30 @@ class AdvancedTabMixin:
         maint_group = QGroupBox("Maintenance Tools")
         maint_layout = QVBoxLayout()
         
+        # --- Deck Scoping Row ---
+        scope_layout = QHBoxLayout()
+        scope_layout.addWidget(QLabel("Scope Task To:"))
+        
+        self.maint_deck_cb = QComboBox()
+        self.maint_deck_cb.setEditable(True)
+        self.maint_deck_cb.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.maint_deck_cb.setToolTip("Choose whether to run maintenance on a specific deck or your entire collection.")
+        
+        # Populate decks
+        self._refresh_maint_deck_list()
+        
+        scope_layout.addWidget(self.maint_deck_cb, 1)
+        
+        self.maint_deck_refresh_btn = QPushButton("🔄")
+        self.maint_deck_refresh_btn.setFixedWidth(30)
+        self.maint_deck_refresh_btn.setToolTip("Refresh deck list")
+        self.maint_deck_refresh_btn.clicked.connect(self._refresh_maint_deck_list)
+        scope_layout.addWidget(self.maint_deck_refresh_btn)
+        
+        maint_layout.addLayout(scope_layout)
+        maint_layout.addWidget(QLabel("<hr/>"))
+        # ------------------------
+
         self.migrate_btn = QPushButton("📦 Migrate AI Data to First Fields")
         self.migrate_btn.setToolTip("Moves AI hints from various fields into the first field (JSON format) for all notes.")
         self.migrate_btn.clicked.connect(self.on_migrate_data)
@@ -133,6 +157,33 @@ class AdvancedTabMixin:
         main_layout.addWidget(scroll)
         
         return self.advanced_tab
+
+    def _refresh_maint_deck_list(self):
+        """Populates the maintenance deck combo box with Entire Collection + current decks."""
+        try:
+            current_text = self.maint_deck_cb.currentText()
+            self.maint_deck_cb.clear()
+            self.maint_deck_cb.addItem("🌍 Entire Collection")
+            
+            all_decks = sorted(mw.col.decks.all_names())
+            self.maint_deck_cb.addItems(all_decks)
+            
+            if current_text in all_decks or current_text == "🌍 Entire Collection":
+                self.maint_deck_cb.setCurrentText(current_text)
+            
+            # Setup completer
+            completer = QCompleter(["🌍 Entire Collection"] + all_decks, self)
+            completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+            completer.setFilterMode(Qt.MatchFlag.MatchContains)
+            self.maint_deck_cb.setCompleter(completer)
+        except: pass
+
+    def _get_maint_search_query(self):
+        """Returns the search query based on selected deck scope."""
+        selected = self.maint_deck_cb.currentText().strip()
+        if not selected or "Entire Collection" in selected:
+            return ""
+        return f'deck:"{selected}"'
 
     def refresh_blacklist_list(self):
         if not hasattr(self, "blacklist_list"):

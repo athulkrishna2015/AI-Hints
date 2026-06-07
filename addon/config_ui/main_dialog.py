@@ -1022,7 +1022,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if self._migration_running:
             return
 
-        if not askUser("This will scan your entire collection and move any AI data blocks from secondary fields to the <b>first field</b> of each note to ensure they render correctly during review.\n\nContinue?"):
+        query = self._get_maint_search_query()
+        scope_str = "your entire collection" if not query else f"the deck '{self.maint_deck_cb.currentText()}'"
+
+        if not askUser(f"This will scan {scope_str} and move any AI data blocks from secondary fields to the <b>first field</b> of each note to ensure they render correctly during review.\n\nContinue?"):
             return
 
         mw.checkpoint("Migrate AI Data")
@@ -1041,12 +1044,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.mig_status_label.setText("Initializing migration...")
         self.mig_stop_btn.setEnabled(True)
         
-        logger.info("AI-Hints: Starting collection-wide migration to move AI data to first fields.")
+        logger.info(f"AI-Hints: Starting migration for {scope_str} to move AI data to first fields.")
         
         def _task():
             moved = 0
             # Get all note IDs
-            nids = mw.col.find_notes("")
+            nids = mw.col.find_notes(query)
             total = len(nids)
             
             for i, nid in enumerate(nids):
@@ -1323,7 +1326,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         from aqt.utils import askUser, showInfo
         from ..card_parser import CardParser
 
-        if not askUser("This will scan your entire collection and convert any legacy AI hints JSON data with hex escape codes (like \\uXXXX) into readable text and apply pretty formatting.\n\nContinue?"):
+        query = self._get_maint_search_query()
+        scope_str = "your entire collection" if not query else f"the deck '{self.maint_deck_cb.currentText()}'"
+
+        if not askUser(f"This will scan {scope_str} and convert any legacy AI hints JSON data with hex escape codes (like \\uXXXX) into readable text and apply pretty formatting.\n\nContinue?"):
             return
 
         mw.checkpoint("Convert Unicode Escapes")
@@ -1334,19 +1340,19 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             fix_latex=self.config.get("fix_latex", False)
         )
 
-        nids = mw.col.find_notes("")
+        nids = mw.col.find_notes(query)
         total = len(nids)
         if total == 0:
-            showInfo("Your collection is empty!")
+            showInfo(f"No notes found in the selected scope ({scope_str})!")
             return
 
         # Show a progress dialog
-        progress = QProgressDialog("Converting legacy Unicode escapes...", "Cancel", 0, total, self)
+        progress = QProgressDialog(f"Converting Unicode escapes in {scope_str}...", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(200)
 
         changed_count = 0
-        logger.info("AI-Hints: Starting collection-wide conversion of Unicode escapes in JSON blocks.")
+        logger.info(f"AI-Hints: Starting Unicode conversion for {scope_str}.")
 
         for i, nid in enumerate(nids):
             if progress.wasCanceled():
@@ -1378,21 +1384,24 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         from ..card_parser import CardParser
         import json, html, re
 
+        query = self._get_maint_search_query()
+        scope_str = "entire collection" if not query else f"deck '{self.maint_deck_cb.currentText()}'"
+
         parser = CardParser(storage_mode=self.config.get("storage_mode", "json"))
 
-        nids = mw.col.find_notes("")
+        nids = mw.col.find_notes(query)
         total = len(nids)
         if total == 0:
-            QMessageBox.information(self, "AI-Hints", "Your collection is empty!")
+            QMessageBox.information(self, "AI-Hints", f"No notes found in the selected scope ({scope_str})!")
             return
 
         # Show a progress dialog
-        progress = QProgressDialog("Scanning collection for orphaned hints...", "Cancel", 0, total, self)
+        progress = QProgressDialog(f"Scanning {scope_str} for orphaned hints...", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(200)
 
         orphaned_hints = []
-        logger.info("AI-Hints: Starting collection-wide scan for orphaned AI hints.")
+        logger.info(f"AI-Hints: Starting scan for orphaned AI hints in {scope_str}.")
 
         for i, nid in enumerate(nids):
             if progress.wasCanceled():
@@ -1622,23 +1631,26 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         import html
         import re
 
-        if not askUser("This will scan your entire collection and safely remove only legacy, un-wrapped ('naked/raw') JSON text blocks, while keeping the proper wrapped AI data completely untouched.\n\nContinue?"):
+        query = self._get_maint_search_query()
+        scope_str = "your entire collection" if not query else f"the deck '{self.maint_deck_cb.currentText()}'"
+
+        if not askUser(f"This will scan {scope_str} and safely remove only legacy, un-wrapped ('naked/raw') JSON text blocks, while keeping the proper wrapped AI data completely untouched.\n\nContinue?"):
             return
 
         mw.checkpoint("Purge Naked JSON Blocks")
 
-        nids = mw.col.find_notes("")
+        nids = mw.col.find_notes(query)
         total = len(nids)
         if total == 0:
-            showInfo("Your collection is empty!")
+            showInfo(f"No notes found in the selected scope ({scope_str})!")
             return
 
-        progress = QProgressDialog("Scanning and purging naked JSON blocks...", "Cancel", 0, total, self)
+        progress = QProgressDialog(f"Scanning and purging naked JSON in {scope_str}...", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(200)
 
         changed_count = 0
-        logger.info("AI-Hints: Starting collection-wide purge of naked JSON blocks.")
+        logger.info(f"AI-Hints: Starting purge of naked JSON blocks in {scope_str}.")
         div_pattern = re.compile(
             r'<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>',
             flags=re.DOTALL | re.IGNORECASE,
