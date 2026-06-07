@@ -26,6 +26,7 @@ class BatchManager:
         self.local_queue_active = False
         self.local_queue_paused = False
         self.local_queue_errors = 0
+        self.local_queue_pass = 1
         self.saved_config = {}
         self.saved_provider = None
         
@@ -60,6 +61,7 @@ class BatchManager:
                      self.local_queue_active = cache.get("active", False)
                      self.local_queue_paused = cache.get("paused", False)
                      self.local_queue_errors = cache.get("errors", 0)
+                     self.local_queue_pass = cache.get("pass", 1)
                      self.saved_config = cache.get("config", {})
                      self.saved_provider = cache.get("provider", None)
                      self.last_run_stats = cache.get("last_run_stats", None)
@@ -84,6 +86,7 @@ class BatchManager:
                         "queue": self.local_queue,
                         "total": self.local_queue_total,
                         "errors": self.local_queue_errors,
+                        "pass": self.local_queue_pass,
                         "active": self.local_queue_active,
                         "paused": self.local_queue_paused,
                         "config": getattr(self, "saved_config", {}),
@@ -105,7 +108,8 @@ class BatchManager:
             done = self.local_queue_total - remaining
             status_txt = "<span style='color:#ffc107;'><b>⏸️ PAUSED</b></span>" if self.local_queue_paused else "<span style='color:#28a745;'><b>🔥 ACTIVE</b></span>"
             
-            html_parts.append(f"<div style='font-size:12px; padding-bottom:4px;'>{status_txt} <b>Local Sequential Queue</b></div>")
+            pass_str = f" (Pass #{self.local_queue_pass})" if self.local_queue_pass > 1 else ""
+            html_parts.append(f"<div style='font-size:12px; padding-bottom:4px;'>{status_txt} <b>Local Sequential Queue{pass_str}</b></div>")
             html_parts.append(f"📊 Progress: <b>{done}</b> / {self.local_queue_total} cards generated. ({remaining} left)<br/>")
             
             active_threads = {}
@@ -371,6 +375,7 @@ class BatchManager:
              self.local_queue = list(card_ids)
              self.local_queue_total = len(card_ids)
              self.local_queue_errors = 0
+             self.local_queue_pass = 1
              self.saved_config = config or {}
              self.saved_provider = provider_override
              self.last_run_stats = None 
@@ -448,53 +453,97 @@ class BatchManager:
         client = AIClient(config)
         parser = CardParser(config.get("storage_mode", "json"))
         
-        use_multithread = config.get("multithread_providers", False)
-        
-        if use_multithread and (not provider_override or provider_override == "Standard Config (Follows Fallback Matrix)"):
-             primary = config.get("ai_provider", "openai")
-             providers = client._candidate_providers(primary)
-             if not providers:
-                  logger.error("No configured providers are ready for multithreading.")
-                  self.local_queue_active = False
-                  self.save_state()
-                  return
-        else:
-             target_prov = provider_override or config.get("ai_provider", "openai")
-             providers = [target_prov]
-             
-        self.active_providers = providers
-        logger.info(f"Running batch queue with providers: {providers}")
-        
-        threads = []
-        for prov in providers:
-             t = threading.Thread(
-                  target=self._run_local_queue_thread,
-                  args=(prov, client, parser, config),
-                  daemon=True
-             )
-             threads.append(t)
-             t.start()
-             
-        for t in threads:
-             t.join()
+        # Keep track of the full set of cards we intend to process
+        # This is used for the verification passes.
+        original_request = list(self.local_queue)
+        from .reviewer_hooks import card_has_hints, _get_card_from_collection
+
+        while self.local_queue_active:
+            use_multithread = config.get("multithread_providers", False)
+            
+            if use_multithread and (not provider_override or provider_override == "Standard Config (Follows Fallback Matrix)"):
+                 primary = config.get("ai_provider", "openai")
+                 providers = client._candidate_providers(primary)
+                 if not providers:
+                      logger.error("No configured providers are ready for multithreading.")
+                      self.local_queue_active = False
+                      self.save_state()
+                      return
+            else:
+                 target_prov = provider_override or config.get("ai_provider", "openai")
+                 providers = [target_prov]
+                 
+            self.active_providers = providers
+            logger.info(f"Local Queue Pass #{self.local_queue_pass}: Running with {len(self.local_queue)} cards using providers: {providers}")
+            
+            threads = []
+            for prov in providers:
+                 t = threading.Thread(
+                      target=self._run_local_queue_thread,
+                      args=(prov, client, parser, config),
+                      daemon=True
+                 )
+                 threads.append(t)
+                 t.start()
+                 
+            for t in threads:
+                 t.join()
+            
+            # --- Verification Pass Logic ---
+            if not self.local_queue_active:
+                break
+
+            # Check if any cards from the original request are still missing hints
+            missing_cids = []
+            for cid in original_request:
+                # We fetch card from collection because its hints might have been updated by other threads/passes
+                card = _get_card_from_collection(cid)
+                if card and not card_has_hints(card):
+                    missing_cids.append(cid)
+            
+            if not missing_cids:
+                # 🏁 All done!
+                logger.info(f"Verification Pass: All {len(original_request)} cards successfully have hints now.")
+                break
+            
+            # If we reached here, some cards are still missing. 
+            # Re-queue them and start another pass.
+            with self._db_lock:
+                self.local_queue = list(missing_cids)
+                self.local_queue_pass += 1
+                self.card_attempts = {} # Reset attempts for new pass
+                self.save_state()
+            
+            logger.info(f"Verification Pass: {len(missing_cids)} cards still missing hints. Starting Pass #{self.local_queue_pass} in 3 seconds...")
+            time.sleep(3) # Small cooldown between passes
+            
+            if self.local_queue_pass > 10:
+                logger.warning(f"Batch Sequential Queue reached maximum pass limit (10). Stopping with {len(missing_cids)} cards unfinished.")
+                break
              
         self.local_queue_active = False
         self.active_threads_status = {}
         
-        if not self.local_queue:
-            self.last_run_stats = {
-                "total": self.local_queue_total,
-                "errors": self.local_queue_errors,
-                "time": time.time()
-            }
+        # Calculate final error count for stats
+        final_missing = []
+        for cid in original_request:
+            card = _get_card_from_collection(cid)
+            if card and not card_has_hints(card):
+                final_missing.append(cid)
+        
+        self.last_run_stats = {
+            "total": self.local_queue_total,
+            "errors": len(final_missing),
+            "time": time.time()
+        }
             
         self.save_state()
-        logger.info(f"FINISHED local sequential queue. Total={self.local_queue_total}, Errors={self.local_queue_errors}")
-        
-        def _finished_notify():
-              pass
-
-        mw.taskman.run_on_main(_finished_notify)
+        if len(final_missing) == 0:
+            logger.info(f"FINISHED local sequential queue. Successfully processed all {self.local_queue_total} cards.")
+            mw.taskman.run_on_main(lambda: tooltip("✨ Batch Sequential Queue Finished! All cards processed."))
+        else:
+            logger.info(f"FINISHED local sequential queue. Processed {self.local_queue_total - len(final_missing)} cards. {len(final_missing)} cards failed after {self.local_queue_pass} passes.")
+            mw.taskman.run_on_main(lambda m=len(final_missing): tooltip(f"✨ Batch Finished. {m} cards failed all retry attempts."))
 
     def _handle_card_failure(self, cid: int, provider: str):
         failed_provs = self.card_attempts.setdefault(cid, [])
