@@ -223,7 +223,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.refresh_custom_list()
         self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
         self.options_count_sb.setValue(c.get("options_count", 4))
-        self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
         self.mathjax_format_cb.setCurrentText(c.get("mathjax_format", "delimiters"))
         self.fix_latex_cb.setChecked(c.get("fix_latex", False))
         self.answer_display_position_cb.setCurrentText(c.get("answer_display_position", "between"))
@@ -947,7 +946,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         c = self.default_config
         self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
         self.options_count_sb.setValue(c.get("options_count", 4))
-        self.storage_mode_cb.setCurrentText(c.get("storage_mode", "json"))
         self.mathjax_format_cb.setCurrentText(c.get("mathjax_format", "delimiters"))
         self.fix_latex_cb.setChecked(c.get("fix_latex", False))
         self.answer_display_position_cb.setCurrentText(c.get("answer_display_position", "between"))
@@ -1086,13 +1084,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     # - Data in other fields
                     # - Multiple blocks total (even if all in first field)
                     if not blocks_in_others and len(all_blocks) <= 1:
-                        # Check format: if single block is HTML but we want JSON, convert anyway
-                        if parser.storage_mode == "json":
-                            first_field_val = note[first_field]
-                            if "ai-hints-container" in first_field_val:
-                                pass # proceed to migrate/convert
-                            else:
-                                continue
+                        # Check format: if single block is HTML, convert anyway
+                        first_field_val = note[first_field]
+                        if "ai-hints-container" in first_field_val:
+                            pass # proceed to migrate/convert
                         else:
                             continue
                     
@@ -1116,11 +1111,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         card_key = block.get("card_key")
                         toggles = block.get("toggles", {})
                         
-                        if parser.storage_mode == "json":
-                            current_val = parser._update_json_block_in_field(current_val, data, card_key, toggles)
-                        else:
-                            content = parser.build_hints_block(data, toggles)
-                            current_val = current_val.strip() + "\n\n" + content
+                        current_val = parser._update_json_block_in_field(current_val, data, card_key, toggles)
                             
                     note[first_field] = current_val
                     mw.col.update_note(note)
@@ -1276,7 +1267,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config = self.config.copy()
             new_config["ai_provider"] = self.ai_provider_cb.currentText()
             new_config["options_count"] = self.options_count_sb.value()
-            new_config["storage_mode"] = self.storage_mode_cb.currentText()
             new_config["mathjax_format"] = self.mathjax_format_cb.currentText()
             new_config["fix_latex"] = self.fix_latex_cb.isChecked()
             new_config["answer_display_position"] = self.answer_display_position_cb.currentText()
@@ -1503,7 +1493,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         query = self._get_maint_search_query()
         scope_str = "entire collection" if not query else f"deck '{self.maint_deck_cb.currentText()}'"
 
-        parser = CardParser(storage_mode=self.config.get("storage_mode", "json"))
+        parser = CardParser()
 
         nids = mw.col.find_notes(query)
         total = len(nids)
@@ -1948,3 +1938,4 @@ def init_config_ui():
     # Add Tools menu entry so the window can be opened any time
     action = mw.form.menuTools.addAction("AI-Hints Config")
     action.triggered.connect(lambda: on_config_dialog(mw))
+

@@ -502,13 +502,11 @@ class CardParser:
         return current_val.strip() + "\n\n" + content_block
 
     def build_hints_block(self, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None) -> str:
-        """Build the persisted/injected hints block for the configured storage mode."""
+        """Build the persisted/injected hints block as invisible JSON."""
         data = self.normalize_hint_data(data)
         attrs = self._build_attrs(toggles, card)
-        if self.storage_mode == "json":
-            payload = self.serialize_json_payload(data)
-            return f'<div class="{self.json_class}" {attrs} style="display:none">{payload}</div>'
-        return self._build_html_block(data, attrs)
+        payload = self.serialize_json_payload(data)
+        return f'<div class="{self.json_class}" {attrs} style="display:none">{payload}</div>'
 
     def _find_target_field(self, note) -> Optional[str]:
         # User requested to ALWAYS save to the first field of all cards

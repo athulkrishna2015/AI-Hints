@@ -13,18 +13,6 @@ class AdvancedTabMixin:
         self.system_prompt_edit.setToolTip("Customize the core AI persona instructions defining generation constraints, math syntaxes, and output layout.")
         adv_layout.addWidget(self.system_prompt_edit)
 
-        # 1. AI Content Storage Options
-        storage_group = QGroupBox("AI Data Storage")
-        storage_layout = QFormLayout()
-        
-        self.storage_mode_cb = QComboBox()
-        self.storage_mode_cb.addItems(["JSON (Recommended)", "HTML (Legacy)"])
-        self.storage_mode_cb.setToolTip("How AI hints are stored in your cards. JSON is more robust.")
-        storage_layout.addRow("Storage Format:", self.storage_mode_cb)
-        
-        storage_group.setLayout(storage_layout)
-        adv_layout.addWidget(storage_group)
-
         # 2. Model failure/blacklist management
         blacklist_group = QGroupBox("Model Cooldowns & Blacklist")
         blacklist_layout = QVBoxLayout()

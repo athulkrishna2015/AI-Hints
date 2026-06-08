@@ -24,11 +24,6 @@ class GeneralTabMixin:
         self.options_count_sb.setToolTip("Set how many multiple-choice options (answers) the AI should generate per card.")
         gen_layout.addRow("Number of Options:", self.options_count_sb)
         
-        self.storage_mode_cb = QComboBox()
-        self.storage_mode_cb.addItems(["json", "html"])
-        self.storage_mode_cb.setToolTip("JSON: Invisible (cleaner). HTML: Visible on all devices.")
-        gen_layout.addRow("Storage Mode:", self.storage_mode_cb)
-        
         self.mathjax_format_cb = QComboBox()
         self.mathjax_format_cb.addItems(["delimiters", "inline"])
         self.mathjax_format_cb.setToolTip(r"delimiters: \( ... \), \[ ... \]. inline: $ ... $, $$ ... $")

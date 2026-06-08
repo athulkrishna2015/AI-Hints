@@ -58,7 +58,6 @@ def _apply_results_to_card(card, data, is_manual=True, web=None):
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
 
     parser = CardParser(
-        storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )
@@ -456,7 +455,6 @@ def on_webview_will_set_content(web_content, context):
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
-        storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )
@@ -607,7 +605,6 @@ def _trigger_frontend_setup(card=None, web=None):
     try:
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         parser = CardParser(
-            storage_mode=config.get("storage_mode", "json"),
             mathjax_format=config.get("mathjax_format", "delimiters"),
             fix_latex=config.get("fix_latex", False)
         )
@@ -750,7 +747,6 @@ def clear_hints(card=None, web=None):
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
-        storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )
@@ -820,7 +816,6 @@ def clear_ai_hints_from_browser_selection(browser):
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
-        storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )
@@ -1253,7 +1248,6 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
     provider = config.get("ai_provider", "openai")
 
     parser = CardParser(
-        storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )
@@ -1407,7 +1401,6 @@ def card_has_hints(card):
     
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
-        storage_mode=config.get("storage_mode", "json"),
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )

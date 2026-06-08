@@ -282,7 +282,6 @@ class BatchManager:
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         client = AIClient(config)
         parser = CardParser(
-            config.get("storage_mode", "json"),
             mathjax_format=config.get("mathjax_format", "delimiters"),
             fix_latex=config.get("fix_latex", False)
         )
@@ -329,10 +328,9 @@ class BatchManager:
             logger.info(f"AI-Hints Applying {len(results)} database batch writes.")
             
             parser = CardParser(
-                config.get("storage_mode", "json")
-,
                 mathjax_format=config.get("mathjax_format", "delimiters"),
                 fix_latex=config.get("fix_latex", False)
+            )
             )
             
             applied_count = 0
@@ -491,7 +489,7 @@ class BatchManager:
              self._db_lock = threading.RLock()
              
         client = AIClient(config)
-        parser = CardParser(config.get("storage_mode", "json"))
+        parser = CardParser()
         
         # Keep track of the full set of cards we intend to process
         # This is used for the verification passes.
