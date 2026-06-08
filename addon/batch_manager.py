@@ -80,6 +80,12 @@ class BatchManager:
         with self._db_lock:
             try:
                 # Package combined persisted bundle
+                # Strip sensitive API keys from the saved config to prevent redundancy and data exposure.
+                # The keys will be re-merged from the main addon config during resume.
+                stripped_config = dict(getattr(self, "saved_config", {}))
+                if "api_keys" in stripped_config:
+                    stripped_config.pop("api_keys")
+
                 payload = {
                     "native_jobs": self.jobs,
                     "local_cache": {
@@ -89,7 +95,7 @@ class BatchManager:
                         "pass": self.local_queue_pass,
                         "active": self.local_queue_active,
                         "paused": self.local_queue_paused,
-                        "config": getattr(self, "saved_config", {}),
+                        "config": stripped_config,
                         "provider": getattr(self, "saved_provider", None),
                         "last_run_stats": self.last_run_stats
                     }
@@ -397,6 +403,18 @@ class BatchManager:
              # Use previously persisted config/provider
              config = self.saved_config or config
              provider_override = self.saved_provider
+
+             # Re-inject fresh API keys from global config if missing in the resumed state.
+             # This prevents batch_state.json from needing to store sensitive keys.
+             if config and not config.get("api_keys"):
+                  try:
+                       from aqt import mw
+                       # Get addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
+                       pkg = __name__.split(".")[0]
+                       global_config = mw.addonManager.getConfig(pkg) or {}
+                       config["api_keys"] = global_config.get("api_keys", {})
+                  except Exception as e:
+                       logger.error(f"Failed to re-inject API keys during batch resume: {e}")
         else:
              # 🆕 START FRESH Logic
              self.local_queue = list(card_ids)

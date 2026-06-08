@@ -869,7 +869,7 @@
             }
         });
     };
-    window.aiHintsSetup = (card, hints) => { 
+    window.aiHintsSetup = (card, hints, uiConfig) => {
         let calcId = card ? card.id : 'temp';
         const ord = card ? card.ord : getCardOrd();
         if (calcId === 'temp') {
@@ -881,6 +881,15 @@
                 calcId = 'h' + hashCode(qa.innerText || qa.textContent || '');
             }
         }
+
+        if (uiConfig) {
+            window.aiHintsUiConfig = uiConfig;
+        } else if (window.aiHintsUiConfig) {
+            // If no new config provided, reset generation state for the new card
+            window.aiHintsUiConfig.is_generating = false;
+            window.aiHintsUiConfig.is_pregenerating = false;
+        }
+
         const setupKey = JSON.stringify({ card: { id: String(calcId), ord: ord }, hints: hints || null });
         const currentAnswerState = isAnswerSide();
         const existingContainer = document.querySelector('.ai-hints-container');
