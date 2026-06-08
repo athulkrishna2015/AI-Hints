@@ -1,6 +1,7 @@
 import re
 import json
 import html
+import unicodedata
 from typing import Any, List, Optional, Tuple, Dict
 try:
     from .latex_fixer import fix_latex, normalize_math_text
@@ -26,6 +27,10 @@ class CardParser:
         """Normalize generated hint text before storage or direct reviewer injection."""
         if not isinstance(data, dict):
             return {"hints": [], "options": []}
+
+        # Handle skipped cards
+        if data.get("_skipped"):
+            return {"hints": [], "options": [], "_skipped": True}
 
         # Handle new format with separate correct_answer and distractors.
         # We keep correct_answer so it survives into JSON storage; it is NOT
@@ -247,6 +252,71 @@ class CardParser:
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
+    def _split_cloze_content(self, content: str) -> Tuple[str, str]:
+        """Splits content into (answer, hint) while being depth-aware of nested clozes."""
+        depth = 0
+        i = 0
+        while i < len(content):
+            if content.startswith("{{", i):
+                depth += 1
+                i += 2
+            elif content.startswith("}}", i):
+                depth -= 1
+                i += 2
+            elif content.startswith("::", i) and depth == 0:
+                return content[:i], content[i+2:]
+            else:
+                i += 1
+        return content, ""
+
+    def _resolve_nested_clozes(self, text: str) -> str:
+        """Recursively resolves clozes within an answer."""
+        iteration_limit = 50
+        while iteration_limit > 0:
+            # Find the FIRST cloze to start resolving its depth
+            match = re.search(r"\{\{c(\d+)::", text)
+            if not match:
+                break
+            
+            start_pos = match.start()
+            search_pos = match.end()
+            depth = 1
+            
+            found_end = False
+            while search_pos < len(text):
+                if text.startswith("{{", search_pos):
+                    depth += 1
+                    search_pos += 2
+                elif text.startswith("}}", search_pos):
+                    depth -= 1
+                    if depth == 0:
+                        # Found the end of THIS cloze
+                        inner_content = text[start_pos+2:search_pos]
+                        # Resolve its internal content (answer vs hint)
+                        tag_parts = inner_content.split("::", 1)
+                        if len(tag_parts) < 2:
+                            answer = inner_content
+                        else:
+                            content_after_tag = tag_parts[1]
+                            answer, _hint = self._split_cloze_content(content_after_tag)
+                        
+                        # Recurse on the resolved part in case it has MORE nested clozes
+                        answer = self._resolve_nested_clozes(answer)
+                        
+                        text = text[:start_pos] + answer + text[search_pos+2:]
+                        found_end = True
+                        break
+                    search_pos += 2
+                else:
+                    search_pos += 1
+            
+            if not found_end:
+                # Malformed: strip the start to avoid loop
+                text = text[:start_pos] + text[start_pos+2:]
+            
+            iteration_limit -= 1
+        return text
+
     def _focus_current_cloze(self, text: str, card=None) -> Tuple[str, str]:
         """Mark the cloze deletion for the current card and extract all active answers."""
         from .logger import logger
@@ -264,21 +334,17 @@ class CardParser:
 
         def resolve_cloze_match(match_text: str, start_pos_in_original: int) -> str:
             """Resolves a single {{c1::answer::hint}} block."""
+            # Strip outer {{ and }}
             inner = match_text[2:-2]
+            
+            # Format: c1::Answer::Hint
             parts = inner.split("::", 1)
             if len(parts) < 2:
                 return match_text
             
             tag = parts[0]
-            content_with_hint = parts[1]
-            
-            c_parts = content_with_hint.rsplit("::", 1)
-            if len(c_parts) > 1:
-                answer = c_parts[0]
-                hint = c_parts[1]
-            else:
-                answer = content_with_hint
-                hint = ""
+            content_after_tag = parts[1]
+            answer, hint = self._split_cloze_content(content_after_tag)
                 
             try:
                 num_match = re.search(r"\d+", tag)
@@ -287,10 +353,11 @@ class CardParser:
                 return match_text
 
             if number != cloze_number:
-                return answer
+                return self._resolve_nested_clozes(answer)
 
             # This IS the active cloze.
-            cleaned_ans = self._clean_html(answer)
+            resolved_answer = self._resolve_nested_clozes(answer)
+            cleaned_ans = self._clean_html(resolved_answer)
             answers_map[start_pos_in_original] = cleaned_ans
             
             res = f"{ACTIVE_MARKER_START}[...]"
@@ -300,42 +367,57 @@ class CardParser:
             return res
 
         def process_recursive(content: str) -> str:
-            """Iteratively resolves the innermost clozes first."""
-            iteration_limit = 50
+            """Iteratively resolves the innermost clozes first using depth-aware logic."""
+            iteration_limit = 100
             while iteration_limit > 0:
-                matches = list(re.finditer(r"\{\{c\d+::", content))
+                # Find ALL starting clozes
+                matches = list(re.finditer(r"\{\{c(\d+)::", content))
                 if not matches:
                     break
                 
-                found_any = False
-                for m in reversed(matches):
-                    start_pos = m.start()
-                    end_pos = content.find("}}", start_pos)
-                    if end_pos != -1:
-                        cloze_text = content[start_pos:end_pos+2]
-                        # We track the original position to keep answers in order
-                        # (approximate since content shifts, but relative order holds)
-                        resolved = resolve_cloze_match(cloze_text, start_pos)
-                        content = content[:start_pos] + resolved + content[end_pos+2:]
-                        found_any = True
-                        break
+                # Take the LAST one (most likely innermost)
+                match = matches[-1]
                 
-                if not found_any:
-                    break
+                depth = 1
+                start_pos = match.start()
+                search_pos = match.end()
+                
+                found_end = False
+                while search_pos < len(content):
+                    if content.startswith("{{", search_pos):
+                        depth += 1
+                        search_pos += 2
+                    elif content.startswith("}}", search_pos):
+                        depth -= 1
+                        if depth == 0:
+                            cloze_text = content[start_pos:search_pos+2]
+                            resolved = resolve_cloze_match(cloze_text, start_pos)
+                            content = content[:start_pos] + resolved + content[search_pos+2:]
+                            found_end = True
+                            break
+                        search_pos += 2
+                    else:
+                        search_pos += 1
+                
+                if not found_end:
+                    # Malformed: skip this start by temporarily masking it
+                    content = content[:start_pos] + "MASKED_START" + content[start_pos+2:]
+                    continue 
+                
                 iteration_limit -= 1
             
+            content = content.replace("MASKED_START", "{{")
             content = content.replace(ACTIVE_MARKER_START, "Current cloze deletion: ")
             content = content.replace(ACTIVE_MARKER_END, "")
             return content
 
         focused_text = process_recursive(text)
-        # Sort answers by their original discovered position
         sorted_answers = [answers_map[k] for k in sorted(answers_map.keys())]
         return focused_text, ", ".join(sorted_answers)
 
     def update_note_with_hints(self, note, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None, skip_if_exists: bool = False) -> bool:
         """Appends or replaces the AI hints block in the target field."""
-        if not data or (not data.get("hints") and not data.get("options")):
+        if not data or (not data.get("hints") and not data.get("options") and not data.get("_skipped")):
             return False
 
         # Safety check: Abort if data exists and we were instructed not to overwrite
@@ -413,11 +495,15 @@ class CardParser:
                                          else:
                                              # Key is active, check if correct_answer matches the cloze text
                                              card_data = parsed[k]
-                                             if isinstance(card_data, dict) and "correct_answer" in card_data:
-                                                 stored_ans = card_data["correct_answer"]
-                                                 if isinstance(stored_ans, str):
-                                                     if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
-                                                         del parsed[k]
+                                             if isinstance(card_data, dict):
+                                                 if card_data.get("_skipped"):
+                                                     continue # Keep skipped markers
+                                                 
+                                                 if "correct_answer" in card_data:
+                                                     stored_ans = card_data["correct_answer"]
+                                                     if isinstance(stored_ans, str):
+                                                         if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
+                                                             del parsed[k]
                              
                              parsed[card_key] = new_data
                         else:
@@ -461,11 +547,14 @@ class CardParser:
                                             del parsed[k]
                                         else:
                                            card_data = parsed[k]
-                                           if isinstance(card_data, dict) and "correct_answer" in card_data:
-                                               stored_ans = card_data["correct_answer"]
-                                               if isinstance(stored_ans, str):
-                                                   if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
-                                                       del parsed[k]
+                                           if isinstance(card_data, dict):
+                                               if card_data.get("_skipped"):
+                                                   continue
+                                               if "correct_answer" in card_data:
+                                                   stored_ans = card_data["correct_answer"]
+                                                   if isinstance(stored_ans, str):
+                                                       if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
+                                                           del parsed[k]
                             # Merge data
                             parsed[card_key] = new_data
                             new_payload = self.serialize_json_payload(parsed)
@@ -819,7 +908,7 @@ class CardParser:
 
     def _replace_or_append_block(self, current_val: str, content_block: str, card=None) -> str:
         pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>.*?</div>',
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
             flags=re.DOTALL | re.IGNORECASE,
         )
         matches = list(pattern.finditer(current_val))
@@ -881,25 +970,46 @@ class CardParser:
             fields_to_scan.append(current_val)
 
         for field in fields_to_scan:
-            # We use a non-greedy match for the content to handle nested clozes better
-            # and then split on :: to separate answer from hint.
-            for match in re.finditer(r'\{\{c(\d+)::(.*?)\}\}', field, re.DOTALL):
+            pos = 0
+            while True:
+                match = re.search(r"\{\{c(\d+)::", field[pos:])
+                if not match:
+                    break
+                
+                start_in_field = pos + match.start()
                 c_num = match.group(1)
-                content = match.group(2)
                 
-                # Logic from _focus_current_cloze: split on the last :: for hint
-                c_parts = content.rsplit("::", 1)
-                if len(c_parts) > 1:
-                    # Check if the second part looks like a hint (usually no {{ or }})
-                    # and the first part isn't empty.
-                    answer = c_parts[0]
-                else:
-                    answer = content
+                depth = 1
+                search_pos = start_in_field + match.end() - match.start()
+                content_start = search_pos
                 
-                c_key = f"c{c_num}"
-                if c_key not in cloze_map:
-                    cloze_map[c_key] = set()
-                cloze_map[c_key].add(self._normalized_answer_text(answer))
+                found_end = False
+                while search_pos < len(field):
+                    if field.startswith("{{", search_pos):
+                        depth += 1
+                        search_pos += 2
+                    elif field.startswith("}}", search_pos):
+                        depth -= 1
+                        if depth == 0:
+                            content = field[content_start:search_pos]
+                            answer, _hint = self._split_cloze_content(content)
+                            answer = self._resolve_nested_clozes(answer)
+                            
+                            c_key = f"c{c_num}"
+                            if c_key not in cloze_map:
+                                cloze_map[c_key] = set()
+                            cloze_map[c_key].add(self._normalized_answer_text(answer))
+                            
+                            # Move pos to after the cN:: to find nested clozes
+                            pos = content_start
+                            found_end = True
+                            break
+                        search_pos += 2
+                    else:
+                        search_pos += 1
+                
+                if not found_end:
+                    pos = start_in_field + 2
                 
         return cloze_map
 
@@ -907,69 +1017,93 @@ class CardParser:
         if not text:
             return ""
         text = str(text)
-        # 1. HTML unescape so LaTeX commands and entities aren't broken
-        # Also converts &nbsp; to actual Unicode non-breaking space
+        
+        # 1. Unicode Normalization (NFC)
+        text = unicodedata.normalize('NFC', text)
+        
+        # 2. HTML unescape
         text = html.unescape(text)
-        # 2. Normalize math content to a stable baseline (fixes backslashes, spacing)
-        # We always use 'anki' delimiters for comparison.
+        
+        # 3. Normalize math content
         try:
             text = normalize_math_text(text, output_format='anki', fix_latex=True)
         except:
-            pass # Fallback to raw if fixer fails
+            pass
             
-        # 3. Strip ALL HTML tags (including <anki-mathjax>)
+        # 4. Strip ALL HTML tags
         text = re.sub(r'<[^>]+>', '', text)
         
-        # 4. CRITICAL: Strip leading/trailing math delimiters for comparison
-        # This allows "{{c1::answer}}" to match generated "\(answer\)"
+        # 5. CRITICAL: Strip leading/trailing math delimiters
         text = text.strip()
-        # Recursive unwrap for cases like \( $ ans $ \)
-        for _ in range(2):
+        for _ in range(3):
             text = re.sub(r'^\\\(|\\\)$|^\\\[|\\\]$|^\$\$|\$\$$|^\$|\$$', '', text).strip()
             
-        # 5. Final stripping of all whitespace (including Unicode &nbsp;) and case folding
-        # We use re.sub with \s and UNICODE flag to catch all types of spaces
+        # 6. Punctuation Robustness
+        text = re.sub(r'^[\s"\'\(\[<.,;:!?\-\u201c\u201d\u2018\u2019]+', '', text)
+        text = re.sub(r'[\s"\'\)\]>.,;:!?\-\u201c\u201d\u2018\u2019]+$', '', text)
+        
+        # 7. Unicode Cleaner: Remove ZWJ/ZWNJ which are often used in older 
+        # typing methods but not by modern AI (fixes visual-only mismatches)
+        text = text.replace('\u200D', '').replace('\u200C', '')
+        
+        # 8. Final stripping of all whitespace and case folding
         text = re.sub(r'\s+', '', text, flags=re.UNICODE)
         return text.casefold()
 
     def _cloze_data_matches_note(self, data: Any, card_key: str, note=None) -> bool:
-        if not isinstance(data, dict) or "correct_answer" not in data:
+        if not isinstance(data, dict):
+            return True
+        
+        # Skipped cards always match (we don't want to regenerate them)
+        if data.get("_skipped"):
+            return True
+
+        if "correct_answer" not in data:
             return True
 
         active_clozes = self._get_active_clozes_map(note)
         if not active_clozes:
-            # If no clozes found at all, we might be in a non-cloze card or 
-            # some other weird state. To be safe, don't purge.
             return True
             
         if card_key not in active_clozes:
-            # card_key (e.g. c1) exists in data but NOT in note. Definitely mismatched.
             return False
 
         stored_answer_raw = data.get("correct_answer")
         if not isinstance(stored_answer_raw, str) or not stored_answer_raw.strip():
             return True
 
-        # Support for multi-cloze matching:
-        # If the note has multiple clozes for the same ID, the AI is instructed
-        # to provide a comma-separated list of values.
-        # We first try matching the ENTIRE string (normalized).
+        # Layered Matching:
+        # 1. Try matching the ENTIRE string (normalized).
         full_norm = self._normalized_answer_text(stored_answer_raw)
         note_clozes = active_clozes[card_key] # set of normalized strings
         
         if full_norm in note_clozes:
             return True
 
-        # If full match fails, split the stored answer and check if each part matches an active cloze.
-        # This handles the case where the AI returns "val1, val2" for two separate clozes.
-        stored_parts = [p.strip() for p in stored_answer_raw.split(",")]
-        normalized_stored = [self._normalized_answer_text(p) for p in stored_parts if p.strip()]
+        # 2. Try splitting by multiple common separators (comma, semicolon, newline)
+        # This handles multi-cloze IDs where the AI returns a list.
+        stored_parts = re.split(r'[,\n;]+', stored_answer_raw)
+        normalized_parts = [self._normalized_answer_text(p) for p in stored_parts if p.strip()]
         
-        if not normalized_stored:
+        if not normalized_parts:
             return True
             
         # Every part of the stored answer must be present in the note's clozes
-        return all(p in note_clozes for p in normalized_stored)
+        if all(p in note_clozes for p in normalized_parts):
+            return True
+            
+        # 3. Super-Fuzzy Fallback: Alphanumeric only (ignore all punctuation)
+        # ONLY use this for non-math strings to avoid false positives in formulas
+        def super_fuzzy(s):
+            return re.sub(r'[^a-zA-Z0-9\u0d00-\u0d7f]+', '', s).casefold()
+
+        if "\\" not in stored_answer_raw: # likely not math
+            sf_stored = [super_fuzzy(p) for p in normalized_parts]
+            sf_note = {super_fuzzy(n) for n in note_clozes}
+            if all(s in sf_note for s in sf_stored if s):
+                return True
+
+        return False
 
     def _parse_json_payload(self, raw_payload: str) -> Any:
         if not raw_payload:
@@ -982,7 +1116,7 @@ class CardParser:
     def _is_keyed_payload(self, payload: Dict[str, Any]) -> bool:
         if not isinstance(payload, dict):
             return False
-        if "hints" in payload or "options" in payload:
+        if "hints" in payload or "options" in payload or "_skipped" in payload:
             return False
         return any(re.fullmatch(r"c\d+", str(key)) for key in payload.keys())
 
@@ -1013,7 +1147,7 @@ class CardParser:
             )
             
         # Legacy/Universal block: check for hints/options
-        has_hints = bool(parsed.get("hints")) or bool(parsed.get("options"))
+        has_hints = bool(parsed.get("hints")) or bool(parsed.get("options")) or bool(parsed.get("_skipped"))
         
         if (
             has_hints
@@ -1027,6 +1161,9 @@ class CardParser:
         return has_hints
 
     def _build_html_block(self, data: Dict[str, List[str]], attrs: str = "") -> str:
+        if data.get("_skipped"):
+             return f'<div class="{self.container_class}" {attrs} data-ai-hints-skipped="true"><hr><i>AI generation skipped for this card.</i></div>'
+
         hints = data.get("hints", [])
         options = data.get("options", [])
         
@@ -1106,12 +1243,15 @@ class CardParser:
                                         purged = True
                                     else:
                                         card_data = parsed[k]
-                                        if isinstance(card_data, dict) and "correct_answer" in card_data:
-                                            stored_ans = card_data["correct_answer"]
-                                            if isinstance(stored_ans, str):
-                                                if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
-                                                    del parsed[k]
-                                                    purged = True
+                                        if isinstance(card_data, dict):
+                                            if card_data.get("_skipped"):
+                                                continue
+                                            if "correct_answer" in card_data:
+                                                stored_ans = card_data["correct_answer"]
+                                                if isinstance(stored_ans, str):
+                                                    if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
+                                                        del parsed[k]
+                                                        purged = True
                             if purged:
                                 note_changed = True
                         
@@ -1127,6 +1267,7 @@ class CardParser:
                             new_val = new_val[:match.start()] + new_block + new_val[match.end():]
                             note_changed = True
                 except Exception as e:
+                    from .logger import logger
                     logger.error(f"Error checking/formatting JSON block: {e}")
                     
             if note_changed:

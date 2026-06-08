@@ -753,6 +753,9 @@ def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_show_menu":
         show_bottom_bar_menu()
         return (True, None)
+    if message == "ai_hints_skip":
+        skip_ai_for_card(card=card, web=web)
+        return (True, None)
     return handled
 
 def clear_hints(card=None, web=None):
@@ -1166,6 +1169,29 @@ def refresh_current_card(card=None, web=None):
     except Exception as e:
         logger.error(f"Failed to refresh reviewer card: {e}")
 
+def skip_ai_for_card(card=None, web=None):
+    if card is None:
+        card = mw.reviewer.card
+    if not card:
+        return
+    
+    if web is None:
+        web = getattr(mw.reviewer, "web", None)
+
+    logger.info(f"AI-Hints: Skipping AI for card {card.id}")
+    
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
+    )
+    
+    data = {"hints": [], "options": [], "_skipped": True}
+    if _apply_results_to_card(card, data, is_manual=True, web=web):
+        tooltip("AI generation skipped for this card.")
+        # Trigger a refresh so the skip state is visible
+        refresh_current_card(card=card, web=web)
+
 def show_bottom_bar_menu():
     reviewer = getattr(mw, "reviewer", None)
     if not reviewer or not reviewer.card:
@@ -1194,16 +1220,19 @@ def show_bottom_bar_menu():
     a_regen = QAction("Regenerate All", menu)
     a_regen.triggered.connect(generate_hints)
     menu.addAction(a_regen)
+
+    # 5. Skip AI
+    a_skip = QAction("Skip AI Generation", menu)
+    a_skip.triggered.connect(skip_ai_for_card)
+    menu.addAction(a_skip)
     
     menu.addSeparator()
     
-    # 5. Config
+    # 6. Config
     a_config = QAction("Settings...", menu)
     a_config.triggered.connect(lambda: on_config_dialog(mw))
     menu.addAction(a_config)
     
-    # Position menu above the bottom bar button
-    # This is a bit tricky with webview buttons, so we'll just show it at cursor for now
     menu.exec(QPoint(mw.cursor().pos()))
 
 def _click_ai_hints_action_script(action: str) -> str:

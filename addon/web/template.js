@@ -403,6 +403,7 @@
             refresh: useEmojis ? "🔄" : "Refresh",
             json: useEmojis ? "📝" : "JSON",
             clear: useEmojis ? "🗑️" : "Clear",
+            skip: useEmojis ? "⏭️" : "Skip AI",
             hideHints: useEmojis ? "💡" : "Hide Hints",
             hideOptions: useEmojis ? "🎯" : "Hide Options"
         };
@@ -623,6 +624,21 @@
                         if (typeof pycmd === 'function') pycmd('ai_hints_generate');
                     };
                     btnBox.appendChild(genBtn);
+
+                    // Skip Button (only if not already generated or skipped)
+                    if (!hasContent && !data?._skipped) {
+                        const skipBtn = document.createElement('button');
+                        skipBtn.className = 'ai-hints-btn';
+                        skipBtn.textContent = labels.skip;
+                        skipBtn.title = "Skip AI generation for this card permanently";
+                        skipBtn.onclick = (e) => {
+                            if (e) { e.stopPropagation(); e.preventDefault(); }
+                            if (confirm("Skip AI generation for this card? This will add an empty marker to prevent auto-generation.")) {
+                                pycmd('ai_hints_skip');
+                            }
+                        };
+                        btnBox.appendChild(skipBtn);
+                    }
                 }
 
                 const saveState = () => {
@@ -631,6 +647,17 @@
                         persistence.save('global_state', { hints: state.hints, options: state.options });
                     }
                 };
+
+                if (data?._skipped) {
+                    const msg = document.createElement('div');
+                    msg.style.padding = '8px';
+                    msg.style.fontSize = '12px';
+                    msg.style.opacity = '0.6';
+                    msg.style.fontStyle = 'italic';
+                    msg.textContent = "AI generation skipped.";
+                    contentBox.appendChild(msg);
+                    contentBox.className = 'ai-hints-content-box ai-hints-content-active';
+                }
 
                 if (hasContent) {
                     if (hSection) {
