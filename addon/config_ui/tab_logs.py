@@ -55,6 +55,11 @@ class LogTabMixin:
         self.live_label.setVisible(False)
         filter_layout.addWidget(self.live_label)
         
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setToolTip("Manually refresh the log view")
+        refresh_btn.clicked.connect(self.load_log)
+        filter_layout.addWidget(refresh_btn)
+        
         copy_btn = QPushButton("Copy")
         copy_btn.clicked.connect(lambda: (
             QApplication.clipboard().setText(self.log_view.toPlainText()),
