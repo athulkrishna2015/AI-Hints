@@ -45,8 +45,8 @@ class TestHyperRobustMatching(unittest.TestCase):
         note = MockNote({"Text": note_text})
         
         active = self.parser._get_active_clozes_map(note)
-        self.assertIn("outerinner", active["c1"])
-        self.assertIn("inner", active["c2"])
+        self.assertTrue(any(norm == "outerinner" for norm, _ in active["c1"]))
+        self.assertTrue(any(norm == "inner" for norm, _ in active["c2"]))
 
     def test_nested_with_hints(self):
         note_text = "{{c1::Outer {{c2::Inner::Hint}} }}"
@@ -54,8 +54,8 @@ class TestHyperRobustMatching(unittest.TestCase):
         
         active = self.parser._get_active_clozes_map(note)
         # c1's answer should be "Outer Inner" (stripping the inner hint)
-        self.assertIn("outerinner", active["c1"])
-        self.assertIn("inner", active["c2"])
+        self.assertTrue(any(norm == "outerinner" for norm, _ in active["c1"]))
+        self.assertTrue(any(norm == "inner" for norm, _ in active["c2"]))
 
     def test_surrounding_punctuation(self):
         # AI might add quotes or a period

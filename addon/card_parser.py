@@ -998,7 +998,12 @@ class CardParser:
                             c_key = f"c{c_num}"
                             if c_key not in cloze_map:
                                 cloze_map[c_key] = set()
-                            cloze_map[c_key].add(self._normalized_answer_text(answer))
+                            
+                            # Store both the heavily normalized version AND the lightly cleaned version
+                            # so we can do accurate word-boundary checks later.
+                            norm = self._normalized_answer_text(answer)
+                            clean = self._clean_html(answer)
+                            cloze_map[c_key].add((norm, clean))
                             
                             # Move pos to after the cN:: to find nested clozes
                             pos = content_start
@@ -1075,12 +1080,17 @@ class CardParser:
         # Layered Matching:
         # 1. Try matching the ENTIRE string (normalized).
         full_norm = self._normalized_answer_text(stored_answer_raw)
-        note_clozes = active_clozes[card_key] # set of normalized strings
+        note_clozes = active_clozes[card_key] # set of (normalized, clean_raw) tuples
         
-        if full_norm in note_clozes:
+        if any(full_norm == norm for norm, _ in note_clozes):
             return True
 
-        # 2. Try splitting by multiple common separators (comma, semicolon, newline)
+        # 2. Substring Match (handles "impeachment" vs "President can be removed... by impeachment")
+        for norm, clean_raw in note_clozes:
+            if full_norm and full_norm in norm:
+                return True
+
+        # 3. Try splitting by multiple common separators (comma, semicolon, newline)
         # This handles multi-cloze IDs where the AI returns a list.
         stored_parts = re.split(r'[,\n;]+', stored_answer_raw)
         normalized_parts = [self._normalized_answer_text(p) for p in stored_parts if p.strip()]
@@ -1089,29 +1099,35 @@ class CardParser:
             return True
             
         # Every part of the stored answer must be present in the note's clozes
-        if all(p in note_clozes for p in normalized_parts):
+        if all(any(p in norm for norm, _ in note_clozes) for p in normalized_parts):
             return True
             
-        # 3. Super-Fuzzy Fallback: Alphanumeric only (ignore all punctuation)
+        # 4. Super-Fuzzy Fallback: Alphanumeric only (ignore all punctuation)
         # ONLY use this for non-math strings to avoid false positives in formulas
         def super_fuzzy(s):
             return re.sub(r'[^a-zA-Z0-9\u0d00-\u0d7f]+', '', s).casefold()
 
         if "\\" not in stored_answer_raw: # likely not math
             sf_stored = [super_fuzzy(p) for p in normalized_parts]
-            sf_note = {super_fuzzy(n) for n in note_clozes}
-            if all(s in sf_note for s in sf_stored if s):
-                return True
+            
+            for p in sf_stored:
+                if not p: continue
+                # If ANY stored part is a substring of ANY note cloze, it's a match.
+                if any(p in super_fuzzy(clean_raw) for _, clean_raw in note_clozes):
+                    return True
                 
-            # 4. Word subset fallback (handles "Article 21" vs "21")
+            # 5. Loose Word Fallback (handles "Article 21" vs "21" AND overlapping concepts)
             def get_words(s):
-                return set(w for w in re.split(r'[^a-zA-Z0-9\u0d00-\u0d7f]+', str(s).casefold()) if w)
+                # Consider words longer than 2 characters OR numbers
+                return set(w for w in re.split(r'[^a-zA-Z0-9\u0d00-\u0d7f]+', str(s).casefold()) if len(w) > 2 or w.isdigit())
                 
             stored_words = get_words(stored_answer_raw)
-            for n_cloze in note_clozes:
-                note_words = get_words(n_cloze)
+            for _, clean_raw in note_clozes:
+                note_words = get_words(clean_raw)
                 if stored_words and note_words:
-                    # If all words of one are in the other (one is a subset of the other)
+                    # To prevent "Article 21" matching "Article 14" because of "Article",
+                    # we require that one set of words is fully contained within the other
+                    # (i.e. one is a subset of the other).
                     if stored_words.issubset(note_words) or note_words.issubset(stored_words):
                         return True
 
