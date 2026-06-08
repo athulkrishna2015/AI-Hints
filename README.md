@@ -129,6 +129,12 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### June 8, 2026 (v3.3.1)
+- **LaTeX Repair Disabled by Default**: Set the "Repair AI LaTeX Errors" setting to `off` by default. This preserves standard math normalization (delimiters, JSON escaping) while making aggressive repairs opt-in for maximum stability with modern models like Claude 3.7 or Gemini 2.0.
+- **Improved Log Ignoration**: Updated `.gitignore` to more robustly handle rotated log files (`.log.1`, `.log.2`) and ensured critical metadata files remain tracked.
+- **Test Suite Stability**: Resolved unit test regressions in `CardParser` and improved coverage for LaTeX normalization and JSON-only storage.
+- **Cleaned Up Batch Logic**: Removed stray code and improved reliability of multi-threaded generation hooks.
+
 ### June 8, 2026 (v3.3.0)
 - **Granular Batch Queue Control**: You can now see the next 5 cards in the pending batch queue directly in the status area, with individual **[✖ Discard]** buttons to remove specific cards without stopping the whole process.
 - **Deck-Specific Maintenance Scoping**: Added a searchable deck selector to the **Advanced** tab. All maintenance tools (Migration, Unicode Fixer, Orphan Cleanup, and Naked JSON Purge) can now be scoped to a specific deck or run on the entire collection.
