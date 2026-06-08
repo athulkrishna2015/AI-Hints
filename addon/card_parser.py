@@ -579,7 +579,7 @@ class CardParser:
                 # Check if this block is scoped to the card
                 if self._block_matches_card(block, card):
                     # Check if the block actually HAS data for this specific card
-                    if self._json_block_has_data_for_card(block, match.group(1), card):
+                    if self._json_block_has_data_for_card(block, match.group(1), card, note):
                         return block
         return None
 
@@ -640,7 +640,7 @@ class CardParser:
             # We check the block attributes directly
             block_ord = self._data_attr(block, "data-ai-hints-card-ord")
             current_card_key = card_key
-            if not current_card_key and block_ord is not None:
+            if not current_card_key and block_ord:
                 current_card_key = f"c{int(block_ord) + 1}"
 
             if self._is_keyed_payload(parsed):
@@ -900,6 +900,21 @@ class CardParser:
                 
         return cloze_map
 
+    def _normalized_answer_text(self, text: Any) -> str:
+        text = re.sub(r'<[^>]+>', '', html.unescape(str(text or "")))
+        return "".join(text.split()).casefold()
+
+    def _cloze_data_matches_note(self, data: Any, card_key: str, note=None) -> bool:
+        if not isinstance(data, dict) or "correct_answer" not in data:
+            return True
+
+        active_clozes = self._get_active_clozes_map(note)
+        if not active_clozes or card_key not in active_clozes:
+            return True
+
+        stored_answer = self._normalized_answer_text(data.get("correct_answer"))
+        return bool(stored_answer) and stored_answer in active_clozes[card_key]
+
     def _parse_json_payload(self, raw_payload: str) -> Any:
         if not raw_payload:
             return {}
@@ -915,7 +930,7 @@ class CardParser:
             return False
         return any(re.fullmatch(r"c\d+", str(key)) for key in payload.keys())
 
-    def _json_block_has_data_for_card(self, block: str, raw_payload: str, card=None) -> bool:
+    def _json_block_has_data_for_card(self, block: str, raw_payload: str, card=None, note=None) -> bool:
         if self.json_class not in block:
             # HTML-only blocks always count as having data (we don't know what's in them)
             return True
@@ -935,7 +950,11 @@ class CardParser:
             if card_ord is None:
                 # If no card provided, just check if ANY keys exist
                 return bool(parsed)
-            return f"c{card_ord + 1}" in parsed
+            card_key = f"c{card_ord + 1}"
+            return (
+                card_key in parsed
+                and self._cloze_data_matches_note(parsed[card_key], card_key, note)
+            )
             
         # Legacy/Universal block: check for hints/options
         has_hints = bool(parsed.get("hints")) or bool(parsed.get("options"))
@@ -1059,5 +1078,3 @@ class CardParser:
                 note[f_name] = new_val
                 
         return note_changed
-
-

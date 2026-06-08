@@ -1,190 +1,190 @@
 {
-    "ai_provider": "gemini",
-    "api_keys": {
-        "openai": "",
-        "anthropic": "",
-        "gemini": "",
-        "openrouter": "",
-        "grok": "",
-        "deepseek": "",
-        "groq": "",
-        "nvidia": "",
-        "mistral": "",
-        "huggingface": "",
-        "together": "",
-        "sambanova": "",
-        "cerebras": ""
-    },
-    "local_endpoint": {
-        "enabled": false,
-        "base_url": "http://localhost:11434/v1",
-        "model": "llama3",
-        "api_key": ""
-    },
-    "models": {
-        "openai": "gpt-4o",
-        "anthropic": "claude-3-7-sonnet-latest",
-        "gemini": "gemini-flash-latest",
-        "groq": "llama-3.3-70b-versatile",
-        "deepseek": "deepseek-reasoner",
-        "grok": "grok-2-1212",
-        "mistral": "mistral-large-latest",
-        "openrouter": "deepseek/deepseek-chat",
-        "nvidia": "meta/llama-3.3-70b-instruct",
-        "huggingface": "deepseek-ai/DeepSeek-V3",
-        "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "sambanova": "Meta-Llama-3.3-70B-Instruct",
-        "cerebras": "llama-3.1-8b",
-        "antigravity": "gemini-3.1-flash-lite",
-        "local": "llama3.3"
-    },
-    "model_fallbacks": {
-        "anthropic": [
-            "claude-3-7-sonnet-latest",
-            "claude-3-5-sonnet-latest",
-            "claude-3-5-haiku-latest"
-        ],
-        "gemini": [
-            "gemini-3.1-flash-lite",
-            "gemini-flash-lite-latest",
-            "gemini-3.1-flash-lite-preview",
-            "gemini-2.5-flash-lite",
-            "gemini-3.1-pro-preview",
-            "gemini-3-pro-preview",
-            "gemini-2.5-pro",
-            "gemini-pro-latest",
-            "gemini-3-flash-preview",
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-flash-latest",
-            "gemini-2.0-flash-lite"
-        ],
-        "groq": [
-            "llama-3.3-70b-versatile",
-            "mixtral-8x7b-32768",
-            "llama-3.1-8b-instant"
-        ],
-        "grok": [
-            "grok-2-1212"
-        ],
-        "huggingface": [
-            "deepseek-ai/DeepSeek-V3",
-            "meta-llama/Llama-3.3-70B-Instruct",
-            "Qwen/Qwen2.5-72B-Instruct"
-        ],
-        "openai": [
-            "gpt-4o",
-            "o1-mini",
-            "gpt-4o-mini"
-        ],
-        "nvidia": [
-            "meta/llama-3.3-70b-instruct",
-            "meta/llama-3.1-8b-instruct"
-        ],
-        "openrouter": [
-            "google/gemini-2.0-flash-001",
-            "google/gemini-2.0-flash-lite-001",
-            "anthropic/claude-3.5-sonnet",
-            "openai/gpt-4o",
-            "deepseek/deepseek-chat",
-            "meta-llama/llama-3.3-70b-instruct",
-            "openrouter/auto"
-        ],
-        "together": [
-            "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-            "deepseek-ai/DeepSeek-V3",
-            "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
-        ],
-        "sambanova": [
-            "Meta-Llama-3.3-70B-Instruct"
-        ],
-        "cerebras": [
-            "llama-3.3-70b",
-            "llama-3.1-8b"
-        ],
-        "antigravity": [
-            "gemini-3.1-flash-lite",
-            "gemini-3-flash",
-            "gemini-2.5-flash",
-            "gemini-2-flash",
-            "gemini-2.5-pro"
-        ],
-        "local": [
-            "gemini-2.5-flash-lite",
-            "gpt-oss-120b-medium"
-        ]
-    },
-    "target_fields": [
-        "Extras",
-        "Back",
-        "Text",
-        "Extra"
+  "ai_provider": "gemini",
+  "api_keys": {
+    "openai": "",
+    "anthropic": "",
+    "gemini": "",
+    "openrouter": "",
+    "grok": "",
+    "deepseek": "",
+    "groq": "",
+    "nvidia": "",
+    "mistral": "",
+    "huggingface": "",
+    "together": "",
+    "sambanova": "",
+    "cerebras": ""
+  },
+  "local_endpoint": {
+    "enabled": false,
+    "base_url": "http://localhost:11434/v1",
+    "model": "llama3",
+    "api_key": ""
+  },
+  "models": {
+    "openai": "gpt-4o",
+    "anthropic": "claude-3-7-sonnet-latest",
+    "gemini": "gemini-flash-latest",
+    "groq": "llama-3.3-70b-versatile",
+    "deepseek": "deepseek-reasoner",
+    "grok": "grok-2-1212",
+    "mistral": "mistral-large-latest",
+    "openrouter": "deepseek/deepseek-chat",
+    "nvidia": "meta/llama-3.3-70b-instruct",
+    "huggingface": "deepseek-ai/DeepSeek-V3",
+    "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "sambanova": "Meta-Llama-3.3-70B-Instruct",
+    "cerebras": "llama-3.1-8b",
+    "antigravity": "gemini-3.1-flash-lite",
+    "local": "llama3.3"
+  },
+  "model_fallbacks": {
+    "anthropic": [
+      "claude-3-7-sonnet-latest",
+      "claude-3-5-sonnet-latest",
+      "claude-3-5-haiku-latest"
     ],
-    "system_prompt": "**ROLE**\nYou are an expert in Effective Learning, Instructional Design, and Spaced Repetition Systems (SRS). Your objective is to deconstruct complex flashcards to enhance active recall through high-quality multiple-choice questions (MCQs).\n\n**TASK**\nAnalyze the provided Anki card content. The **Back** side often contains the core answer alongside extensive supplementary information (derivations, related data, context, examples). \n\nYour task is to execute the following steps:\n1. **Isolate (for Standard Cards) / Accept (for Cloze Cards):** For Standard cards, extract only the core correct answer from the Back side, ignoring supplementary data. For Cloze deletion cards (where Front contains a blank `[...]` or `[... (existing hint: ...)]`), the provided **Back / correct answer** is already the exact correct answer—accept it exactly as-is without any modification, shortening, or further extraction.\n2. **Generate Distractors:** Create three highly plausible, unique distractors based on the core correct answer. These must address common misconceptions or closely related concepts to test true understanding rather than pure memorization. You MUST utilize professional MCQ setter tricks to craft these distractors. Choose the most applicable techniques from the \"Distractor Formulation Techniques\" list below based on the flashcard content.\n3. **Formulate Hints:** Generate two concise, conceptual hints based on the Front side question. These should trigger recall through underlying principles or contextual clues without giving away the answer or repeating the prompt verbatim.\n4. **Format:** Output the results strictly in the required JSON structure.\n\n**DISTRACTOR FORMULATION TECHNIQUES**\nWhen generating distractors, employ the following recurring tricks used by expert examiners to separate deep comprehension from rote memorization:\n*   **Closely Related Formula Trap:** Use a valid formula from the same chapter or topic (e.g., if the answer is the Second London Equation, provide the First London Equation as a distractor).\n*   **Sign Error Trap:** Invert signs in equations (e.g., changing $-$ to $+$).\n*   **Missing Constant/Factor Trap:** Omit or alter standard coefficients like $2$, $\\pi$, $1/2$, $c$, or $\\hbar$.\n*   **Unit/Dimension Trap:** Create options that look similar mathematically but have incorrect dimensional analysis (e.g., $mv/r$ instead of $mv^2/r$).\n*   **Variable Swap Trap:** Swap related but distinct variables (e.g., $E$ and $B$, frequency and angular frequency).\n*   **Similar Concept Trap:** Use another true principle or equation that answers a *different* but related concept (e.g., Gauss's Law instead of Coulomb's Law).\n*   **Extreme Statement Trap:** Introduce words like \"always,\" \"never,\" \"only,\" or \"exactly\" to make a generally true statement technically false.\n*   **Partial Truth Trap:** Provide an option that is mostly correct but contains one fundamentally wrong phrase or mechanism.\n*   **Graph Shape/Notation Trap:** Alter slope signs, asymptotes, origins, or confuse standard notation symbols (e.g., using $\\rho$ for permeability instead of resistivity).\n*   **Limiting Case/Context Trap:** Apply a formula to a situation where its assumptions fail (e.g., using ideal gas laws for non-ideal conditions), or present the correct equation in the wrong context.\n*   **Concept-Reversal Trap:** Swap the cause and effect of a physical phenomenon.\n*   **Temporal & Field Parallelism Trap (for Awards, History, & Discoveries):** If the question involves an award (e.g., Nobel Prize), discovery, or historical event for a specific year/field, use laureates/achievements from the same field in adjacent years (previous/next) or different fields in the same year as distractors.\n*   **Sequential/Adjacent Elements Trap (for Laws, Articles, Rules, & Sections):** If the card refers to a specific numbered or sequential item (like a constitutional Article, legal Section, Amendment, Rule, or Chapter) and the blank is the description/definition of that item, the distractors must be the actual, real descriptions/definitions of adjacent numbered items (e.g. if the answer is the definition of Article 13, use the actual, real definitions of Articles 12, 14, or 15 as distractors). Do not invent speculative or synthetic variations.\n*   **Subject-Aligned Number Trap (for Articles, Laws, & Sections):** If the correct answer is a specific number (like a constitutional Article, Section, or Law number), the distractors should be other famous, prominent, or highly relevant numbers associated with the exact same subject, entity, or category (e.g., if the correct answer is Article 61 which deals with the President's impeachment, use other major President-related articles like Article 52, 72, or 123 as distractors, instead of just mathematically adjacent numbers like 60 or 62). This makes the options extremely challenging and realistic.\n\n**CONSTRAINTS & GUIDELINES**\n*   **Minimum Information Principle:** Keep all output text extremely concise, specific, and atomic. \n*   **Absolute Focus:** Formulate the correct answer and distractors based *only* on the core concept. Do not attempt to summarize or include the extra data from the Back side.\n*   **Distractor Quality:** Ensure all distractors are distinct from one another. Avoid overlapping meanings, \"throwaway\" options, or \"All of the above\" style traps unless explicitly relevant.\n*   **Structural Symmetry and Sign Balance:** Ensure all four options are structurally homogeneous. For mathematical or formula-based questions, do not make the correct answer a structural outlier (e.g., if the correct answer has a negative sign, balance the options by making exactly two options negative and two options positive, rather than making the correct answer the only negative option, so that test-takers cannot guess the correct answer through sign-elimination or symmetry breaking).\n*   **Homogeneous Grammar and Structure:** Ensure choices are grammatically consistent with each other. Do not mix parts of speech unevenly (e.g., do not write two options with qualifying adverbs and two options without). All options must share the same sentence structure, length, complexity, and format style.\n*   **Meaningful Ordering:** Always place the choices in a logical order (e.g., numerical order, chronological order, or alphabetical order) in the final JSON array when applicable. This reduces scanning effort and eliminates position-based guessing clues.\n*   **Misconception-Driven Plausibility:** Every distractor must represent a common, realistic misconception or error (such as a specific math step error, sign inversion, or term confusion) rather than a speculative, obviously false, or far-fetched option.\n*   **Prevent Overlapping Clues:** Avoid making two options highly similar while others are completely different. For example, do not include the same individual's name in only two out of the four options, as this provides a syntactic clue allowing test-takers to narrow down the answer. Ensure distractors are fully independent and do not share prominent names or phrases unless all options follow the exact same structural template. All options must be homogeneous in style, format, and complexity.\n*   **Syntax Scrubbing:** Remove all Anki-specific syntax, HTML tags, or cloze deletion formatting (e.g., `{{c1::answer}}`). Output plain text and math formats only.\n*   **Math Formatting:** USE ONLY `$` ... `$` for inline math and `$$` ... `$$` for block math. DO NOT wrap `$` inside `\\(` or any other delimiters. Ensure valid LaTeX syntax.\n*   **Language Consistency:** The hints and all options/distractors MUST be generated in the exact same language as the question/content provided in the prompt (e.g., if the question is in Malayalam, generate the hints and distractors in Malayalam; if in Spanish, generate in Spanish; if in English, generate in English). Never explain or write hints in English if the card content is in a non-English language.\n\n**OUTPUT FORMAT**\nReturn ONLY a valid JSON object matching the exact structure below. Do not include markdown formatting (like ```json), conversational filler, or any text outside the JSON block.\n\n{\n  \"hints\": [\n    \"Short conceptual hint 1\",\n    \"Short conceptual hint 2\"\n  ],\n  \"correct_answer\": \"The isolated core answer\",\n  \"distractors\": [\n    \"Plausible distractor 1\",\n    \"Plausible distractor 2\",\n    \"Plausible distractor 3\"\n  ]\n}",
-    "storage_mode": "json",
-    "mathjax_format": "delimiters",
-    "fix_latex": false,
-    "answer_display_position": "between",
-    "options_count": 4,
-    "show_hints_button": true,
-    "show_options_button": true,
-    "show_on_card": true,
-    "show_in_bottom_bar": true,
-    "auto_clear_logs": true,
-    "custom_providers": {},
-    "note_type_fields": {
-        "Cloze": [
-            "Text"
-        ],
-        "Basic": [
-            "Front",
-            "Back"
-        ]
-    },
-    "provider_priority": [
-        "anthropic",
-        "openai",
-        "deepseek",
-        "grok",
-        "gemini",
-        "openrouter",
-        "huggingface",
-        "together",
-        "groq",
-        "sambanova",
-        "nvidia",
-        "mistral",
-        "cerebras",
-        "antigravity",
-        "local"
+    "gemini": [
+      "gemini-3.1-flash-lite",
+      "gemini-flash-lite-latest",
+      "gemini-3.1-flash-lite-preview",
+      "gemini-2.5-flash-lite",
+      "gemini-3.1-pro-preview",
+      "gemini-3-pro-preview",
+      "gemini-2.5-pro",
+      "gemini-pro-latest",
+      "gemini-3-flash-preview",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-flash-latest",
+      "gemini-2.0-flash-lite"
     ],
-    "shortcuts": {
-        "modifier": "alt",
-        "generate": "1",
-        "toggle-options": "3",
-        "toggle-hints": "2",
-        "clear": "4",
-        "refresh": "5",
-        "show-json": "6"
-    },
-    "auto_generate_new": false,
-    "auto_regenerate_all": false,
-    "auto_regenerate_if_old_version": false,
-    "auto_regenerate_min_version": "",
-    "auto_regenerate_if_old_time": false,
-    "auto_regenerate_min_time": "",
-    "antigravity_proxy": {
-        "enabled": false,
-        "port": 3000
-    },
-    "auto_show_hints": true,
-    "auto_show_options": false,
-    "do_not_auto_collapse": false,
-    "pre_generate_next": true,
-    "disabled_providers": [],
-    "disabled_fallback_models": {},
-    "model_cooldown_minutes": 5,
-    "hints_font_size": "",
-    "batch_limit": 1000,
-    "multithread_providers": false
+    "groq": [
+      "llama-3.3-70b-versatile",
+      "mixtral-8x7b-32768",
+      "llama-3.1-8b-instant"
+    ],
+    "grok": [
+      "grok-2-1212"
+    ],
+    "huggingface": [
+      "deepseek-ai/DeepSeek-V3",
+      "meta-llama/Llama-3.3-70B-Instruct",
+      "Qwen/Qwen2.5-72B-Instruct"
+    ],
+    "openai": [
+      "gpt-4o",
+      "o1-mini",
+      "gpt-4o-mini"
+    ],
+    "nvidia": [
+      "meta/llama-3.3-70b-instruct",
+      "meta/llama-3.1-8b-instruct"
+    ],
+    "openrouter": [
+      "google/gemini-2.0-flash-001",
+      "google/gemini-2.0-flash-lite-001",
+      "anthropic/claude-3.5-sonnet",
+      "openai/gpt-4o",
+      "deepseek/deepseek-chat",
+      "meta-llama/llama-3.3-70b-instruct",
+      "openrouter/auto"
+    ],
+    "together": [
+      "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "deepseek-ai/DeepSeek-V3",
+      "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+    ],
+    "sambanova": [
+      "Meta-Llama-3.3-70B-Instruct"
+    ],
+    "cerebras": [
+      "llama-3.3-70b",
+      "llama-3.1-8b"
+    ],
+    "antigravity": [
+      "gemini-3.1-flash-lite",
+      "gemini-3-flash",
+      "gemini-2.5-flash",
+      "gemini-2-flash",
+      "gemini-2.5-pro"
+    ],
+    "local": [
+      "gemini-2.5-flash-lite",
+      "gpt-oss-120b-medium"
+    ]
+  },
+  "target_fields": [
+    "Extras",
+    "Back",
+    "Text",
+    "Extra"
+  ],
+  "system_prompt": "**ROLE**\nYou are an expert in Effective Learning, Instructional Design, and Spaced Repetition Systems (SRS). Your objective is to deconstruct complex flashcards to enhance active recall through high-quality multiple-choice questions (MCQs).\n\n**TASK**\nAnalyze the provided Anki card content. The **Back** side often contains the core answer alongside extensive supplementary information (derivations, related data, context, examples). \n\nYour task is to execute the following steps:\n1. **Isolate (for Standard Cards) / Accept (for Cloze Cards):** For Standard cards, extract only the core correct answer from the Back side, ignoring supplementary data. For Cloze deletion cards (where Front contains a blank `[...]` or `[... (existing hint: ...)]`), the provided **Back / correct answer** is already the exact correct answer\u2014accept it exactly as-is without any modification, shortening, or further extraction.\n2. **Generate Distractors:** Create three highly plausible, unique distractors based on the core correct answer. These must address common misconceptions or closely related concepts to test true understanding rather than pure memorization. You MUST utilize professional MCQ setter tricks to craft these distractors. Choose the most applicable techniques from the \"Distractor Formulation Techniques\" list below based on the flashcard content.\n3. **Formulate Hints:** Generate two concise, conceptual hints based on the Front side question. These should trigger recall through underlying principles or contextual clues without giving away the answer or repeating the prompt verbatim.\n4. **Format:** Output the results strictly in the required JSON structure.\n\n**DISTRACTOR FORMULATION TECHNIQUES**\nWhen generating distractors, employ the following recurring tricks used by expert examiners to separate deep comprehension from rote memorization:\n*   **Closely Related Formula Trap:** Use a valid formula from the same chapter or topic (e.g., if the answer is the Second London Equation, provide the First London Equation as a distractor).\n*   **Sign Error Trap:** Invert signs in equations (e.g., changing $-$ to $+$).\n*   **Missing Constant/Factor Trap:** Omit or alter standard coefficients like $2$, $\\pi$, $1/2$, $c$, or $\\hbar$.\n*   **Unit/Dimension Trap:** Create options that look similar mathematically but have incorrect dimensional analysis (e.g., $mv/r$ instead of $mv^2/r$).\n*   **Variable Swap Trap:** Swap related but distinct variables (e.g., $E$ and $B$, frequency and angular frequency).\n*   **Similar Concept Trap:** Use another true principle or equation that answers a *different* but related concept (e.g., Gauss's Law instead of Coulomb's Law).\n*   **Extreme Statement Trap:** Introduce words like \"always,\" \"never,\" \"only,\" or \"exactly\" to make a generally true statement technically false.\n*   **Partial Truth Trap:** Provide an option that is mostly correct but contains one fundamentally wrong phrase or mechanism.\n*   **Graph Shape/Notation Trap:** Alter slope signs, asymptotes, origins, or confuse standard notation symbols (e.g., using $\\rho$ for permeability instead of resistivity).\n*   **Limiting Case/Context Trap:** Apply a formula to a situation where its assumptions fail (e.g., using ideal gas laws for non-ideal conditions), or present the correct equation in the wrong context.\n*   **Concept-Reversal Trap:** Swap the cause and effect of a physical phenomenon.\n*   **Temporal & Field Parallelism Trap (for Awards, History, & Discoveries):** If the question involves an award (e.g., Nobel Prize), discovery, or historical event for a specific year/field, use laureates/achievements from the same field in adjacent years (previous/next) or different fields in the same year as distractors.\n*   **Sequential/Adjacent Elements Trap (for Laws, Articles, Rules, & Sections):** If the card refers to a specific numbered or sequential item (like a constitutional Article, legal Section, Amendment, Rule, or Chapter) and the blank is the description/definition of that item, the distractors must be the actual, real descriptions/definitions of adjacent numbered items (e.g. if the answer is the definition of Article 13, use the actual, real definitions of Articles 12, 14, or 15 as distractors). Do not invent speculative or synthetic variations.\n*   **Subject-Aligned Number Trap (for Articles, Laws, & Sections):** If the correct answer is a specific number (like a constitutional Article, Section, or Law number), the distractors should be other famous, prominent, or highly relevant numbers associated with the exact same subject, entity, or category (e.g., if the correct answer is Article 61 which deals with the President's impeachment, use other major President-related articles like Article 52, 72, or 123 as distractors, instead of just mathematically adjacent numbers like 60 or 62). This makes the options extremely challenging and realistic.\n\n**CONSTRAINTS & GUIDELINES**\n*   **Minimum Information Principle:** Keep all output text extremely concise, specific, and atomic. \n*   **Absolute Focus:** Formulate the correct answer and distractors based *only* on the core concept. Do not attempt to summarize or include the extra data from the Back side.\n*   **Distractor Quality:** Ensure all distractors are distinct from one another. Avoid overlapping meanings, \"throwaway\" options, or \"All of the above\" style traps unless explicitly relevant.\n*   **Structural Symmetry and Sign Balance:** Ensure all four options are structurally homogeneous. For mathematical or formula-based questions, do not make the correct answer a structural outlier (e.g., if the correct answer has a negative sign, balance the options by making exactly two options negative and two options positive, rather than making the correct answer the only negative option, so that test-takers cannot guess the correct answer through sign-elimination or symmetry breaking).\n*   **Homogeneous Grammar and Structure:** Ensure choices are grammatically consistent with each other. Do not mix parts of speech unevenly (e.g., do not write two options with qualifying adverbs and two options without). All options must share the same sentence structure, length, complexity, and format style.\n*   **Meaningful Ordering:** Always place the choices in a logical order (e.g., numerical order, chronological order, or alphabetical order) in the final JSON array when applicable. This reduces scanning effort and eliminates position-based guessing clues.\n*   **Misconception-Driven Plausibility:** Every distractor must represent a common, realistic misconception or error (such as a specific math step error, sign inversion, or term confusion) rather than a speculative, obviously false, or far-fetched option.\n*   **Prevent Overlapping Clues:** Avoid making two options highly similar while others are completely different. For example, do not include the same individual's name in only two out of the four options, as this provides a syntactic clue allowing test-takers to narrow down the answer. Ensure distractors are fully independent and do not share prominent names or phrases unless all options follow the exact same structural template. All options must be homogeneous in style, format, and complexity.\n*   **Syntax Scrubbing:** Remove all Anki-specific syntax, HTML tags, or cloze deletion formatting (e.g., `{{c1::answer}}`). Output plain text and math formats only.\n*   **Math Formatting:** USE ONLY `$` ... `$` for inline math and `$$` ... `$$` for block math. DO NOT wrap `$` inside `\\(` or any other delimiters. Ensure valid LaTeX syntax.\n*   **Language Consistency:** The hints and all options/distractors MUST be generated in the exact same language as the question/content provided in the prompt (e.g., if the question is in Malayalam, generate the hints and distractors in Malayalam; if in Spanish, generate in Spanish; if in English, generate in English). Never explain or write hints in English if the card content is in a non-English language.\n\n**OUTPUT FORMAT**\nReturn ONLY a valid JSON object matching the exact structure below. Do not include markdown formatting (like ```json), conversational filler, or any text outside the JSON block.\n\n{\n  \"hints\": [\n    \"Short conceptual hint 1\",\n    \"Short conceptual hint 2\"\n  ],\n  \"correct_answer\": \"The isolated core answer\",\n  \"distractors\": [\n    \"Plausible distractor 1\",\n    \"Plausible distractor 2\",\n    \"Plausible distractor 3\"\n  ]\n}",
+  "storage_mode": "json",
+  "mathjax_format": "delimiters",
+  "fix_latex": false,
+  "answer_display_position": "between",
+  "options_count": 4,
+  "show_hints_button": true,
+  "show_options_button": true,
+  "show_on_card": true,
+  "show_in_bottom_bar": true,
+  "auto_clear_logs": true,
+  "custom_providers": {},
+  "note_type_fields": {
+    "Cloze": [
+      "Text"
+    ],
+    "Basic": [
+      "Front",
+      "Back"
+    ]
+  },
+  "provider_priority": [
+    "anthropic",
+    "openai",
+    "deepseek",
+    "grok",
+    "gemini",
+    "openrouter",
+    "huggingface",
+    "together",
+    "groq",
+    "sambanova",
+    "nvidia",
+    "mistral",
+    "cerebras",
+    "antigravity",
+    "local"
+  ],
+  "shortcuts": {
+    "modifier": "alt",
+    "generate": "1",
+    "toggle-options": "3",
+    "toggle-hints": "2",
+    "clear": "4",
+    "refresh": "5",
+    "show-json": "6"
+  },
+  "auto_generate_new": false,
+  "auto_regenerate_all": false,
+  "auto_regenerate_if_old_version": false,
+  "auto_regenerate_min_version": "",
+  "auto_regenerate_if_old_time": false,
+  "auto_regenerate_min_time": "",
+  "antigravity_proxy": {
+    "enabled": false,
+    "port": 3000
+  },
+  "auto_show_hints": true,
+  "auto_show_options": false,
+  "do_not_auto_collapse": false,
+  "pre_generate_next": true,
+  "disabled_providers": [],
+  "disabled_fallback_models": {},
+  "model_cooldown_minutes": 60,
+  "hints_font_size": "",
+  "batch_limit": 1000,
+  "multithread_providers": false
 }

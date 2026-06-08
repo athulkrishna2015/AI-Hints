@@ -124,6 +124,31 @@ class CardParserTests(unittest.TestCase):
         self.assertEqual(payload["c1"]["hints"], ["h1new"])
         self.assertNotIn("c2", payload)
 
+    def test_mismatched_cloze_payload_is_not_reported_as_existing(self):
+        parser = CardParser(storage_mode="json")
+        note = FakeNote(
+            "Cloze",
+            {
+                "Text": "{{c1::Mumbai}} and {{c2::financial}}",
+                "Back": "",
+            },
+        )
+        note["Text"] += parser.build_hints_block({
+            "c1": {
+                "hints": ["valid"],
+                "options": ["Mumbai"],
+                "correct_answer": "Mumbai",
+            },
+            "c2": {
+                "hints": ["copied from another note"],
+                "options": ["nose ring"],
+                "correct_answer": "nose ring",
+            },
+        })
+
+        self.assertIsNotNone(parser.find_hints_block(note, FakeCard(1, 0)))
+        self.assertIsNone(parser.find_hints_block(note, FakeCard(2, 1)))
+
     def test_html_mode_escapes_non_math_tags(self):
         parser = CardParser(storage_mode="html")
 

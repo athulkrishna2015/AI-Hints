@@ -183,36 +183,48 @@ class AdvancedTabMixin:
             return
         self.blacklist_list.clear()
         import time
-        from ..ai_client import FAILED_MODELS_CACHE, RATE_LIMIT_STREAK
+        from ..ai_client import FAILED_MODELS_CACHE, RATE_LIMIT_STREAK, load_blacklist
+
+        # Always reload from disk to stay in sync with background failures
+        load_blacklist()
+
         now = time.time()
         
-        expired_keys = []
-        for (provider, model), expiry in list(FAILED_MODELS_CACHE.items()):
-            remaining = expiry - now
-            if remaining <= 0:
-                expired_keys.append((provider, model))
-                continue
-            
-            mins = int(remaining // 60)
-            secs = int(remaining % 60)
-            if mins > 60:
-                hours = mins // 60
-                mins = mins % 60
-                time_str = f"{hours}h {mins}m remaining"
+        expired_keys = [
+            key for key, expiry in FAILED_MODELS_CACHE.items()
+            if expiry <= now
+        ]
+        for key in expired_keys:
+            del FAILED_MODELS_CACHE[key]
+
+        all_keys = sorted(
+            set(FAILED_MODELS_CACHE) | set(RATE_LIMIT_STREAK),
+            key=lambda key: (key[0].casefold(), key[1].casefold()),
+        )
+        for provider, model in all_keys:
+            expiry = FAILED_MODELS_CACHE.get((provider, model))
+            streak = RATE_LIMIT_STREAK.get((provider, model), 0)
+
+            if expiry is not None:
+                remaining = max(0, expiry - now)
+                mins = int(remaining // 60)
+                secs = int(remaining % 60)
+                if mins >= 60:
+                    hours = mins // 60
+                    mins = mins % 60
+                    status = f"{hours}h {mins}m remaining"
+                else:
+                    status = f"{mins}m {secs}s remaining"
             else:
-                time_str = f"{mins}m {secs}s remaining"
-                
-            item_text = f"{provider.capitalize()} - {model} ({time_str})"
+                status = "not on cooldown"
+
+            streak_text = f", failure streak {streak}" if streak else ""
+            item_text = f"{provider.capitalize()} - {model} ({status}{streak_text})"
             item = QListWidgetItem(item_text)
             item.setData(Qt.ItemDataRole.UserRole, (provider, model))
             self.blacklist_list.addItem(item)
             
         if expired_keys:
-            for k in expired_keys:
-                if k in FAILED_MODELS_CACHE:
-                    del FAILED_MODELS_CACHE[k]
-                if k in RATE_LIMIT_STREAK:
-                    del RATE_LIMIT_STREAK[k]
             self._save_blacklist_locally()
 
     def _save_blacklist_locally(self):

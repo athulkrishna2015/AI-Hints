@@ -429,6 +429,27 @@ def _set_frontend_generating(web, active, card_id=None, is_pregen=False, status=
         }})();
     """)
 
+def _get_ui_config(card, auto_reveal=False, is_answer=False):
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    return {
+        "show_on_card": config.get("show_on_card", True),
+        "auto_reveal": auto_reveal,
+        "auto_show_hints": config.get("auto_show_hints", False),
+        "auto_show_options": config.get("auto_show_options", False),
+        "do_not_auto_collapse": config.get("do_not_auto_collapse", False),
+        "manual_show_hints": config.get("manual_show_hints", True),
+        "manual_show_options": config.get("manual_show_options", False),
+        "mathjax_format": config.get("mathjax_format", "delimiters"),
+        "fix_latex": config.get("fix_latex", False),
+        "review_token": _review_token,
+        "is_generating": card.id in _generating_card_ids if card else False,
+        "is_pregenerating": any(cid != card.id for cid in _generating_card_ids) if card else False,
+        "shortcuts": config.get("shortcuts", {}),
+        "is_answer_side": is_answer,
+        "hints_font_size": config.get("hints_font_size", ""),
+        "answer_display_position": config.get("answer_display_position", "between")
+    }
+
 def on_webview_will_set_content(web_content, context):
     if type(context).__name__ == "ReviewerBottomBar":
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
@@ -484,9 +505,11 @@ def on_webview_will_set_content(web_content, context):
                 except Exception as format_err:
                     logger.error(f"Error auto-formatting note on review: {format_err}")
 
-                # Inject ALL blocks found in the note. The frontend JS will select 
-                # the one matching the card ID once the ID is confirmed.
-                hints_blocks = parser.find_all_hints_blocks(note)
+                # Only inject data validated for the active card. This prevents a
+                # stale c2/c3 payload from being shown after clozes are added or edited.
+                valid_block = parser.find_hints_block(note, card)
+                if valid_block:
+                    hints_blocks = [valid_block]
             
             # If no blocks in note, check cache
             if not hints_blocks:
@@ -515,24 +538,8 @@ def on_webview_will_set_content(web_content, context):
     elif context and getattr(context, "name", None) == "previewer":
         is_answer = getattr(context, "_state", "question") == "answer"
 
-    ui_payload = json.dumps({
-        "show_on_card": config.get("show_on_card", True),
-        "auto_reveal": auto_reveal,
-        "auto_show_hints": config.get("auto_show_hints", False),
-        "auto_show_options": config.get("auto_show_options", False),
-        "do_not_auto_collapse": config.get("do_not_auto_collapse", False),
-        "manual_show_hints": config.get("manual_show_hints", True),
-        "manual_show_options": config.get("manual_show_options", False),
-        "mathjax_format": config.get("mathjax_format", "delimiters"),
-        "fix_latex": config.get("fix_latex", False),
-        "review_token": _review_token,
-        "is_generating": card.id in _generating_card_ids if card else False,
-        "is_pregenerating": any(cid != card.id for cid in _generating_card_ids) if card else False,
-        "shortcuts": config.get("shortcuts", {}),
-        "is_answer_side": is_answer,
-        "hints_font_size": config.get("hints_font_size", ""),
-        "answer_display_position": config.get("answer_display_position", "between")
-    })
+    ui_config = _get_ui_config(card, auto_reveal=auto_reveal, is_answer=is_answer)
+    ui_payload = json.dumps(ui_config)
 
     if config.get("auto_show_hints", False) or config.get("auto_show_options", False):
         logger.debug(
@@ -541,6 +548,14 @@ def on_webview_will_set_content(web_content, context):
             config.get("auto_show_hints", False),
             config.get("auto_show_options", False)
         )
+
+    # Remove field-rendered copies before adding the validated active-card block.
+    web_content.body = re.sub(
+        r'<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>',
+        '',
+        web_content.body,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
 
     # Ensure placeholder exists for the unified script to target
     if "<ai-hints" not in web_content.body:
@@ -596,6 +611,13 @@ def _trigger_frontend_setup(card=None, web=None):
 
     _prepare_card_review_state(card)
 
+    is_answer = False
+    if mw.reviewer:
+        is_answer = getattr(mw.reviewer, "state", "") == "answer"
+
+    ui_config = _get_ui_config(card, is_answer=is_answer)
+    ui_config_json = json.dumps(ui_config)
+
     card_data = {"id": str(card.id), "ord": int(card.ord)}
 
     # Pass hint data directly so the frontend can render it even if the
@@ -604,6 +626,7 @@ def _trigger_frontend_setup(card=None, web=None):
     hint_data = None
     try:
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        # ... (rest of hint_data lookup)
         parser = CardParser(
             mathjax_format=config.get("mathjax_format", "delimiters"),
             fix_latex=config.get("fix_latex", False)
@@ -654,12 +677,13 @@ def _trigger_frontend_setup(card=None, web=None):
             (function() {{
                 var data = {json.dumps(card_data)};
                 var hintData = {hint_data_json};
+                var uiConfig = {ui_config_json};
                 var token = String(data.id) + ':' + String(data.ord) + ':' + {json.dumps(_review_token)};
                 window.aiHintsSetupToken = token;
                 function applySetup() {{
                     if (window.aiHintsSetupToken !== token) return;
                     if (typeof window.aiHintsSetup === 'function') {{
-                        window.aiHintsSetup(data, hintData);
+                        window.aiHintsSetup(data, hintData, uiConfig);
                     }}
                 }}
                 var attempts = 0;
@@ -1231,7 +1255,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         if not is_pregen and web:
             # If we arrive at a card already being pre-generated, 
             # just trigger the UI animation so the user sees the progress.
-            _set_frontend_generating(web, True)
+            _set_frontend_generating(web, True, card_id=card_id)
         return
     
     # Priority: If ANY card is currently generating and this is a pre-gen, abort.

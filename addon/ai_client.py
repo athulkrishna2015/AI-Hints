@@ -1015,7 +1015,7 @@ class AIClient:
         return _check_network_online()
 
     def _cooldown_seconds(self) -> float:
-        return self.config.get("model_cooldown_minutes", 5) * 60
+        return self.config.get("model_cooldown_minutes", 60) * 60
 
     def _mark_model_failed(self, provider: str, model: str, delay_seconds: float = None):
         """Records a model failure and sets a cooldown timer."""
@@ -1026,7 +1026,13 @@ class AIClient:
             return
 
         if delay_seconds is None:
-            delay_seconds = self._cooldown_seconds()
+            # Apply streak-based cooldown for ALL failures to prevent repeated lag
+            key = (provider, model)
+            streak = RATE_LIMIT_STREAK.get(key, 0) + 1
+            RATE_LIMIT_STREAK[key] = streak
+
+            cooldown_sec = self._cooldown_seconds()
+            delay_seconds = cooldown_sec * streak
             
         expiry = time.time() + delay_seconds
         FAILED_MODELS_CACHE[(provider, model)] = expiry
@@ -1045,7 +1051,7 @@ class AIClient:
         else:
             time_str = f"{secs}s"
             
-        logger.info(f"AI-Hints: Blacklisting {provider}/{model} for {time_str} due to failure.")
+        logger.info(f"AI-Hints: Blacklisting {provider}/{model} for {time_str} due to failure (Streak: {RATE_LIMIT_STREAK.get((provider, model), 1)}).")
 
     def _on_model_success(self, provider: str, model: str):
         """Resets the rate limit streak when a model successfully responds."""
@@ -1053,7 +1059,7 @@ class AIClient:
         key = (provider, model)
         needs_save = False
         if key in RATE_LIMIT_STREAK:
-            logger.debug(f"AI-Hints: Resetting rate limit streak for {provider}/{model} after success.")
+            logger.debug(f"AI-Hints: Resetting failure streak for {provider}/{model} after success.")
             del RATE_LIMIT_STREAK[key]
             needs_save = True
         
@@ -1111,6 +1117,10 @@ class AIClient:
             
             now = time.time()
             
+            # Clear existing memory caches to stay in sync with disk
+            FAILED_MODELS_CACHE.clear()
+            RATE_LIMIT_STREAK.clear()
+
             # Check if it's the new format or old flat format
             if isinstance(data, dict) and "expiries" in data:
                 # New format (version 2)
@@ -1138,22 +1148,20 @@ class AIClient:
     def _extract_retry_delay(self, provider: str, model: str, error: urllib.error.HTTPError, body: str) -> float:
         """
         Calculates cooldown delay.
-        If it's a rate limit (429), the delay increases with each consecutive hit: 1h, 2h, 3h...
+        For 429 (rate limit), we respect any Retry-After header or use streak-based logic.
         """
-        cooldown_sec = self._cooldown_seconds()
+        # For non-429, we let _mark_model_failed handle the streak-based cooldown
         if getattr(error, "code", None) != 429:
-            return cooldown_sec
+            return None
             
+        cooldown_sec = self._cooldown_seconds()
         key = (provider, model)
         streak = RATE_LIMIT_STREAK.get(key, 0) + 1
         RATE_LIMIT_STREAK[key] = streak
         
-        # Persist the updated streak immediately
-        self._save_blacklist()
-        
         # delay = cooldown * streak
         delay = cooldown_sec * streak
-        logger.info(f"AI-Hints: Rate limit hit for {provider}/{model}. Streak: {streak}. New delay: {delay/3600:.1f} hours.")
+        logger.info(f"AI-Hints: Rate limit (429) hit for {provider}/{model}. Streak: {streak}. New delay: {delay/60:.1f} minutes.")
         return delay
 
     def _models_for_provider(self, provider: str, primary_model: str = "", extra_fallbacks: List[str] = None) -> List[str]:
@@ -1432,8 +1440,15 @@ class AIClient:
             return ""
         return body[:4000]
 
+def load_blacklist():
+    """Globally loads the blacklist into memory caches."""
+    client = AIClient(None)
+    client._load_blacklist()
+
 def is_model_blacklisted(provider: str, model: str) -> bool:
     try:
+        if not FAILED_MODELS_CACHE:
+            load_blacklist()
         client = AIClient(None)
         return client._is_model_failed(provider, model)
     except Exception:

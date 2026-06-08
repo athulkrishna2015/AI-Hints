@@ -319,7 +319,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.raw_editor.setPlainText(json.dumps(c, indent=4))
         
         if hasattr(self, "cooldown_spin"):
-            self.cooldown_spin.setValue(c.get("model_cooldown_minutes", 5))
+            self.cooldown_spin.setValue(c.get("model_cooldown_minutes", 60))
             
         if hasattr(self, "font_size_combo"):
             font_size = c.get("hints_font_size", "")
@@ -1938,4 +1938,3 @@ def init_config_ui():
     # Add Tools menu entry so the window can be opened any time
     action = mw.form.menuTools.addAction("AI-Hints Config")
     action.triggered.connect(lambda: on_config_dialog(mw))
-
