@@ -67,7 +67,6 @@ _pregenerated_data = PregenCache(_pregen_cache_path)
 _generated_hint_cache = {}
 _popup_dialog_instance = None
 MAX_HINT_CACHE_SIZE = 200
-_current_card_has_data = False
 
 _review_token = 0
 _last_undo_time = 0
@@ -494,7 +493,7 @@ def _set_frontend_generating(web, active, card_id=None, is_pregen=False, status=
         }})();
     """)
 
-def _get_ui_config(card, auto_reveal=False, is_answer=False):
+def _get_ui_config(card, auto_reveal=False, is_answer=False, has_data=False):
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     return {
         "show_on_card": config.get("show_on_card", True),
@@ -512,7 +511,8 @@ def _get_ui_config(card, auto_reveal=False, is_answer=False):
         "shortcuts": config.get("shortcuts", {}),
         "is_answer_side": is_answer,
         "hints_font_size": config.get("hints_font_size", ""),
-        "answer_display_position": config.get("answer_display_position", "between")
+        "answer_display_position": config.get("answer_display_position", "between"),
+        "has_data": has_data
     }
 
 def on_webview_will_set_content(web_content, context):
@@ -532,9 +532,6 @@ def on_webview_will_set_content(web_content, context):
     if not is_supported:
         return
 
-    global _current_card_has_data
-    _current_card_has_data = False
-
     css, js = get_web_assets()
     if css:
         web_content.head += f"\n<style id='ai-hints-head-styles'>{css}</style>\n"
@@ -548,6 +545,7 @@ def on_webview_will_set_content(web_content, context):
     card, web = _get_card_and_web_from_context(context)
 
     hints_blocks = []
+    has_hints = False
     auto_reveal = False
     if card:
         try:
@@ -588,7 +586,7 @@ def on_webview_will_set_content(web_content, context):
                     hints_blocks = [block]
             
             if hints_blocks:
-                _current_card_has_data = True
+                has_hints = True
             
             if card.id in _just_generated_card_ids:
                 auto_reveal = True
@@ -603,7 +601,7 @@ def on_webview_will_set_content(web_content, context):
     elif context and getattr(context, "name", None) == "previewer":
         is_answer = getattr(context, "_state", "question") == "answer"
 
-    ui_config = _get_ui_config(card, auto_reveal=auto_reveal, is_answer=is_answer)
+    ui_config = _get_ui_config(card, auto_reveal=auto_reveal, is_answer=is_answer, has_data=has_hints)
     ui_payload = json.dumps(ui_config)
 
     if config.get("auto_show_hints", False) or config.get("auto_show_options", False):
@@ -628,12 +626,9 @@ def on_webview_will_set_content(web_content, context):
     state_js = f"""
 <script>
 (function() {{
-    // Instantly wipe stale hints/options containers from previous card reviews
-    document.querySelectorAll('.ai-hints-container, .ai-hints-container-rendered').forEach(e => e.remove());
-    if (!{json.dumps(bool(hints_blocks))}) {{
-        document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
-    }}
-    document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
+    // Instantly wipe ALL stale AI-Hints elements from previous card reviews to prevent bleed.
+    // We do this before the main script runs init().
+    document.querySelectorAll('.ai-hints-container, .ai-hints-container-rendered, .ai-hints-json').forEach(e => e.remove());
 }})();
 window.aiHintsLastSetupKey = undefined;
 window.aiHintsSetupToken = undefined;
@@ -675,7 +670,8 @@ def _trigger_frontend_setup(card=None, web=None):
     if mw.reviewer:
         is_answer = getattr(mw.reviewer, "state", "") == "answer"
 
-    ui_config = _get_ui_config(card, is_answer=is_answer)
+    has_hints = card_has_hints(card)
+    ui_config = _get_ui_config(card, is_answer=is_answer, has_data=has_hints)
     ui_config_json = json.dumps(ui_config)
 
     card_data = {"id": str(card.id), "ord": int(card.ord)}
@@ -1859,11 +1855,22 @@ def init_hooks():
     gui_hooks.reviewer_did_show_question.append(on_show_question)
     gui_hooks.reviewer_did_show_answer.append(_trigger_frontend_setup)
     
+    def _on_reviewer_init():
+        global _reviewer_is_ending
+        _reviewer_is_ending = False
+        
+    gui_hooks.reviewer_did_init.append(_on_reviewer_init)
+    
     # Close popup on next card or when leaving reviewer
     def _on_reviewer_end():
         global _reviewer_is_ending
         _reviewer_is_ending = True
         close_popup_if_open()
+        
+        # Clear transient session markers to prevent bleed between sessions
+        _just_generated_card_ids.clear()
+        _just_cleared_card_ids.clear()
+        _generated_hint_cache.clear()
         
     gui_hooks.reviewer_did_show_question.append(lambda _card: close_popup_if_open())
     gui_hooks.reviewer_will_end.append(_on_reviewer_end)
