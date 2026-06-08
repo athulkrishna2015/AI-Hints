@@ -129,6 +129,11 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### June 8, 2026 (v3.3.2)
+- **Fixed Math Cloze Loop**: Resolved an endless regeneration loop for cards containing math formatting inside cloze deletions. The system now robustly handles LaTeX normalization during answer verification.
+- **Optimized UI Refresh**: Prevented redundant re-rendering of reviewer card HTML to improve performance and stability during background generation.
+- **Adjusted Fallback Delay**: Set the default model fallback cooldown to 10 minutes to better handle transient API rate limits.
+
 ### June 8, 2026 (v3.3.1)
 - **LaTeX Repair Disabled by Default**: Set the "Repair AI LaTeX Errors" setting to `off` by default. This preserves standard math normalization (delimiters, JSON escaping) while making aggressive repairs opt-in for maximum stability with modern models like Claude 3.7 or Gemini 2.0.
 - **Improved Log Ignoration**: Updated `.gitignore` to more robustly handle rotated log files (`.log.1`, `.log.2`) and ensured critical metadata files remain tracked.
