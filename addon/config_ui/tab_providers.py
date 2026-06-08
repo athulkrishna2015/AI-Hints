@@ -3,6 +3,7 @@ from aqt import mw
 from aqt.qt import *
 from ..logger import info, tooltip
 from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS, MODEL_FALLBACKS, PROVIDER_ORDER
+from ..ai_client import is_model_blacklisted
 from .widgets import ProviderRowWidget, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS
 
 DEFAULT_TEST_QUESTION = "Why does a rotating magnet fall slower through a copper tube than a non-magnetic mass of the same size?"
@@ -92,6 +93,11 @@ class FallbackOrderDialog(QDialog):
             item.setData(Qt.ItemDataRole.UserRole, m)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Unchecked if m in disabled_models else Qt.CheckState.Checked)
+            # Show blacklist badge immediately on open
+            bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, m) else ""
+            status = fallback_statuses.get(m)
+            status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
+            item.setText(m + status_suffix)
             self.list_widget.addItem(item)
             
         layout.addWidget(self.list_widget)
@@ -382,14 +388,15 @@ class FallbackOrderDialog(QDialog):
                 item = self.list_widget.item(i)
                 m = item.data(Qt.ItemDataRole.UserRole)
                 status = fallback_statuses.get(m)
-                status_suffix = f" ({status})" if status else ""
+                bl = " | 🚫 Blacklisted" if is_model_blacklisted(self.provider, m) else ""
+                status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
                 
                 # Update tooltip if we have a saved response
                 tt = fallback_tooltips.get(m) if fallback_tooltips else None
                 if tt:
                     item.setToolTip(tt)
                 else:
-                    item.setToolTip("")
+                    item.setToolTip("" if not bl else "This model is currently on cooldown due to recent failures.")
                 
                 if i == 0:
                     item.setCheckState(Qt.CheckState.Checked)
@@ -610,7 +617,8 @@ class GlobalFallbackOrderDialog(QDialog):
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, (provider, model))
             status = global_statuses.get((provider, model))
-            status_suffix = f" ({status})" if status else ""
+            bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model) else ""
+            status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
             item.setText(f"[{provider.capitalize()}] {model}{status_suffix}")
             
             # Make item checkable and ensure standard flags are set
@@ -623,6 +631,8 @@ class GlobalFallbackOrderDialog(QDialog):
             tt = global_tooltips.get((provider, model))
             if tt:
                 item.setToolTip(tt)
+            elif bl:
+                item.setToolTip("This model is currently on cooldown due to recent failures.")
             self.list_widget.addItem(item)
             
     def refresh_statuses(self):
@@ -633,11 +643,14 @@ class GlobalFallbackOrderDialog(QDialog):
             item = self.list_widget.item(i)
             provider, model = item.data(Qt.ItemDataRole.UserRole)
             status = global_statuses.get((provider, model))
-            status_suffix = f" ({status})" if status else ""
+            bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model) else ""
+            status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
             item.setText(f"[{provider.capitalize()}] {model}{status_suffix}")
             tt = global_tooltips.get((provider, model))
             if tt:
                 item.setToolTip(tt)
+            elif bl:
+                item.setToolTip("This model is currently on cooldown due to recent failures.")
 
     def add_model_prompt(self):
         providers = list(PROVIDER_ORDER) + list(self.main_dialog.custom_providers_data.keys())
