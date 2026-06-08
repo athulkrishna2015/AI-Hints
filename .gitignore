@@ -8,6 +8,8 @@ addon/*.log.*
 # Rotated logs specifically
 ai_hints.log*
 addon/ai_hints.log*
+meta.json
+addon/meta.json
 addon/batch_state.json
 addon/blacklist.json
 .vscode/
