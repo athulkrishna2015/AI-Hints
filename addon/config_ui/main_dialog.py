@@ -1929,12 +1929,49 @@ def check_support_on_update():
     except Exception as e:
         logger.error(f"AI-Hints: Update check failed: {e}")
 
+def on_clean_orphaned_hints():
+    on_config_dialog(mw)
+    global _config_dialog_instance
+    if _config_dialog_instance:
+        # Switch to Advanced tab (index 2)
+        _config_dialog_instance.tabs.setCurrentIndex(2)
+        # Trigger scan with a slight delay to ensure UI is ready
+        QTimer.singleShot(500, _config_dialog_instance.on_scan_orphans)
+
 def init_config_ui():
     from aqt import gui_hooks
     gui_hooks.profile_will_close.append(_close_config_dialog_on_shutdown)
     gui_hooks.profile_did_open.append(check_support_on_update)
     
     mw.addonManager.setConfigAction(ADDON_PACKAGE, on_config_dialog)
-    # Add Tools menu entry so the window can be opened any time
+
+    # 1. Add "Clean Orphaned Hints" right below "Empty Cards..."
+    orphan_action = QAction("Clean Orphaned Hints", mw)
+    orphan_action.triggered.connect(on_clean_orphaned_hints)
+    
+    # Try to find actionEmpty_Cards or search text
+    inserted = False
+    try:
+        tools_menu = mw.form.menuTools
+        for action in tools_menu.actions():
+            # Check for standard "Empty Cards..." text
+            if action.text().replace("&", "") == "Empty Cards...":
+                # Find the action AFTER it
+                actions = tools_menu.actions()
+                idx = actions.index(action)
+                if idx + 1 < len(actions):
+                    tools_menu.insertAction(actions[idx+1], orphan_action)
+                else:
+                    tools_menu.addAction(orphan_action)
+                inserted = True
+                break
+    except Exception as e:
+        logger.error(f"AI-Hints: Failed to insert menu item at specific location: {e}")
+
+    if not inserted:
+        # Fallback to appending if search fails
+        mw.form.menuTools.addAction(orphan_action)
+
+    # 2. Add Tools menu entry so the window can be opened any time
     action = mw.form.menuTools.addAction("AI-Hints Config")
     action.triggered.connect(lambda: on_config_dialog(mw))
