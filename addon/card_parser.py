@@ -416,8 +416,7 @@ class CardParser:
                                              if isinstance(card_data, dict) and "correct_answer" in card_data:
                                                  stored_ans = card_data["correct_answer"]
                                                  if isinstance(stored_ans, str):
-                                                     cleaned_stored = "".join(re.sub(r'<[^>]+>', '', html.unescape(stored_ans)).split()).lower()
-                                                     if cleaned_stored not in active_clozes[k]:
+                                                     if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
                                                          del parsed[k]
                              
                              parsed[card_key] = new_data
@@ -461,14 +460,12 @@ class CardParser:
                                         if k not in active_clozes:
                                             del parsed[k]
                                         else:
-                                            card_data = parsed[k]
-                                            if isinstance(card_data, dict) and "correct_answer" in card_data:
-                                                stored_ans = card_data["correct_answer"]
-                                                if isinstance(stored_ans, str):
-                                                    cleaned_stored = "".join(re.sub(r'<[^>]+>', '', html.unescape(stored_ans)).split()).lower()
-                                                    if cleaned_stored not in active_clozes[k]:
-                                                        del parsed[k]
-
+                                           card_data = parsed[k]
+                                           if isinstance(card_data, dict) and "correct_answer" in card_data:
+                                               stored_ans = card_data["correct_answer"]
+                                               if isinstance(stored_ans, str):
+                                                   if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
+                                                       del parsed[k]
                             # Merge data
                             parsed[card_key] = new_data
                             new_payload = self.serialize_json_payload(parsed)
@@ -870,11 +867,6 @@ class CardParser:
     def _get_active_clozes_map(self, note=None, current_val: str = "") -> Dict[str, set]:
         cloze_map = {}
         
-        def clean_text(text: str) -> str:
-            text = re.sub(r'<[^>]+>', '', text)
-            text = html.unescape(text)
-            return "".join(text.split()).lower()
-
         fields_to_scan = []
         if note:
             if hasattr(note, "items"):
@@ -889,19 +881,52 @@ class CardParser:
             fields_to_scan.append(current_val)
 
         for field in fields_to_scan:
+            # We use a non-greedy match for the content to handle nested clozes better
+            # and then split on :: to separate answer from hint.
             for match in re.finditer(r'\{\{c(\d+)::(.*?)\}\}', field, re.DOTALL):
                 c_num = match.group(1)
                 content = match.group(2)
-                replacement = content.split("::")[0]
+                
+                # Logic from _focus_current_cloze: split on the last :: for hint
+                c_parts = content.rsplit("::", 1)
+                if len(c_parts) > 1:
+                    # Check if the second part looks like a hint (usually no {{ or }})
+                    # and the first part isn't empty.
+                    answer = c_parts[0]
+                else:
+                    answer = content
+                
                 c_key = f"c{c_num}"
                 if c_key not in cloze_map:
                     cloze_map[c_key] = set()
-                cloze_map[c_key].add(clean_text(replacement))
+                cloze_map[c_key].add(self._normalized_answer_text(answer))
                 
         return cloze_map
 
     def _normalized_answer_text(self, text: Any) -> str:
-        text = re.sub(r'<[^>]+>', '', html.unescape(str(text or "")))
+        if not text:
+            return ""
+        text = str(text)
+        # 1. HTML unescape so LaTeX commands and entities aren't broken
+        text = html.unescape(text)
+        # 2. Normalize math content to a stable baseline (fixes backslashes, spacing)
+        # We always use 'anki' delimiters for comparison.
+        try:
+            text = normalize_math_text(text, output_format='anki', fix_latex=True)
+        except:
+            pass # Fallback to raw if fixer fails
+            
+        # 3. Strip ALL HTML tags (including <anki-mathjax>)
+        text = re.sub(r'<[^>]+>', '', text)
+        
+        # 4. CRITICAL: Strip leading/trailing math delimiters for comparison
+        # This allows "{{c1::answer}}" to match generated "\(answer\)"
+        text = text.strip()
+        # Recursive unwrap for cases like \( $ ans $ \)
+        for _ in range(2):
+            text = re.sub(r'^\\\(|\\\)$|^\\\[|\\\]$|^\$\$|\$\$$|^\$|\$$', '', text).strip()
+            
+        # 5. Final stripping of all whitespace and case folding
         return "".join(text.split()).casefold()
 
     def _cloze_data_matches_note(self, data: Any, card_key: str, note=None) -> bool:
@@ -909,8 +934,14 @@ class CardParser:
             return True
 
         active_clozes = self._get_active_clozes_map(note)
-        if not active_clozes or card_key not in active_clozes:
+        if not active_clozes:
+            # If no clozes found at all, we might be in a non-cloze card or 
+            # some other weird state. To be safe, don't purge.
             return True
+            
+        if card_key not in active_clozes:
+            # card_key (e.g. c1) exists in data but NOT in note. Definitely mismatched.
+            return False
 
         stored_answer = self._normalized_answer_text(data.get("correct_answer"))
         return bool(stored_answer) and stored_answer in active_clozes[card_key]
@@ -1053,8 +1084,7 @@ class CardParser:
                                         if isinstance(card_data, dict) and "correct_answer" in card_data:
                                             stored_ans = card_data["correct_answer"]
                                             if isinstance(stored_ans, str):
-                                                cleaned_stored = "".join(re.sub(r'<[^>]+>', '', html.unescape(stored_ans)).split()).lower()
-                                                if cleaned_stored not in active_clozes[k]:
+                                                if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
                                                     del parsed[k]
                                                     purged = True
                             if purged:
