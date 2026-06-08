@@ -42,7 +42,7 @@ class AdvancedTabMixin:
         cooldown_row.addWidget(QLabel("Default Failure Lockout (mins):"))
         self.cooldown_spin = QSpinBox()
         self.cooldown_spin.setRange(1, 1440)
-        self.cooldown_spin.setValue(60)
+        self.cooldown_spin.setValue(10)
         cooldown_row.addWidget(self.cooldown_spin)
         cooldown_row.addStretch()
         blacklist_layout.addLayout(cooldown_row)

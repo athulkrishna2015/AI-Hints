@@ -1015,7 +1015,7 @@ class AIClient:
         return _check_network_online()
 
     def _cooldown_seconds(self) -> float:
-        return self.config.get("model_cooldown_minutes", 60) * 60
+        return self.config.get("model_cooldown_minutes", 10) * 60
 
     def _mark_model_failed(self, provider: str, model: str, delay_seconds: float = None):
         """Records a model failure and sets a cooldown timer."""

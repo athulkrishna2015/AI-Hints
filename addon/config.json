@@ -183,7 +183,7 @@
   "pre_generate_next": true,
   "disabled_providers": [],
   "disabled_fallback_models": {},
-  "model_cooldown_minutes": 60,
+  "model_cooldown_minutes": 10,
   "hints_font_size": "",
   "batch_limit": 1000,
   "multithread_providers": false
