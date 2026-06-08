@@ -549,14 +549,6 @@ def on_webview_will_set_content(web_content, context):
             config.get("auto_show_options", False)
         )
 
-    # Remove field-rendered copies before adding the validated active-card block.
-    web_content.body = re.sub(
-        r'<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>',
-        '',
-        web_content.body,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-
     # Ensure placeholder exists for the unified script to target
     if "<ai-hints" not in web_content.body:
         web_content.body += "<ai-hints></ai-hints>"
@@ -573,6 +565,9 @@ def on_webview_will_set_content(web_content, context):
 (function() {{
     // Instantly wipe stale hints/options containers from previous card reviews
     document.querySelectorAll('.ai-hints-container, .ai-hints-container-rendered').forEach(e => e.remove());
+    if (!{json.dumps(bool(hints_blocks))}) {{
+        document.querySelectorAll('.ai-hints-json').forEach(e => e.remove());
+    }}
     document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
 }})();
 window.aiHintsLastSetupKey = undefined;
