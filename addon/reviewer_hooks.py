@@ -1888,8 +1888,3 @@ def init_hooks():
     gui_hooks.state_did_undo.append(on_undo)
     
     _hooks_registered = True
-     _trigger_frontend_setup(mw.reviewer.card)
-
-    gui_hooks.state_did_undo.append(on_undo)
-    
-    _hooks_registered = True
