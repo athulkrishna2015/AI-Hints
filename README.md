@@ -319,9 +319,14 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 - **Optimized Provider Failover**: Enhanced 404/Timeout recovery.
 - **Missing Cloze Handling**: Graceful detection and skipping for cards with missing clozes.
 
-### May 12, 2026
-- **Persistent Model Blacklisting**: Failures now persist across restarts via `blacklist.json`.
-- **Enhanced Fallback UI**: Dedicated fallback manager with testing buttons.
-- **Instant-Open Config UI**: Lazy-loading for note types and fields.
-- **Optimized Anki Startup**: Deferred background tasks.
-- **Interactive Model Testing**: Instant connectivity verification in config.
+### June 8, 2026 (v3.4.0)
+- **Persistent Pre-generation Cache**: Background hints now survive Anki restarts and Undo operations. Data is strictly retained until successfully added to a card.
+- **Manual Cache Maintenance**: Added a "🧹 Clear Pregen Cache" button to the Advanced settings tab.
+- **Enhanced Data Integrity**: Eliminated "data bleed" between cards and sessions by ensuring strictly isolated DOM cleanup on every load.
+- **Fallback Visibility**: Added visual 🚫 Blacklisted badges in fallback priority dialogs to instantly identify models on cooldown.
+- **Infinite Regeneration Fix**: Completely refactored cloze matching to use robust card keys, resolving issues with summary-style AI answers.
+- **Interactive Logs**: 13-digit card IDs in the logs are now clickable, and a new "Refresh" button has been added to the Logs tab.
+- **Skip AI Feature**: Added the ability to permanently skip AI generation for specific cards with a single click.
+- **Orphaned Hint Cleanup**: New maintenance tool to scan and remove AI-Hints data for notes that have been deleted or modified.
+- **Improved Cloze Parsing**: Robust depth-aware parsing for complex nested cloze deletions.
+- **Stability Fixes**: Resolved IndentationError and TypeError regressions in the reviewer hooks.
