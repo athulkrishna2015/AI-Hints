@@ -1868,7 +1868,6 @@ def init_hooks():
         global _reviewer_is_ending
         _reviewer_is_ending = True
         close_popup_if_open()
-        _pregenerated_data.clear()
         
     gui_hooks.reviewer_did_show_question.append(lambda _card: close_popup_if_open())
     gui_hooks.reviewer_will_end.append(_on_reviewer_end)
@@ -1891,8 +1890,5 @@ def init_hooks():
             _trigger_frontend_setup(mw.reviewer.card)
 
     gui_hooks.state_did_undo.append(on_undo)
-    
-    _hooks_registered = True
- gui_hooks.state_did_undo.append(on_undo)
     
     _hooks_registered = True
