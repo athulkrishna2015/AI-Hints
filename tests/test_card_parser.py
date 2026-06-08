@@ -97,7 +97,9 @@ class CardParserTests(unittest.TestCase):
         self.assertIsNotNone(parser.find_hints_block(note, FakeCard(1, 0)))
         self.assertIsNone(parser.find_hints_block(note, FakeCard(2, 1)))
 
-    def test_purges_mismatched_correct_answer_for_active_cloze(self):
+    def test_retains_data_for_other_clozes(self):
+        # Verification of the fix: updating one cloze should NOT purge others
+        # even if they have different answers (since we removed correct_answer validation).
         parser = CardParser(storage_mode="json")
         note = FakeNote(
             "Cloze",
@@ -108,23 +110,24 @@ class CardParserTests(unittest.TestCase):
         )
         
         initial_data = {
-            "c1": {"hints": ["h1"], "options": ["o1"], "correct_answer": "A"},
-            "c2": {"hints": ["h2"], "options": ["o2"], "correct_answer": "Different"}
+            "c1": {"hints": ["h1"], "options": ["o1"]},
+            "c2": {"hints": ["h2"], "options": ["o2"]}
         }
         note["Text"] += "\n\n" + parser.build_hints_block(initial_data)
         
         parser.update_note_with_hints(
             note,
-            {"hints": ["h1new"], "options": ["o1new"], "correct_answer": "A"},
+            {"hints": ["h1new"], "options": ["o1new"]},
             card=FakeCard(1, 0)
         )
         
         payload = json_payload_from_field(note["Text"])
         self.assertIn("c1", payload)
         self.assertEqual(payload["c1"]["hints"], ["h1new"])
-        self.assertNotIn("c2", payload)
+        self.assertIn("c2", payload) # SUCCESS: Retention of other keys
 
-    def test_mismatched_cloze_payload_is_not_reported_as_existing(self):
+    def test_mismatched_cloze_payload_is_reported_as_existing_if_key_present(self):
+        # Behavior changed: we no longer check the 'correct_answer' content, only the key presence.
         parser = CardParser(storage_mode="json")
         note = FakeNote(
             "Cloze",
@@ -134,20 +137,14 @@ class CardParserTests(unittest.TestCase):
             },
         )
         note["Text"] += parser.build_hints_block({
-            "c1": {
-                "hints": ["valid"],
-                "options": ["Mumbai"],
-                "correct_answer": "Mumbai",
-            },
             "c2": {
-                "hints": ["copied from another note"],
+                "hints": ["copied but key matches"],
                 "options": ["nose ring"],
-                "correct_answer": "nose ring",
             },
         })
 
-        self.assertIsNotNone(parser.find_hints_block(note, FakeCard(1, 0)))
-        self.assertIsNone(parser.find_hints_block(note, FakeCard(2, 1)))
+        self.assertIsNone(parser.find_hints_block(note, FakeCard(1, 0)))
+        self.assertIsNotNone(parser.find_hints_block(note, FakeCard(2, 1)))
 
     def test_html_mode_escapes_non_math_tags(self):
         parser = CardParser(storage_mode="html")
