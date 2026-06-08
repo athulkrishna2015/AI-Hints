@@ -839,7 +839,6 @@ def clear_hints(card=None, web=None):
     )
     
     note = card.note()
-    _pregenerated_data.pop(card.id, None)
     if parser.clear_hints_from_note(note, card):
         mw.col.update_note(note)
         _forget_generated_hints(card)
@@ -1166,10 +1165,8 @@ def refresh_current_card(card=None, web=None):
     if card:
         # NOTE: Do NOT call _forget_generated_hints(card) here.
         # refresh_current_card triggers _showQuestion() which fires on_show_question
-        # → card_has_hints → cache lookup. If we wipe the cache here, the cache miss
-        # causes an auto-generation loop immediately after every successful write.
-        # The cache entry remains valid since hints were just written to the note.
-        _pregenerated_data.pop(card.id, None)
+        # → card_has_hints → cache lookup.
+        # We no longer pop here. We let the consumption logic in on_show_question handle it.
         try:
             card.load()
             card.note().load()
@@ -1794,8 +1791,7 @@ def init_hooks():
             # This handles cases where Anki's state is still resolving.
             if time.time() - _last_undo_time < 0.5:
                 logger.info(f"AI-Hints: Skipping pre-gen application for {card.id} due to recent undo.")
-                # We still pop it so it doesn't get applied on the next show either
-                _pregenerated_data.pop(card.id, None)
+                # Retention: We do not pop here. It will be applied on the next show after the lockout.
             else:
                 data = _pregenerated_data.pop(card.id)
                 logger.debug(f"AI-Hints: Applying pre-generated data for card {card.id}")
@@ -1888,6 +1884,11 @@ def init_hooks():
         if mw.reviewer and mw.reviewer.card:
             # Force UI setup for the restored card
             _trigger_frontend_setup(mw.reviewer.card)
+
+    gui_hooks.state_did_undo.append(on_undo)
+    
+    _hooks_registered = True
+     _trigger_frontend_setup(mw.reviewer.card)
 
     gui_hooks.state_did_undo.append(on_undo)
     
