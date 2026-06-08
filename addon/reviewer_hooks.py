@@ -1884,13 +1884,15 @@ def init_hooks():
         logger.info("AI-Hints: Handling Undo. Wiping all transient session data to prevent bleed.")
         _just_generated_card_ids.clear()
         _just_cleared_card_ids.clear()
-        _generated_hint_cache.clear() 
-        _pregenerated_data.clear() # FULL CLEAR on undo to prevent stale 'future' data from lingering
-        
+        _generated_hint_cache.clear()
+
         if mw.reviewer and mw.reviewer.card:
             # Force UI setup for the restored card
             _trigger_frontend_setup(mw.reviewer.card)
 
     gui_hooks.state_did_undo.append(on_undo)
+    
+    _hooks_registered = True
+ gui_hooks.state_did_undo.append(on_undo)
     
     _hooks_registered = True

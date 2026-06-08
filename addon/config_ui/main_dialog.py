@@ -1853,6 +1853,24 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             f"Successfully scanned your collection and cleaned naked JSON blocks from {changed_count} notes."
         )
 
+    def on_clear_pregen_cache(self):
+        """Clears the transient pre-generation disk cache."""
+        try:
+            from ..reviewer_hooks import _pregenerated_data
+            count = len(_pregenerated_data)
+            if count == 0:
+                tooltip("Pregen cache is already empty.")
+                return
+            
+            if not askUser(f"Are you sure you want to clear {count} pre-generated hints from the disk cache?"):
+                return
+                
+            _pregenerated_data.clear()
+            tooltip(f"Successfully cleared {count} items from pregen cache.")
+        except Exception as e:
+            logger.error(f"Failed to clear pregen cache: {e}")
+            info(f"Failed to clear pregen cache: {e}")
+
 # --- Module Global Lifecycle functions ---
 _config_dialog_instance = None
 

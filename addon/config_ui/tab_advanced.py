@@ -119,6 +119,11 @@ class AdvancedTabMixin:
         self.purge_json_btn.clicked.connect(self.on_clean_naked_json)
         maint_layout.addWidget(self.purge_json_btn)
         
+        self.clear_pregen_btn = QPushButton("🧹 Clear Pregen Cache")
+        self.clear_pregen_btn.setToolTip("Removes all pre-generated hints from the disk cache. Useful if you want to start fresh or clear space.")
+        self.clear_pregen_btn.clicked.connect(self.on_clear_pregen_cache)
+        maint_layout.addWidget(self.clear_pregen_btn)
+        
         maint_group.setLayout(maint_layout)
         adv_layout.addWidget(maint_group)
 
