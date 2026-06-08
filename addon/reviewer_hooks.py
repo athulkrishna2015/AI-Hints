@@ -1253,7 +1253,6 @@ def skip_ai_for_card(card=None, web=None):
     
     data = {"hints": [], "options": [], "_skipped": True}
     if _apply_results_to_card(card, data, is_manual=True, web=web):
-        tooltip("AI generation skipped for this card.")
         # Trigger a refresh so the skip state is visible
         refresh_current_card(card=card, web=web)
 
