@@ -15,8 +15,13 @@ mock_qt = ModuleType('aqt.qt')
 sys.modules['aqt.qt'] = mock_qt
 
 # Inject dummy classes into aqt.qt for inheritance
+class DummySignal:
+    def connect(self, *args): pass
+
 class Dummy: 
-    def __init__(self, *args, **kwargs): pass
+    def __init__(self, *args, **kwargs): 
+        self.triggered = DummySignal()
+        self.clicked = DummySignal()
     def setVisible(self, *args): pass
     def setEnabled(self, *args): pass
 
@@ -38,6 +43,8 @@ mock_qt.Qt.WindowType = MagicMock()
 # Mock other submodules
 sys.modules['aqt.utils'] = MagicMock()
 sys.modules['aqt.gui_hooks'] = MagicMock()
+sys.modules['aqt.webview'] = MagicMock()
+sys.modules['aqt.webview'].AnkiWebView = Dummy
 
 # Import from package
 try:

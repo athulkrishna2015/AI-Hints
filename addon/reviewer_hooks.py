@@ -13,7 +13,57 @@ _hooks_registered = False
 _generating_card_ids = set()
 _just_generated_card_ids = set()
 _just_cleared_card_ids = set()
-_pregenerated_data = {} # {card_id: data}
+
+import os, json
+from collections import UserDict
+
+class PregenCache(UserDict):
+    """Disk-backed dictionary to persist pre-generated data across Anki sessions."""
+    def __init__(self, filepath):
+        super().__init__()
+        self.filepath = filepath
+        self.load()
+
+    def load(self):
+        try:
+            if os.path.exists(self.filepath):
+                with open(self.filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.data = {int(k) if k.isdigit() else k: v for k, v in data.items()}
+        except Exception as e:
+            from .logger import logger
+            logger.error(f"Failed to load pregen cache: {e}")
+
+    def save(self):
+        try:
+            with open(self.filepath, "w", encoding="utf-8") as f:
+                json.dump(self.data, f)
+        except Exception as e:
+            from .logger import logger
+            logger.error(f"Failed to save pregen cache: {e}")
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.save()
+
+    def __delitem__(self, key):
+        super().__delitem__(key)
+        self.save()
+
+    def pop(self, key, default=None):
+        if key in self.data:
+            val = super().pop(key)
+            self.save()
+            return val
+        return default
+
+    def clear(self):
+        super().clear()
+        self.save()
+
+_pregen_cache_path = os.path.join(os.path.dirname(__file__), "pregen_cache.json")
+_pregenerated_data = PregenCache(_pregen_cache_path)
+
 _generated_hint_cache = {}
 _popup_dialog_instance = None
 MAX_HINT_CACHE_SIZE = 200
@@ -1290,6 +1340,14 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         web = getattr(mw.reviewer, "web", None)
 
     card_id = getattr(card, "id", None)
+    
+    # Check cache first for manual generation (to avoid redundant API calls)
+    if not is_pregen and card_id in _pregenerated_data:
+        logger.info(f"AI-Hints: Found pre-generated data for card {card_id} in disk cache. Applying directly.")
+        cached_data = _pregenerated_data.pop(card_id)
+        _apply_results_to_card(card, cached_data, is_manual=is_manual, web=web)
+        return
+
     if card_id in _generating_card_ids:
         if not is_pregen and web:
             # If we arrive at a card already being pre-generated, 
