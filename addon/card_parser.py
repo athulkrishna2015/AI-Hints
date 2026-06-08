@@ -943,8 +943,24 @@ class CardParser:
             # card_key (e.g. c1) exists in data but NOT in note. Definitely mismatched.
             return False
 
-        stored_answer = self._normalized_answer_text(data.get("correct_answer"))
-        return bool(stored_answer) and stored_answer in active_clozes[card_key]
+        stored_answer_raw = data.get("correct_answer")
+        if not isinstance(stored_answer_raw, str) or not stored_answer_raw.strip():
+            return True
+
+        # Support for multi-cloze matching:
+        # If the note has multiple clozes for the same ID, the AI is instructed
+        # to provide a comma-separated list of values.
+        # We split the stored answer and check if each part matches an active cloze.
+        stored_parts = [p.strip() for p in stored_answer_raw.split(",")]
+        normalized_stored = [self._normalized_answer_text(p) for p in stored_parts if p.strip()]
+        
+        if not normalized_stored:
+            return True
+            
+        note_clozes = active_clozes[card_key] # set of normalized strings
+        
+        # Every part of the stored answer must be present in the note's clozes
+        return all(p in note_clozes for p in normalized_stored)
 
     def _parse_json_payload(self, raw_payload: str) -> Any:
         if not raw_payload:
