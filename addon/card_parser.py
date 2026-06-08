@@ -908,6 +908,7 @@ class CardParser:
             return ""
         text = str(text)
         # 1. HTML unescape so LaTeX commands and entities aren't broken
+        # Also converts &nbsp; to actual Unicode non-breaking space
         text = html.unescape(text)
         # 2. Normalize math content to a stable baseline (fixes backslashes, spacing)
         # We always use 'anki' delimiters for comparison.
@@ -926,8 +927,10 @@ class CardParser:
         for _ in range(2):
             text = re.sub(r'^\\\(|\\\)$|^\\\[|\\\]$|^\$\$|\$\$$|^\$|\$$', '', text).strip()
             
-        # 5. Final stripping of all whitespace and case folding
-        return "".join(text.split()).casefold()
+        # 5. Final stripping of all whitespace (including Unicode &nbsp;) and case folding
+        # We use re.sub with \s and UNICODE flag to catch all types of spaces
+        text = re.sub(r'\s+', '', text, flags=re.UNICODE)
+        return text.casefold()
 
     def _cloze_data_matches_note(self, data: Any, card_key: str, note=None) -> bool:
         if not isinstance(data, dict) or "correct_answer" not in data:
@@ -950,15 +953,21 @@ class CardParser:
         # Support for multi-cloze matching:
         # If the note has multiple clozes for the same ID, the AI is instructed
         # to provide a comma-separated list of values.
-        # We split the stored answer and check if each part matches an active cloze.
+        # We first try matching the ENTIRE string (normalized).
+        full_norm = self._normalized_answer_text(stored_answer_raw)
+        note_clozes = active_clozes[card_key] # set of normalized strings
+        
+        if full_norm in note_clozes:
+            return True
+
+        # If full match fails, split the stored answer and check if each part matches an active cloze.
+        # This handles the case where the AI returns "val1, val2" for two separate clozes.
         stored_parts = [p.strip() for p in stored_answer_raw.split(",")]
         normalized_stored = [self._normalized_answer_text(p) for p in stored_parts if p.strip()]
         
         if not normalized_stored:
             return True
             
-        note_clozes = active_clozes[card_key] # set of normalized strings
-        
         # Every part of the stored answer must be present in the note's clozes
         return all(p in note_clozes for p in normalized_stored)
 
