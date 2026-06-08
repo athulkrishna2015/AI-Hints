@@ -70,7 +70,8 @@ class LogTabMixin:
         
         self.log_view = QTextBrowser()
         self.log_view.setReadOnly(True)
-        self.log_view.setOpenExternalLinks(True)
+        self.log_view.setOpenExternalLinks(False)
+        self.log_view.anchorClicked.connect(self._on_log_anchor_clicked)
         self.log_view.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse | 
             Qt.TextInteractionFlag.TextSelectableByKeyboard |
@@ -130,11 +131,20 @@ class LogTabMixin:
                 for line in lines:
                     stripped = line.rstrip("\r\n")
                     escaped = stripped.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    
+                    # 1. Hyperlink URLs
                     escaped = re.sub(
                         r'(https?://[^\s<>"]+)',
                         r'<a href="\1" style="color: #0d6efd; text-decoration: underline;">\1</a>',
                         escaped
                     )
+                    
+                    # 2. Hyperlink 13-digit Anki IDs (but not inside the a-tags we just made)
+                    # We use a custom replace function to avoid matching within href attributes or text content of existing tags
+                    def _link_anki_ids(m):
+                        return re.sub(r'\b(\d{13})\b', r'<a href="browse:cid:\1" title="Open in Browser" style="color: #0d6efd; text-decoration: underline;">\1</a>', m.group(0))
+                    
+                    escaped = re.sub(r'(<a[^>]*>.*?</a>)|(.*?)(?=<a|$)', lambda m: m.group(1) or _link_anki_ids(m), escaped)
                     
                     color = None
                     font_weight = "normal"
@@ -241,3 +251,28 @@ class LogTabMixin:
             logger.info("Log cleared by user.")
         except Exception as e:
             info(f"Could not clear log: {e}")
+
+    def _on_log_anchor_clicked(self, qurl):
+        """Intercepts clicks on anchor tags to either open Anki Browser or an external URL."""
+        url = qurl.toString().strip()
+        if url.startswith("browse:"):
+             query = url.split(":", 1)[1] 
+             from aqt import dialogs, mw
+             browser = dialogs.open("Browser", mw)
+             try:
+                  browser.search_for(query)
+             except AttributeError:
+                  try:
+                       browser.search(query)
+                  except (AttributeError, TypeError):
+                       try:
+                            try: browser.form.searchEdit.lineEdit().setText(query)
+                            except AttributeError: browser.form.searchEdit.setText(query)
+                            try: browser.search() 
+                            except (AttributeError, TypeError): browser.onSearchActivated()
+                       except Exception: pass
+             browser.setFocus()
+             browser.activateWindow()
+             browser.raise_()
+        else:
+             QDesktopServices.openUrl(qurl)
