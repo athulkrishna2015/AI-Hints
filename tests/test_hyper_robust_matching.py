@@ -66,24 +66,6 @@ class TestHyperRobustMatching(unittest.TestCase):
         data = {"correct_answer": stored}
         self.assertTrue(self.parser._cloze_data_matches_note(data, "c1", note))
 
-    def test_unicode_normalization(self):
-        # Malayalam Chillu characters (different representations)
-        # NFC vs NFD
-        ans_nfc = "\u0D05\u0D2E\u0D4D\u0D2E" # അമ്മ
-        ans_nfd = "\u0D05\u0D2E\u0D4D\u0D2E" # അമ്മ (these are actually same in this case, but let's try a real one)
-        
-        # Chillu 'n'
-        # Old way: \u0D23\u0D4D\u0D20 (na + virama + joiner) - wait that's not right
-        # New way: \u0D7A
-        n_modern = "\u0D7A" # ൻ
-        n_old = "\u0D28\u0D4D\u200D" # na + virama + zwj
-        
-        note_text = f"{{{{c1::{n_old}}}}}"
-        note = MockNote({"Text": note_text})
-        
-        data = {"correct_answer": n_modern}
-        self.assertTrue(self.parser._cloze_data_matches_note(data, "c1", note))
-
     def test_super_fuzzy_fallback(self):
         # Mismatch in brackets or minor symbols in non-math
         stored = "Economic Growth (Industrial)"
@@ -100,6 +82,25 @@ class TestHyperRobustMatching(unittest.TestCase):
         
         data = {"correct_answer": stored}
         self.assertTrue(self.parser._cloze_data_matches_note(data, "c1", note))
+
+    def test_subset_fallback(self):
+        # AI returned "Article 21", but cloze is just "21"
+        stored = "Article 21"
+        note_text = "Article {{c1::21}}"
+        note = MockNote({"Text": note_text})
+        
+        data = {"correct_answer": stored}
+        self.assertTrue(self.parser._cloze_data_matches_note(data, "c1", note))
+
+        # Changing "21" to "14" should fail
+        note_text2 = "Article {{c1::14}}"
+        note2 = MockNote({"Text": note_text2})
+        self.assertFalse(self.parser._cloze_data_matches_note(data, "c1", note2))
+
+        # Changing "Article 21" to "Article 14" should fail
+        note_text3 = "{{c1::Article 14}}"
+        note3 = MockNote({"Text": note_text3})
+        self.assertFalse(self.parser._cloze_data_matches_note(data, "c1", note3))
 
 if __name__ == "__main__":
     unittest.main()

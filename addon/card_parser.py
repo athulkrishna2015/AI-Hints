@@ -1102,6 +1102,18 @@ class CardParser:
             sf_note = {super_fuzzy(n) for n in note_clozes}
             if all(s in sf_note for s in sf_stored if s):
                 return True
+                
+            # 4. Word subset fallback (handles "Article 21" vs "21")
+            def get_words(s):
+                return set(w for w in re.split(r'[^a-zA-Z0-9\u0d00-\u0d7f]+', str(s).casefold()) if w)
+                
+            stored_words = get_words(stored_answer_raw)
+            for n_cloze in note_clozes:
+                note_words = get_words(n_cloze)
+                if stored_words and note_words:
+                    # If all words of one are in the other (one is a subset of the other)
+                    if stored_words.issubset(note_words) or note_words.issubset(stored_words):
+                        return True
 
         return False
 

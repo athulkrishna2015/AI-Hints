@@ -163,8 +163,23 @@ def _trigger_next_pregeneration(current_card_id=None):
                                     continue
                                     
                                 if card_has_hints(card):
-                                    # Already has hints on disk, does not count against our pregen buffer limit
-                                    continue
+                                    # We also need to be sure that the existing hints actually cover
+                                    # this specific card's cloze (if it's a cloze card).
+                                    # card_has_hints checks if there is ANY block matching the card.
+                                    # For keyed blocks, we should check if this specific cloze ord is covered.
+                                    card_ord = getattr(card, "ord", None)
+                                    parser = CardParser(
+                                        mathjax_format=config.get("mathjax_format", "delimiters"),
+                                        fix_latex=config.get("fix_latex", False)
+                                    )
+                                    block = parser.find_hints_block(card.note(), card)
+                                    
+                                    # If block is found, we assume it's covered. 
+                                    # If it's a cloze and missing its specific key, find_hints_block 
+                                    # with the card passed in *should* return None if it doesn't have data for it.
+                                    if block:
+                                        # Already has hints on disk, does not count against our pregen buffer limit
+                                        continue
                                     
                                 if cid in _pregenerated_data or cid in _generating_card_ids:
                                     prepared_count += 1
