@@ -331,8 +331,6 @@ class BatchManager:
                 mathjax_format=config.get("mathjax_format", "delimiters"),
                 fix_latex=config.get("fix_latex", False)
             )
-            )
-            
             applied_count = 0
             notes_to_flush = {} # note_id -> note object
             

@@ -69,7 +69,7 @@ def run_tests():
     ]
     
     for input_text, expected in test_cases:
-        normalized = normalize_math_text(input_text)
+        normalized = normalize_math_text(input_text, fix_latex=True)
         # Using simplified check for readability
         if expected.replace(" ", "") in normalized.replace(" ", ""):
             pass

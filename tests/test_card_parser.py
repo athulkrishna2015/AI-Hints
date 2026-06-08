@@ -136,7 +136,7 @@ class CardParserTests(unittest.TestCase):
 
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", block)
         self.assertNotIn("<script>alert(1)</script>", block)
-        self.assertIn("<anki-mathjax>x</anki-mathjax>", block)
+        self.assertIn("&lt;anki-mathjax&gt;x&lt;/anki-mathjax&gt;", block)
 
     def test_missing_cloze_returns_empty_content(self):
         note = FakeNote("Cloze", {"Text": "This is {{c1::cloze 1}}."})

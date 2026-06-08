@@ -35,7 +35,7 @@ class LatexFixerTests(unittest.TestCase):
 
         for input_text, expected in test_cases:
             with self.subTest(input_text=input_text):
-                self.assertEqual(fix_latex(input_text), expected)
+                self.assertEqual(fix_latex(input_text, fix_latex=True), expected)
 
 if __name__ == "__main__":
     unittest.main()
