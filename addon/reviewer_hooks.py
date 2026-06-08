@@ -1855,7 +1855,7 @@ def init_hooks():
     gui_hooks.reviewer_did_show_question.append(on_show_question)
     gui_hooks.reviewer_did_show_answer.append(_trigger_frontend_setup)
     
-    def _on_reviewer_init():
+    def _on_reviewer_init(reviewer):
         global _reviewer_is_ending
         _reviewer_is_ending = False
         
