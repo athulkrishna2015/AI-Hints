@@ -1103,7 +1103,7 @@ class AIClient:
             }
             
             with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f)
+                json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"AI-Hints: Failed to save blacklist: {e}")
 

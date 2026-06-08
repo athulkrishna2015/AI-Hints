@@ -1930,13 +1930,228 @@ def check_support_on_update():
         logger.error(f"AI-Hints: Update check failed: {e}")
 
 def on_clean_orphaned_hints():
-    on_config_dialog(mw)
-    global _config_dialog_instance
-    if _config_dialog_instance:
-        # Switch to Advanced tab (index 2)
-        _config_dialog_instance.tabs.setCurrentIndex(2)
-        # Trigger scan with a slight delay to ensure UI is ready
-        QTimer.singleShot(500, _config_dialog_instance.on_scan_orphans)
+    """Run the orphaned-hints scan and show the cleanup dialog without opening the config window."""
+    from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton
+    from .main_dialog import _show_orphans_cleanup_dialog_standalone
+    _show_orphans_cleanup_dialog_standalone(mw)
+
+
+def _show_orphans_cleanup_dialog_standalone(parent):
+    """Standalone version of the orphan scan + cleanup dialog that does not require ConfigDialog."""
+    from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton
+    from ..card_parser import CardParser
+    import json, html, re
+
+    parser = CardParser()
+
+    # Always scan the full collection when launched from the Tools menu
+    query = ""
+    scope_str = "entire collection"
+
+    nids = mw.col.find_notes(query)
+    total = len(nids)
+    if total == 0:
+        QMessageBox.information(parent, "AI-Hints", "No notes found in your collection!")
+        return
+
+    progress = QProgressDialog(f"Scanning {scope_str} for orphaned hints...", "Cancel", 0, total, parent)
+    progress.setWindowModality(Qt.WindowModality.WindowModal)
+    progress.setMinimumDuration(200)
+
+    orphaned_hints = []
+    logger.info(f"AI-Hints: Starting standalone scan for orphaned AI hints in {scope_str}.")
+
+    for i, nid in enumerate(nids):
+        if progress.wasCanceled():
+            logger.info(f"AI-Hints: Orphaned hints scan CANCELLED by user. Processed {i} notes.")
+            return
+        progress.setValue(i)
+        progress.setLabelText(f"Scanning note {i+1} of {total}...")
+        QApplication.processEvents()
+
+        try:
+            note = mw.col.get_note(nid)
+            raw_blocks = parser.find_all_hints_blocks(note)
+            if not raw_blocks:
+                continue
+
+            active_ords = {c.ord for c in note.cards()}
+            valid_keys = {f"c{ord + 1}" for ord in active_ords}
+
+            note_orphans = []
+            for block in raw_blocks:
+                if parser.json_class in block:
+                    m = re.search(
+                        r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
+                        block, re.DOTALL | re.IGNORECASE
+                    )
+                    if m:
+                        raw = html.unescape(m.group(1) or "")
+                        try:
+                            parsed = json.loads(raw)
+                        except Exception:
+                            continue
+                        if isinstance(parsed, dict) and parser._is_keyed_payload(parsed):
+                            for key in list(parsed.keys()):
+                                if re.fullmatch(r"c\d+", str(key)) and key not in valid_keys:
+                                    note_orphans.append((block, key, parsed[key]))
+
+            if note_orphans:
+                first_field_val = list(note.values())[0] if note.values() else ""
+                preview = parser._clean_html(first_field_val)[:60]
+                if len(first_field_val) > 60:
+                    preview += "..."
+                orphaned_hints.append({
+                    "note_id": nid,
+                    "preview": preview or f"Note ID {nid}",
+                    "orphans": note_orphans,
+                    "note": note,
+                })
+        except Exception as e:
+            logger.error(f"Error scanning note {nid} for orphans: {e}")
+
+    progress.setValue(total)
+    logger.info(f"AI-Hints: Standalone orphan scan COMPLETED. Found orphans in {len(orphaned_hints)} notes.")
+
+    if not orphaned_hints:
+        QMessageBox.information(parent, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
+        return
+
+    # --- Cleanup dialog ---
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("🧹 Orphaned Hints Cleanup")
+    dialog.resize(600, 450)
+    layout = QVBoxLayout(dialog)
+
+    desc = QLabel(
+        "The following orphaned AI hints were detected. These exist in your cards' "
+        "JSON data but do not correspond to any active cards (likely because "
+        "cloze deletions were removed or note types were changed)."
+    )
+    desc.setWordWrap(True)
+    layout.addWidget(desc)
+
+    list_widget = QListWidget()
+    layout.addWidget(list_widget)
+
+    for item in orphaned_hints:
+        keys_str = ", ".join([opt[1] for opt in item["orphans"]])
+        preview_text = f"📝 {item['preview']}\n   ❌ Orphaned Card Keys: {keys_str}"
+        list_widget.addItem(QListWidgetItem(preview_text))
+
+    tip_label = QLabel("💡 <i>Double-click an item or click 'Show in Browser' to view the note in Anki's Browser.</i>")
+    tip_label.setWordWrap(True)
+    tip_label.setStyleSheet("color: #666; font-size: 11px; margin-top: 2px; margin-bottom: 2px;")
+    layout.addWidget(tip_label)
+
+    btn_layout = QHBoxLayout()
+    show_btn = QPushButton("🔍 Show in Browser")
+    show_btn.setStyleSheet("padding: 6px; border-radius: 4px;")
+    show_btn.setEnabled(False)
+    clean_btn = QPushButton(f"🔥 Remove {len(orphaned_hints)} Orphaned Hints")
+    clean_btn.setStyleSheet("font-weight: bold; background-color: #dc3545; color: white; padding: 6px; border-radius: 4px;")
+    cancel_btn = QPushButton("Cancel")
+    cancel_btn.setStyleSheet("padding: 6px;")
+    btn_layout.addWidget(show_btn)
+    btn_layout.addStretch()
+    btn_layout.addWidget(clean_btn)
+    btn_layout.addWidget(cancel_btn)
+    layout.addLayout(btn_layout)
+
+    def on_show_card():
+        selected_row = list_widget.currentRow()
+        if selected_row < 0 or selected_row >= len(orphaned_hints):
+            return
+        note_id = orphaned_hints[selected_row]["note_id"]
+        query_str = f"nid:{note_id}"
+        from aqt import dialogs
+        browser = dialogs.open("Browser", mw)
+        try:
+            browser.search_for(query_str)
+        except AttributeError:
+            try:
+                browser.search(query_str)
+            except (AttributeError, TypeError):
+                try:
+                    try: browser.form.searchEdit.lineEdit().setText(query_str)
+                    except AttributeError: browser.form.searchEdit.setText(query_str)
+                    try: browser.search()
+                    except (AttributeError, TypeError): browser.onSearchActivated()
+                except Exception: pass
+        browser.setFocus()
+        browser.activateWindow()
+        browser.raise_()
+
+    def on_selection_changed():
+        show_btn.setEnabled(list_widget.currentRow() >= 0)
+
+    list_widget.currentRowChanged.connect(on_selection_changed)
+    list_widget.itemDoubleClicked.connect(on_show_card)
+    show_btn.clicked.connect(on_show_card)
+
+    def do_clean():
+        mw.checkpoint("Clean Orphaned Hints")
+        cleaned_count = 0
+        logger.info(f"AI-Hints: Starting cleanup of orphaned hints in {len(orphaned_hints)} notes.")
+        for item in orphaned_hints:
+            note = item["note"]
+            fields = list(note.keys())
+            if not fields:
+                continue
+            note_changed = False
+            for f_name in fields:
+                val = note[f_name]
+                if not isinstance(val, str) or parser.json_class not in val:
+                    continue
+                pattern = re.compile(
+                    rf'<div\b[^>]*class=["\'][^"\']*{parser.json_class}[^"\']*["\'][^>]*>(.*?)</div>',
+                    flags=re.DOTALL | re.IGNORECASE,
+                )
+                new_val = val
+                matches = list(pattern.finditer(val))
+                for match in reversed(matches):
+                    block_html = match.group(0)
+                    raw_payload = match.group(1)
+                    try:
+                        parsed_block = parser._parse_json_payload(raw_payload)
+                        if isinstance(parsed_block, dict) and parser._is_keyed_payload(parsed_block):
+                            keys_removed = 0
+                            for opt in item["orphans"]:
+                                orphan_block = opt[0]
+                                orphan_key = opt[1]
+                                if block_html == orphan_block and orphan_key in parsed_block:
+                                    del parsed_block[orphan_key]
+                                    keys_removed += 1
+                            if keys_removed > 0:
+                                if parsed_block:
+                                    new_payload = parser.serialize_json_payload(parsed_block)
+                                    inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
+                                    if inner_match:
+                                        new_block = block_html.replace(inner_match.group(1), new_payload)
+                                        new_val = new_val[:match.start()] + new_block + new_val[match.end():]
+                                        note_changed = True
+                                else:
+                                    new_val = new_val[:match.start()] + new_val[match.end():]
+                                    note_changed = True
+                    except Exception as e:
+                        logger.error(f"Error cleaning orphaned hint block in note {note.id}: {e}")
+            if note_changed:
+                new_val = re.sub(r'(?:<br\s*/?>|\s|&nbsp;)+$', '', new_val, flags=re.IGNORECASE)
+                note[fields[0]] = new_val.strip()
+                mw.col.update_note(note)
+                cleaned_count += 1
+
+        dialog.accept()
+        mw.reset()
+        logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
+        QMessageBox.information(
+            parent, "Cleanup Complete",
+            f"🎉 Successfully cleaned up orphaned AI hints from {cleaned_count} notes!"
+        )
+
+    clean_btn.clicked.connect(do_clean)
+    cancel_btn.clicked.connect(dialog.reject)
+    dialog.exec()
 
 def init_config_ui():
     from aqt import gui_hooks

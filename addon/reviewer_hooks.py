@@ -37,7 +37,7 @@ class PregenCache(UserDict):
     def save(self):
         try:
             with open(self.filepath, "w", encoding="utf-8") as f:
-                json.dump(self.data, f)
+                json.dump(self.data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             from .logger import logger
             logger.error(f"Failed to save pregen cache: {e}")
@@ -1164,7 +1164,11 @@ def refresh_current_card(card=None, web=None):
     reviewer = getattr(mw, "reviewer", None)
     
     if card:
-        _forget_generated_hints(card)
+        # NOTE: Do NOT call _forget_generated_hints(card) here.
+        # refresh_current_card triggers _showQuestion() which fires on_show_question
+        # → card_has_hints → cache lookup. If we wipe the cache here, the cache miss
+        # causes an auto-generation loop immediately after every successful write.
+        # The cache entry remains valid since hints were just written to the note.
         _pregenerated_data.pop(card.id, None)
         try:
             card.load()

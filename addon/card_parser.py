@@ -493,17 +493,11 @@ class CardParser:
                                          if k not in active_clozes:
                                              del parsed[k]
                                          else:
-                                             # Key is active, check if correct_answer matches the cloze text
-                                             card_data = parsed[k]
-                                             if isinstance(card_data, dict):
-                                                 if card_data.get("_skipped"):
-                                                     continue # Keep skipped markers
-                                                 
-                                                 if "correct_answer" in card_data:
-                                                     stored_ans = card_data["correct_answer"]
-                                                     if isinstance(stored_ans, str):
-                                                         if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
-                                                             del parsed[k]
+                                             # Key is active: verify correct_answer still matches the
+                                             # cloze text. Uses _cloze_data_matches_note which correctly
+                                             # unpacks the (norm, clean_raw) tuples in active_clozes[k].
+                                             if not self._cloze_data_matches_note(parsed[k], k, note):
+                                                 del parsed[k]
                              
                              parsed[card_key] = new_data
                         else:
@@ -546,15 +540,11 @@ class CardParser:
                                         if k not in active_clozes:
                                             del parsed[k]
                                         else:
-                                           card_data = parsed[k]
-                                           if isinstance(card_data, dict):
-                                               if card_data.get("_skipped"):
-                                                   continue
-                                               if "correct_answer" in card_data:
-                                                   stored_ans = card_data["correct_answer"]
-                                                   if isinstance(stored_ans, str):
-                                                       if self._normalized_answer_text(stored_ans) not in active_clozes[k]:
-                                                           del parsed[k]
+                                            # Key is active: verify correct_answer still matches the
+                                            # cloze text. Uses _cloze_data_matches_note which correctly
+                                            # unpacks the (norm, clean_raw) tuples in active_clozes[k].
+                                            if not self._cloze_data_matches_note(parsed[k], k, note):
+                                                del parsed[k]
                             # Merge data
                             parsed[card_key] = new_data
                             new_payload = self.serialize_json_payload(parsed)
