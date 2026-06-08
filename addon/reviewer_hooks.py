@@ -1436,7 +1436,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                          _set_frontend_generating(web, False, card_id, is_pregen)
                     else:
                         _pregenerated_data[card_id] = data
-                        logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Cached in memory).")
+                        logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Saved to disk cache).")
                         _set_frontend_generating(web, False, card_id, is_pregen)
                 else:
                     logger.info(f"AI-Hints: Pre-generation for {card_id} failed or returned no data.")
