@@ -13,6 +13,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Native Antigravity Daemon**: Features seamless embedded integration of the [Antigravity Cloud Proxy](https://github.com/frieser/antigravity-proxy). Automatically manages background executable lifecycle, offers one-click account setup dashboard, and provides direct gateway to premier LLMs completely locally.
 - **Unified UI System**: Desktop and Mobile now share the exact same rendering engine (`template.js`), ensuring consistent features (like shuffling and MathJax) across all devices.
 - **Optimized Prompt Efficiency (v3.4.1)**: Re-engineered system prompts for maximum token efficiency (~1k tokens saved per request) while improving distractor quality via **Sequential Parallelism**.
+- **Factual Error Warnings & Fixed Pregen Styling (v3.6.0)**: Automatically highlights factual errors in the card content with a dedicated warning indicator explaining why it is wrong and what the correct answer is. Includes polished pregeneration button styling for both light and dark themes.
 - **Multiple API Keys Rotation (v3.5.0)**: Supports prioritizing, labeling, and rotating multiple API keys per provider. Includes visual key management (enabling/disabling individual keys) and persistent disk-based key blacklisting.
 - **Cross-Platform Support**: Includes a **Unified UI** script that works on AnkiDroid, AnkiMobile, and AnkiWeb even without the add-on installed. Includes a **Smart One-Click Installer** that automatically manages your templates and keep them in sync.
 - **Smart Auto-Updates**: Once you've opted-in via the Installer, the addon automatically keeps your mobile setup up to date whenever you update the addon or change settings.
@@ -130,6 +131,10 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 
 ## Changelog
+
+### June 10, 2026 (v3.6.0)
+- **Pregeneration Button Redesign**: Fixed pregeneration button animation and styling. Restored original green colors for light mode and night mode with explicit overrides for maximum text readability and visual consistency.
+- **Prompt Optimization & Factual Warning**: Updated the system prompt to enforce exactly 3 hints across all card types. If the front or back contains factual errors, the 3rd (last) hint is formatted with a warning symbol `⚠️` to indicate exactly what is wrong and explain the correct information.
 
 ### June 10, 2026 (v3.5.0)
 - **Multiple API Keys Rotation**: Configure multiple API keys per provider in a new visual Manage Keys dialog. Keys can be assigned custom labels/names for clearer logging.

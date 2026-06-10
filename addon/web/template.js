@@ -30,7 +30,8 @@
         .nightMode .ai-hints-json-view { background: rgba(255,255,255,0.05); }
         .ai-hints-btn-generating { animation: ai-hints-pulse 1.5s ease-in-out infinite; background: linear-gradient(90deg, #f8fafc 0%, #dbeafe 50%, #f8fafc 100%); background-size: 200% 100%; color: #111827; border-color: #60a5fa; will-change: background-position; }
         .nightMode .ai-hints-btn-generating { background: linear-gradient(90deg, #172554 0%, #1d4ed8 50%, #172554 100%); background-size: 200% 100%; color: #ffffff; border-color: #93c5fd; will-change: background-position; }
-        .ai-hints-btn-pregenerating { animation: ai-hints-pregen-pulse 2s ease-in-out infinite; background: linear-gradient(90deg, #f0fdf4 0%, #dcfce7 50%, #f0fdf4 100%); background-size: 200% 100%; border-color: #86efac; will-change: background-position; }
+        .ai-hints-btn-pregenerating { animation: ai-hints-pregen-pulse 2s ease-in-out infinite; background: linear-gradient(90deg, #f0fdf4 0%, #dcfce7 50%, #f0fdf4 100%) !important; background-size: 200% 100%; border-color: #86efac !important; will-change: background-position; }
+        .nightMode .ai-hints-btn-pregenerating { background: linear-gradient(90deg, #064e3b 0%, #166534 50%, #064e3b 100%) !important; background-size: 200% 100%; border-color: #22c55e !important; }
         .ai-hints-btn-warning { border-color: #f39c12 !important; background-color: #fff9e6 !important; color: #d35400 !important; box-shadow: 0 0 4px rgba(243, 156, 18, 0.4); }
         .ai-hints-btn-warning:hover { background-color: #fef5d1 !important; }
         .nightMode .ai-hints-btn-warning { border-color: #f39c12 !important; background-color: #2c2514 !important; color: #f39c12 !important; box-shadow: 0 0 4px rgba(243, 156, 18, 0.4); }
