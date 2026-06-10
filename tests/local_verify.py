@@ -13,6 +13,10 @@ sys.path.insert(0, PROJECT_ROOT)
 
 # 2. Mock Anki/Qt
 from types import ModuleType
+class PyQtMock(MagicMock):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
 aqt = ModuleType('aqt')
 sys.modules['aqt'] = aqt
 aqt.qt = MagicMock()
@@ -36,9 +40,10 @@ classes = ['QDialog', 'QWidget', 'QVBoxLayout', 'QHBoxLayout', 'QLabel',
            'QScrollArea', 'QGroupBox', 'QFormLayout', 'QSpinBox', 'QDialogButtonBox',
            'QPixmap', 'Qt', 'QApplication', 'QSizePolicy', 'QTimer', 'QTabWidget',
            'QListWidget', 'QListWidgetItem', 'QDesktopServices', 'QUrl', 'QProgressBar',
-           'QDialogButtonBox', 'QStyledItemDelegate']
+           'QStyledItemDelegate', 'QAction', 'QHeaderView', 'QTableWidget', 'QTableWidgetItem',
+           'QAbstractItemView', 'QMenu']
 for cls in classes:
-    setattr(mock_qt, cls, MagicMock)
+    setattr(mock_qt, cls, type(cls, (PyQtMock,), {}))
 
 from aqt import mw
 mw.addonManager = MagicMock()

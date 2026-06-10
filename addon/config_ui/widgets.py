@@ -24,13 +24,31 @@ class CustomProviderDialog(QDialog):
             
         self.url_edit = QLineEdit(data.get("url", "") if data else "")
         self.key_edit = QLineEdit(data.get("api_key", "") if data else "")
+        self.key_edit.setPlaceholderText("Enter API Key(s)...")
+        self.key_edit.setToolTip(
+            "Enter one or more API keys separated by commas, semicolons, or newlines.\n"
+            "To name/label your keys, use formats:\n"
+            "  - name:key (e.g. primary:sk-xxx)\n"
+            "  - key (name) (e.g. sk-xxx (backup))"
+        )
+        
+        self.manage_keys_btn = QPushButton("🔑")
+        self.manage_keys_btn.setToolTip("Manage Multiple API Keys...")
+        self.manage_keys_btn.setFixedWidth(30)
+        self.manage_keys_btn.setStyleSheet("padding: 2px;")
+        self.manage_keys_btn.clicked.connect(self.on_manage_keys)
+        
+        key_layout = QHBoxLayout()
+        key_layout.addWidget(self.key_edit, 1)
+        key_layout.addWidget(self.manage_keys_btn)
+
         self.model_edit = QLineEdit(data.get("model", "") if data else "")
         self.headers_edit = QTextEdit()
         self.headers_edit.setPlainText(json.dumps(data.get("headers", {}), indent=2) if data else "{}")
         
         layout.addRow("Provider Name (ID):", self.name_edit)
         layout.addRow("Endpoint URL:", self.url_edit)
-        layout.addRow("API Key:", self.key_edit)
+        layout.addRow("API Key:", key_layout)
         
         model_row = QHBoxLayout()
         self.model_edit = QLineEdit(data.get("model", "") if data else "")
@@ -47,6 +65,12 @@ class CustomProviderDialog(QDialog):
         btns.accepted.connect(self.validate_and_accept)
         btns.rejected.connect(self.reject)
         layout.addRow(btns)
+
+    def on_manage_keys(self):
+        provider = self.name_edit.text().strip() or "custom"
+        dlg = ManageKeysDialog(provider, self, self.key_edit.text().strip())
+        if dlg.exec():
+            self.key_edit.setText(dlg.get_keys_string())
 
     def on_fetch(self):
         url = self.url_edit.text().strip()
@@ -166,12 +190,26 @@ class ProviderRowWidget(QWidget):
         # API Key Input field
         self.key_edit = QLineEdit()
         self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.key_edit.setPlaceholderText("Enter API Key...")
+        self.key_edit.setPlaceholderText("Enter API Key(s)...")
+        self.key_edit.setToolTip(
+            "Enter one or more API keys separated by commas, semicolons, or newlines.\n"
+            "To name/label your keys, use formats:\n"
+            "  - name:key (e.g. primary:sk-xxx)\n"
+            "  - key (name) (e.g. sk-xxx (backup))"
+        )
         
         # Load existing API key
         keys = parent_dialog.config.get("api_keys", {}) or {}
         self.key_edit.setText(keys.get(provider, ""))
         top_layout.addWidget(self.key_edit, 1)
+
+        # Keys Management Button
+        self.manage_keys_btn = QPushButton("🔑")
+        self.manage_keys_btn.setToolTip("Manage Multiple API Keys...")
+        self.manage_keys_btn.setFixedWidth(30)
+        self.manage_keys_btn.setStyleSheet("padding: 2px;")
+        self.manage_keys_btn.clicked.connect(self.on_manage_keys)
+        top_layout.addWidget(self.manage_keys_btn)
 
         # Register key edit in parent_dialog dict for backwards compatibility/saving!
         if not hasattr(parent_dialog, "api_key_edits"):
@@ -281,6 +319,7 @@ class ProviderRowWidget(QWidget):
 
     def on_enabled_toggled(self, checked):
         self.key_edit.setEnabled(checked)
+        self.manage_keys_btn.setEnabled(checked)
         self.eye_btn.setEnabled(checked)
         self.model_label.setEnabled(checked)
         self.edit.setEnabled(checked)
@@ -289,6 +328,11 @@ class ProviderRowWidget(QWidget):
         self.up_btn.setEnabled(checked)
         self.down_btn.setEnabled(checked)
         self.fallbacks_btn.setEnabled(checked)
+
+    def on_manage_keys(self):
+        dlg = ManageKeysDialog(self.provider, self, self.key_edit.text().strip())
+        if dlg.exec():
+            self.key_edit.setText(dlg.get_keys_string())
 
     def update_blacklist_status(self):
         model = self.edit.currentText().strip()
@@ -343,3 +387,149 @@ class ProviderRowWidget(QWidget):
             
         self.fallback_dialog.accepted.connect(_save_data)
         self.fallback_dialog.show()
+
+
+class ManageKeysDialog(QDialog):
+    def __init__(self, provider, parent_widget, raw_keys_str):
+        super().__init__(parent_widget)
+        self.setWindowTitle(f"Manage API Keys - {provider.capitalize()}")
+        self.resize(500, 300)
+        
+        layout = QVBoxLayout(self)
+        
+        # Add instruction label
+        label = QLabel("Manage multiple API keys for rotation. Order determines failover priority.")
+        label.setStyleSheet("font-style: italic; color: gray;")
+        layout.addWidget(label)
+        
+        # Table widget to show keys
+        self.table = QTableWidget(0, 2)
+        self.table.setHorizontalHeaderLabels(["Name / Label (Optional)", "API Key"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        layout.addWidget(self.table)
+        
+        # Action Buttons Layout (Add, Remove, Move Up, Move Down)
+        btn_layout = QHBoxLayout()
+        
+        self.add_btn = QPushButton("＋ Add Row")
+        self.add_btn.clicked.connect(self.on_add_row)
+        btn_layout.addWidget(self.add_btn)
+        
+        self.remove_btn = QPushButton("－ Remove Row")
+        self.remove_btn.clicked.connect(self.on_remove_row)
+        btn_layout.addWidget(self.remove_btn)
+        
+        self.up_btn = QPushButton("▲ Move Up")
+        self.up_btn.clicked.connect(self.on_move_up)
+        btn_layout.addWidget(self.up_btn)
+        
+        self.down_btn = QPushButton("▼ Move Down")
+        self.down_btn.clicked.connect(self.on_move_down)
+        btn_layout.addWidget(self.down_btn)
+        
+        layout.addLayout(btn_layout)
+        
+        # Dialog buttons (OK, Cancel)
+        dialog_btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        dialog_btns.accepted.connect(self.accept)
+        dialog_btns.rejected.connect(self.reject)
+        layout.addWidget(dialog_btns)
+        
+        # Parse and populate existing keys
+        self.populate_keys(provider, raw_keys_str)
+
+    def populate_keys(self, provider, raw_keys_str):
+        client = AIClient({"api_keys": {provider: raw_keys_str}})
+        keys = client._api_keys_for(provider)
+        for key in keys:
+            name = client._key_names.get((provider, key), "")
+            self.add_key_row(name, key)
+
+    def add_key_row(self, name, key):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        
+        name_item = QTableWidgetItem(name)
+        key_item = QTableWidgetItem(key)
+        
+        self.table.setItem(row, 0, name_item)
+        self.table.setItem(row, 1, key_item)
+
+    def on_add_row(self):
+        self.add_key_row("", "")
+        row = self.table.rowCount() - 1
+        self.table.setCurrentCell(row, 1)
+        self.table.editItem(self.table.item(row, 1))
+
+    def on_remove_row(self):
+        row = self.table.currentRow()
+        if row >= 0:
+            self.table.removeRow(row)
+
+    def on_move_up(self):
+        row = self.table.currentRow()
+        if row > 0:
+            name = self.table.item(row, 0).text() if self.table.item(row, 0) else ""
+            key = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
+            
+            prev_name = self.table.item(row - 1, 0).text() if self.table.item(row - 1, 0) else ""
+            prev_key = self.table.item(row - 1, 1).text() if self.table.item(row - 1, 1) else ""
+            
+            for r in [row, row - 1]:
+                if not self.table.item(r, 0):
+                    self.table.setItem(r, 0, QTableWidgetItem())
+                if not self.table.item(r, 1):
+                    self.table.setItem(r, 1, QTableWidgetItem())
+                    
+            self.table.item(row - 1, 0).setText(name)
+            self.table.item(row - 1, 1).setText(key)
+            self.table.item(row, 0).setText(prev_name)
+            self.table.item(row, 1).setText(prev_key)
+            
+            self.table.setCurrentCell(row - 1, 0)
+
+    def on_move_down(self):
+        row = self.table.currentRow()
+        if row >= 0 and row < self.table.rowCount() - 1:
+            name = self.table.item(row, 0).text() if self.table.item(row, 0) else ""
+            key = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
+            
+            next_name = self.table.item(row + 1, 0).text() if self.table.item(row + 1, 0) else ""
+            next_key = self.table.item(row + 1, 1).text() if self.table.item(row + 1, 1) else ""
+            
+            if not self.table.item(row, 0):
+                self.table.setItem(row, 0, QTableWidgetItem())
+            if not self.table.item(row, 1):
+                self.table.setItem(row, 1, QTableWidgetItem())
+            if not self.table.item(row + 1, 0):
+                self.table.setItem(row + 1, 0, QTableWidgetItem())
+            if not self.table.item(row + 1, 1):
+                self.table.setItem(row + 1, 1, QTableWidgetItem())
+                
+            self.table.item(row + 1, 0).setText(name)
+            self.table.item(row + 1, 1).setText(key)
+            self.table.item(row, 0).setText(next_name)
+            self.table.item(row, 1).setText(next_key)
+            
+            self.table.setCurrentCell(row + 1, 0)
+
+    def get_keys_string(self) -> str:
+        entries = []
+        for row in range(self.table.rowCount()):
+            name_item = self.table.item(row, 0)
+            key_item = self.table.item(row, 1)
+            
+            name = name_item.text().strip() if name_item else ""
+            key = key_item.text().strip() if key_item else ""
+            
+            if not key:
+                continue
+            if name:
+                entries.append(f"{name}:{key}")
+            else:
+                entries.append(key)
+                
+        return ", ".join(entries)
