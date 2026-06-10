@@ -224,8 +224,9 @@ class FallbackOrderDialog(QDialog):
                         info(f"Could not fetch models for {self.provider.capitalize()}. Check connection.")
                 mw.taskman.run_on_main(_update_ui)
             except Exception as e:
+                err_msg = str(e)
                 def _fail_err():
-                    info(f"Error fetching models: {e}")
+                    info(f"Error fetching models: {err_msg}")
                 mw.taskman.run_on_main(_fail_err)
             finally:
                 if fetch_key in FETCH_CANCELLATIONS:
@@ -783,8 +784,9 @@ class GlobalFallbackOrderDialog(QDialog):
                                 tooltip(f"Added {added_count} new models for {p.capitalize()}.")
                         mw.taskman.run_on_main(_update_ui)
             except Exception as e:
-                def _fail(err=str(e)):
-                    info(f"Error during global fetch: {err}")
+                err_msg = str(e)
+                def _fail():
+                    info(f"Error during global fetch: {err_msg}")
                 mw.taskman.run_on_main(_fail)
             finally:
                 if fetch_key in FETCH_CANCELLATIONS:

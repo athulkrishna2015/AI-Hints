@@ -652,16 +652,17 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 mw.taskman.run_on_main(_done)
                 
             except Exception as e:
+                err_msg = str(e)
                 def _fail():
                     combobox.setEnabled(True)
                     if status_label:
-                        st, tt, col = "❌ Failed", f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/><b>Error:</b> {str(e)}</div>", "red"
+                        st, tt, col = "❌ Failed", f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/><b>Error:</b> {err_msg}</div>", "red"
                         PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
                         status_label.setText(st)
                         status_label.setToolTip(tt)
                         status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
                     else:
-                        info(f"❌ Test Error ({provider.capitalize()}):\n\n{str(e)}")
+                        info(f"❌ Test Error ({provider.capitalize()}):\n\n{err_msg}")
                 mw.taskman.run_on_main(_fail)
 
         import threading
@@ -856,8 +857,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 mw.taskman.run_on_main(_done)
             except Exception as e:
                 logger.error(f"Fetch error: {e}")
+                err_msg = str(e)
                 def _fail():
-                    if not silent: info(f"Error fetching models: {e}")
+                    if not silent: info(f"Error fetching models: {err_msg}")
                 mw.taskman.run_on_main(_fail)
             finally:
                 if fetch_key in FETCH_CANCELLATIONS:
