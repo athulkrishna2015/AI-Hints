@@ -13,6 +13,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Native Antigravity Daemon**: Features seamless embedded integration of the [Antigravity Cloud Proxy](https://github.com/frieser/antigravity-proxy). Automatically manages background executable lifecycle, offers one-click account setup dashboard, and provides direct gateway to premier LLMs completely locally.
 - **Unified UI System**: Desktop and Mobile now share the exact same rendering engine (`template.js`), ensuring consistent features (like shuffling and MathJax) across all devices.
 - **Optimized Prompt Efficiency (v3.4.1)**: Re-engineered system prompts for maximum token efficiency (~1k tokens saved per request) while improving distractor quality via **Sequential Parallelism**.
+- **Multiple API Keys Rotation (v3.5.0)**: Supports prioritizing, labeling, and rotating multiple API keys per provider. Includes visual key management (enabling/disabling individual keys) and persistent disk-based key blacklisting.
 - **Cross-Platform Support**: Includes a **Unified UI** script that works on AnkiDroid, AnkiMobile, and AnkiWeb even without the add-on installed. Includes a **Smart One-Click Installer** that automatically manages your templates and keep them in sync.
 - **Smart Auto-Updates**: Once you've opted-in via the Installer, the addon automatically keeps your mobile setup up to date whenever you update the addon or change settings.
 - **Compact Emoji Mode**: Optional ultra-compact UI for mobile that uses pure emojis (💡, 🎯, 🗑️) instead of text labels.
@@ -129,6 +130,29 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 
 ## Changelog
+
+### June 10, 2026 (v3.5.0)
+- **Multiple API Keys Rotation**: Configure multiple API keys per provider in a new visual Manage Keys dialog. Keys can be assigned custom labels/names for clearer logging.
+- **Enabled/Disabled Key States**: Temporarily disable backup keys using checkboxes in the GUI without removing them from your settings.
+- **Persistent Key Cooldowns**: API key blacklists are now written to `blacklist.json` on disk to survive Anki restarts. Added an optimized global cache flag to prevent redundant disk I/O.
+- **Python 3.11+ Closure Fix**: Resolved a `NameError` crash occurring in asynchronous exception closures on Python 3.11+.
+- **Orphan Hints Detection**: Added robust detection and cleanup of orphaned hints in card parser.
+- **Clean Test Logs**: Isolated unit test logs to prevent mock API failures from polluting your production log file.
+
+### June 9, 2026 (v3.4.1)
+- **Optimized Prompt Efficiency**: Re-engineered system prompts for maximum token efficiency (~1k tokens saved per request) while improving distractor quality via Sequential Parallelism.
+
+### June 8, 2026 (v3.4.0)
+- **Persistent Pre-generation Cache**: Background hints now survive Anki restarts and Undo operations. Data is strictly retained until successfully added to a card.
+- **Manual Cache Maintenance**: Added a "🧹 Clear Pregen Cache" button to the Advanced settings tab.
+- **Enhanced Data Integrity**: Eliminated "data bleed" between cards and sessions by ensuring strictly isolated DOM cleanup on every load.
+- **Fallback Visibility**: Added visual 🚫 Blacklisted badges in fallback priority dialogs to instantly identify models on cooldown.
+- **Infinite Regeneration Fix**: Completely refactored cloze matching to use robust card keys, resolving issues with summary-style AI answers.
+- **Interactive Logs**: 13-digit card IDs in the logs are now clickable, and a new "Refresh" button has been added to the Logs tab.
+- **Skip AI Feature**: Added the ability to permanently skip AI generation for specific cards with a single click.
+- **Orphaned Hint Cleanup**: New maintenance tool to scan and remove AI-Hints data for notes that have been deleted or modified.
+- **Improved Cloze Parsing**: Robust depth-aware parsing for complex nested cloze deletions.
+- **Stability Fixes**: Resolved IndentationError and TypeError regressions in the reviewer hooks.
 
 ### June 8, 2026 (v3.3.2)
 - **Fixed Math Cloze Loop**: Resolved an endless regeneration loop for cards containing math formatting inside cloze deletions. The system now robustly handles LaTeX normalization during answer verification.
@@ -319,15 +343,3 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 - **Global Emergency Stop**: Added instant-kill signal for all AI generations.
 - **Optimized Provider Failover**: Enhanced 404/Timeout recovery.
 - **Missing Cloze Handling**: Graceful detection and skipping for cards with missing clozes.
-
-### June 8, 2026 (v3.4.0)
-- **Persistent Pre-generation Cache**: Background hints now survive Anki restarts and Undo operations. Data is strictly retained until successfully added to a card.
-- **Manual Cache Maintenance**: Added a "🧹 Clear Pregen Cache" button to the Advanced settings tab.
-- **Enhanced Data Integrity**: Eliminated "data bleed" between cards and sessions by ensuring strictly isolated DOM cleanup on every load.
-- **Fallback Visibility**: Added visual 🚫 Blacklisted badges in fallback priority dialogs to instantly identify models on cooldown.
-- **Infinite Regeneration Fix**: Completely refactored cloze matching to use robust card keys, resolving issues with summary-style AI answers.
-- **Interactive Logs**: 13-digit card IDs in the logs are now clickable, and a new "Refresh" button has been added to the Logs tab.
-- **Skip AI Feature**: Added the ability to permanently skip AI generation for specific cards with a single click.
-- **Orphaned Hint Cleanup**: New maintenance tool to scan and remove AI-Hints data for notes that have been deleted or modified.
-- **Improved Cloze Parsing**: Robust depth-aware parsing for complex nested cloze deletions.
-- **Stability Fixes**: Resolved IndentationError and TypeError regressions in the reviewer hooks.
