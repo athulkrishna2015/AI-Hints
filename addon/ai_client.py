@@ -18,7 +18,7 @@ except ImportError:
 
 ADDON_PATH = os.path.dirname(__file__)
 BLACKLIST_FILE = os.path.join(ADDON_PATH, "blacklist.json")
-REQUEST_TIMEOUT_SECONDS = 20
+REQUEST_TIMEOUT_SECONDS = 10
 USER_AGENT = "Anki-AI-Hints/1.0"
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 MODEL_COOLDOWN_SECONDS = 3600  # 1 hour
@@ -1107,42 +1107,66 @@ class AIClient:
         keys = self._available_api_keys(provider)
         return keys[0] if keys else ""
 
-    def _split_and_parse_keys(self, provider: str, val: str) -> List[str]:
+    def _parse_all_keys(self, provider: str, val: str) -> List[Dict[str, Any]]:
         val = str(val or "").strip()
         if not val:
             return []
         
-        # Split by comma, semicolon, or newline to preserve spaces in named keys
         raw_entries = [e.strip() for e in re.split(r'[,\;\n\r]+', val) if e.strip()]
         
-        keys = []
+        results = []
         for entry in raw_entries:
-            # Check for parenthesized name at the end: key (name) or key[name]
+            enabled = True
+            entry_lower = entry.lower()
+            if entry_lower.startswith("disabled:"):
+                enabled = False
+                entry = entry[9:].strip()
+            elif entry_lower.startswith("[disabled]"):
+                enabled = False
+                entry = entry[10:].strip()
+                
+            name = ""
+            key = ""
+            
             paren_match = re.search(r'\s*[\(\[]([^\]\)]+)[\)\]]\s*$', entry)
             if paren_match:
                 name = paren_match.group(1).strip()
                 key = entry[:paren_match.start()].strip()
-                if key and name:
-                    self._key_names[(provider, key)] = name
-                    keys.append(key)
-                    continue
-            
-            # Check for colon separator: name:key
             elif ":" in entry:
                 parts = entry.split(":", 1)
                 name = parts[0].strip()
                 key = parts[1].strip()
-                if key and name:
+            else:
+                key = entry.strip()
+                
+            if key:
+                if not name and len(key.split()) > 1:
+                    for sub_key in key.split():
+                        sub_key = sub_key.strip()
+                        if sub_key:
+                            results.append({
+                                "key": sub_key,
+                                "name": "",
+                                "enabled": enabled
+                            })
+                else:
+                    results.append({
+                        "key": key,
+                        "name": name,
+                        "enabled": enabled
+                    })
+        return results
+
+    def _split_and_parse_keys(self, provider: str, val: str) -> List[str]:
+        parsed = self._parse_all_keys(provider, val)
+        keys = []
+        for item in parsed:
+            if item["enabled"]:
+                key = item["key"]
+                name = item["name"]
+                if name:
                     self._key_names[(provider, key)] = name
-                    keys.append(key)
-                    continue
-            
-            # Default: split by whitespace for multiple raw keys (e.g. "key1 key2 key3")
-            for sub_key in entry.split():
-                sub_key = sub_key.strip()
-                if sub_key:
-                    keys.append(sub_key)
-                    
+                keys.append(key)
         return keys
 
     def _key_identifier(self, provider: str, api_key: str) -> str:
@@ -1190,6 +1214,7 @@ class AIClient:
             delay_seconds = self._cooldown_seconds()
         
         FAILED_KEYS_CACHE[(provider, api_key)] = time.time() + delay_seconds
+        self._save_blacklist()
         key_id = self._key_identifier(provider, api_key)
         logger.info(f"AI-Hints: Key for {provider} ({key_id}) put on cooldown for {int(delay_seconds)}s due to failure.")
 
@@ -1200,6 +1225,7 @@ class AIClient:
         if key in FAILED_KEYS_CACHE:
             try:
                 del FAILED_KEYS_CACHE[key]
+                self._save_blacklist()
                 logger.debug(f"AI-Hints: Cleared cooldown for {provider} key {self._key_identifier(provider, api_key)}")
             except KeyError:
                 pass
@@ -1311,16 +1337,18 @@ class AIClient:
         return True
 
     def _save_blacklist(self):
-        """Persists the FAILED_MODELS_CACHE and RATE_LIMIT_STREAK to disk."""
+        """Persists the FAILED_MODELS_CACHE, FAILED_KEYS_CACHE and RATE_LIMIT_STREAK to disk."""
         try:
             # Convert tuple keys to strings for JSON
             expiries = {f"{p}|{m}": e for (p, m), e in FAILED_MODELS_CACHE.items()}
             streaks = {f"{p}|{m}": s for (p, m), s in RATE_LIMIT_STREAK.items()}
+            keys_expiries = {f"{p}|{k}": e for (p, k), e in FAILED_KEYS_CACHE.items()}
             
             # Save as a nested structure
             data = {
                 "expiries": expiries,
                 "streaks": streaks,
+                "keys_expiries": keys_expiries,
                 "version": 2
             }
             
@@ -1330,7 +1358,7 @@ class AIClient:
             logger.error(f"AI-Hints: Failed to save blacklist: {e}")
 
     def _load_blacklist(self):
-        """Loads the FAILED_MODELS_CACHE and RATE_LIMIT_STREAK from disk."""
+        """Loads the FAILED_MODELS_CACHE, FAILED_KEYS_CACHE and RATE_LIMIT_STREAK from disk."""
         if not os.path.exists(BLACKLIST_FILE):
             return
         try:
@@ -1342,12 +1370,14 @@ class AIClient:
             # Clear existing memory caches to stay in sync with disk
             FAILED_MODELS_CACHE.clear()
             RATE_LIMIT_STREAK.clear()
+            FAILED_KEYS_CACHE.clear()
 
             # Check if it's the new format or old flat format
             if isinstance(data, dict) and "expiries" in data:
                 # New format (version 2)
                 expiries = data.get("expiries", {})
                 streaks = data.get("streaks", {})
+                keys_expiries = data.get("keys_expiries", {})
                 
                 for key, expiry in expiries.items():
                     if "|" in key and expiry > now:
@@ -1358,6 +1388,11 @@ class AIClient:
                     if "|" in key:
                         provider, model = key.split("|", 1)
                         RATE_LIMIT_STREAK[(provider, model)] = streak
+
+                for key, expiry in keys_expiries.items():
+                    if "|" in key and expiry > now:
+                        provider, api_key = key.split("|", 1)
+                        FAILED_KEYS_CACHE[(provider, api_key)] = expiry
             else:
                 # Old flat format (just expiries)
                 for key, expiry in data.items():

@@ -393,7 +393,7 @@ class ManageKeysDialog(QDialog):
     def __init__(self, provider, parent_widget, raw_keys_str):
         super().__init__(parent_widget)
         self.setWindowTitle(f"Manage API Keys - {provider.capitalize()}")
-        self.resize(500, 300)
+        self.resize(550, 300)
         
         layout = QVBoxLayout(self)
         
@@ -403,10 +403,11 @@ class ManageKeysDialog(QDialog):
         layout.addWidget(label)
         
         # Table widget to show keys
-        self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["Name / Label (Optional)", "API Key"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["Enabled", "Name / Label (Optional)", "API Key"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         layout.addWidget(self.table)
@@ -442,27 +443,32 @@ class ManageKeysDialog(QDialog):
         self.populate_keys(provider, raw_keys_str)
 
     def populate_keys(self, provider, raw_keys_str):
-        client = AIClient({"api_keys": {provider: raw_keys_str}})
-        keys = client._api_keys_for(provider)
-        for key in keys:
-            name = client._key_names.get((provider, key), "")
-            self.add_key_row(name, key)
+        client = AIClient({})
+        parsed = client._parse_all_keys(provider, raw_keys_str)
+        for item in parsed:
+            self.add_key_row(item["name"], item["key"], item["enabled"])
 
-    def add_key_row(self, name, key):
+    def add_key_row(self, name, key, enabled):
         row = self.table.rowCount()
         self.table.insertRow(row)
+        
+        # Checkbox item in column 0
+        enabled_item = QTableWidgetItem()
+        enabled_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+        enabled_item.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
         
         name_item = QTableWidgetItem(name)
         key_item = QTableWidgetItem(key)
         
-        self.table.setItem(row, 0, name_item)
-        self.table.setItem(row, 1, key_item)
+        self.table.setItem(row, 0, enabled_item)
+        self.table.setItem(row, 1, name_item)
+        self.table.setItem(row, 2, key_item)
 
     def on_add_row(self):
-        self.add_key_row("", "")
+        self.add_key_row("", "", True)
         row = self.table.rowCount() - 1
-        self.table.setCurrentCell(row, 1)
-        self.table.editItem(self.table.item(row, 1))
+        self.table.setCurrentCell(row, 2)
+        self.table.editItem(self.table.item(row, 2))
 
     def on_remove_row(self):
         row = self.table.currentRow()
@@ -472,64 +478,73 @@ class ManageKeysDialog(QDialog):
     def on_move_up(self):
         row = self.table.currentRow()
         if row > 0:
-            name = self.table.item(row, 0).text() if self.table.item(row, 0) else ""
-            key = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
+            enabled = self.table.item(row, 0).checkState() == Qt.CheckState.Checked if self.table.item(row, 0) else True
+            name = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
+            key = self.table.item(row, 2).text() if self.table.item(row, 2) else ""
             
-            prev_name = self.table.item(row - 1, 0).text() if self.table.item(row - 1, 0) else ""
-            prev_key = self.table.item(row - 1, 1).text() if self.table.item(row - 1, 1) else ""
+            prev_enabled = self.table.item(row - 1, 0).checkState() == Qt.CheckState.Checked if self.table.item(row - 1, 0) else True
+            prev_name = self.table.item(row - 1, 1).text() if self.table.item(row - 1, 1) else ""
+            prev_key = self.table.item(row - 1, 2).text() if self.table.item(row - 1, 2) else ""
             
             for r in [row, row - 1]:
-                if not self.table.item(r, 0):
-                    self.table.setItem(r, 0, QTableWidgetItem())
-                if not self.table.item(r, 1):
-                    self.table.setItem(r, 1, QTableWidgetItem())
-                    
-            self.table.item(row - 1, 0).setText(name)
-            self.table.item(row - 1, 1).setText(key)
-            self.table.item(row, 0).setText(prev_name)
-            self.table.item(row, 1).setText(prev_key)
+                for c in [0, 1, 2]:
+                    if not self.table.item(r, c):
+                        self.table.setItem(r, c, QTableWidgetItem())
+            
+            self.table.item(row - 1, 0).setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
+            self.table.item(row - 1, 1).setText(name)
+            self.table.item(row - 1, 2).setText(key)
+            
+            self.table.item(row, 0).setCheckState(Qt.CheckState.Checked if prev_enabled else Qt.CheckState.Unchecked)
+            self.table.item(row, 1).setText(prev_name)
+            self.table.item(row, 2).setText(prev_key)
             
             self.table.setCurrentCell(row - 1, 0)
 
     def on_move_down(self):
         row = self.table.currentRow()
         if row >= 0 and row < self.table.rowCount() - 1:
-            name = self.table.item(row, 0).text() if self.table.item(row, 0) else ""
-            key = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
+            enabled = self.table.item(row, 0).checkState() == Qt.CheckState.Checked if self.table.item(row, 0) else True
+            name = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
+            key = self.table.item(row, 2).text() if self.table.item(row, 2) else ""
             
-            next_name = self.table.item(row + 1, 0).text() if self.table.item(row + 1, 0) else ""
-            next_key = self.table.item(row + 1, 1).text() if self.table.item(row + 1, 1) else ""
+            next_enabled = self.table.item(row + 1, 0).checkState() == Qt.CheckState.Checked if self.table.item(row + 1, 0) else True
+            next_name = self.table.item(row + 1, 1).text() if self.table.item(row + 1, 1) else ""
+            next_key = self.table.item(row + 1, 2).text() if self.table.item(row + 1, 2) else ""
             
-            if not self.table.item(row, 0):
-                self.table.setItem(row, 0, QTableWidgetItem())
-            if not self.table.item(row, 1):
-                self.table.setItem(row, 1, QTableWidgetItem())
-            if not self.table.item(row + 1, 0):
-                self.table.setItem(row + 1, 0, QTableWidgetItem())
-            if not self.table.item(row + 1, 1):
-                self.table.setItem(row + 1, 1, QTableWidgetItem())
-                
-            self.table.item(row + 1, 0).setText(name)
-            self.table.item(row + 1, 1).setText(key)
-            self.table.item(row, 0).setText(next_name)
-            self.table.item(row, 1).setText(next_key)
+            for r in [row, row + 1]:
+                for c in [0, 1, 2]:
+                    if not self.table.item(r, c):
+                        self.table.setItem(r, c, QTableWidgetItem())
+            
+            self.table.item(row + 1, 0).setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
+            self.table.item(row + 1, 1).setText(name)
+            self.table.item(row + 1, 2).setText(key)
+            
+            self.table.item(row, 0).setCheckState(Qt.CheckState.Checked if next_enabled else Qt.CheckState.Unchecked)
+            self.table.item(row, 1).setText(next_name)
+            self.table.item(row, 2).setText(next_key)
             
             self.table.setCurrentCell(row + 1, 0)
 
     def get_keys_string(self) -> str:
         entries = []
         for row in range(self.table.rowCount()):
-            name_item = self.table.item(row, 0)
-            key_item = self.table.item(row, 1)
+            enabled_item = self.table.item(row, 0)
+            name_item = self.table.item(row, 1)
+            key_item = self.table.item(row, 2)
             
+            enabled = enabled_item.checkState() == Qt.CheckState.Checked if enabled_item else True
             name = name_item.text().strip() if name_item else ""
             key = key_item.text().strip() if key_item else ""
             
             if not key:
                 continue
+                
+            prefix = "" if enabled else "disabled:"
             if name:
-                entries.append(f"{name}:{key}")
+                entries.append(f"{prefix}{name}:{key}")
             else:
-                entries.append(key)
+                entries.append(f"{prefix}{key}")
                 
         return ", ".join(entries)

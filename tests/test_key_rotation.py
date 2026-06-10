@@ -57,6 +57,36 @@ class TestKeyRotation(unittest.TestCase):
         self.assertEqual(client._key_identifier("openai", "key4"), "ending in ...key4")
         self.assertEqual(client._key_identifier("openai", ""), "empty key")
 
+    def test_disabled_api_keys(self):
+        config = {
+            "api_keys": {
+                "openai": "primary:key1, disabled:key2 (backup), key3[third key], [disabled]disabled_key4"
+            }
+        }
+        client = AIClient(config)
+        
+        all_parsed = client._parse_all_keys("openai", config["api_keys"]["openai"])
+        self.assertEqual(len(all_parsed), 4)
+        
+        self.assertEqual(all_parsed[0]["key"], "key1")
+        self.assertEqual(all_parsed[0]["name"], "primary")
+        self.assertTrue(all_parsed[0]["enabled"])
+        
+        self.assertEqual(all_parsed[1]["key"], "key2")
+        self.assertEqual(all_parsed[1]["name"], "backup")
+        self.assertFalse(all_parsed[1]["enabled"])
+        
+        self.assertEqual(all_parsed[2]["key"], "key3")
+        self.assertEqual(all_parsed[2]["name"], "third key")
+        self.assertTrue(all_parsed[2]["enabled"])
+        
+        self.assertEqual(all_parsed[3]["key"], "disabled_key4")
+        self.assertEqual(all_parsed[3]["name"], "")
+        self.assertFalse(all_parsed[3]["enabled"])
+        
+        keys = client._api_keys_for("openai")
+        self.assertEqual(keys, ["key1", "key3"])
+
     def test_available_api_keys_excludes_failed(self):
         # All available initially
         self.assertEqual(self.client._available_api_keys("openai"), ["key1", "key2", "key3"])
@@ -176,6 +206,37 @@ class TestKeyRotation(unittest.TestCase):
         
         # Check that key_gemini_2 is not blacklisted
         self.assertNotIn(("gemini", "key_gemini_2"), FAILED_KEYS_CACHE)
+
+    @patch("addon.ai_client.BLACKLIST_FILE", "tests/test_blacklist.json")
+    def test_key_blacklist_persistence(self):
+        import time
+        # Clean test file if exists
+        if os.path.exists("tests/test_blacklist.json"):
+            os.remove("tests/test_blacklist.json")
+            
+        try:
+            # Mark a key as failed
+            self.client._mark_key_failed("gemini", "my_failed_key", delay_seconds=100)
+            
+            # Verify it is in cache
+            self.assertIn(("gemini", "my_failed_key"), FAILED_KEYS_CACHE)
+            
+            # Verify file was created
+            self.assertTrue(os.path.exists("tests/test_blacklist.json"))
+            
+            # Clear cache and reload
+            FAILED_KEYS_CACHE.clear()
+            self.assertEqual(len(FAILED_KEYS_CACHE), 0)
+            
+            self.client._load_blacklist()
+            
+            # Verify it was reloaded
+            self.assertIn(("gemini", "my_failed_key"), FAILED_KEYS_CACHE)
+            self.assertGreater(FAILED_KEYS_CACHE[("gemini", "my_failed_key")], time.time())
+            
+        finally:
+            if os.path.exists("tests/test_blacklist.json"):
+                os.remove("tests/test_blacklist.json")
 
 if __name__ == "__main__":
     unittest.main()
