@@ -1519,34 +1519,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
             try:
                 note = mw.col.get_note(nid)
-                raw_blocks = parser.find_all_hints_blocks(note)
-                if not raw_blocks:
-                    continue
-
-                # Get active cards and their keys
-                active_ords = {c.ord for c in note.cards()}
-                valid_keys = {f"c{ord + 1}" for ord in active_ords}
-
-                note_orphans = []
-                
-                for block in raw_blocks:
-                    if parser.json_class in block:
-                        m = re.search(
-                            r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
-                            block, re.DOTALL | re.IGNORECASE
-                        )
-                        if m:
-                            raw = html.unescape(m.group(1) or "")
-                            try:
-                                parsed = json.loads(raw)
-                            except Exception:
-                                continue
-                            
-                            if isinstance(parsed, dict) and parser._is_keyed_payload(parsed):
-                                # Find keys that are c\d+ but not in valid_keys
-                                for key in list(parsed.keys()):
-                                    if re.fullmatch(r"c\d+", str(key)) and key not in valid_keys:
-                                        note_orphans.append((block, key, parsed[key]))
+                note_orphans = parser.get_orphaned_hints(note)
 
                 if note_orphans:
                     # Get preview (first field content, stripped of HTML)
@@ -1565,7 +1538,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 logger.error(f"Error scanning note {nid} for orphans: {e}")
 
         progress.setValue(total)
-        logger.info(f"AI-Hints: Orphaned hints scan COMPLETED. Found orphans in {len(orphaned_hints)} notes.")
+        _log_orphaned_results(orphaned_hints, is_standalone=False)
 
         if not orphaned_hints:
             QMessageBox.information(self, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
@@ -1989,30 +1962,7 @@ def _show_orphans_cleanup_dialog_standalone(parent):
 
         try:
             note = mw.col.get_note(nid)
-            raw_blocks = parser.find_all_hints_blocks(note)
-            if not raw_blocks:
-                continue
-
-            active_ords = {c.ord for c in note.cards()}
-            valid_keys = {f"c{ord + 1}" for ord in active_ords}
-
-            note_orphans = []
-            for block in raw_blocks:
-                if parser.json_class in block:
-                    m = re.search(
-                        r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
-                        block, re.DOTALL | re.IGNORECASE
-                    )
-                    if m:
-                        raw = html.unescape(m.group(1) or "")
-                        try:
-                            parsed = json.loads(raw)
-                        except Exception:
-                            continue
-                        if isinstance(parsed, dict) and parser._is_keyed_payload(parsed):
-                            for key in list(parsed.keys()):
-                                if re.fullmatch(r"c\d+", str(key)) and key not in valid_keys:
-                                    note_orphans.append((block, key, parsed[key]))
+            note_orphans = parser.get_orphaned_hints(note)
 
             if note_orphans:
                 first_field_val = list(note.values())[0] if note.values() else ""
@@ -2029,7 +1979,7 @@ def _show_orphans_cleanup_dialog_standalone(parent):
             logger.error(f"Error scanning note {nid} for orphans: {e}")
 
     progress.setValue(total)
-    logger.info(f"AI-Hints: Standalone orphan scan COMPLETED. Found orphans in {len(orphaned_hints)} notes.")
+    _log_orphaned_results(orphaned_hints, is_standalone=True)
 
     if not orphaned_hints:
         QMessageBox.information(parent, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
@@ -2170,6 +2120,37 @@ def _show_orphans_cleanup_dialog_standalone(parent):
     clean_btn.clicked.connect(do_clean)
     cancel_btn.clicked.connect(dialog.reject)
     dialog.exec()
+
+def _log_orphaned_results(orphaned_hints, is_standalone=False):
+    prefix = "Standalone orphan scan" if is_standalone else "Orphaned hints scan"
+    if not orphaned_hints:
+        logger.info(f"AI-Hints: {prefix} COMPLETED. Found orphans in 0 notes.")
+        return
+
+    orphaned_details = []
+    for item in orphaned_hints:
+        nid = item["note_id"]
+        note_obj = item["note"]
+        card_info = []
+        for block, key, val in item["orphans"]:
+            try:
+                ord_idx = int(key[1:]) - 1
+                cid = None
+                if hasattr(note_obj, "cards") and callable(note_obj.cards):
+                    for c in note_obj.cards():
+                        if c.ord == ord_idx:
+                            cid = c.id
+                            break
+                if cid is not None:
+                    card_info.append(f"{key} (Card ID: {cid})")
+                else:
+                    card_info.append(f"{key} (No Card ID)")
+            except Exception:
+                card_info.append(key)
+        orphaned_details.append(f"Note ID: {nid} -> {', '.join(card_info)}")
+
+    details_str = "\n  - " + "\n  - ".join(orphaned_details)
+    logger.info(f"AI-Hints: {prefix} COMPLETED. Found orphans in {len(orphaned_hints)} notes.{details_str}")
 
 def init_config_ui():
     from aqt import gui_hooks

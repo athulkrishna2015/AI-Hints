@@ -9,20 +9,24 @@ sys.path.insert(0, ROOT_DIR)
 from addon.card_parser import CardParser
 
 class MockCard:
-    def __init__(self, ord):
+    def __init__(self, ord, id=12345):
         self.ord = ord
-        self.id = 12345
+        self.id = id
 
 class MockNote(dict):
-    def __init__(self, fields, model_name="Cloze"):
+    def __init__(self, fields, model_name="Cloze", cards=None):
         super().__init__(fields)
-        self._model = {"name": model_name, "type": 1}
+        self._model = {"name": model_name, "type": 1 if "cloze" in model_name.lower() else 0}
+        self._cards = cards or []
     def items(self):
         return list(super().items())
     def model(self):
         return self._model
     def values(self):
-        return super().values()
+        return list(super().values())
+    def cards(self):
+        return self._cards
+
 
 class TestClozeScenarios(unittest.TestCase):
     def setUp(self):
@@ -84,27 +88,41 @@ class TestClozeScenarios(unittest.TestCase):
         self.assertEqual(back1, "x")
         self.assertIn("\\( Current cloze deletion: [...]^2 \\)", front1)
 
-    def test_active_cloze_map_with_nesting(self):
-        text = "{{c1::outer {{c2::inner}}}}"
-        note = MockNote({"Text": text})
+    def test_get_orphaned_hints_detects_cloze_orphan_when_card_exists_but_no_tag(self):
+        # Text has c1 and c2, but NOT c3
+        text = (
+            "{{c1::Paris}}, {{c2::France}} "
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"a\"]}, \"c2\": {\"hints\": [\"b\"]}, \"c3\": {\"hints\": [\"c\"]}}"
+            "</div>"
+        )
+        # However, note.cards() has cards for ord 0, 1, 2 (meaning card 3 still exists in DB)
+        cards = [MockCard(0, 101), MockCard(1, 102), MockCard(2, 103)]
+        note = MockNote({"Text": text}, model_name="Cloze", cards=cards)
         
-        cloze_map = self.parser._get_active_clozes_map(note)
-        # Normalized versions
-        self.assertIn("c1", cloze_map)
-        self.assertIn("c2", cloze_map)
-        
-        # c1 answer should be "outer inner" (normalized)
-        # Note: _normalized_answer_text strips whitespace
-        self.assertIn("outerinner", list(cloze_map["c1"]))
-        self.assertIn("inner", list(cloze_map["c2"]))
+        orphans = self.parser.get_orphaned_hints(note)
+        # It should detect c3 as orphaned because the {{c3::}} tag is missing from fields
+        self.assertEqual(len(orphans), 1)
+        self.assertEqual(orphans[0][1], "c3")
+        self.assertEqual(orphans[0][2], {"hints": ["c"]})
 
-    def test_mathjax_with_double_braces_not_cloze(self):
-        # Some LaTeX uses {{ }} which is not a cloze if it doesn't match c\d+::
-        text = "\\( \\text{val} = {{ value }} \\)"
-        note = MockNote({"Text": text})
+    def test_get_orphaned_hints_non_cloze_note(self):
+        # A non-cloze (Basic) note with active template card 0 (ord=0)
+        # JSON has c1 and c2
+        text = (
+            "Front content"
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"a\"]}, \"c2\": {\"hints\": [\"b\"]}}"
+            "</div>"
+        )
+        cards = [MockCard(0, 201)] # card ord 0 exists, card ord 1 does not
+        note = MockNote({"Text": text}, model_name="Basic", cards=cards)
         
-        cloze_map = self.parser._get_active_clozes_map(note)
-        self.assertEqual(len(cloze_map), 0)
+        orphans = self.parser.get_orphaned_hints(note)
+        # It should detect c2 as orphaned because non-cloze card ord 1 is missing
+        self.assertEqual(len(orphans), 1)
+        self.assertEqual(orphans[0][1], "c2")
+
 
 if __name__ == "__main__":
     unittest.main()

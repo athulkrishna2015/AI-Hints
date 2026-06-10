@@ -651,6 +651,69 @@ class CardParser:
                 blocks.append(match.group(0))
         return blocks
 
+    def get_orphaned_hints(self, note) -> List[Tuple[str, str, Any]]:
+        """Scans the note and returns a list of orphaned hints.
+        Each entry is a tuple: (block_html, key, payload)
+        """
+        raw_blocks = self.find_all_hints_blocks(note)
+        if not raw_blocks:
+            return []
+
+        # Get active cards and their keys
+        if hasattr(note, "cards") and callable(note.cards):
+            active_ords = {c.ord for c in note.cards()}
+        else:
+            active_ords = None
+        
+        # Check if Cloze note
+        model = note.model()
+        model_name = model["name"].lower() if model else ""
+        is_cloze = model and ("cloze" in model_name or model.get("type") == 1)
+
+        if is_cloze:
+            # Find all cloze numbers actually present in the note fields
+            active_cloze_nums = set()
+            fields_to_scan = []
+            if hasattr(note, "values"):
+                fields_to_scan = note.values()
+            elif hasattr(note, "items"):
+                fields_to_scan = [v for k, v in note.items()]
+            
+            for field_val in fields_to_scan:
+                if isinstance(field_val, str):
+                    for m in re.finditer(r'(?i)\{\{\s*c(\d+)\s*::', field_val):
+                        active_cloze_nums.add(int(m.group(1)))
+            if active_ords is not None:
+                valid_keys = {f"c{num}" for num in active_cloze_nums if (num - 1) in active_ords}
+            else:
+                valid_keys = {f"c{num}" for num in active_cloze_nums}
+        else:
+            if active_ords is not None:
+                valid_keys = {f"c{ord + 1}" for ord in active_ords}
+            else:
+                valid_keys = {"c1"} # default for standard note
+
+        note_orphans = []
+        for block in raw_blocks:
+            if self.json_class in block:
+                # Use re.search to extract the JSON payload
+                m = re.search(
+                    r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
+                    block, re.DOTALL | re.IGNORECASE
+                )
+                if m:
+                    raw = html.unescape(m.group(1) or "")
+                    try:
+                        parsed = json.loads(raw)
+                    except Exception:
+                        continue
+                    if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
+                        for key in list(parsed.keys()):
+                            if re.fullmatch(r"c\d+", str(key)) and key not in valid_keys:
+                                note_orphans.append((block, key, parsed[key]))
+        return note_orphans
+
+
     def _extract_all_hints_from_fields(self, note) -> List[Dict[str, Any]]:
         """Scans all fields and returns a list of parsed data objects with metadata."""
         all_data = []
