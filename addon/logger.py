@@ -16,6 +16,18 @@ def get_logger():
     logger = logging.getLogger("AI-Hints")
     if not logger.handlers:
         logger.setLevel(logging.DEBUG)
+        
+        # Check if we are running in a test environment to avoid polluting production logs
+        import sys
+        is_testing = (
+            any("unittest" in m or "pytest" in m for m in sys.modules) or
+            (len(sys.argv) > 0 and any(t in sys.argv[0] for t in ["tests", "unittest", "pytest"]))
+        )
+        
+        if is_testing:
+            logger.addHandler(logging.NullHandler())
+            return logger
+
         addon_dir = os.path.dirname(__file__)
         log_file = os.path.join(addon_dir, "ai_hints.log")
         # 3 levels: ai_hints.log, ai_hints.log.1, ai_hints.log.2

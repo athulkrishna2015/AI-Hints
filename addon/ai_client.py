@@ -25,6 +25,7 @@ MODEL_COOLDOWN_SECONDS = 3600  # 1 hour
 FAILED_MODELS_CACHE: Dict[Tuple[str, str], float] = {}  # (provider, model) -> expiry_timestamp
 FAILED_KEYS_CACHE: Dict[Tuple[str, str], float] = {}    # (provider, api_key) -> expiry_timestamp
 RATE_LIMIT_STREAK: Dict[Tuple[str, str], int] = {}    # (provider, model) -> consecutive_hits
+_BLACKLIST_LOADED = False
 
 # Global network state for background monitoring
 _NETWORK_STATE = {"online": True, "last_check": 0}
@@ -1321,7 +1322,8 @@ class AIClient:
 
     def _is_model_failed(self, provider: str, model: str) -> bool:
         """Returns True if the model is currently in its cooldown period."""
-        if not FAILED_MODELS_CACHE:
+        global _BLACKLIST_LOADED
+        if not _BLACKLIST_LOADED and not FAILED_MODELS_CACHE:
             self._load_blacklist()
             
         expiry = FAILED_MODELS_CACHE.get((provider, model))
@@ -1359,6 +1361,8 @@ class AIClient:
 
     def _load_blacklist(self):
         """Loads the FAILED_MODELS_CACHE, FAILED_KEYS_CACHE and RATE_LIMIT_STREAK from disk."""
+        global _BLACKLIST_LOADED
+        _BLACKLIST_LOADED = True
         if not os.path.exists(BLACKLIST_FILE):
             return
         try:
@@ -1714,7 +1718,8 @@ def load_blacklist():
 
 def is_model_blacklisted(provider: str, model: str) -> bool:
     try:
-        if not FAILED_MODELS_CACHE:
+        global _BLACKLIST_LOADED
+        if not _BLACKLIST_LOADED and not FAILED_MODELS_CACHE:
             load_blacklist()
         client = AIClient(None)
         return client._is_model_failed(provider, model)
