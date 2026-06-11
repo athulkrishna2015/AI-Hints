@@ -467,12 +467,30 @@ class BatchTabMixin:
                 
             if self.batch_skip_existing_cb.isChecked():
                 from ..reviewer_hooks import card_has_hints, _get_card_from_collection, _card_saved_version, _version_less_than
+                from aqt.qt import Qt, QProgressDialog, QApplication
+                
                 final_ids = []
                 use_ver_gate = self.batch_regen_version_cb.isChecked()
                 min_ver = self.batch_regen_min_version_edit.text().strip()
                 
                 skipped_count = 0
-                for cid in source_cids:
+                
+                # Show a progress dialog
+                progress = QProgressDialog("Scanning deck for eligible cards...", "Cancel", 0, len(source_cids), self)
+                progress.setWindowTitle("AI Hints - Card Scanner")
+                progress.setWindowModality(Qt.WindowModality.WindowModal)
+                progress.setMinimumDuration(0)  # Show immediately
+                
+                for i, cid in enumerate(source_cids):
+                    if i % 10 == 0:
+                        progress.setValue(i)
+                        progress.setLabelText(f"Scanning card {i+1} of {len(source_cids)}...")
+                        QApplication.processEvents()
+                        if progress.wasCanceled():
+                            logger.info("AI-Hints Batch: Scanning canceled by user.")
+                            progress.close()
+                            return
+                            
                     c = _get_card_from_collection(cid)
                     if not c: continue
                     has_hints = card_has_hints(c)
@@ -489,6 +507,7 @@ class BatchTabMixin:
                         if skipped_count < 5:
                              logger.debug(f"AI-Hints Batch: Skipping card {cid} (already has hints).")
                 
+                progress.setValue(len(source_cids))
                 logger.info(f"AI-Hints Batch Filtering: Filtered {len(source_cids)} cards -> {len(final_ids)} cards to process ({skipped_count} skipped).")
             else:
                 final_ids = list(source_cids)
