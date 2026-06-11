@@ -76,7 +76,7 @@ PROVIDER_ORDER = [
 DEFAULT_MODELS = {
     "openai":     "gpt-4o",
     "anthropic":  "claude-3-7-sonnet-latest",
-    "gemini":     "gemini-2.5-flash",
+    "gemini":     "gemini-3.5-flash",
     "groq":       "llama-3.3-70b-versatile",
     "deepseek":   "deepseek-reasoner",
     "grok":       "grok-2-1212",
@@ -87,7 +87,7 @@ DEFAULT_MODELS = {
     "together":   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.3-70B-Instruct",
     "cerebras":   "llama3.1-8b",
-    "antigravity":"gemini-3.1-flash-lite",
+    "antigravity":"gemini-3.5-flash",
     "local":      "llama3.3",
 }
 
@@ -105,6 +105,7 @@ MODEL_SUGGESTIONS = {
         "claude-3-7-sonnet-latest",
     ],
     "gemini": [
+        "gemini-3.5-flash",
         "gemini-3.1-flash-lite",
         "gemini-flash-lite-latest",
         "gemini-3.1-flash-lite-preview",
@@ -164,6 +165,7 @@ MODEL_SUGGESTIONS = {
         "Qwen/Qwen2.5-72B-Instruct",
     ],
     "antigravity": [
+        "gemini-3.5-flash",
         "gemini-3.1-flash-lite",
         "gemini-3-flash",
         "gemini-2.5-flash",
@@ -201,6 +203,7 @@ MODEL_FALLBACKS = {
         "claude-3-5-haiku-latest",
     ],
     "gemini": [
+        "gemini-3.5-flash",
         "gemini-3.1-flash-lite",
         "gemini-flash-lite-latest",
         "gemini-3.1-flash-lite-preview",
@@ -259,6 +262,7 @@ MODEL_FALLBACKS = {
         "llama-3.1-8b",
     ],
     "antigravity": [
+        "gemini-3.5-flash",
         "gemini-3.1-flash-lite",
         "gemini-3-flash",
         "gemini-2.5-flash",
