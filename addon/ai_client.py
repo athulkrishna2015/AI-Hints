@@ -481,7 +481,9 @@ class AIClient:
             if state.GLOBAL_STOP:
                 break
 
-            available_keys = [k for k in keys if not self._is_combo_failed(provider_name, model, k)]
+            from .logger import log_context
+            is_test = getattr(log_context, "source", None) == "model_test"
+            available_keys = keys if is_test else [k for k in keys if not self._is_combo_failed(provider_name, model, k)]
             if not available_keys:
                 continue
 
@@ -582,7 +584,9 @@ class AIClient:
             elif not keys:
                 continue
 
-            available_keys = [k for k in keys if not self._is_combo_failed(provider, model, k)]
+            from .logger import log_context
+            is_test = getattr(log_context, "source", None) == "model_test"
+            available_keys = keys if is_test else [k for k in keys if not self._is_combo_failed(provider, model, k)]
             if not available_keys:
                 continue
 
@@ -657,7 +661,9 @@ class AIClient:
             if not keys:
                 continue
 
-            available_keys = [k for k in keys if not self._is_combo_failed("anthropic", model, k)]
+            from .logger import log_context
+            is_test = getattr(log_context, "source", None) == "model_test"
+            available_keys = keys if is_test else [k for k in keys if not self._is_combo_failed("anthropic", model, k)]
             if not available_keys:
                 continue
 
@@ -721,7 +727,9 @@ class AIClient:
             if not keys:
                 continue
 
-            available_keys = [k for k in keys if not self._is_combo_failed("gemini", model, k)]
+            from .logger import log_context
+            is_test = getattr(log_context, "source", None) == "model_test"
+            available_keys = keys if is_test else [k for k in keys if not self._is_combo_failed("gemini", model, k)]
             if not available_keys:
                 continue
 
@@ -856,25 +864,30 @@ class AIClient:
         }
         
         logger.info(f"Submitting Gemini Batch for {len(request_items)} items to model: {model}")
+        
+        available_keys = [k for k in keys if not self._is_combo_failed("gemini", model, k)]
+        if not available_keys:
+            available_keys = keys
+
         last_err = None
-        for api_key in keys:
+        for api_key in available_keys:
             headers = self._json_headers()
             headers["x-goog-api-key"] = api_key
             try:
                 response = self._post_json(url, payload, headers)
-                self._on_key_success("gemini", api_key)
+                self._on_combo_success("gemini", model, api_key)
                 return response
             except urllib.error.HTTPError as e:
                 err_body = e.read().decode("utf-8", errors="ignore")
                 if "FAILED_PRECONDITION" in err_body:
                      raise Exception("🔒 Access Denied: Your Gemini API key appears to be on the FREE TIER.\n\nNative Batch Generation is a Paid-Only feature. Please link a billing method in Google AI Studio to enable it, OR switch to the 'Sequential Local Queue' mode in your Batch tab for free support.")
                 if e.code in [401, 403, 429] or (e.code == 400 and ("API_KEY_INVALID" in err_body or "API key not valid" in err_body)):
-                    self._mark_key_failed("gemini", api_key)
+                    self._mark_combo_failed("gemini", model, api_key)
                     last_err = Exception(f"Google API Error ({e.code}) with key {self._key_identifier('gemini', api_key)}: {err_body}")
                     continue
                 raise Exception(f"Google API Error ({e.code}): {err_body}")
             except Exception as e:
-                self._mark_key_failed("gemini", api_key)
+                self._mark_combo_failed("gemini", model, api_key)
                 last_err = e
                 continue
         if last_err:
@@ -893,25 +906,32 @@ class AIClient:
         job_name = job_name.lstrip("/")
         url = f"https://generativelanguage.googleapis.com/v1beta/{job_name}"
         
+        models = self._models_for_provider("gemini")
+        model = models[0] if models else DEFAULT_MODELS["gemini"]
+        
+        available_keys = [k for k in keys if not self._is_combo_failed("gemini", model, k)]
+        if not available_keys:
+            available_keys = keys
+
         last_err = None
-        for api_key in keys:
+        for api_key in available_keys:
             headers = self._json_headers()
             headers["x-goog-api-key"] = api_key
             try:
                 req = urllib.request.Request(url, headers=headers, method="GET")
                 with urllib.request.urlopen(req, timeout=30) as response:
                     raw = response.read().decode("utf-8")
-                    self._on_key_success("gemini", api_key)
+                    self._on_combo_success("gemini", model, api_key)
                     return json.loads(raw)
             except urllib.error.HTTPError as e:
                 err_body = self._read_http_error(e)
                 if e.code in [401, 403, 429] or (e.code == 400 and ("API_KEY_INVALID" in err_body or "API key not valid" in err_body)):
-                    self._mark_key_failed("gemini", api_key)
+                    self._mark_combo_failed("gemini", model, api_key)
                     last_err = Exception(f"Google API Error ({e.code}) with key {self._key_identifier('gemini', api_key)}: {err_body}")
                     continue
                 raise
             except Exception as e:
-                self._mark_key_failed("gemini", api_key)
+                self._mark_combo_failed("gemini", model, api_key)
                 last_err = e
                 continue
         if last_err:

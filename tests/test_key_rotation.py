@@ -170,8 +170,8 @@ class TestKeyRotation(unittest.TestCase):
         result = self.client._call_openai_compatible("openai", "sys_prompt", "prompt")
         self.assertEqual(result["hints"], ["hint1"])
         
-        # Test case 2: Both keys fail. It should raise an Exception on the last key.
-        mock_urlopen.side_effect = [resp_401, resp_401]
+        # Test case 2: All keys fail. It should raise an Exception on the last key.
+        mock_urlopen.side_effect = [resp_401, resp_401, resp_401]
         with self.assertRaises(Exception) as ctx:
             self.client._call_openai_compatible("openai", "sys_prompt", "prompt")
         self.assertIn("Unauthorized", str(ctx.exception))
