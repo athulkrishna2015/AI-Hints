@@ -131,6 +131,7 @@
   "show_on_card": true,
   "show_in_bottom_bar": true,
   "auto_clear_logs": true,
+  "debug_logging": false,
   "custom_providers": {},
   "note_type_fields": {
     "Cloze": [

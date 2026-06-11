@@ -21,6 +21,14 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         if config.get("auto_clear_logs", True):
             clear_log_file()
 
+        # Dynamically set log level based on user config
+        from .logger import logger
+        import logging
+        if config.get("debug_logging", False):
+            logger.setLevel(logging.DEBUG)
+        else:
+            logger.setLevel(logging.INFO)
+
         # Delay startup tasks to avoid resource contention and potential crashes.
         # This also ensures we don't interfere with Anki's initial startup sync.
         def _delayed_startup():

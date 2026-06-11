@@ -15,7 +15,17 @@ class ContextFilter(logging.Filter):
 def get_logger():
     logger = logging.getLogger("AI-Hints")
     if not logger.handlers:
-        logger.setLevel(logging.DEBUG)
+        log_level = logging.INFO
+        try:
+            from aqt import mw
+            if mw is not None and mw.addonManager is not None:
+                addon_package = __name__.split(".")[0]
+                config = mw.addonManager.getConfig(addon_package)
+                if config and config.get("debug_logging", False):
+                    log_level = logging.DEBUG
+        except Exception:
+            pass
+        logger.setLevel(log_level)
         
         # Check if we are running in a test environment to avoid polluting production logs
         import sys
