@@ -493,7 +493,8 @@ class AIClient:
             headers = self._json_headers(api_key)
             headers.update(custom_headers)
 
-            key_failed = False
+            key_failed_immediately = False
+            encountered_key_level_error = False
             for model in models:
                 if state.GLOBAL_STOP:
                     break
@@ -527,23 +528,30 @@ class AIClient:
                             raise Exception(f"{e} - {body}")
                         else:
                             self._mark_key_failed(provider_name, api_key)
-                            key_failed = True
+                            key_failed_immediately = True
                             break
-                    if e.code in [401, 403, 429]:
+                    if e.code in [401, 403]:
                         self._mark_key_failed(provider_name, api_key)
-                        key_failed = True
+                        key_failed_immediately = True
                         break
+                    if e.code == 429:
+                        self._mark_model_failed(provider_name, model)
+                        encountered_key_level_error = True
+                        continue
                     if e.code in [404, 500, 503]:
                         delay = self._extract_retry_delay(provider_name, model, e, body)
                         self._mark_model_failed(provider_name, model, delay)
                         continue
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
-                    self._mark_key_failed(provider_name, api_key)
-                    key_failed = True
-                    break
+                    self._mark_model_failed(provider_name, model)
+                    encountered_key_level_error = True
+                    continue
             
-            if key_failed:
+            if key_failed_immediately:
+                continue
+            if encountered_key_level_error:
+                self._mark_key_failed(provider_name, api_key)
                 continue
 
         return {"hints": [], "options": []}
@@ -649,7 +657,8 @@ class AIClient:
                     self._mark_key_failed(provider, api_key)
                     continue
 
-            key_failed = False
+            key_failed_immediately = False
+            encountered_key_level_error = False
             for model in models:
                 if state.GLOBAL_STOP:
                     break
@@ -685,23 +694,30 @@ class AIClient:
                             raise Exception(f"{e} - {body}")
                         else:
                             self._mark_key_failed(provider, api_key)
-                            key_failed = True
+                            key_failed_immediately = True
                             break
-                    if e.code in [401, 403, 429]:
+                    if e.code in [401, 403]:
                         self._mark_key_failed(provider, api_key)
-                        key_failed = True
+                        key_failed_immediately = True
                         break
+                    if e.code == 429:
+                        self._mark_model_failed(provider, model)
+                        encountered_key_level_error = True
+                        continue
                     if e.code in [404, 500, 503]:
                         delay = self._extract_retry_delay(provider, model, e, body)
                         self._mark_model_failed(provider, model, delay)
                         continue
                 except Exception as e:
                     logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
-                    self._mark_key_failed(provider, api_key)
-                    key_failed = True
-                    break
+                    self._mark_model_failed(provider, model)
+                    encountered_key_level_error = True
+                    continue
             
-            if key_failed:
+            if key_failed_immediately:
+                continue
+            if encountered_key_level_error:
+                self._mark_key_failed(provider, api_key)
                 continue
 
         return {"hints": [], "options": []}
@@ -721,7 +737,8 @@ class AIClient:
                 "anthropic-version": "2023-06-01"
             })
 
-            key_failed = False
+            key_failed_immediately = False
+            encountered_key_level_error = False
             for model in models:
                 if state.GLOBAL_STOP:
                     break
@@ -754,23 +771,30 @@ class AIClient:
                             raise Exception(f"{e} - {body}")
                         else:
                             self._mark_key_failed("anthropic", api_key)
-                            key_failed = True
+                            key_failed_immediately = True
                             break
-                    if e.code in [401, 403, 429]:
+                    if e.code in [401, 403]:
                         self._mark_key_failed("anthropic", api_key)
-                        key_failed = True
+                        key_failed_immediately = True
                         break
+                    if e.code == 429:
+                        self._mark_model_failed("anthropic", model)
+                        encountered_key_level_error = True
+                        continue
                     if e.code in [404, 500, 503]:
                         delay = self._extract_retry_delay("anthropic", model, e, body)
                         self._mark_model_failed("anthropic", model, delay)
                         continue
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
-                    self._mark_key_failed("anthropic", api_key)
-                    key_failed = True
-                    break
+                    self._mark_model_failed("anthropic", model)
+                    encountered_key_level_error = True
+                    continue
             
-            if key_failed:
+            if key_failed_immediately:
+                continue
+            if encountered_key_level_error:
+                self._mark_key_failed("anthropic", api_key)
                 continue
 
         return {"hints": [], "options": []}
@@ -786,7 +810,8 @@ class AIClient:
             headers = self._json_headers()
             headers["x-goog-api-key"] = api_key
 
-            key_failed = False
+            key_failed_immediately = False
+            encountered_key_level_error = False
             for model in models:
                 if state.GLOBAL_STOP:
                     break
@@ -839,23 +864,30 @@ class AIClient:
                             raise Exception(f"{e} - {body}")
                         else:
                             self._mark_key_failed("gemini", api_key)
-                            key_failed = True
+                            key_failed_immediately = True
                             break
-                    if e.code in [401, 403, 429] or (e.code == 400 and ("API_KEY_INVALID" in body or "API key not valid" in body)):
+                    if e.code in [401, 403] or (e.code == 400 and ("API_KEY_INVALID" in body or "API key not valid" in body)):
                         self._mark_key_failed("gemini", api_key)
-                        key_failed = True
+                        key_failed_immediately = True
                         break
+                    if e.code == 429:
+                        self._mark_model_failed("gemini", model)
+                        encountered_key_level_error = True
+                        continue
                     if e.code in [404, 500, 503]:
                         delay = self._extract_retry_delay("gemini", model, e, body)
                         self._mark_model_failed("gemini", model, delay)
                         continue
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
-                    self._mark_key_failed("gemini", api_key)
-                    key_failed = True
-                    break
+                    self._mark_model_failed("gemini", model)
+                    encountered_key_level_error = True
+                    continue
             
-            if key_failed:
+            if key_failed_immediately:
+                continue
+            if encountered_key_level_error:
+                self._mark_key_failed("gemini", api_key)
                 continue
 
         return {"hints": [], "options": []}

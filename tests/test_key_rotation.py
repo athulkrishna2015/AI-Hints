@@ -238,5 +238,69 @@ class TestKeyRotation(unittest.TestCase):
             if os.path.exists("tests/test_blacklist.json"):
                 os.remove("tests/test_blacklist.json")
 
+    @patch("urllib.request.urlopen")
+    def test_gemini_rate_limit_checks_other_models_before_blacklisting(self, mock_urlopen):
+        # Configure multiple models for gemini
+        self.client.config["model_fallbacks"] = {
+            "gemini": ["gemini-2.5-pro"]
+        }
+        
+        # First call (gemini-flash-latest) fails with 429
+        resp_429 = urllib.error.HTTPError(
+            url="http://mock.api",
+            code=429,
+            msg="Too Many Requests",
+            hdrs={},
+            fp=None
+        )
+        resp_429.read = MagicMock(return_value=b'{"error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}}')
+        
+        # Second call (gemini-2.5-pro) succeeds
+        resp_success = MagicMock()
+        resp_success.read.return_value = b'{"candidates": [{"content": {"parts": [{"text": "{\\"hints\\": [\\"hint_from_model_2\\"], \\"options\\": [\\"opt1\\"]}"}]}}]}'
+        resp_success.__enter__.return_value = resp_success
+        
+        mock_urlopen.side_effect = [resp_429, resp_success]
+        
+        result = self.client._call_gemini("sys_prompt", "prompt")
+        
+        # Verify that result succeeded with the second model
+        self.assertEqual(result["hints"], ["hint_from_model_2"])
+        
+        # Verify that key_gemini_1 is NOT blacklisted (because model 2 succeeded on it)
+        self.assertNotIn(("gemini", "key_gemini_1"), FAILED_KEYS_CACHE)
+
+    @patch("urllib.request.urlopen")
+    def test_gemini_rate_limit_blacklists_key_if_all_models_fail(self, mock_urlopen):
+        # Configure multiple models for gemini
+        self.client.config["model_fallbacks"] = {
+            "gemini": ["gemini-2.5-pro"]
+        }
+        
+        resp_429 = urllib.error.HTTPError(
+            url="http://mock.api",
+            code=429,
+            msg="Too Many Requests",
+            hdrs={},
+            fp=None
+        )
+        resp_429.read = MagicMock(return_value=b'{"error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}}')
+        
+        resp_success = MagicMock()
+        resp_success.read.return_value = b'{"candidates": [{"content": {"parts": [{"text": "{\\"hints\\": [\\"hint_from_key_2\\"], \\"options\\": [\\"opt1\\"]}"}]}}]}'
+        resp_success.__enter__.return_value = resp_success
+        
+        # key1 model 1 fails (429), key1 model 2 fails (429).
+        # It rotates to key2. key2 model 1 succeeds.
+        mock_urlopen.side_effect = [resp_429, resp_429, resp_success]
+        
+        result = self.client._call_gemini("sys_prompt", "prompt")
+        
+        # Verify that result succeeded with key 2
+        self.assertEqual(result["hints"], ["hint_from_key_2"])
+        
+        # Verify that key_gemini_1 IS blacklisted (because all models failed on it)
+        self.assertIn(("gemini", "key_gemini_1"), FAILED_KEYS_CACHE)
+
 if __name__ == "__main__":
     unittest.main()
