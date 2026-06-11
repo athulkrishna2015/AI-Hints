@@ -188,27 +188,27 @@ class AdvancedTabMixin:
             return
         self.blacklist_list.clear()
         import time
-        from ..ai_client import FAILED_MODELS_CACHE, RATE_LIMIT_STREAK, load_blacklist
+        from ..ai_client import FAILED_COMBOS_CACHE, RATE_LIMIT_STREAK, load_blacklist
 
         # Always reload from disk to stay in sync with background failures
         load_blacklist()
 
         now = time.time()
         
-        expired_keys = [
-            key for key, expiry in FAILED_MODELS_CACHE.items()
+        expired_combos = [
+            key for key, expiry in FAILED_COMBOS_CACHE.items()
             if expiry <= now
         ]
-        for key in expired_keys:
-            del FAILED_MODELS_CACHE[key]
+        for key in expired_combos:
+            del FAILED_COMBOS_CACHE[key]
 
-        all_keys = sorted(
-            set(FAILED_MODELS_CACHE) | set(RATE_LIMIT_STREAK),
-            key=lambda key: (key[0].casefold(), key[1].casefold()),
+        all_combos = sorted(
+            set(FAILED_COMBOS_CACHE) | set(RATE_LIMIT_STREAK),
+            key=lambda key: (key[0].casefold(), key[1].casefold(), key[2].casefold()),
         )
-        for provider, model in all_keys:
-            expiry = FAILED_MODELS_CACHE.get((provider, model))
-            streak = RATE_LIMIT_STREAK.get((provider, model), 0)
+        for provider, model, api_key in all_combos:
+            expiry = FAILED_COMBOS_CACHE.get((provider, model, api_key))
+            streak = RATE_LIMIT_STREAK.get((provider, model, api_key), 0)
 
             if expiry is not None:
                 remaining = max(0, expiry - now)
@@ -223,30 +223,22 @@ class AdvancedTabMixin:
             else:
                 status = "not on cooldown"
 
+            preview = api_key[-6:] if len(api_key) > 6 else api_key
+            if not preview:
+                preview = "empty key"
             streak_text = f", failure streak {streak}" if streak else ""
-            item_text = f"{provider.capitalize()} - {model} ({status}{streak_text})"
+            item_text = f"Combo: {provider.capitalize()} - {model} (Key: ...{preview}) ({status}{streak_text})"
             item = QListWidgetItem(item_text)
-            item.setData(Qt.ItemDataRole.UserRole, (provider, model))
+            item.setData(Qt.ItemDataRole.UserRole, ("combo", provider, model, api_key))
             self.blacklist_list.addItem(item)
             
-        if expired_keys:
+        if expired_combos:
             self._save_blacklist_locally()
 
     def _save_blacklist_locally(self):
         try:
-            from ..ai_client import BLACKLIST_FILE, FAILED_MODELS_CACHE, RATE_LIMIT_STREAK
-            import json
-            expiries = {f"{p}|{m}": e for (p, m), e in FAILED_MODELS_CACHE.items()}
-            streaks = {f"{p}|{m}": s for (p, m), s in RATE_LIMIT_STREAK.items()}
-            
-            data = {
-                "expiries": expiries,
-                "streaks": streaks,
-                "version": 2
-            }
-            
-            with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            from ..ai_client import save_blacklist
+            save_blacklist()
         except Exception:
             pass
 
@@ -256,26 +248,32 @@ class AdvancedTabMixin:
             return
             
         data = curr_item.data(Qt.ItemDataRole.UserRole)
-        if data:
-            provider, model = data
-            from ..ai_client import FAILED_MODELS_CACHE, RATE_LIMIT_STREAK
-            from ..logger import tooltip
-            key = (provider, model)
-            if key in FAILED_MODELS_CACHE:
-                del FAILED_MODELS_CACHE[key]
-            if key in RATE_LIMIT_STREAK:
-                del RATE_LIMIT_STREAK[key]
-            
-            self._save_blacklist_locally()
-            tooltip(f"Cleared cooldown and streak for {provider.capitalize()} - {model}")
-            self.refresh_blacklist_list()
+        if data and isinstance(data, tuple) and len(data) == 4:
+            type_tag, provider, model, api_key = data
+            if type_tag == "combo":
+                from ..ai_client import FAILED_COMBOS_CACHE, RATE_LIMIT_STREAK
+                from ..logger import tooltip
+                
+                key = (provider, model, api_key)
+                if key in FAILED_COMBOS_CACHE:
+                    del FAILED_COMBOS_CACHE[key]
+                if key in RATE_LIMIT_STREAK:
+                    del RATE_LIMIT_STREAK[key]
+                
+                preview = api_key[-6:] if len(api_key) > 6 else api_key
+                if not preview:
+                    preview = "empty key"
+                tooltip(f"Cleared cooldown and streak for {provider.capitalize()} - {model} (Key: ...{preview})")
+                
+                self._save_blacklist_locally()
+                self.refresh_blacklist_list()
                 
     def on_clear_all_blacklist(self):
-        from ..ai_client import FAILED_MODELS_CACHE, RATE_LIMIT_STREAK
+        from ..ai_client import FAILED_COMBOS_CACHE, RATE_LIMIT_STREAK
         from ..logger import tooltip
-        if FAILED_MODELS_CACHE or RATE_LIMIT_STREAK:
-            FAILED_MODELS_CACHE.clear()
+        if FAILED_COMBOS_CACHE or RATE_LIMIT_STREAK:
+            FAILED_COMBOS_CACHE.clear()
             RATE_LIMIT_STREAK.clear()
             self._save_blacklist_locally()
-            tooltip("Cleared all model cooldowns and streaks")
+            tooltip("Cleared all model combos, cooldowns, and streaks")
             self.refresh_blacklist_list()

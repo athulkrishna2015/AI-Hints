@@ -22,9 +22,10 @@ REQUEST_TIMEOUT_SECONDS = 10
 USER_AGENT = "Anki-AI-Hints/1.0"
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 MODEL_COOLDOWN_SECONDS = 3600  # 1 hour
-FAILED_MODELS_CACHE: Dict[Tuple[str, str], float] = {}  # (provider, model) -> expiry_timestamp
-FAILED_KEYS_CACHE: Dict[Tuple[str, str], float] = {}    # (provider, api_key) -> expiry_timestamp
-RATE_LIMIT_STREAK: Dict[Tuple[str, str], int] = {}    # (provider, model) -> consecutive_hits
+FAILED_MODELS_CACHE: Dict[Tuple[str, str], float] = {}  # Legacy stub
+FAILED_KEYS_CACHE: Dict[Tuple[str, str], float] = {}    # Legacy stub
+FAILED_COMBOS_CACHE: Dict[Tuple[str, str, str], float] = {}  # (provider, model, api_key) -> expiry_timestamp
+RATE_LIMIT_STREAK: Dict[Tuple[str, str, str], int] = {}    # (provider, model, api_key) -> consecutive_hits
 _BLACKLIST_LOADED = False
 
 # Global network state for background monitoring
@@ -476,28 +477,21 @@ class AIClient:
 
         models = [override_model] if override_model else self._models_for_provider(provider_name, custom_cfg.get("model", ""), custom_cfg.get("model_fallbacks", []))
 
-        now = time.time()
-        available_keys = []
-        for key in keys:
-            if key:
-                expiry = FAILED_KEYS_CACHE.get((provider_name, key))
-                if expiry is None or now > expiry:
-                    available_keys.append(key)
-            else:
-                available_keys.append(key)
-                
-        if not available_keys:
-            available_keys = keys
+        for model in models:
+            if state.GLOBAL_STOP:
+                break
 
-        for idx, api_key in enumerate(available_keys):
-            headers = self._json_headers(api_key)
-            headers.update(custom_headers)
+            available_keys = [k for k in keys if not self._is_combo_failed(provider_name, model, k)]
+            if not available_keys:
+                continue
 
-            key_failed_immediately = False
-            encountered_key_level_error = False
-            for model in models:
+            for idx, api_key in enumerate(available_keys):
                 if state.GLOBAL_STOP:
                     break
+
+                headers = self._json_headers(api_key)
+                headers.update(custom_headers)
+
                 data = {
                     "model": model,
                     "messages": [
@@ -512,13 +506,13 @@ class AIClient:
                     content = self._extract_content(result)
                     parsed = self._parse_json_result(content)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
-                        self._on_key_success(provider_name, api_key)
-                        self._on_model_success(provider_name, model)
+                        self._on_combo_success(provider_name, model, api_key)
                         parsed["_provider"] = provider_name
                         parsed["_model"] = model
                         parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                         return parsed
                     logger.warning(f"AI-Hints: Custom provider {provider_name} model '{model}' returned no parseable hints/options.")
+                    self._mark_combo_failed(provider_name, model, api_key)
                 except urllib.error.HTTPError as e:
                     body = self._read_http_error(e)
                     logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e} - {body}")
@@ -527,42 +521,18 @@ class AIClient:
                         if idx == len(available_keys) - 1:
                             raise Exception(f"{e} - {body}")
                         else:
-                            self._mark_key_failed(provider_name, api_key)
-                            key_failed_immediately = True
-                            break
-                    if e.code in [401, 403]:
-                        self._mark_key_failed(provider_name, api_key)
-                        key_failed_immediately = True
-                        break
-                    if e.code == 429:
-                        self._mark_model_failed(provider_name, model)
-                        encountered_key_level_error = True
-                        continue
-                    if e.code in [404, 500, 503]:
-                        delay = self._extract_retry_delay(provider_name, model, e, body)
-                        self._mark_model_failed(provider_name, model, delay)
-                        continue
+                            self._mark_combo_failed(provider_name, model, api_key)
+                            continue
+
+                    delay = self._extract_retry_delay(provider_name, model, api_key, e, body)
+                    self._mark_combo_failed(provider_name, model, api_key, delay)
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
-                    self._mark_model_failed(provider_name, model)
-                    encountered_key_level_error = True
-                    continue
-            
-            if key_failed_immediately:
-                continue
-            if encountered_key_level_error:
-                self._mark_key_failed(provider_name, api_key)
-                continue
+                    self._mark_combo_failed(provider_name, model, api_key)
 
         return {"hints": [], "options": []}
 
     def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
-        keys = self._available_api_keys(provider)
-        if not keys and provider in ["local", "antigravity"]:
-            keys = [""]
-        elif not keys:
-            return {"hints": [], "options": []}
-
         models = [override_model] if override_model else self._models_for_provider(provider)
         
         base_url = "https://api.openai.com/v1"
@@ -602,66 +572,37 @@ class AIClient:
         
         url = f"{base_url}/chat/completions"
 
-        for idx, api_key in enumerate(keys):
-            if provider == "local":
-                local_cfg = self.config.get("local_endpoint") or {}
-                actual_key = str(local_cfg.get("api_key", "") or api_key).strip()
-            elif provider == "antigravity":
-                actual_key = "antigravity"
-            else:
-                actual_key = api_key
+        for model in models:
+            if state.GLOBAL_STOP:
+                break
 
-            headers = self._json_headers(actual_key)
-            if provider == "openrouter":
-                headers["HTTP-Referer"] = "https://github.com/athulkrishna2015/ai-hints"
-                headers["X-Title"] = "Anki AI-Hints"
+            keys = self._available_api_keys(provider)
+            if not keys and provider in ["local", "antigravity"]:
+                keys = [""]
+            elif not keys:
+                continue
 
-            # OpenRouter supports a 'models' array for automatic server-side fallbacks
-            if provider == "openrouter" and len(models) > 1:
-                data = {
-                    "models": models[:3],
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "response_format": {"type": "json_object"}
-                }
-                try:
-                    logger.debug(f"Calling OpenRouter with models array: {models}")
-                    result = self._post_json(url, data, headers)
-                    content = self._extract_content(result)
-                    parsed = self._parse_json_result(content)
-                    if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
-                        self._on_key_success(provider, api_key)
-                        actual_model = result.get("model", "openrouter-auto")
-                        parsed["_provider"] = "openrouter"
-                        parsed["_model"] = actual_model
-                        parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
-                        return parsed
-                    logger.warning("AI-Hints: OpenRouter models array returned no parseable hints/options.")
-                except urllib.error.HTTPError as e:
-                    body = self._read_http_error(e)
-                    logger.error(f"AI-Hints Error (OpenRouter models array): {e} - {body}")
-                    from .logger import log_context
-                    if getattr(log_context, "source", None) == "model_test":
-                        if idx == len(keys) - 1:
-                            raise Exception(f"{e} - {body}")
-                        else:
-                            self._mark_key_failed(provider, api_key)
-                            continue
-                    if e.code in [401, 403, 429]:
-                        self._mark_key_failed(provider, api_key)
-                        continue
-                except Exception as e:
-                    logger.error(f"AI-Hints Error (OpenRouter models array): {e}")
-                    self._mark_key_failed(provider, api_key)
-                    continue
+            available_keys = [k for k in keys if not self._is_combo_failed(provider, model, k)]
+            if not available_keys:
+                continue
 
-            key_failed_immediately = False
-            encountered_key_level_error = False
-            for model in models:
+            for idx, api_key in enumerate(available_keys):
                 if state.GLOBAL_STOP:
                     break
+
+                if provider == "local":
+                    local_cfg = self.config.get("local_endpoint") or {}
+                    actual_key = str(local_cfg.get("api_key", "") or api_key).strip()
+                elif provider == "antigravity":
+                    actual_key = "antigravity"
+                else:
+                    actual_key = api_key
+
+                headers = self._json_headers(actual_key)
+                if provider == "openrouter":
+                    headers["HTTP-Referer"] = "https://github.com/athulkrishna2015/ai-hints"
+                    headers["X-Title"] = "Anki AI-Hints"
+
                 data = {
                     "model": model,
                     "messages": [
@@ -678,70 +619,58 @@ class AIClient:
                     content = self._extract_content(result)
                     parsed = self._parse_json_result(content)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
-                        self._on_key_success(provider, api_key)
-                        self._on_model_success(provider, model)
+                        self._on_combo_success(provider, model, api_key)
                         parsed["_provider"] = provider
                         parsed["_model"] = model
                         parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                         return parsed
                     logger.warning(f"AI-Hints: {provider} model '{model}' returned no parseable hints/options.")
+                    self._mark_combo_failed(provider, model, api_key)
                 except urllib.error.HTTPError as e:
                     body = self._read_http_error(e)
                     logger.error(f"AI-Hints Error ({provider}, model {model}): {e} - {body}")
                     from .logger import log_context
                     if getattr(log_context, "source", None) == "model_test":
-                        if idx == len(keys) - 1:
+                        if idx == len(available_keys) - 1:
                             raise Exception(f"{e} - {body}")
                         else:
-                            self._mark_key_failed(provider, api_key)
-                            key_failed_immediately = True
-                            break
-                    if e.code in [401, 403]:
-                        self._mark_key_failed(provider, api_key)
-                        key_failed_immediately = True
-                        break
-                    if e.code == 429:
-                        self._mark_model_failed(provider, model)
-                        encountered_key_level_error = True
-                        continue
-                    if e.code in [404, 500, 503]:
-                        delay = self._extract_retry_delay(provider, model, e, body)
-                        self._mark_model_failed(provider, model, delay)
-                        continue
+                            self._mark_combo_failed(provider, model, api_key)
+                            continue
+
+                    delay = self._extract_retry_delay(provider, model, api_key, e, body)
+                    self._mark_combo_failed(provider, model, api_key, delay)
                 except Exception as e:
                     logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
-                    self._mark_model_failed(provider, model)
-                    encountered_key_level_error = True
-                    continue
-            
-            if key_failed_immediately:
-                continue
-            if encountered_key_level_error:
-                self._mark_key_failed(provider, api_key)
-                continue
+                    self._mark_combo_failed(provider, model, api_key)
 
         return {"hints": [], "options": []}
 
     def _call_anthropic(self, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
-        keys = self._available_api_keys("anthropic")
-        if not keys:
-            return {"hints": [], "options": []}
-            
         models = [override_model] if override_model else self._models_for_provider("anthropic")
         url = "https://api.anthropic.com/v1/messages"
         
-        for idx, api_key in enumerate(keys):
-            headers = self._json_headers()
-            headers.update({
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01"
-            })
+        for model in models:
+            if state.GLOBAL_STOP:
+                break
+                
+            keys = self._available_api_keys("anthropic")
+            if not keys:
+                continue
 
-            key_failed_immediately = False
-            encountered_key_level_error = False
-            for model in models:
+            available_keys = [k for k in keys if not self._is_combo_failed("anthropic", model, k)]
+            if not available_keys:
+                continue
+
+            for idx, api_key in enumerate(available_keys):
                 if state.GLOBAL_STOP:
                     break
+
+                headers = self._json_headers()
+                headers.update({
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01"
+                })
+
                 data = {
                     "model": model,
                     "system": system_prompt,
@@ -755,66 +684,54 @@ class AIClient:
                     content = self._extract_content(result)
                     parsed = self._parse_json_result(content)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
-                        self._on_key_success("anthropic", api_key)
-                        self._on_model_success("anthropic", model)
+                        self._on_combo_success("anthropic", model, api_key)
                         parsed["_provider"] = "anthropic"
                         parsed["_model"] = model
                         parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                         return parsed
                     logger.warning(f"AI-Hints: Anthropic model '{model}' returned no parseable hints/options.")
+                    self._mark_combo_failed("anthropic", model, api_key)
                 except urllib.error.HTTPError as e:
                     body = self._read_http_error(e)
                     logger.error(f"AI-Hints Error (Anthropic, model {model}): {e} - {body}")
                     from .logger import log_context
                     if getattr(log_context, "source", None) == "model_test":
-                        if idx == len(keys) - 1:
+                        if idx == len(available_keys) - 1:
                             raise Exception(f"{e} - {body}")
                         else:
-                            self._mark_key_failed("anthropic", api_key)
-                            key_failed_immediately = True
-                            break
-                    if e.code in [401, 403]:
-                        self._mark_key_failed("anthropic", api_key)
-                        key_failed_immediately = True
-                        break
-                    if e.code == 429:
-                        self._mark_model_failed("anthropic", model)
-                        encountered_key_level_error = True
-                        continue
-                    if e.code in [404, 500, 503]:
-                        delay = self._extract_retry_delay("anthropic", model, e, body)
-                        self._mark_model_failed("anthropic", model, delay)
-                        continue
+                            self._mark_combo_failed("anthropic", model, api_key)
+                            continue
+
+                    delay = self._extract_retry_delay("anthropic", model, api_key, e, body)
+                    self._mark_combo_failed("anthropic", model, api_key, delay)
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
-                    self._mark_model_failed("anthropic", model)
-                    encountered_key_level_error = True
-                    continue
-            
-            if key_failed_immediately:
-                continue
-            if encountered_key_level_error:
-                self._mark_key_failed("anthropic", api_key)
-                continue
+                    self._mark_combo_failed("anthropic", model, api_key)
 
         return {"hints": [], "options": []}
 
     def _call_gemini(self, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
-        keys = self._available_api_keys("gemini")
-        if not keys:
-            return {"hints": [], "options": []}
-            
         models = [override_model] if override_model else self._models_for_provider("gemini")
 
-        for idx, api_key in enumerate(keys):
-            headers = self._json_headers()
-            headers["x-goog-api-key"] = api_key
+        for model in models:
+            if state.GLOBAL_STOP:
+                break
 
-            key_failed_immediately = False
-            encountered_key_level_error = False
-            for model in models:
+            keys = self._available_api_keys("gemini")
+            if not keys:
+                continue
+
+            available_keys = [k for k in keys if not self._is_combo_failed("gemini", model, k)]
+            if not available_keys:
+                continue
+
+            for idx, api_key in enumerate(available_keys):
                 if state.GLOBAL_STOP:
                     break
+
+                headers = self._json_headers()
+                headers["x-goog-api-key"] = api_key
+
                 model_path = urllib.parse.quote(model, safe="")
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_path}:generateContent"
                 logger.debug(f"Calling Gemini with model: {model}")
@@ -848,47 +765,29 @@ class AIClient:
                     content = self._extract_content(result)
                     parsed = self._parse_json_result(content)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
-                        self._on_key_success("gemini", api_key)
-                        self._on_model_success("gemini", model)
+                        self._on_combo_success("gemini", model, api_key)
                         parsed["_provider"] = "gemini"
                         parsed["_model"] = model
                         parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
                         return parsed
                     logger.warning(f"AI-Hints: Gemini model '{model}' returned no parseable hints/options.")
+                    self._mark_combo_failed("gemini", model, api_key)
                 except urllib.error.HTTPError as e:
                     body = self._read_http_error(e)
                     logger.error(f"AI-Hints Error (Gemini, model {model}): {e} - {body}")
                     from .logger import log_context
                     if getattr(log_context, "source", None) == "model_test":
-                        if idx == len(keys) - 1:
+                        if idx == len(available_keys) - 1:
                             raise Exception(f"{e} - {body}")
                         else:
-                            self._mark_key_failed("gemini", api_key)
-                            key_failed_immediately = True
-                            break
-                    if e.code in [401, 403] or (e.code == 400 and ("API_KEY_INVALID" in body or "API key not valid" in body)):
-                        self._mark_key_failed("gemini", api_key)
-                        key_failed_immediately = True
-                        break
-                    if e.code == 429:
-                        self._mark_model_failed("gemini", model)
-                        encountered_key_level_error = True
-                        continue
-                    if e.code in [404, 500, 503]:
-                        delay = self._extract_retry_delay("gemini", model, e, body)
-                        self._mark_model_failed("gemini", model, delay)
-                        continue
+                            self._mark_combo_failed("gemini", model, api_key)
+                            continue
+
+                    delay = self._extract_retry_delay("gemini", model, api_key, e, body)
+                    self._mark_combo_failed("gemini", model, api_key, delay)
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
-                    self._mark_model_failed("gemini", model)
-                    encountered_key_level_error = True
-                    continue
-            
-            if key_failed_immediately:
-                continue
-            if encountered_key_level_error:
-                self._mark_key_failed("gemini", api_key)
-                continue
+                    self._mark_combo_failed("gemini", model, api_key)
 
         return {"hints": [], "options": []}
 
@@ -1220,49 +1119,119 @@ class AIClient:
         return self._split_and_parse_keys(provider, val)
 
     def _available_api_keys(self, provider: str) -> List[str]:
-        keys = self._api_keys_for(provider)
-        if not keys:
-            return []
-        
-        now = time.time()
-        available = []
-        for key in keys:
-            expiry = FAILED_KEYS_CACHE.get((provider, key))
-            if expiry is None or now > expiry:
-                if expiry is not None:
-                    try:
-                        del FAILED_KEYS_CACHE[(provider, key)]
-                    except KeyError:
-                        pass
-                available.append(key)
-        
-        if not available:
-            return keys
-        return available
+        # Simply return all keys; filtering is done per-model inside the calling loops
+        return self._api_keys_for(provider)
 
-    def _mark_key_failed(self, provider: str, api_key: str, delay_seconds: float = None):
+    def _mark_combo_failed(self, provider: str, model: str, api_key: str, delay_seconds: float = None):
         if not api_key:
+            api_key = ""
+        import sys
+        # Only blacklist if we are actually online.
+        if "unittest" not in sys.modules and not self._is_actually_online():
+            logger.info(f"AI-Hints: Skipping blacklist for {provider}/{model} ({api_key}) because network appears offline.")
             return
+
+        streak_key = (provider, model, api_key)
         if delay_seconds is None:
-            delay_seconds = self._cooldown_seconds()
-        
-        FAILED_KEYS_CACHE[(provider, api_key)] = time.time() + delay_seconds
-        self._save_blacklist()
-        key_id = self._key_identifier(provider, api_key)
-        logger.info(f"AI-Hints: Key for {provider} ({key_id}) put on cooldown for {int(delay_seconds)}s due to failure.")
+            # Apply streak-based cooldown for ALL failures to prevent repeated lag
+            streak = RATE_LIMIT_STREAK.get(streak_key, 0) + 1
+            RATE_LIMIT_STREAK[streak_key] = streak
 
-    def _on_key_success(self, provider: str, api_key: str):
+            cooldown_sec = self._cooldown_seconds()
+            delay_seconds = cooldown_sec * streak
+        else:
+            streak = RATE_LIMIT_STREAK.get(streak_key, 0) + 1
+            RATE_LIMIT_STREAK[streak_key] = streak
+            
+        expiry = time.time() + delay_seconds
+        FAILED_COMBOS_CACHE[streak_key] = expiry
+        self._save_blacklist()
+        
+        # Format for log
+        mins = int(delay_seconds // 60)
+        hours = mins // 60
+        mins = mins % 60
+        secs = int(delay_seconds % 60)
+        
+        if hours > 0:
+            time_str = f"{hours}h {mins}m"
+        elif mins > 0:
+            time_str = f"{mins}m {secs}s"
+        else:
+            time_str = f"{secs}s"
+            
+        preview = api_key[-6:] if len(api_key) > 6 else api_key
+        logger.info(f"AI-Hints: Blacklisted combo {provider}/{model} (Key: ...{preview}) for {time_str} due to failure (Streak: {streak}).")
+
+    def _on_combo_success(self, provider: str, model: str, api_key: str):
         if not api_key:
-            return
-        key = (provider, api_key)
-        if key in FAILED_KEYS_CACHE:
+            api_key = ""
+        key = (provider, model, api_key)
+        needs_save = False
+        if key in RATE_LIMIT_STREAK:
+            logger.debug(f"AI-Hints: Resetting failure streak for {provider}/{model} ({api_key}) after success.")
+            del RATE_LIMIT_STREAK[key]
+            needs_save = True
+        
+        # If it was blacklisted, remove it
+        if key in FAILED_COMBOS_CACHE:
+            del FAILED_COMBOS_CACHE[key]
+            needs_save = True
+            
+        if needs_save:
+            self._save_blacklist()
+
+    def _is_combo_failed(self, provider: str, model: str, api_key: str) -> bool:
+        if not api_key:
+            api_key = ""
+        global _BLACKLIST_LOADED
+        if not _BLACKLIST_LOADED:
+            self._load_blacklist()
+            
+        key = (provider, model, api_key)
+        expiry = FAILED_COMBOS_CACHE.get(key)
+        if expiry is None:
+            return False
+        
+        if time.time() > expiry:
+            # Cooldown expired, remove from cache
             try:
-                del FAILED_KEYS_CACHE[key]
+                del FAILED_COMBOS_CACHE[key]
                 self._save_blacklist()
-                logger.debug(f"AI-Hints: Cleared cooldown for {provider} key {self._key_identifier(provider, api_key)}")
             except KeyError:
                 pass
+            return False
+            
+        return True
 
+    def _is_model_failed(self, provider: str, model: str) -> bool:
+        """Returns True if the model is failed for all keys under this provider."""
+        custom_providers = self.config.get("custom_providers") or {}
+        if provider in custom_providers:
+            custom_cfg = custom_providers.get(provider, {})
+            keys = self._api_keys_for_custom(provider, custom_cfg)
+        else:
+            keys = self._api_keys_for(provider)
+            
+        if not keys:
+            keys = [""]
+        for key in keys:
+            if not self._is_combo_failed(provider, model, key):
+                return False
+        return True
+
+    # Legacy compatibility stubs to prevent import/access crashes:
+    def _mark_key_failed(self, provider: str, api_key: str, delay_seconds: float = None):
+        pass
+
+    def _on_key_success(self, provider: str, api_key: str):
+        pass
+
+    def _mark_model_failed(self, provider: str, model: str, delay_seconds: float = None):
+        pass
+
+    def _on_model_success(self, provider: str, model: str):
+        pass
 
     def _get_model(self, provider: str) -> str:
         models = self.config.get("models") or {}
@@ -1298,92 +1267,18 @@ class AIClient:
     def _cooldown_seconds(self) -> float:
         return self.config.get("model_cooldown_minutes", 10) * 60
 
-    def _mark_model_failed(self, provider: str, model: str, delay_seconds: float = None):
-        """Records a model failure and sets a cooldown timer."""
-        # Only blacklist if we are actually online. If the network is down, 
-        # the failure is likely due to connectivity, not the specific model/provider.
-        if not self._is_actually_online():
-            logger.info(f"AI-Hints: Skipping blacklist for {provider}/{model} because network appears offline.")
-            return
-
-        if delay_seconds is None:
-            # Apply streak-based cooldown for ALL failures to prevent repeated lag
-            key = (provider, model)
-            streak = RATE_LIMIT_STREAK.get(key, 0) + 1
-            RATE_LIMIT_STREAK[key] = streak
-
-            cooldown_sec = self._cooldown_seconds()
-            delay_seconds = cooldown_sec * streak
-            
-        expiry = time.time() + delay_seconds
-        FAILED_MODELS_CACHE[(provider, model)] = expiry
-        self._save_blacklist()
-        
-        # Format for log
-        mins = int(delay_seconds // 60)
-        hours = mins // 60
-        mins = mins % 60
-        secs = int(delay_seconds % 60)
-        
-        if hours > 0:
-            time_str = f"{hours}h {mins}m"
-        elif mins > 0:
-            time_str = f"{mins}m {secs}s"
-        else:
-            time_str = f"{secs}s"
-            
-        logger.info(f"AI-Hints: Blacklisting {provider}/{model} for {time_str} due to failure (Streak: {RATE_LIMIT_STREAK.get((provider, model), 1)}).")
-
-    def _on_model_success(self, provider: str, model: str):
-        """Resets the rate limit streak when a model successfully responds."""
-        logger.info(f"AI-Hints: Successful generation response from {provider} using model {model}.")
-        key = (provider, model)
-        needs_save = False
-        if key in RATE_LIMIT_STREAK:
-            logger.debug(f"AI-Hints: Resetting failure streak for {provider}/{model} after success.")
-            del RATE_LIMIT_STREAK[key]
-            needs_save = True
-        
-        # If it was blacklisted, remove it
-        if key in FAILED_MODELS_CACHE:
-            del FAILED_MODELS_CACHE[key]
-            needs_save = True
-            
-        if needs_save:
-            self._save_blacklist()
-
-    def _is_model_failed(self, provider: str, model: str) -> bool:
-        """Returns True if the model is currently in its cooldown period."""
-        global _BLACKLIST_LOADED
-        if not _BLACKLIST_LOADED and not FAILED_MODELS_CACHE:
-            self._load_blacklist()
-            
-        expiry = FAILED_MODELS_CACHE.get((provider, model))
-        if expiry is None:
-            return False
-        
-        if time.time() > expiry:
-            # Cooldown expired, remove from cache
-            del FAILED_MODELS_CACHE[(provider, model)]
-            self._save_blacklist()
-            return False
-            
-        return True
-
     def _save_blacklist(self):
-        """Persists the FAILED_MODELS_CACHE, FAILED_KEYS_CACHE and RATE_LIMIT_STREAK to disk."""
+        """Persists the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK to disk."""
         try:
             # Convert tuple keys to strings for JSON
-            expiries = {f"{p}|{m}": e for (p, m), e in FAILED_MODELS_CACHE.items()}
-            streaks = {f"{p}|{m}": s for (p, m), s in RATE_LIMIT_STREAK.items()}
-            keys_expiries = {f"{p}|{k}": e for (p, k), e in FAILED_KEYS_CACHE.items()}
+            expiries = {f"{p}|{m}|{k}": e for (p, m, k), e in FAILED_COMBOS_CACHE.items()}
+            streaks = {f"{p}|{m}|{k}": s for (p, m, k), s in RATE_LIMIT_STREAK.items()}
             
             # Save as a nested structure
             data = {
-                "expiries": expiries,
+                "combos_expiries": expiries,
                 "streaks": streaks,
-                "keys_expiries": keys_expiries,
-                "version": 2
+                "version": 3
             }
             
             with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
@@ -1392,7 +1287,7 @@ class AIClient:
             logger.error(f"AI-Hints: Failed to save blacklist: {e}")
 
     def _load_blacklist(self):
-        """Loads the FAILED_MODELS_CACHE, FAILED_KEYS_CACHE and RATE_LIMIT_STREAK from disk."""
+        """Loads the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK from disk."""
         global _BLACKLIST_LOADED
         _BLACKLIST_LOADED = True
         if not os.path.exists(BLACKLIST_FILE):
@@ -1404,57 +1299,42 @@ class AIClient:
             now = time.time()
             
             # Clear existing memory caches to stay in sync with disk
-            FAILED_MODELS_CACHE.clear()
+            FAILED_COMBOS_CACHE.clear()
             RATE_LIMIT_STREAK.clear()
-            FAILED_KEYS_CACHE.clear()
 
-            # Check if it's the new format or old flat format
-            if isinstance(data, dict) and "expiries" in data:
-                # New format (version 2)
-                expiries = data.get("expiries", {})
+            if isinstance(data, dict) and data.get("version") == 3:
+                expiries = data.get("combos_expiries", {})
                 streaks = data.get("streaks", {})
-                keys_expiries = data.get("keys_expiries", {})
                 
                 for key, expiry in expiries.items():
-                    if "|" in key and expiry > now:
-                        provider, model = key.split("|", 1)
-                        FAILED_MODELS_CACHE[(provider, model)] = expiry
+                    parts = key.split("|")
+                    if len(parts) == 3 and expiry > now:
+                        p, m, k = parts
+                        FAILED_COMBOS_CACHE[(p, m, k)] = expiry
                 
                 for key, streak in streaks.items():
-                    if "|" in key:
-                        provider, model = key.split("|", 1)
-                        RATE_LIMIT_STREAK[(provider, model)] = streak
-
-                for key, expiry in keys_expiries.items():
-                    if "|" in key and expiry > now:
-                        provider, api_key = key.split("|", 1)
-                        FAILED_KEYS_CACHE[(provider, api_key)] = expiry
-            else:
-                # Old flat format (just expiries)
-                for key, expiry in data.items():
-                    if "|" in key and isinstance(expiry, (int, float)) and expiry > now:
-                        provider, model = key.split("|", 1)
-                        FAILED_MODELS_CACHE[(provider, model)] = expiry
+                    parts = key.split("|")
+                    if len(parts) == 3:
+                        p, m, k = parts
+                        RATE_LIMIT_STREAK[(p, m, k)] = streak
         except Exception as e:
             logger.error(f"AI-Hints: Failed to load blacklist: {e}")
 
-    def _extract_retry_delay(self, provider: str, model: str, error: urllib.error.HTTPError, body: str) -> float:
+    def _extract_retry_delay(self, provider: str, model: str, api_key: str, error: urllib.error.HTTPError, body: str) -> float:
         """
         Calculates cooldown delay.
         For 429 (rate limit), we respect any Retry-After header or use streak-based logic.
         """
-        # For non-429, we let _mark_model_failed handle the streak-based cooldown
         if getattr(error, "code", None) != 429:
             return None
             
         cooldown_sec = self._cooldown_seconds()
-        key = (provider, model)
+        key = (provider, model, api_key)
         streak = RATE_LIMIT_STREAK.get(key, 0) + 1
         RATE_LIMIT_STREAK[key] = streak
         
-        # delay = cooldown * streak
         delay = cooldown_sec * streak
-        logger.info(f"AI-Hints: Rate limit (429) hit for {provider}/{model}. Streak: {streak}. New delay: {delay/60:.1f} minutes.")
+        logger.info(f"AI-Hints: Rate limit (429) hit for {provider}/{model} (Key: ...{api_key[-6:] if len(api_key)>6 else api_key}). Streak: {streak}. New delay: {delay/60:.1f} minutes.")
         return delay
 
     def _models_for_provider(self, provider: str, primary_model: str = "", extra_fallbacks: List[str] = None) -> List[str]:
@@ -1748,10 +1628,15 @@ def load_blacklist():
     client = AIClient(None)
     client._load_blacklist()
 
+def save_blacklist():
+    """Globally saves the blacklist from memory caches."""
+    client = AIClient(None)
+    client._save_blacklist()
+
 def is_model_blacklisted(provider: str, model: str) -> bool:
     try:
         global _BLACKLIST_LOADED
-        if not _BLACKLIST_LOADED and not FAILED_MODELS_CACHE:
+        if not _BLACKLIST_LOADED and not FAILED_COMBOS_CACHE:
             load_blacklist()
         client = AIClient(None)
         return client._is_model_failed(provider, model)

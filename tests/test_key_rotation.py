@@ -8,11 +8,13 @@ import sys
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from addon.ai_client import AIClient, FAILED_KEYS_CACHE, FAILED_MODELS_CACHE
+from addon.ai_client import AIClient, FAILED_KEYS_CACHE, FAILED_MODELS_CACHE, FAILED_COMBOS_CACHE, RATE_LIMIT_STREAK
 
 class TestKeyRotation(unittest.TestCase):
     def setUp(self):
         FAILED_KEYS_CACHE.clear()
+        FAILED_MODELS_CACHE.clear()
+        FAILED_COMBOS_CACHE.clear()
         self.config = {
             "api_keys": {
                 "openai": "key1, key2, key3",
@@ -27,8 +29,7 @@ class TestKeyRotation(unittest.TestCase):
             "model_cooldown_minutes": 10
         }
         self.client = AIClient(self.config)
-        FAILED_MODELS_CACHE.clear()
-        FAILED_MODELS_CACHE[("dummy", "dummy")] = 0.0
+        RATE_LIMIT_STREAK.clear()
 
     def test_api_keys_splitting(self):
         # OpenAI keys split by comma
@@ -91,21 +92,22 @@ class TestKeyRotation(unittest.TestCase):
         # All available initially
         self.assertEqual(self.client._available_api_keys("openai"), ["key1", "key2", "key3"])
         
-        # Mark key1 as failed
-        self.client._mark_key_failed("openai", "key1", delay_seconds=60)
+        # Mark combo as failed
+        self.client._mark_combo_failed("openai", "gpt-4o", "key1", delay_seconds=60)
         
-        # key1 should be excluded
-        self.assertEqual(self.client._available_api_keys("openai"), ["key2", "key3"])
+        # Check combo failed status
+        self.assertTrue(self.client._is_combo_failed("openai", "gpt-4o", "key1"))
+        self.assertFalse(self.client._is_combo_failed("openai", "gpt-4o", "key2"))
         
-        # Mark key2 as failed
-        self.client._mark_key_failed("openai", "key2", delay_seconds=60)
-        self.assertEqual(self.client._available_api_keys("openai"), ["key3"])
+        # Clear/On success
+        self.client._on_combo_success("openai", "gpt-4o", "key1")
+        self.assertFalse(self.client._is_combo_failed("openai", "gpt-4o", "key1"))
 
     def test_available_api_keys_fallback(self):
         # Mark all as failed
-        self.client._mark_key_failed("openai", "key1", delay_seconds=60)
-        self.client._mark_key_failed("openai", "key2", delay_seconds=60)
-        self.client._mark_key_failed("openai", "key3", delay_seconds=60)
+        self.client._mark_combo_failed("openai", "gpt-4o", "key1", delay_seconds=60)
+        self.client._mark_combo_failed("openai", "gpt-4o", "key2", delay_seconds=60)
+        self.client._mark_combo_failed("openai", "gpt-4o", "key3", delay_seconds=60)
         
         # If all fail, it should fall back to returning all of them
         self.assertEqual(self.client._available_api_keys("openai"), ["key1", "key2", "key3"])
@@ -138,10 +140,10 @@ class TestKeyRotation(unittest.TestCase):
         self.assertEqual(result["hints"], ["hint1"])
         
         # Check that key1 was blacklisted
-        self.assertIn(("openai", "key1"), FAILED_KEYS_CACHE)
+        self.assertIn(("openai", "gpt-4o", "key1"), FAILED_COMBOS_CACHE)
         
         # Check that key2 is not blacklisted
-        self.assertNotIn(("openai", "key2"), FAILED_KEYS_CACHE)
+        self.assertNotIn(("openai", "gpt-4o", "key2"), FAILED_COMBOS_CACHE)
 
     @patch("urllib.request.urlopen")
     def test_key_rotation_during_model_test(self, mock_urlopen):
@@ -202,10 +204,10 @@ class TestKeyRotation(unittest.TestCase):
         self.assertEqual(result["hints"], ["hint1"])
         
         # Check that key_gemini_1 was blacklisted
-        self.assertIn(("gemini", "key_gemini_1"), FAILED_KEYS_CACHE)
+        self.assertIn(("gemini", "gemini-flash-latest", "key_gemini_1"), FAILED_COMBOS_CACHE)
         
         # Check that key_gemini_2 is not blacklisted
-        self.assertNotIn(("gemini", "key_gemini_2"), FAILED_KEYS_CACHE)
+        self.assertNotIn(("gemini", "gemini-flash-latest", "key_gemini_2"), FAILED_COMBOS_CACHE)
 
     @patch("addon.ai_client.BLACKLIST_FILE", "tests/test_blacklist.json")
     def test_key_blacklist_persistence(self):
@@ -215,24 +217,24 @@ class TestKeyRotation(unittest.TestCase):
             os.remove("tests/test_blacklist.json")
             
         try:
-            # Mark a key as failed
-            self.client._mark_key_failed("gemini", "my_failed_key", delay_seconds=100)
+            # Mark a combo as failed
+            self.client._mark_combo_failed("gemini", "gemini-flash-latest", "my_failed_key", delay_seconds=100)
             
             # Verify it is in cache
-            self.assertIn(("gemini", "my_failed_key"), FAILED_KEYS_CACHE)
+            self.assertIn(("gemini", "gemini-flash-latest", "my_failed_key"), FAILED_COMBOS_CACHE)
             
             # Verify file was created
             self.assertTrue(os.path.exists("tests/test_blacklist.json"))
             
             # Clear cache and reload
-            FAILED_KEYS_CACHE.clear()
-            self.assertEqual(len(FAILED_KEYS_CACHE), 0)
+            FAILED_COMBOS_CACHE.clear()
+            self.assertEqual(len(FAILED_COMBOS_CACHE), 0)
             
             self.client._load_blacklist()
             
             # Verify it was reloaded
-            self.assertIn(("gemini", "my_failed_key"), FAILED_KEYS_CACHE)
-            self.assertGreater(FAILED_KEYS_CACHE[("gemini", "my_failed_key")], time.time())
+            self.assertIn(("gemini", "gemini-flash-latest", "my_failed_key"), FAILED_COMBOS_CACHE)
+            self.assertGreater(FAILED_COMBOS_CACHE[("gemini", "gemini-flash-latest", "my_failed_key")], time.time())
             
         finally:
             if os.path.exists("tests/test_blacklist.json"):
@@ -245,7 +247,7 @@ class TestKeyRotation(unittest.TestCase):
             "gemini": ["gemini-2.5-pro"]
         }
         
-        # First call (gemini-flash-latest) fails with 429
+        # First call (gemini-flash-latest, key 1) fails with 429
         resp_429 = urllib.error.HTTPError(
             url="http://mock.api",
             code=429,
@@ -255,7 +257,7 @@ class TestKeyRotation(unittest.TestCase):
         )
         resp_429.read = MagicMock(return_value=b'{"error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}}')
         
-        # Second call (gemini-2.5-pro) succeeds
+        # Second call (gemini-flash-latest, key 2) succeeds
         resp_success = MagicMock()
         resp_success.read.return_value = b'{"candidates": [{"content": {"parts": [{"text": "{\\"hints\\": [\\"hint_from_model_2\\"], \\"options\\": [\\"opt1\\"]}"}]}}]}'
         resp_success.__enter__.return_value = resp_success
@@ -264,11 +266,12 @@ class TestKeyRotation(unittest.TestCase):
         
         result = self.client._call_gemini("sys_prompt", "prompt")
         
-        # Verify that result succeeded with the second model
+        # Verify that result succeeded
         self.assertEqual(result["hints"], ["hint_from_model_2"])
         
-        # Verify that key_gemini_1 is NOT blacklisted (because model 2 succeeded on it)
-        self.assertNotIn(("gemini", "key_gemini_1"), FAILED_KEYS_CACHE)
+        # Verify that key_gemini_1 IS blacklisted (because it failed on the model)
+        self.assertIn(("gemini", "gemini-flash-latest", "key_gemini_1"), FAILED_COMBOS_CACHE)
+        self.assertNotIn(("gemini", "gemini-flash-latest", "key_gemini_2"), FAILED_COMBOS_CACHE)
 
     @patch("urllib.request.urlopen")
     def test_gemini_rate_limit_blacklists_key_if_all_models_fail(self, mock_urlopen):
@@ -290,17 +293,19 @@ class TestKeyRotation(unittest.TestCase):
         resp_success.read.return_value = b'{"candidates": [{"content": {"parts": [{"text": "{\\"hints\\": [\\"hint_from_key_2\\"], \\"options\\": [\\"opt1\\"]}"}]}}]}'
         resp_success.__enter__.return_value = resp_success
         
-        # key1 model 1 fails (429), key1 model 2 fails (429).
-        # It rotates to key2. key2 model 1 succeeds.
-        mock_urlopen.side_effect = [resp_429, resp_429, resp_success]
+        # Model 1 key 1 fails, Model 1 key 2 fails.
+        # Fallback Model 2: key 1 fails, key 2 succeeds.
+        mock_urlopen.side_effect = [resp_429, resp_429, resp_429, resp_success]
         
         result = self.client._call_gemini("sys_prompt", "prompt")
         
-        # Verify that result succeeded with key 2
+        # Verify that result succeeded
         self.assertEqual(result["hints"], ["hint_from_key_2"])
         
-        # Verify that key_gemini_1 IS blacklisted (because all models failed on it)
-        self.assertIn(("gemini", "key_gemini_1"), FAILED_KEYS_CACHE)
+        # Verify that key_gemini_1 IS blacklisted (all models failed on it)
+        self.assertIn(("gemini", "gemini-flash-latest", "key_gemini_1"), FAILED_COMBOS_CACHE)
+        self.assertIn(("gemini", "gemini-2.5-pro", "key_gemini_1"), FAILED_COMBOS_CACHE)
+        self.assertNotIn(("gemini", "gemini-2.5-pro", "key_gemini_2"), FAILED_COMBOS_CACHE)
 
 if __name__ == "__main__":
     unittest.main()
