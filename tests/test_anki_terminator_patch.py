@@ -65,6 +65,14 @@ class TestAnkiTerminatorPatch(unittest.TestCase):
         self.assertNotIn("ai-hints-container", cleaned)
         self.assertNotIn("Hint 1", cleaned)
 
+        # 6. Cloze note text should not have its clozes stripped, but should have the JSON block stripped if present
+        cloze_with_json = '{{c1::കരിം}} + {{c1::പുലി}} എന്ന് ചേർത്തെഴുതുമ്പോൾ ലഭിക്കുന്ന പദമാണ് കരിമ്പുലി {\n  "c1": {\n    "hints": [\n      "Consider hierarchical logic."\n    ],\n    "options": [\n      "option1",\n      "option2"\n    ]\n  }\n}'
+        self.assertEqual(clean_ai_hints_from_text(cloze_with_json), '{{c1::കരിം}} + {{c1::പുലി}} എന്ന് ചേർത്തെഴുതുമ്പോൾ ലഭിക്കുന്ന പദമാണ് കരിമ്പുലി')
+
+        # 7. Cloze note text without JSON should remain fully untouched
+        cloze_only = '{{c1::കരിം}} + {{c1::പുലി}} എന്ന് ചേർത്തെഴുതുമ്പോൾ ലഭിക്കുന്ന പദമാണ് കരിമ്പുലി'
+        self.assertEqual(clean_ai_hints_from_text(cloze_only), cloze_only)
+
     def test_clean_note_proxy_getitem(self):
         note = FakeNote({
             "Front": "What is alpha?<br><div class=\"ai-hints-json\" style=\"display:none\">payload</div>",

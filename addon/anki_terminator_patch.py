@@ -1,5 +1,16 @@
+import json
 import re
 import sys
+
+def _is_ai_hints_dict(obj) -> bool:
+    if not isinstance(obj, dict):
+        return False
+    if "hints" in obj or "options" in obj:
+        return True
+    for val in obj.values():
+        if isinstance(val, dict) and ("hints" in val or "options" in val):
+            return True
+    return False
 
 def clean_ai_hints_from_text(text: str) -> str:
     if not isinstance(text, str):
@@ -11,27 +22,29 @@ def clean_ai_hints_from_text(text: str) -> str:
     cleaned = re.sub(pattern, "", text)
     
     # Strip plain/tag-stripped JSON payloads that get saved in sfld (Sort Field)
+    decoder = json.JSONDecoder()
     idx = 0
     while True:
         start_idx = cleaned.find("{", idx)
         if start_idx == -1:
             break
-        chunk = cleaned[start_idx:start_idx+150]
-        if any(f'"c{i}"' in chunk for i in range(1, 10)) and ('"hints"' in chunk or '"options"' in chunk):
-            brace_count = 0
-            end_idx = -1
-            for i in range(start_idx, len(cleaned)):
-                if cleaned[i] == '{':
-                    brace_count += 1
-                elif cleaned[i] == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        end_idx = i
-                        break
-            if end_idx != -1:
-                cleaned = cleaned[:start_idx] + cleaned[end_idx+1:]
+        
+        # Fast path: skip cloze deletions (which start with "{{")
+        if cleaned[start_idx:start_idx+2] == "{{":
+            idx = start_idx + 2
+            continue
+            
+        try:
+            # Try parsing a JSON object starting at start_idx
+            obj, end_pos = decoder.raw_decode(cleaned[start_idx:])
+            actual_end_idx = start_idx + end_pos
+            if _is_ai_hints_dict(obj):
+                cleaned = cleaned[:start_idx] + cleaned[actual_end_idx:]
                 idx = start_idx
                 continue
+        except json.JSONDecodeError:
+            pass
+            
         idx = start_idx + 1
     return cleaned.strip()
 
