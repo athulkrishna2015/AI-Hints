@@ -805,6 +805,9 @@ def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_clear":
         clear_hints(card=card, web=web)
         return (True, None)
+    if message == "ai_hints_remove_warning":
+        remove_warning_hint(card=card, web=web)
+        return (True, None)
     if message == "ai_hints_refresh":
         refresh_current_card(card=card, web=web)
         return (True, None)
@@ -864,6 +867,38 @@ def clear_hints(card=None, web=None):
             )
     else:
         tooltip("AI-Hints: No cached data found to clear.")
+
+def remove_warning_hint(card=None, web=None):
+    if card is None:
+        card = mw.reviewer.card
+    if not card:
+        return
+
+    if web is None:
+        web = getattr(mw.reviewer, "web", None)
+
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
+    )
+    
+    note = card.note()
+    if parser.remove_warning_hint_from_note(note, card):
+        mw.col.update_note(note)
+        _forget_generated_hints(card)
+        logger.info("AI-Hints warning removed for card %s", card.id)
+        tooltip("AI-Hints: Warning removed.")
+        if web:
+            QTimer.singleShot(
+                100,
+                lambda: (
+                    None if _reviewer_is_ending or _qt_object_is_deleted(web)
+                    else refresh_current_card(card=card, web=web)
+                )
+            )
+    else:
+        tooltip("AI-Hints: No warning found.")
 
 def _selected_browser_card_ids(browser):
     selected_cards = getattr(browser, "selectedCards", None)

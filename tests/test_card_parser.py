@@ -216,6 +216,35 @@ class CardParserTests(unittest.TestCase):
         self.assertEqual(front, "Paris")
         self.assertEqual(back, "Capital of France")
 
+    def test_remove_warning_hint_from_note(self):
+        parser = CardParser(storage_mode="json")
+        note = FakeNote("Cloze", {"Text": "Prompt", "Back": ""})
+        
+        # Test JSON mode warning removal
+        initial_data = {
+            "c1": {"hints": ["Fine hint", "⚠️ Warning hint", "Another hint"], "options": []}
+        }
+        note["Text"] = "Prompt" + parser.build_hints_block(initial_data)
+        
+        self.assertTrue(parser.remove_warning_hint_from_note(note, card=FakeCard(1, 0)))
+        
+        payload = json_payload_from_field(note["Text"])
+        self.assertEqual(payload["c1"]["hints"], ["Fine hint", "Another hint"])
+        
+        # Test HTML mode warning removal
+        parser_html = CardParser(storage_mode="html")
+        note_html = FakeNote("Basic", {"Front": "Front", "Back": ""})
+        block = parser_html.build_hints_block({
+            "hints": ["First hint", "⚠️ Warning hint", "Third hint"],
+            "options": []
+        })
+        note_html["Back"] = "Back" + block
+        
+        self.assertTrue(parser_html.remove_warning_hint_from_note(note_html))
+        self.assertIn("First hint", note_html["Back"])
+        self.assertNotIn("⚠️ Warning hint", note_html["Back"])
+        self.assertIn("Third hint", note_html["Back"])
+
 
 if __name__ == "__main__":
     unittest.main()

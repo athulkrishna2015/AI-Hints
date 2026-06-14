@@ -935,6 +935,84 @@ class CardParser:
         
         return cleared
 
+    def remove_warning_hint_from_note(self, note, card=None) -> bool:
+        """Finds any hints block on the note matching the card, and filters out
+        any hint containing a warning (i.e. '⚠️').
+        Returns True if a warning was found and removed, False otherwise.
+        """
+        card_ord = self._card_ord(card)
+        card_key = f"c{card_ord + 1}" if card_ord is not None else None
+        
+        modified = False
+        pattern = re.compile(
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+
+        for f_name in note.keys():
+            current_val = note[f_name]
+            if not isinstance(current_val, str):
+                continue
+                
+            matches = list(pattern.finditer(current_val))
+            field_modified = False
+            new_val = current_val
+            
+            # Work backwards to avoid offset issues
+            for match in reversed(matches):
+                block_html = match.group(0)
+                if self._block_matches_card(block_html, card):
+                    if self.json_class in block_html:
+                        try:
+                            raw_payload = match.group(1)
+                            parsed = self._parse_json_payload(raw_payload)
+                            if not isinstance(parsed, dict):
+                                continue
+                                
+                            block_modified = False
+                            # If keyed format
+                            if self._is_keyed_payload(parsed):
+                                if card_key and card_key in parsed:
+                                    data = parsed[card_key]
+                                    if isinstance(data, dict) and "hints" in data:
+                                        orig_len = len(data["hints"])
+                                        data["hints"] = [h for h in data["hints"] if "⚠️" not in str(h)]
+                                        if len(data["hints"]) < orig_len:
+                                            block_modified = True
+                            else:
+                                # Not keyed format
+                                if "hints" in parsed:
+                                    orig_len = len(parsed["hints"])
+                                    parsed["hints"] = [h for h in parsed["hints"] if "⚠️" not in str(h)]
+                                    if len(parsed["hints"]) < orig_len:
+                                        block_modified = True
+                                        
+                            if block_modified:
+                                new_payload = self.serialize_json_payload(parsed)
+                                new_attrs = block_html.split(">", 1)[0].replace(f'<div class="{self.json_class}"', "").strip()
+                                new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
+                                new_val = new_val[:match.start()] + new_block + new_val[match.end():]
+                                field_modified = True
+                                modified = True
+                        except Exception as e:
+                            logger.error(f"Error removing warning from JSON: {e}")
+                    else:
+                        # HTML format
+                        # Warnings are inside list items. Let's find <li> elements containing ⚠️
+                        li_pattern = re.compile(r'<li\b[^>]*>[^<]*⚠️.*?</li>', flags=re.DOTALL | re.IGNORECASE)
+                        new_block_content, count = li_pattern.subn('', match.group(1))
+                        if count > 0:
+                            # Rebuild HTML block
+                            new_block = block_html.replace(match.group(1), new_block_content)
+                            new_val = new_val[:match.start()] + new_block + new_val[match.end():]
+                            field_modified = True
+                            modified = True
+            
+            if field_modified:
+                note[f_name] = new_val.strip()
+                
+        return modified
+
     def _replace_or_append_block(self, current_val: str, content_block: str, card=None) -> str:
         pattern = re.compile(
             rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',

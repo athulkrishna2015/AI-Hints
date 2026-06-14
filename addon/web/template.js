@@ -188,9 +188,34 @@
         list.className = title.toLowerCase().includes('hint') ? 'ai-hints-hint-list' : 'ai-hints-list';
         const listItems = items.map((text, index) => {
             const li = document.createElement('li');
-            li.innerHTML = convertMathDelimitersToTags(escapeHtml(text));
-            if ((correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text))) {
-                li.className = 'ai-hints-correct';
+            const isWarning = text && text.includes('⚠️');
+            if (isWarning && isAddonActive) {
+                li.className = 'ai-hints-warning-item';
+                const span = document.createElement('span');
+                span.innerHTML = convertMathDelimitersToTags(escapeHtml(text));
+                li.appendChild(span);
+                
+                const delBtn = document.createElement('span');
+                delBtn.className = 'ai-hints-del-warning-btn';
+                delBtn.textContent = ' ❌ Remove Warning';
+                delBtn.style.cursor = 'pointer';
+                delBtn.style.color = '#dc3545';
+                delBtn.style.marginLeft = '8px';
+                delBtn.style.fontSize = '0.8em';
+                delBtn.style.fontWeight = 'bold';
+                delBtn.title = "Permanently remove this warning hint from the note";
+                delBtn.onclick = (e) => {
+                    if (e) { e.stopPropagation(); e.preventDefault(); }
+                    if (confirm("Remove this warning hint from the note permanently?")) {
+                        pycmd('ai_hints_remove_warning');
+                    }
+                };
+                li.appendChild(delBtn);
+            } else {
+                li.innerHTML = convertMathDelimitersToTags(escapeHtml(text));
+                if ((correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text))) {
+                    li.className = 'ai-hints-correct';
+                }
             }
             return li;
         });
