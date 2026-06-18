@@ -133,6 +133,12 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
 
+### June 18, 2026 (v3.6.4)
+- **Robust Math/Image Cloze Parsing**: Fixed sequential queue processing skipping cloze cards that contain images or formulas by returning an explicit existence boolean instead of checking if the text content is empty.
+- **HTML Image Descriptor Preservation**: Enhanced `_clean_html` to convert `<img>` tags into descriptive textual placeholders (e.g. `[Image: filename - alt]`) rather than stripping them completely. This preserves context for math clozes and allows the LLM to generate higher quality hints.
+- **Stuck/Failed Card ID Visibility**: Added real-time tracking and visual display of failed card IDs in the batch generation status summary. Clickable card links are shown for active, dormant, and completed queue runs.
+- **Startup Connection Stability**: Delayed sequential queue auto-resume until after the local proxy daemon is fully initialized.
+
 ### June 11, 2026 (v3.6.1)
 - **Granular API Key Blacklisting**: Refactored the key rotation blacklist to block specific model-key-provider combinations rather than entire keys or models globally.
 - **Gemini 3.5 Flash Support**: Added support for Google's new `gemini-3.5-flash` model as the default Gemini and Antigravity provider model.
