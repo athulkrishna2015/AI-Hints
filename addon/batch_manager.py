@@ -27,6 +27,7 @@ class BatchManager:
         self.local_queue_paused = False
         self.local_queue_errors = 0
         self.local_queue_pass = 1
+        self.local_queue_failed_cards = []
         self.saved_config = {}
         self.saved_provider = None
         
@@ -62,6 +63,7 @@ class BatchManager:
                      self.local_queue_paused = cache.get("paused", False)
                      self.local_queue_errors = cache.get("errors", 0)
                      self.local_queue_pass = cache.get("pass", 1)
+                     self.local_queue_failed_cards = cache.get("failed_cards", [])
                      self.saved_config = cache.get("config", {})
                      self.saved_provider = cache.get("provider", None)
                      self.last_run_stats = cache.get("last_run_stats", None)
@@ -95,6 +97,7 @@ class BatchManager:
                         "pass": self.local_queue_pass,
                         "active": self.local_queue_active,
                         "paused": self.local_queue_paused,
+                        "failed_cards": getattr(self, "local_queue_failed_cards", []),
                         "config": stripped_config,
                         "provider": getattr(self, "saved_provider", None),
                         "last_run_stats": self.last_run_stats
@@ -117,6 +120,17 @@ class BatchManager:
             pass_str = f" (Pass #{self.local_queue_pass})" if self.local_queue_pass > 1 else ""
             html_parts.append(f"<div style='font-size:12px; padding-bottom:4px;'>{status_txt} <b>Local Sequential Queue{pass_str}</b></div>")
             html_parts.append(f"📊 Progress: <b>{done}</b> / {self.local_queue_total} cards generated. ({remaining} left)<br/>")
+            failed_cards = getattr(self, "local_queue_failed_cards", [])
+            if failed_cards:
+                 html_parts.append("<div style='margin-top:4px;'>")
+                 html_parts.append(f"⚠️ <b>Failed Cards ({len(failed_cards)}):</b> ")
+                 links = []
+                 for fcid in failed_cards[:15]:
+                      links.append(f"<a href='browse:cid:{fcid}' style='color: #dc3545;'>[Card {fcid}]</a>")
+                 html_parts.append(", ".join(links))
+                 if len(failed_cards) > 15:
+                      html_parts.append(f" <i>and {len(failed_cards) - 15} more</i>")
+                 html_parts.append("</div>")
             
             active_threads = {}
             if getattr(self, "active_threads_status", None):
@@ -167,6 +181,17 @@ class BatchManager:
             done = self.local_queue_total - remaining
             html_parts.append(f"💾 <b style='color:#fd7e14;'>Saved Dormant Queue</b> ({remaining} cards pending)<br/>")
             html_parts.append(f"Completed so far: {done} / {self.local_queue_total} total.<br/>")
+            failed_cards = getattr(self, "local_queue_failed_cards", [])
+            if failed_cards:
+                 html_parts.append("<div style='margin-top:4px;'>")
+                 html_parts.append(f"⚠️ <b>Failed Cards ({len(failed_cards)}):</b> ")
+                 links = []
+                 for fcid in failed_cards[:15]:
+                      links.append(f"<a href='browse:cid:{fcid}' style='color: #dc3545;'>[Card {fcid}]</a>")
+                 html_parts.append(", ".join(links))
+                 if len(failed_cards) > 15:
+                      html_parts.append(f" <i>and {len(failed_cards) - 15} more</i>")
+                 html_parts.append("</div>")
             
             if self.local_queue:
                  html_parts.append("<div style='margin-top:6px; font-size:11px;'>")
@@ -191,6 +216,17 @@ class BatchManager:
             html_parts.append(f"✨ Success: <b>{success}</b> / {stats['total']} cards.<br/>")
             if stats['errors'] > 0:
                 html_parts.append(f"⚠️ Errors: <span style='color:#dc3545;'>{stats['errors']}</span><br/>")
+                failed_cards = stats.get("failed_cards", [])
+                if failed_cards:
+                     html_parts.append("<div style='margin-top:4px;'>")
+                     html_parts.append("<b>Failed Card IDs:</b> ")
+                     links = []
+                     for fcid in failed_cards[:15]:
+                          links.append(f"<a href='browse:cid:{fcid}' style='color: #dc3545;'>[Card {fcid}]</a>")
+                     html_parts.append(", ".join(links))
+                     if len(failed_cards) > 15:
+                          html_parts.append(f" <i>and {len(failed_cards) - 15} more</i>")
+                     html_parts.append("</div>")
             
             finished_at = time.strftime('%H:%M:%S', time.localtime(stats.get('time', 0)))
             html_parts.append(f"🕒 Finished at: {finished_at}<br/>")
@@ -421,6 +457,7 @@ class BatchManager:
              self.local_queue_total = len(card_ids)
              self.local_queue_errors = 0
              self.local_queue_pass = 1
+             self.local_queue_failed_cards = []
              self.saved_config = config or {}
              self.saved_provider = provider_override
              self.last_run_stats = None 
@@ -491,6 +528,11 @@ class BatchManager:
         with self._db_lock:
             if cid in self.local_queue:
                 self.local_queue.remove(cid)
+                if hasattr(self, "local_queue_failed_cards") and cid in self.local_queue_failed_cards:
+                    try:
+                        self.local_queue_failed_cards.remove(cid)
+                    except ValueError:
+                        pass
                 self.save_state()
                 return True
         return False
@@ -588,6 +630,7 @@ class BatchManager:
         self.last_run_stats = {
             "total": self.local_queue_total,
             "errors": len(final_missing),
+            "failed_cards": list(final_missing),
             "time": time.time()
         }
             
@@ -609,6 +652,11 @@ class BatchManager:
             if all_failed:
                 logger.warning(f"Card {cid} failed on all active providers {self.active_providers}. Counting as error.")
                 self.local_queue_errors += 1
+                if not hasattr(self, "local_queue_failed_cards"):
+                    self.local_queue_failed_cards = []
+                if cid not in self.local_queue_failed_cards:
+                    self.local_queue_failed_cards.append(cid)
+                self.save_state()
             else:
                 logger.info(f"Card {cid} failed on {provider}. Requeuing for other providers to try.")
                 self.local_queue.insert(0, cid)
@@ -739,6 +787,10 @@ class BatchManager:
                     logger.error(f"Error fetching card {cid} content: {payload['error']}")
                     with self._db_lock:
                         self.local_queue_errors += 1
+                        if not hasattr(self, "local_queue_failed_cards"):
+                            self.local_queue_failed_cards = []
+                        if cid not in self.local_queue_failed_cards:
+                            self.local_queue_failed_cards.append(cid)
                     continue
 
                 if not payload["exists"] or (not payload["front"] and not payload["back"]):

@@ -129,6 +129,46 @@ class TestBatchManager(unittest.TestCase):
             data = json.load(f)
         self.assertTrue(data.get("local_cache", {}).get("paused"))
 
+    def test_failed_cards_in_status_summary(self):
+        """Test that failed card IDs are correctly stored, persisted, and shown in get_status_summary."""
+        manager = BatchManager()
+        manager.local_queue = [10, 11]
+        manager.local_queue_total = 2
+        manager.local_queue_failed_cards = [12, 13]
+        manager.local_queue_active = True
+        manager.save_state()
+
+        # Load recovery to check persistence
+        new_manager = BatchManager()
+        self.assertEqual(new_manager.local_queue_failed_cards, [12, 13])
+
+        # Verify summary output shows the failed cards when active
+        summary_active = new_manager.get_status_summary()
+        self.assertIn("Failed Cards (2)", summary_active)
+        self.assertIn("browse:cid:12", summary_active)
+        self.assertIn("browse:cid:13", summary_active)
+
+        # Verify summary output shows the failed cards when dormant
+        new_manager.local_queue_active = False
+        summary_dormant = new_manager.get_status_summary()
+        self.assertIn("Failed Cards (2)", summary_dormant)
+        self.assertIn("browse:cid:12", summary_dormant)
+        self.assertIn("browse:cid:13", summary_dormant)
+
+        # Verify summary output shows the failed cards when completed (last_run_stats)
+        new_manager.local_queue = []
+        new_manager.local_queue_failed_cards = []
+        new_manager.last_run_stats = {
+            "total": 2,
+            "errors": 2,
+            "failed_cards": [12, 13],
+            "time": 0
+        }
+        summary_completed = new_manager.get_status_summary()
+        self.assertIn("Failed Card IDs", summary_completed)
+        self.assertIn("browse:cid:12", summary_completed)
+        self.assertIn("browse:cid:13", summary_completed)
+
     @patch('addon.batch_manager.BatchManager.start_local_sequential_queue')
     @patch('addon.batch_manager.BatchManager.start_timer_if_needed')
     def test_initialize_batch_manager_auto_resumes(self, mock_start_timer, mock_start_queue):

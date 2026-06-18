@@ -180,8 +180,8 @@ class CardParser:
         # If it's a Cloze card, we focus on the specific cloze
         # Check both name and internal model type (1 = Cloze)
         if "cloze" in model_name or model.get("type") == 1:
-            front, back = self._focus_current_cloze(front, card)
-            if not back:
+            front, back, found = self._focus_current_cloze(front, card)
+            if not found:
                 return "", ""
         else:
             # Detect reversed card templates by inspecting the card's template qfmt.
@@ -229,6 +229,7 @@ class CardParser:
 
     def _clean_html(self, html_text: str) -> str:
         """Remove most HTML tags to reduce tokens and noise."""
+        import os
         if not isinstance(html_text, str):
             html_text = str(html_text or "")
         
@@ -243,6 +244,27 @@ class CardParser:
             html_text, 
             flags=re.DOTALL | re.IGNORECASE
         )
+
+        # Convert images to a textual placeholder with their source filename / alt text
+        def replace_img(match):
+            tag = match.group(0)
+            src_match = re.search(r'src=["\']([^"\']+)["\']', tag, re.IGNORECASE)
+            alt_match = re.search(r'alt=["\']([^"\']+)["\']', tag, re.IGNORECASE)
+            
+            src_val = os.path.basename(src_match.group(1)) if src_match else ""
+            alt_val = alt_match.group(1) if alt_match else ""
+            
+            parts = []
+            if alt_val:
+                parts.append(alt_val)
+            if src_val:
+                parts.append(src_val)
+            
+            if parts:
+                return " [Image: " + " - ".join(parts) + "] "
+            return " [Image] "
+
+        html_text = re.sub(r"<img\b[^>]*>", replace_img, html_text, flags=re.IGNORECASE)
 
         # Remove all other tags but keep content
         text = re.sub(r"<.*?>", " ", html_text)
@@ -316,12 +338,12 @@ class CardParser:
             iteration_limit -= 1
         return text
 
-    def _focus_current_cloze(self, text: str, card=None) -> Tuple[str, str]:
+    def _focus_current_cloze(self, text: str, card=None) -> Tuple[str, str, bool]:
         """Mark the cloze deletion for the current card and extract all active answers."""
         from .logger import logger
         cloze_number = self._card_ord(card)
         if cloze_number is None:
-            return text, ""
+            return text, "", False
         cloze_number += 1
         
         logger.debug(f"AI-Hints CardParser focusing cloze #{cloze_number} (card.ord={self._card_ord(card)})")
@@ -412,7 +434,8 @@ class CardParser:
 
         focused_text = process_recursive(text)
         sorted_answers = [answers_map[k] for k in sorted(answers_map.keys())]
-        return focused_text, ", ".join(sorted_answers)
+        cloze_found = len(answers_map) > 0
+        return focused_text, ", ".join(sorted_answers), cloze_found
 
     def update_note_with_hints(self, note, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None, skip_if_exists: bool = False) -> bool:
         """Appends or replaces the AI hints block in the target field."""
