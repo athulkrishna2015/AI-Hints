@@ -133,6 +133,11 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
  
+### June 19, 2026 (v3.7.0)
+- **Organized Card Browser Context Menu**: Moved "✨ Batch Generation..." and "Clear AI-Hints" into a clean "AI Hints" nested sub-menu to avoid cluttering Anki's main context menu.
+- **Bulk Skip AI Generation**: Added a new "Skip AI for Selected Cards" action inside the card browser's "AI Hints" sub-menu. This allows marking multiple selected cards as skipped in the database in a single click.
+- **Clear Skipped State Integration**: Verified and tested that the "Clear AI-Hints" action correctly clears the skipped state from the cards, preparing them for generation.
+
 ### June 19, 2026 (v3.6.5)
 - **Fix Sequential Queue Loop on Empty Cards**: Workers in the batch sequential queue now save a skipped state (`_skipped: True`) to the database when a card exists but has empty content (e.g. missing Cloze deletion). This stops verification passes from endlessly re-queuing the card and hitting the maximum pass limit.
 - **Improved Skip Visibility in Reviewer UI**: Pregeneration and manual generation now correctly record `_skipped: True` to the database and refresh the current card instead of silently discarding empty cards. This clears the stuck generating spinner and updates the reviewer UI with the skip status.
