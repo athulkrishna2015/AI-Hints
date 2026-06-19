@@ -793,8 +793,32 @@ class BatchManager:
                             self.local_queue_failed_cards.append(cid)
                     continue
 
-                if not payload["exists"] or (not payload["front"] and not payload["back"]):
+                if not payload["exists"]:
                     continue
+
+                if not payload["front"] and not payload["back"]:
+                    logger.info(f"AI-Hints: Card {cid} has empty content (e.g. empty fields or missing Cloze deletion). Skipping card and marking as skipped in DB.")
+                    resp_data = {"hints": [], "options": [], "_skipped": True}
+                    def _apply_skipped_on_main(cid_val, data_dict):
+                        try:
+                            card = _get_card_from_collection(cid_val)
+                            if not card:
+                                return
+                            note = card.note()
+                            config_current = mw.addonManager.getConfig(os.path.basename(ADDON_PATH)) or {}
+                            toggles = {
+                                "show_hints_button": config_current.get("show_hints_button", True),
+                                "show_options_button": config_current.get("show_options_button", True)
+                            }
+                            if parser.update_note_with_hints(note, data_dict, toggles, card, skip_if_exists=True):
+                                mw.col.update_note(note)
+                        except Exception as ex:
+                            logger.error(f"Error applying skipped results for card {cid_val} on main: {ex}")
+
+                    mw.taskman.run_on_main(lambda c=cid, d=resp_data: _apply_skipped_on_main(c, d))
+                    time.sleep(1.5)
+                    continue
+
 
                 front_txt = payload["front"]
                 back_txt = payload["back"]

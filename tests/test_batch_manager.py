@@ -244,5 +244,50 @@ class TestBatchManager(unittest.TestCase):
             self.assertFalse(should_break)
             self.assertTrue(should_sleep)
 
+    @patch('time.sleep')
+    @patch('addon.reviewer_hooks._get_card_from_collection')
+    @patch('addon.batch_manager.mw')
+    def test_empty_card_skip_behavior(self, mock_mw, mock_get_card, mock_sleep):
+        """Test that a card with empty front and back (e.g. missing cloze) is skipped and marked as skipped in DB."""
+        # Setup manager
+        manager = BatchManager()
+        manager.local_queue = [9999]
+        manager.local_queue_active = True
+        manager.local_queue_total = 1
+        
+        # Setup mocks
+        mock_card = MagicMock()
+        mock_note = MagicMock()
+        mock_card.note.return_value = mock_note
+        mock_get_card.return_value = mock_card
+        
+        mock_client = MagicMock()
+        mock_client._models_for_provider.return_value = ["gemini-flash"]
+        
+        mock_parser = MagicMock()
+        mock_parser.get_note_content.return_value = ("", "")
+        mock_parser.update_note_with_hints.return_value = True
+        
+        # We want run_on_main to execute synchronously so we can assert side effects
+        mock_mw.taskman.run_on_main = lambda func: func()
+        mock_mw.col.update_note = MagicMock()
+        mock_mw.addonManager.getConfig.return_value = {}
+        
+        # Run one step/loop of the thread
+        manager._run_local_queue_thread(
+            provider="gemini",
+            client=mock_client,
+            parser=mock_parser,
+            config={}
+        )
+        
+        # Verify card was popped and processed
+        self.assertEqual(manager.local_queue, [])
+        mock_parser.update_note_with_hints.assert_called_once()
+        args, kwargs = mock_parser.update_note_with_hints.call_args
+        self.assertEqual(args[1], {"hints": [], "options": [], "_skipped": True})
+        mock_mw.col.update_note.assert_called_once_with(mock_note)
+
 if __name__ == "__main__":
     unittest.main()
+

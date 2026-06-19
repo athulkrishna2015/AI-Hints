@@ -1418,6 +1418,10 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         _generating_card_ids.discard(card_id)
         logger.info("AI-Hints: Skipping generation for card %s as no content was found (likely a missing cloze).", card_id)
         
+        # Save skipped state to database to ensure verification passes and the UI reflects skip state
+        data = {"hints": [], "options": [], "_skipped": True}
+        _apply_results_to_card(card, data, is_manual=is_manual, web=web)
+
         # If this was a pre-generation, trigger the next one so the chain doesn't break
         if is_pregen:
             _trigger_next_pregeneration(card_id)

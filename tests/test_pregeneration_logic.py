@@ -229,5 +229,33 @@ class TestPregeneration(unittest.TestCase):
             self.assertEqual(kwargs['card'].id, 555)
             self.assertEqual(kwargs['is_pregen'], True)
 
+    @patch('addon.reviewer_hooks._apply_results_to_card')
+    @patch('addon.reviewer_hooks.CardParser')
+    @patch('addon.reviewer_hooks.AIClient')
+    def test_generate_hints_empty_card_marked_as_skipped(self, MockClient, MockParser, mock_apply_results):
+        """Verify that when a card is empty or missing a cloze, generate_hints marks it as skipped in DB."""
+        mock_card = MagicMock()
+        mock_card.id = 9999
+        
+        # Setup mocks
+        mock_parser_inst = MockParser.return_value
+        mock_parser_inst.get_note_content.return_value = ("", "")
+        
+        mock_client_inst = MockClient.return_value
+        mock_client_inst.has_any_ready_provider.return_value = True
+        
+        # Trigger generation
+        generate_hints(is_manual=True, card=mock_card, is_pregen=False)
+        
+        # Verify card was discarded from generating set
+        self.assertNotIn(mock_card.id, _generating_card_ids)
+        # Verify skipped results were applied
+        mock_apply_results.assert_called_once()
+        args, kwargs = mock_apply_results.call_args
+        self.assertEqual(args[0], mock_card)
+        self.assertEqual(args[1], {"hints": [], "options": [], "_skipped": True})
+        self.assertEqual(kwargs.get("is_manual"), True)
+
 if __name__ == '__main__':
     unittest.main()
+
