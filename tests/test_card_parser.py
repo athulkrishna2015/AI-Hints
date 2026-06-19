@@ -245,6 +245,22 @@ class CardParserTests(unittest.TestCase):
         self.assertNotIn("⚠️ Warning hint", note_html["Back"])
         self.assertIn("Third hint", note_html["Back"])
 
+    def test_clear_hints_clears_skipped_state(self):
+        parser = CardParser(storage_mode="json")
+        note = FakeNote("Cloze", {"Text": "Prompt", "Back": ""})
+        
+        # Mark card 1 (ord 0) as skipped
+        parser.update_note_with_hints(note, {"hints": [], "options": [], "_skipped": True}, card=FakeCard(1, 0))
+        self.assertIsNotNone(parser.find_hints_block(note, FakeCard(1, 0)))
+        
+        # Clear hints
+        self.assertTrue(parser.clear_hints_from_note(note, FakeCard(1, 0)))
+        
+        # Verify block is fully cleared (since there are no other clozes)
+        self.assertIsNone(parser.find_hints_block(note, FakeCard(1, 0)))
+        self.assertNotIn("ai-hints-json", note["Text"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

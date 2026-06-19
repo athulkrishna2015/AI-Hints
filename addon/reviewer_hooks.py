@@ -991,20 +991,102 @@ def clear_ai_hints_from_browser_selection(browser):
 
     return len(card_ids), changed_cards, len(changed_notes)
 
+def skip_ai_hints_from_browser_selection(browser):
+    card_ids = _selected_browser_card_ids(browser)
+    if not card_ids:
+        tooltip("AI-Hints: Select one or more cards first.")
+        return 0, 0, 0
+
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
+    )
+
+    toggles = {
+        "show_hints_button": config.get("show_hints_button", True),
+        "show_options_button": config.get("show_options_button", True)
+    }
+
+    notes_by_id = {}
+    changed_notes = {}
+    changed_cards = 0
+    missing_cards = 0
+
+    for card_id in card_ids:
+        try:
+            card = _get_card_from_collection(card_id)
+            if not card:
+                missing_cards += 1
+                continue
+
+            note_id = getattr(card, "nid", None)
+            if note_id is not None and note_id in notes_by_id:
+                note = notes_by_id[note_id]
+            else:
+                note = card.note()
+                if note_id is not None:
+                    notes_by_id[note_id] = note
+
+            data = {"hints": [], "options": [], "_skipped": True}
+            if parser.update_note_with_hints(note, data, toggles, card):
+                changed_cards += 1
+                changed_notes[note_id if note_id is not None else id(note)] = note
+                _remember_generated_hints(card, data, toggles)
+        except Exception as e:
+            missing_cards += 1
+            logger.error(f"Failed to skip AI-Hints for browser card {card_id}: {e}")
+
+    for note in changed_notes.values():
+        try:
+            mw.col.update_note(note)
+        except Exception as e:
+            logger.error(f"Failed to update note after skipping AI-Hints from browser: {e}")
+
+    if changed_notes:
+        refresh_browser = getattr(browser, "onReset", None)
+        if callable(refresh_browser):
+            try:
+                refresh_browser()
+            except Exception as e:
+                logger.error(f"Failed to refresh browser after skipping AI-Hints: {e}")
+
+    if changed_cards:
+        tooltip(
+            f"AI-Hints: Marked {changed_cards} "
+            f"selected card{'s' if changed_cards != 1 else ''} as skipped."
+        )
+    else:
+        tooltip("AI-Hints: Selected cards were already marked as skipped or couldn't be updated.")
+
+    return len(card_ids), changed_cards, len(changed_notes)
+
 def on_browser_context_menu(browser, menu):
+    # Add separator before our menu
     menu.addSeparator()
     
-    # Action 1: Clear
-    act_clear = menu.addAction("Clear AI-Hints")
-    act_clear.setEnabled(bool(_selected_browser_card_ids(browser)))
-    act_clear.triggered.connect(lambda _checked=False, b=browser: clear_ai_hints_from_browser_selection(b))
+    # Create AI Hints sub-menu
+    ai_menu = QMenu("AI Hints", menu)
+    menu.addMenu(ai_menu)
     
-    # Action 2: Batch Generation UI (Main entry point)
-    act_batch_ui = menu.addAction("✨ Batch Generation...")
-    act_batch_ui.setEnabled(bool(_selected_browser_card_ids(browser)))
+    has_selection = bool(_selected_browser_card_ids(browser))
+    
+    # Action 1: Batch Generation UI
+    act_batch_ui = ai_menu.addAction("✨ Batch Generation...")
+    act_batch_ui.setEnabled(has_selection)
     act_batch_ui.triggered.connect(
         lambda _checked=False, b=browser: on_config_dialog(mw, tab_index=4, card_ids=_selected_browser_card_ids(b))
     )
+    
+    # Action 2: Skip AI for Selected Cards
+    act_skip = ai_menu.addAction("Skip AI for Selected Cards")
+    act_skip.setEnabled(has_selection)
+    act_skip.triggered.connect(lambda _checked=False, b=browser: skip_ai_hints_from_browser_selection(b))
+
+    # Action 3: Clear
+    act_clear = ai_menu.addAction("Clear AI-Hints")
+    act_clear.setEnabled(has_selection)
+    act_clear.triggered.connect(lambda _checked=False, b=browser: clear_ai_hints_from_browser_selection(b))
 
 def on_deck_browser_context_menu(menu, did) -> None:
     from aqt.qt import QAction

@@ -256,6 +256,93 @@ class TestPregeneration(unittest.TestCase):
         self.assertEqual(args[1], {"hints": [], "options": [], "_skipped": True})
         self.assertEqual(kwargs.get("is_manual"), True)
 
+    @patch('addon.reviewer_hooks._get_card_from_collection')
+    @patch('addon.reviewer_hooks.CardParser')
+    @patch('addon.reviewer_hooks.tooltip')
+    def test_clear_ai_hints_from_browser_selection(self, mock_tooltip, MockParser, mock_get_card):
+        from addon.reviewer_hooks import clear_ai_hints_from_browser_selection
+        
+        # Setup mocks
+        browser_mock = MagicMock()
+        browser_mock.selectedCards.return_value = [111, 222]
+        
+        mock_card1 = MagicMock()
+        mock_card1.nid = 12
+        mock_card2 = MagicMock()
+        mock_card2.nid = 34
+        
+        # mock_get_card side effect to return cards
+        mock_get_card.side_effect = lambda cid: mock_card1 if cid == 111 else mock_card2
+        
+        mock_parser = MockParser.return_value
+        mock_parser.clear_hints_from_note.return_value = True
+        
+        # Run function
+        clear_ai_hints_from_browser_selection(browser_mock)
+        
+        # Verify calls
+        self.assertEqual(mock_get_card.call_count, 2)
+        self.assertEqual(mock_parser.clear_hints_from_note.call_count, 2)
+        mock_tooltip.assert_called_once_with("AI-Hints: Cleared cached data from 2 selected cards.")
+
+    @patch('addon.reviewer_hooks._get_card_from_collection')
+    @patch('addon.reviewer_hooks.CardParser')
+    @patch('addon.reviewer_hooks._remember_generated_hints')
+    @patch('addon.reviewer_hooks.tooltip')
+    def test_skip_ai_hints_from_browser_selection(self, mock_tooltip, mock_remember, MockParser, mock_get_card):
+        from addon.reviewer_hooks import skip_ai_hints_from_browser_selection
+        
+        # Setup mocks
+        browser_mock = MagicMock()
+        browser_mock.selectedCards.return_value = [111, 222]
+        
+        mock_card1 = MagicMock()
+        mock_card1.nid = 12
+        mock_card2 = MagicMock()
+        mock_card2.nid = 34
+        
+        # mock_get_card side effect to return cards
+        mock_get_card.side_effect = lambda cid: mock_card1 if cid == 111 else mock_card2
+        
+        mock_parser = MockParser.return_value
+        mock_parser.update_note_with_hints.return_value = True
+        
+        # Run function
+        skip_ai_hints_from_browser_selection(browser_mock)
+        
+        # Verify calls
+        self.assertEqual(mock_get_card.call_count, 2)
+        self.assertEqual(mock_parser.update_note_with_hints.call_count, 2)
+        self.assertEqual(mock_remember.call_count, 2)
+        mock_tooltip.assert_called_once_with("AI-Hints: Marked 2 selected cards as skipped.")
+
+    @patch('addon.reviewer_hooks._selected_browser_card_ids')
+    @patch('addon.reviewer_hooks.QMenu')
+    def test_on_browser_context_menu(self, MockQMenu, mock_selected_ids):
+        from addon.reviewer_hooks import on_browser_context_menu
+        
+        mock_selected_ids.return_value = [111]
+        
+        browser_mock = MagicMock()
+        parent_menu_mock = MagicMock()
+        
+        submenu_mock = MagicMock()
+        MockQMenu.return_value = submenu_mock
+        
+        # Run function
+        on_browser_context_menu(browser_mock, parent_menu_mock)
+        
+        # Verify submenu was created and added
+        MockQMenu.assert_called_once_with("AI Hints", parent_menu_mock)
+        parent_menu_mock.addMenu.assert_called_once_with(submenu_mock)
+        
+        # Verify separators and actions
+        parent_menu_mock.addSeparator.assert_called_once()
+        self.assertEqual(submenu_mock.addAction.call_count, 3)
+        submenu_mock.addAction.assert_any_call("✨ Batch Generation...")
+        submenu_mock.addAction.assert_any_call("Skip AI for Selected Cards")
+        submenu_mock.addAction.assert_any_call("Clear AI-Hints")
+
 if __name__ == '__main__':
     unittest.main()
 
