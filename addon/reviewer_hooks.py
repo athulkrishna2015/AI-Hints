@@ -925,12 +925,7 @@ def _get_card_from_collection(card_id):
         return get_card(card_id)
     return None
 
-def clear_ai_hints_from_browser_selection(browser):
-    card_ids = _selected_browser_card_ids(browser)
-    if not card_ids:
-        tooltip("AI-Hints: Select one or more cards first.")
-        return 0, 0, 0
-
+def clear_ai_hints_for_cards(card_ids) -> tuple[int, int, int]:
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
         mathjax_format=config.get("mathjax_format", "delimiters"),
@@ -963,15 +958,26 @@ def clear_ai_hints_from_browser_selection(browser):
                 _forget_generated_hints(card)
         except Exception as e:
             missing_cards += 1
-            logger.error(f"Failed to clear AI-Hints for browser card {card_id}: {e}")
+            logger.error(f"Failed to clear AI-Hints for card {card_id}: {e}")
 
     for note in changed_notes.values():
         try:
             mw.col.update_note(note)
         except Exception as e:
-            logger.error(f"Failed to update note after clearing AI-Hints from browser: {e}")
+            logger.error(f"Failed to update note after clearing AI-Hints: {e}")
 
-    if changed_notes:
+    return len(card_ids), changed_cards, len(changed_notes)
+
+def clear_ai_hints_from_browser_selection(browser):
+    card_ids = _selected_browser_card_ids(browser)
+    if not card_ids:
+        tooltip("AI-Hints: Select one or more cards first.")
+        return 0, 0, 0
+
+    res = clear_ai_hints_for_cards(card_ids)
+    changed_cards = res[1]
+
+    if changed_cards:
         refresh_browser = getattr(browser, "onReset", None)
         if callable(refresh_browser):
             try:
@@ -984,19 +990,12 @@ def clear_ai_hints_from_browser_selection(browser):
             f"AI-Hints: Cleared cached data from {changed_cards} "
             f"selected card{'s' if changed_cards != 1 else ''}."
         )
-    elif missing_cards:
-        tooltip("AI-Hints: No cached data found on the selected cards.")
     else:
         tooltip("AI-Hints: No cached data found on the selected cards.")
 
-    return len(card_ids), changed_cards, len(changed_notes)
+    return res
 
-def skip_ai_hints_from_browser_selection(browser):
-    card_ids = _selected_browser_card_ids(browser)
-    if not card_ids:
-        tooltip("AI-Hints: Select one or more cards first.")
-        return 0, 0, 0
-
+def skip_ai_hints_for_cards(card_ids) -> tuple[int, int, int]:
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
         mathjax_format=config.get("mathjax_format", "delimiters"),
@@ -1035,15 +1034,26 @@ def skip_ai_hints_from_browser_selection(browser):
                 _remember_generated_hints(card, data, toggles)
         except Exception as e:
             missing_cards += 1
-            logger.error(f"Failed to skip AI-Hints for browser card {card_id}: {e}")
+            logger.error(f"Failed to skip AI-Hints for card {card_id}: {e}")
 
     for note in changed_notes.values():
         try:
             mw.col.update_note(note)
         except Exception as e:
-            logger.error(f"Failed to update note after skipping AI-Hints from browser: {e}")
+            logger.error(f"Failed to update note after skipping AI-Hints: {e}")
 
-    if changed_notes:
+    return len(card_ids), changed_cards, len(changed_notes)
+
+def skip_ai_hints_from_browser_selection(browser):
+    card_ids = _selected_browser_card_ids(browser)
+    if not card_ids:
+        tooltip("AI-Hints: Select one or more cards first.")
+        return 0, 0, 0
+
+    res = skip_ai_hints_for_cards(card_ids)
+    changed_cards = res[1]
+
+    if changed_cards:
         refresh_browser = getattr(browser, "onReset", None)
         if callable(refresh_browser):
             try:
@@ -1059,7 +1069,7 @@ def skip_ai_hints_from_browser_selection(browser):
     else:
         tooltip("AI-Hints: Selected cards were already marked as skipped or couldn't be updated.")
 
-    return len(card_ids), changed_cards, len(changed_notes)
+    return res
 
 def on_browser_context_menu(browser, menu):
     # Add separator before our menu
@@ -1089,32 +1099,125 @@ def on_browser_context_menu(browser, menu):
     act_clear.triggered.connect(lambda _checked=False, b=browser: clear_ai_hints_from_browser_selection(b))
 
 def on_deck_browser_context_menu(menu, did) -> None:
-    from aqt.qt import QAction
-    action = QAction("✨ Batch Generation...", menu)
+    from aqt.qt import QMenu, QAction
+    from aqt.utils import askUser
     
-    def on_triggered() -> None:
+    # Add separator before our menu
+    menu.addSeparator()
+    
+    # Create AI Hints sub-menu
+    ai_menu = QMenu("AI Hints", menu)
+    menu.addMenu(ai_menu)
+    
+    # Action 1: Batch Generation...
+    act_batch = ai_menu.addAction("✨ Batch Generation...")
+    
+    def get_deck_name(col) -> str:
+        try:
+            from anki.decks import DeckId
+            return col.decks.name(DeckId(did))
+        except:
+            return col.decks.name(did)
+            
+    def on_batch_triggered() -> None:
         from aqt.operations import QueryOp
-        
-        def get_deck_name(col) -> str:
-            try:
-                from anki.decks import DeckId
-                return col.decks.name(DeckId(did))
-            except:
-                return col.decks.name(did)
-                
         def on_success(deck_name: str) -> None:
             if deck_name:
                 from .config_ui import on_config_dialog
                 on_config_dialog(mw, tab_index=4, deck_name=deck_name)
-                
         QueryOp(
             parent=mw,
             op=get_deck_name,
             success=on_success,
         ).run_in_background()
         
-    action.triggered.connect(on_triggered)
-    menu.addAction(action)
+    act_batch.triggered.connect(on_batch_triggered)
+    
+    # Action 2: Skip AI for All Cards in Deck
+    act_skip = ai_menu.addAction("Skip AI for All Cards in Deck")
+    
+    def on_skip_triggered() -> None:
+        from aqt.operations import QueryOp
+        
+        def run_skip(col) -> tuple[str, list[int]]:
+            deck_name = get_deck_name(col)
+            card_ids = col.find_cards(f'\"deck:{deck_name}\"')
+            return deck_name, card_ids
+            
+        def on_success(res) -> None:
+            deck_name, card_ids = res
+            if not card_ids:
+                tooltip("AI-Hints: No cards found in this deck.")
+                return
+            if not askUser(f"Are you sure you want to mark all {len(card_ids)} cards in deck '{deck_name}' as skipped for AI hints?"):
+                return
+            
+            def do_skip(col):
+                return skip_ai_hints_for_cards(card_ids)
+                
+            def on_skip_done(skip_res):
+                total, changed, changed_notes = skip_res
+                if changed > 0:
+                    tooltip(f"AI-Hints: Marked {changed} cards as skipped.")
+                else:
+                    tooltip("AI-Hints: Cards were already skipped or couldn't be updated.")
+                    
+            QueryOp(
+                parent=mw,
+                op=do_skip,
+                success=on_skip_done,
+            ).run_in_background()
+            
+        QueryOp(
+            parent=mw,
+            op=run_skip,
+            success=on_success,
+        ).run_in_background()
+        
+    act_skip.triggered.connect(on_skip_triggered)
+    
+    # Action 3: Clear AI-Hints for All Cards in Deck
+    act_clear = ai_menu.addAction("Clear AI-Hints for All Cards in Deck")
+    
+    def on_clear_triggered() -> None:
+        from aqt.operations import QueryOp
+        
+        def run_clear(col) -> tuple[str, list[int]]:
+            deck_name = get_deck_name(col)
+            card_ids = col.find_cards(f'\"deck:{deck_name}\"')
+            return deck_name, card_ids
+            
+        def on_success(res) -> None:
+            deck_name, card_ids = res
+            if not card_ids:
+                tooltip("AI-Hints: No cards found in this deck.")
+                return
+            if not askUser(f"Are you sure you want to clear AI hints from all {len(card_ids)} cards in deck '{deck_name}'? This cannot be undone."):
+                return
+                
+            def do_clear(col):
+                return clear_ai_hints_for_cards(card_ids)
+                
+            def on_clear_done(clear_res):
+                total, changed, changed_notes = clear_res
+                if changed > 0:
+                    tooltip(f"AI-Hints: Cleared data from {changed} cards.")
+                else:
+                    tooltip("AI-Hints: No data found to clear.")
+                    
+            QueryOp(
+                parent=mw,
+                op=do_clear,
+                success=on_clear_done,
+            ).run_in_background()
+            
+        QueryOp(
+            parent=mw,
+            op=run_clear,
+            success=on_success,
+        ).run_in_background()
+        
+    act_clear.triggered.connect(on_clear_triggered)
     
 
 def update_bottom_bar_button(card=None):

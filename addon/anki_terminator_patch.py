@@ -161,7 +161,84 @@ def patch_anki_terminator():
     resizable_web_view_class.load_and_interact = patched_load_and_interact
     resizable_web_view_class._ai_hints_patched = True
 
+def should_bypass_cleaning() -> bool:
+    import sys
+    frame = sys._getframe(1)
+    
+    addon_pkg = None
+    try:
+        from . import ADDON_PACKAGE
+        addon_pkg = ADDON_PACKAGE
+    except Exception:
+        pass
+        
+    while frame:
+        func_name = frame.f_code.co_name
+        mod_name = frame.f_globals.get("__name__", "")
+        filename = frame.f_code.co_filename
+        
+        # Skip the patch's own frames
+        if "anki_terminator_patch" in mod_name or func_name == "should_bypass_cleaning":
+            frame = frame.f_back
+            continue
+            
+        # 1. Database/collection note saving or editor functions
+        if func_name in (
+            "loadNote", "setNote", "set_note", "saveNow", "_save_current_note",
+            "_to_backend_note", "update_note", "add_note", "flush", "addNote",
+            "updateNote", "write", "save", "write_note", "add_or_update"
+        ):
+            return True
+            
+        # 2. Addon-initiated calls
+        if addon_pkg and mod_name.startswith(addon_pkg):
+            return True
+        if mod_name.startswith("addon") or mod_name.startswith("AI-Hints") or mod_name.startswith("ai_hints"):
+            return True
+            
+        # 3. Addon path check fallback
+        if "AI-Hints/addon" in filename.replace("\\", "/") or "ai_hints/addon" in filename.replace("\\", "/"):
+            return True
+            
+        frame = frame.f_back
+    return False
+
+class CleanFieldsList(list):
+    def __getitem__(self, idx):
+        val = super().__getitem__(idx)
+        if isinstance(idx, slice):
+            return [clean_ai_hints_from_text(v) if (isinstance(v, str) and not should_bypass_cleaning()) else v for v in val]
+        if isinstance(val, str) and not should_bypass_cleaning():
+            return clean_ai_hints_from_text(val)
+        return val
+
+    def __iter__(self):
+        for val in super().__iter__():
+            if isinstance(val, str) and not should_bypass_cleaning():
+                yield clean_ai_hints_from_text(val)
+            else:
+                yield val
+
+def patch_anki_note_fields():
+    try:
+        import anki.notes
+        if hasattr(anki.notes.Note, "_ai_hints_fields_patched"):
+            return
+            
+        original_init = anki.notes.Note.__init__
+        def patched_init(self, *args, **kwargs):
+            original_init(self, *args, **kwargs)
+            self.fields = CleanFieldsList(self.fields)
+            
+        anki.notes.Note.__init__ = patched_init
+        anki.notes.Note._ai_hints_fields_patched = True
+    except Exception:
+        pass
+
 def setup_anki_terminator_patch():
+    # Patch Note.fields immediately
+    patch_anki_note_fields()
+    
     # Attempt patching immediately in case already loaded
     patch_anki_terminator()
     try:

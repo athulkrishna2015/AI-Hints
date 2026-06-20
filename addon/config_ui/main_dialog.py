@@ -1700,9 +1700,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             )
 
         clean_btn.clicked.connect(do_clean)
-        cancel_btn.clicked.connect(dialog.reject)
-
-        dialog.exec()
+        dialog.setModal(False)
+        dialog.show()
+        from aqt import mw
+        mw._orphaned_hints_dialog = dialog
 
     def on_clean_naked_json(self):
         """Scans all notes and safely removes raw, naked JSON blocks not wrapped in AI div containers."""
@@ -2120,8 +2121,10 @@ def _show_orphans_cleanup_dialog_standalone(parent):
         )
 
     clean_btn.clicked.connect(do_clean)
-    cancel_btn.clicked.connect(dialog.reject)
-    dialog.exec()
+    dialog.setModal(False)
+    dialog.show()
+    from aqt import mw
+    mw._orphaned_hints_dialog = dialog
 
 def _log_orphaned_results(orphaned_hints, is_standalone=False):
     prefix = "Standalone orphan scan" if is_standalone else "Orphaned hints scan"
