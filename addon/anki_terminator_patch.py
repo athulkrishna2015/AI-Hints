@@ -251,9 +251,18 @@ def setup_anki_terminator_patch():
     try:
         from aqt import gui_hooks
         def clean_browser_row(item_id, is_card, row, columns):
-            for cell in row.cells:
-                if cell.text:
-                    cell.text = clean_ai_hints_from_text(cell.text)
+            try:
+                cells = getattr(row, "cells", None)
+                if cells:
+                    for cell in cells:
+                        text = getattr(cell, "text", None)
+                        if text:
+                            cell.text = clean_ai_hints_from_text(text)
+            except Exception:
+                pass
         gui_hooks.browser_did_fetch_row.append(clean_browser_row)
     except Exception:
         pass
+
+# Prevent Anki_Terminator_Performance_Companion from overriding this with its buggy version
+_companion_optimized = True

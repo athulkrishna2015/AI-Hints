@@ -133,6 +133,13 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
  
+### June 20, 2026 (v3.8.0)
+- **Targeted Clean Orphans Maintenance**: Added the ability to run "Clean Orphaned Hints..." directly from the Card Browser context menu (scoping to the selected cards) or from the Deck Browser cogwheel menu (scoping to the selected deck and its subdecks).
+- **Non-Modal Cleanup Dialog**: Configured the orphaned hints cleanup dialog to be non-modal so that users can interact with Anki and the card browser while reviewing and cleaning orphaned hints.
+- **Anki Terminator Companion Conflict Fix**: Fixed a bug where the third-party `Anki_Terminator_Performance_Companion` addon overwrote the `clean_ai_hints_from_text` function with a buggy version that stripped cloze tags (e.g. converting `{{c1::വിൺ}}` to empty placeholders/whitespace). We now declare `_companion_optimized = True` to prevent this override safely.
+- **Card Browser Row Fetch Robustness**: Enhanced `browser_did_fetch_row` hook error handling to gracefully handle cases where row cells are missing, avoiding hook deactivation by Anki.
+- **Unified Cogwheel Menu Integration**: Moved the batch generation menu entry and added the "Clean Orphaned Hints..." action to the deck selector cogwheel sub-menu in the deck browser.
+
 ### June 19, 2026 (v3.7.0)
 - **Organized Card Browser Context Menu**: Moved "✨ Batch Generation..." and "Clear AI-Hints" into a clean "AI Hints" nested sub-menu to avoid cluttering Anki's main context menu.
 - **Bulk Skip AI Generation**: Added a new "Skip AI for Selected Cards" action inside the card browser's "AI Hints" sub-menu. This allows marking multiple selected cards as skipped in the database in a single click.

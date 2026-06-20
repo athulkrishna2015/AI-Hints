@@ -1702,7 +1702,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         clean_btn.clicked.connect(do_clean)
         dialog.setModal(False)
         dialog.show()
-        from aqt import mw
         mw._orphaned_hints_dialog = dialog
 
     def on_clean_naked_json(self):
@@ -1923,14 +1922,14 @@ def check_support_on_update():
     except Exception as e:
         logger.error(f"AI-Hints: Update check failed: {e}")
 
-def on_clean_orphaned_hints():
+def on_clean_orphaned_hints(query="", scope_str="entire collection"):
     """Run the orphaned-hints scan and show the cleanup dialog without opening the config window."""
     from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton
     from .main_dialog import _show_orphans_cleanup_dialog_standalone
-    _show_orphans_cleanup_dialog_standalone(mw)
+    _show_orphans_cleanup_dialog_standalone(mw, query, scope_str)
 
 
-def _show_orphans_cleanup_dialog_standalone(parent):
+def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire collection"):
     """Standalone version of the orphan scan + cleanup dialog that does not require ConfigDialog."""
     from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton
     from ..card_parser import CardParser
@@ -1938,14 +1937,10 @@ def _show_orphans_cleanup_dialog_standalone(parent):
 
     parser = CardParser()
 
-    # Always scan the full collection when launched from the Tools menu
-    query = ""
-    scope_str = "entire collection"
-
     nids = mw.col.find_notes(query)
     total = len(nids)
     if total == 0:
-        QMessageBox.information(parent, "AI-Hints", "No notes found in your collection!")
+        QMessageBox.information(parent, "AI-Hints", f"No notes found in {scope_str}!")
         return
 
     progress = QProgressDialog(f"Scanning {scope_str} for orphaned hints...", "Cancel", 0, total, parent)
@@ -2123,7 +2118,6 @@ def _show_orphans_cleanup_dialog_standalone(parent):
     clean_btn.clicked.connect(do_clean)
     dialog.setModal(False)
     dialog.show()
-    from aqt import mw
     mw._orphaned_hints_dialog = dialog
 
 def _log_orphaned_results(orphaned_hints, is_standalone=False):

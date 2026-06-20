@@ -1098,6 +1098,17 @@ def on_browser_context_menu(browser, menu):
     act_clear.setEnabled(has_selection)
     act_clear.triggered.connect(lambda _checked=False, b=browser: clear_ai_hints_from_browser_selection(b))
 
+    # Action 4: Clean Orphaned Hints...
+    act_orphans = ai_menu.addAction("🧹 Clean Orphaned Hints...")
+    act_orphans.setEnabled(has_selection)
+    def on_clean_orphans_triggered() -> None:
+        from .config_ui.main_dialog import on_clean_orphaned_hints
+        card_ids = _selected_browser_card_ids(browser)
+        if card_ids:
+            query = "cid:" + ",".join(map(str, card_ids))
+            on_clean_orphaned_hints(query, f"selected cards ({len(card_ids)})")
+    act_orphans.triggered.connect(on_clean_orphans_triggered)
+
 def on_deck_browser_context_menu(menu, did) -> None:
     from aqt.qt import QMenu, QAction
     from aqt.utils import askUser
@@ -1218,6 +1229,24 @@ def on_deck_browser_context_menu(menu, did) -> None:
         ).run_in_background()
         
     act_clear.triggered.connect(on_clear_triggered)
+    
+    # Action 4: Clean Orphaned Hints...
+    act_orphans = ai_menu.addAction("🧹 Clean Orphaned Hints...")
+    def on_clean_orphans_triggered() -> None:
+        from aqt.operations import QueryOp
+        def run_orphans(col) -> str:
+            return get_deck_name(col)
+        def on_success(deck_name: str) -> None:
+            if deck_name:
+                from .config_ui.main_dialog import on_clean_orphaned_hints
+                query = f'\"deck:{deck_name}\"'
+                on_clean_orphaned_hints(query, f"deck '{deck_name}'")
+        QueryOp(
+            parent=mw,
+            op=run_orphans,
+            success=on_success,
+        ).run_in_background()
+    act_orphans.triggered.connect(on_clean_orphans_triggered)
     
 
 def update_bottom_bar_button(card=None):
