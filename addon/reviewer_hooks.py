@@ -88,7 +88,7 @@ def get_addon_version() -> str:
     """Return the addon version string (e.g. '1.4.2')."""
     return _ADDON_VERSION
 
-def _apply_results_to_card(card, data, is_manual=True, web=None):
+def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=False):
     if not card or not data:
         return False
 
@@ -132,10 +132,13 @@ def _apply_results_to_card(card, data, is_manual=True, web=None):
         
         # Update UI if we are still on the card in this webview
         if web:
-            try:
-                refresh_current_card(card=fresh_card, web=web)
-            except Exception as e:
-                logger.error(f"AI-Hints card refresh failed: {e}")
+            if skip_redraw:
+                _push_hint_data_to_frontend(web, fresh_card, data, is_manual=is_manual)
+            else:
+                try:
+                    refresh_current_card(card=fresh_card, web=web)
+                except Exception as e:
+                    logger.error(f"AI-Hints card refresh failed: {e}")
         
         if is_manual and config.get("show_in_popup", False):
             global _popup_dialog_instance
@@ -1634,7 +1637,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         
         # Save skipped state to database to ensure verification passes and the UI reflects skip state
         data = {"hints": [], "options": [], "_skipped": True}
-        _apply_results_to_card(card, data, is_manual=is_manual, web=web)
+        _apply_results_to_card(card, data, is_manual=is_manual, web=web, skip_redraw=is_pregen)
 
         # If this was a pre-generation, trigger the next one so the chain doesn't break
         if is_pregen:
@@ -1681,7 +1684,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                 if data and (data.get("hints") or data.get("options")):
                     if is_on_screen:
                          logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Applied immediately).")
-                         _apply_results_to_card(card, data, is_manual=False, web=web)
+                         _apply_results_to_card(card, data, is_manual=False, web=web, skip_redraw=True)
                          # Explicitly clear frontend state as well for double safety
                          _set_frontend_generating(web, False, card_id, is_pregen)
                     else:
@@ -2044,7 +2047,7 @@ def init_hooks():
             else:
                 data = _pregenerated_data.pop(card.id)
                 logger.debug(f"AI-Hints: Applying pre-generated data for card {card.id}")
-                _apply_results_to_card(card, data, is_manual=False)
+                _apply_results_to_card(card, data, is_manual=False, skip_redraw=True)
                 # Now that this card is done, pre-generate the NEXT one
                 _trigger_next_pregeneration(card.id)
                 return

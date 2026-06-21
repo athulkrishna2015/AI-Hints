@@ -133,6 +133,9 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
  
+### June 21, 2026 (v3.8.1)
+- **Pregenerated Card Momentum Scrolling Fix**: Resolved a bug where trackpad kinetic/momentum scrolling on the previous card automatically triggered the "Show Answer" gesture (revealing the cloze) on the next card if that card was pregenerated. We now update the webview dynamically via direct JS push for pregenerated cards, avoiding recursive page reloads and event loop disruption.
+
 ### June 20, 2026 (v3.8.0)
 - **Targeted Clean Orphans Maintenance**: Added the ability to run "Clean Orphaned Hints..." directly from the Card Browser context menu (scoping to the selected cards) or from the Deck Browser cogwheel menu (scoping to the selected deck and its subdecks).
 - **Non-Modal Cleanup Dialog**: Configured the orphaned hints cleanup dialog to be non-modal so that users can interact with Anki and the card browser while reviewing and cleaning orphaned hints.
