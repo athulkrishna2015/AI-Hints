@@ -133,6 +133,9 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 ## Changelog
  
+### June 22, 2026 (v3.8.2)
+- **Tools Menu Clean Orphans Fix**: Fixed a `TypeError: bad argument type for built-in operation` crash when running the "Clean Orphaned Hints..." maintenance tool from the Tools menu. This was caused by PyQt passing a boolean argument to the trigger slot, which overrode the default query string. We now strictly validate and sanitize the parameter type.
+
 ### June 21, 2026 (v3.8.1)
 - **Pregenerated Card Momentum Scrolling Fix**: Resolved a bug where trackpad kinetic/momentum scrolling on the previous card automatically triggered the "Show Answer" gesture (revealing the cloze) on the next card if that card was pregenerated. We now update the webview dynamically via direct JS push for pregenerated cards, avoiding recursive page reloads and event loop disruption.
 
