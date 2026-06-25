@@ -799,9 +799,127 @@ def _get_card_and_web_from_context(context):
         
     return card, web
 
+def edit_item(card, web, item_type: str, index: int, new_value: str):
+    if not card:
+        logger.error("AI-Hints: No card provided for edit_item")
+        return
+
+    import copy
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
+    )
+
+    note = card.note()
+
+    # 1. Try memory cache first
+    cached = _cached_hints_for_card(card)
+    data = None
+    toggles = None
+    if cached:
+        # Avoid direct modification in-place of cached object
+        data = copy.deepcopy(cached.get("data"))
+        toggles = copy.deepcopy(cached.get("toggles"))
+
+    # 2. If not in cache, load from note
+    if not data or not toggles:
+        block_html = parser.find_hints_block(note, card)
+        if block_html:
+            import re, html as _html
+            m = re.search(
+                r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
+                block_html, re.DOTALL | re.IGNORECASE
+            )
+            if m:
+                import json as _json
+                try:
+                    raw = _html.unescape(m.group(1) or "")
+                    parsed = _json.loads(raw)
+                    card_ord = getattr(card, "ord", None)
+                    card_key = None
+                    if card_ord is not None:
+                        card_key = f"c{card_ord + 1}"
+
+                    if isinstance(parsed, dict) and card_key and card_key in parsed and "hints" not in parsed:
+                        data = parsed[card_key]
+                    else:
+                        data = parsed
+                    toggles = parser._extract_toggles_from_block(block_html)
+                except Exception as e:
+                    logger.error(f"AI-Hints: Failed to parse hints JSON: {e}")
+
+    # 3. Fallbacks
+    if not data:
+        data = {"hints": [], "options": []}
+    if not toggles:
+        toggles = {
+            "show_hints_button": config.get("show_hints_button", True),
+            "show_options_button": config.get("show_options_button", True)
+        }
+
+    # Ensure deep copies/mutable items
+    if not isinstance(data, dict):
+        data = {"hints": [], "options": []}
+    if "hints" not in data or not isinstance(data["hints"], list):
+        data["hints"] = []
+    if "options" not in data or not isinstance(data["options"], list):
+        data["options"] = []
+
+    # 4. Modify the item
+    if item_type == "hints":
+        items = list(data["hints"])
+        if 0 <= index < len(items):
+            items[index] = new_value
+            data["hints"] = items
+        else:
+            logger.error(f"AI-Hints: Edit index {index} out of range for hints ({len(items)})")
+            return
+    elif item_type == "options":
+        items = list(data["options"])
+        if 0 <= index < len(items):
+            items[index] = new_value
+            data["options"] = items
+            if index == 0:
+                data["correct_answer"] = new_value
+        else:
+            logger.error(f"AI-Hints: Edit index {index} out of range for options ({len(items)})")
+            return
+    else:
+        logger.error(f"AI-Hints: Unknown edit type {item_type}")
+        return
+
+    # 5. Save back to note and update Anki database
+    if parser.update_note_with_hints(note, data, toggles, card):
+        mw.col.update_note(note)
+        # Update cache with the modified dict
+        _remember_generated_hints(card, data, toggles)
+        # Push updated data to frontend (without refresh/flicker)
+        if web:
+            _push_hint_data_to_frontend(web, card, data, is_manual=False)
+            tooltip("AI-Hints: Saved.")
+    else:
+        logger.error("AI-Hints: Failed to update note with edited items")
+
 def on_webview_did_receive_js_message(handled, message, context):
     card, web = _get_card_and_web_from_context(context)
     
+    if message.startswith("{"):
+        try:
+            import json as _json
+            data = _json.loads(message)
+            if isinstance(data, dict) and data.get("action") == "ai_hints_edit_item":
+                edit_item(
+                    card=card,
+                    web=web,
+                    item_type=data.get("type"),
+                    index=data.get("index"),
+                    new_value=data.get("value")
+                )
+                return (True, None)
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to parse JS JSON message: {e}")
+
     if message == "ai_hints_generate":
         generate_hints(card=card, web=web)
         return (True, None)

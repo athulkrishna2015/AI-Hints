@@ -10,6 +10,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 ## Features
 
 - **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, **Antigravity Proxy**, and any OpenAI-compatible local API (like Ollama or LM Studio).
+- **Inline Editing (v4.0.0)**: Hold `Ctrl` (or `Cmd` on macOS) to highlight any hint or option during review, and click to edit it inline instantly inside a dynamic `<textarea>`. Press `Enter` (without Shift) or blur to save, or `Escape` to cancel. Saves edits directly to the note's JSON block in the database, updates the cache, and updates the webview dynamically with zero page flicker.
 - **Native Antigravity Daemon**: Features seamless embedded integration of the [Antigravity Cloud Proxy](https://github.com/frieser/antigravity-proxy). Automatically manages background executable lifecycle, offers one-click account setup dashboard, and provides direct gateway to premier LLMs completely locally.
 - **Unified UI System**: Desktop and Mobile now share the exact same rendering engine (`template.js`), ensuring consistent features (like shuffling and MathJax) across all devices.
 - **Optimized Prompt Efficiency (v3.4.1)**: Re-engineered system prompts for maximum token efficiency (~1k tokens saved per request) while improving distractor quality via **Sequential Parallelism**.
@@ -132,6 +133,9 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 
 
 ## Changelog
+
+### June 25, 2026 (v4.0.0)
+- **Inline Editing of Hints and Options**: Introduced interactive inline editing for hints and multiple-choice options directly during review. Holding `Ctrl` (or `Cmd` on macOS) highlights editable items on hover. Ctrl-clicking (or Cmd-clicking) an item turns it into an inline editor (`<textarea>`). Edits are saved on `Enter` or blur (and cancelled with `Escape`), which surgically updates the note's JSON block in the Anki database, synchronizes the `correct_answer` field if the correct option (index 0) was modified, updates the generated hint cache, and pushes the updated data back to the frontend dynamically with zero page flicker.
  
 ### June 22, 2026 (v3.8.2)
 - **Tools Menu Clean Orphans Fix**: Fixed a `TypeError: bad argument type for built-in operation` crash when running the "Clean Orphaned Hints..." maintenance tool from the Tools menu. This was caused by PyQt passing a boolean argument to the trigger slot, which overrode the default query string. We now strictly validate and sanitize the parameter type.

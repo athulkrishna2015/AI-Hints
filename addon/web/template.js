@@ -38,10 +38,58 @@
         .nightMode .ai-hints-btn-warning:hover { background-color: #3e331b !important; }
         @keyframes ai-hints-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
         @keyframes ai-hints-pregen-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+        .ai-hints-ctrl-active .ai-hints-hint-list li:hover,
+        .ai-hints-ctrl-active .ai-hints-list li:hover,
+        .ai-hints-ctrl-active .ai-hints-warning-item span:hover {
+            cursor: pointer;
+            background-color: rgba(255, 235, 59, 0.15) !important;
+            border-radius: 4px;
+        }
+        .nightMode.ai-hints-ctrl-active .ai-hints-hint-list li:hover,
+        .nightMode.ai-hints-ctrl-active .ai-hints-list li:hover,
+        .nightMode.ai-hints-ctrl-active .ai-hints-warning-item span:hover {
+            background-color: rgba(255, 235, 59, 0.08) !important;
+        }
+        .ai-hints-inline-editor {
+            width: 100%;
+            min-height: 40px;
+            font-family: inherit;
+            font-size: inherit;
+            color: inherit;
+            background: #fff;
+            border: 1px solid #007acc;
+            border-radius: 4px;
+            padding: 4px;
+            box-sizing: border-box;
+            resize: vertical;
+            outline: none;
+        }
+        .nightMode .ai-hints-inline-editor {
+            background: #2b2b2b;
+            border-color: #007acc;
+            color: #eee;
+        }
+        .ai-hints-editing {
+            list-style-type: none !important;
+            padding-left: 0 !important;
+        }
     `;
 
     // 2. State & Helpers
     const isAddonActive = !!window.aiHintsUiConfig;
+
+    if (isAddonActive) {
+        const updateActiveState = (e, isDown) => {
+            const keys = ['Control', 'Meta'];
+            if (keys.includes(e.key)) {
+                if (isDown) document.body.classList.add('ai-hints-ctrl-active');
+                else document.body.classList.remove('ai-hints-ctrl-active');
+            }
+        };
+        window.addEventListener('keydown', (e) => updateActiveState(e, true));
+        window.addEventListener('keyup', (e) => updateActiveState(e, false));
+        window.addEventListener('blur', () => document.body.classList.remove('ai-hints-ctrl-active'));
+    }
 
     function hashCode(str) {
         let hash = 0;
@@ -192,8 +240,21 @@
             if (isWarning && isAddonActive) {
                 li.className = 'ai-hints-warning-item';
                 const span = document.createElement('span');
+                span.dataset.idx = index;
+                span.dataset.type = 'hints';
+                span.dataset.rawText = text;
                 span.innerHTML = convertMathDelimitersToTags(escapeHtml(text));
                 li.appendChild(span);
+                
+                if (isAddonActive) {
+                    span.addEventListener('click', (event) => {
+                        if (event.ctrlKey || event.metaKey) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            startInlineEditing(span);
+                        }
+                    });
+                }
                 
                 const delBtn = document.createElement('span');
                 delBtn.className = 'ai-hints-del-warning-btn';
@@ -212,9 +273,21 @@
                 };
                 li.appendChild(delBtn);
             } else {
+                li.dataset.idx = index;
+                li.dataset.type = title.toLowerCase().includes('hint') ? 'hints' : 'options';
+                li.dataset.rawText = text;
                 li.innerHTML = convertMathDelimitersToTags(escapeHtml(text));
                 if ((correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text))) {
                     li.className = 'ai-hints-correct';
+                }
+                if (isAddonActive) {
+                    li.addEventListener('click', (event) => {
+                        if (event.ctrlKey || event.metaKey) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            startInlineEditing(li);
+                        }
+                    });
                 }
             }
             return li;
@@ -820,6 +893,72 @@
 
             } catch (e) { console.error("AI-Hints Error:", e); }
         });
+    }
+
+    function startInlineEditing(el) {
+        if (el.dataset.editing === 'true') return;
+        el.dataset.editing = 'true';
+        el.classList.add('ai-hints-editing');
+
+        const originalHtml = el.innerHTML;
+        const input = document.createElement('textarea');
+        input.className = 'ai-hints-inline-editor';
+        input.value = el.dataset.rawText || "";
+        
+        // Stop keydown events from bubbling to Anki shortcuts
+        input.onkeydown = (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                saveEdit();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        };
+
+        el.innerHTML = '';
+        el.appendChild(input);
+        input.focus();
+        input.select();
+        
+        function saveEdit() {
+            const newValue = input.value.trim();
+            if (newValue && newValue !== el.dataset.rawText) {
+                const type = el.dataset.type;
+                const idx = el.dataset.idx;
+                
+                // Clear editing state first so blur doesn't call it again
+                el.dataset.editing = 'false';
+                el.classList.remove('ai-hints-editing');
+                
+                // Send JSON payload back to Python
+                if (typeof pycmd === 'function') {
+                    pycmd(JSON.stringify({
+                        action: "ai_hints_edit_item",
+                        type: type,
+                        index: parseInt(idx),
+                        value: newValue
+                    }));
+                }
+            } else {
+                cancelEdit();
+            }
+        }
+
+        function cancelEdit() {
+            el.dataset.editing = 'false';
+            el.classList.remove('ai-hints-editing');
+            el.innerHTML = originalHtml;
+        }
+        
+        input.onblur = () => {
+            setTimeout(() => {
+                if (el.dataset.editing === 'true') {
+                    saveEdit();
+                }
+            }, 100);
+        };
     }
 
     // API for Python
