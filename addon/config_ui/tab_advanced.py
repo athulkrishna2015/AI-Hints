@@ -8,9 +8,9 @@ class AdvancedTabMixin:
         adv_layout = QVBoxLayout()
         
         # 0. System Prompt (at top)
-        adv_layout.addWidget(QLabel("System Prompt:"))
+        adv_layout.addWidget(QLabel("Additional System Instructions (Appended to Default Prompt):"))
         self.system_prompt_edit = QTextEdit()
-        self.system_prompt_edit.setToolTip("Customize the core AI persona instructions defining generation constraints, math syntaxes, and output layout.")
+        self.system_prompt_edit.setToolTip("Enter custom instructions, formatting rules, or prompt adjustments to append to the default system prompt.")
         adv_layout.addWidget(self.system_prompt_edit)
 
         # 2. Model failure/blacklist management

@@ -286,7 +286,27 @@ class AIClient:
 
     def generate_options(self, front: str, back: str, override_provider: str = None, only_this_provider: bool = False) -> Dict[str, List[str]]:
         primary_provider = override_provider or self.config.get("ai_provider", "openai")
-        system_prompt = (self.config.get("system_prompt", "") or "").strip()
+        # Always dynamically read the core prompt from the default config.json
+        # so it gets updated automatically when the addon is upgraded.
+        default_prompt = ""
+        try:
+            import os
+            addon_dir = os.path.dirname(os.path.abspath(__file__))
+            default_config_path = os.path.join(addon_dir, "config.json")
+            if os.path.exists(default_config_path):
+                with open(default_config_path, "r", encoding="utf-8") as f:
+                    default_cfg = json.load(f)
+                    default_prompt = default_cfg.get("system_prompt", "")
+        except Exception:
+            pass
+            
+        if not default_prompt:
+            default_prompt = self.config.get("system_prompt", "")
+            
+        additional_instr = (self.config.get("additional_system_instructions", "") or "").strip()
+        system_prompt = default_prompt.strip()
+        if additional_instr:
+            system_prompt = f"{system_prompt}\n\n**USER CUSTOM INSTRUCTIONS**\n{additional_instr}"
         count = self._options_count()
         
         # Add strict formatting every time; user-provided prompts often omit the exact count.
@@ -294,7 +314,7 @@ class AIClient:
             f"{system_prompt}\n\n" if system_prompt else ""
         ) + (
             "CRITICAL:\n"
-            f"- Generate exactly {count} total options (1 correct, {count-1} distractors) and 2-3 conceptual hints.\n"
+            f"- Generate exactly {count} total options (1 correct, {count-1} distractors) and exactly 3 conceptual hints.\n"
             "- Return ONLY strictly valid raw JSON. No markdown, no preambles.\n"
             "- If using 'distractors' key, provide only incorrect options. If 'options', include the correct answer.\n"
             "- Ensure all options match the correct answer's format, length, and style perfectly.\n"

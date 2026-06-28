@@ -310,7 +310,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.local_api_key_edit.setText(local.get("api_key", ""))
         self.local_fallback_cb.setChecked(local.get("enabled", False))
         
-        self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
+        self.system_prompt_edit.setPlainText(c.get("additional_system_instructions", ""))
         
         from .tab_providers import DEFAULT_TEST_QUESTION, DEFAULT_TEST_ANSWER
         self.test_question_edit.setText(c.get("test_question_front", DEFAULT_TEST_QUESTION))
@@ -1008,7 +1008,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
     def on_restore_advanced(self):
         if not self.default_config: return
         c = self.default_config
-        self.system_prompt_edit.setPlainText(c.get("system_prompt", ""))
+        self.system_prompt_edit.setPlainText(c.get("additional_system_instructions", ""))
         tooltip("Advanced defaults restored.")
 
     def stop_migration(self):
@@ -1304,7 +1304,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 "model": self.local_model_edit.currentText().strip() or DEFAULT_MODELS["local"],
                 "api_key": self.local_api_key_edit.text().strip()
             }
-            new_config["system_prompt"] = self.system_prompt_edit.toPlainText()
+            new_config["system_prompt"] = self.default_config.get("system_prompt", "")
+            new_config["additional_system_instructions"] = self.system_prompt_edit.toPlainText()
             new_config["custom_providers"] = self.custom_providers_data
             new_config["model_fallbacks"] = self.model_fallbacks_data
             new_config["disabled_fallback_models"] = self.disabled_fallback_models_data
@@ -1394,6 +1395,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("fix_latex", False)
         config.setdefault("answer_display_position", "between")
         config.setdefault("system_prompt", "")
+        config.setdefault("additional_system_instructions", "")
         config.setdefault("show_hints_button", True)
         config.setdefault("show_options_button", True)
         if not isinstance(config.get("custom_providers", {}), dict): config["custom_providers"] = {}
