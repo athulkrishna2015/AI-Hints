@@ -189,5 +189,6 @@
   "batch_limit": 1000,
   "multithread_providers": false,
   "antigravity_accounts": "",
-  "additional_system_instructions": ""
+  "additional_system_instructions": "",
+  "model_blacklist_data": {}
 }

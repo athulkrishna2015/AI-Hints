@@ -209,12 +209,11 @@ class TestKeyRotation(unittest.TestCase):
         # Check that key_gemini_2 is not blacklisted
         self.assertNotIn(("gemini", "gemini-flash-latest", "key_gemini_2"), FAILED_COMBOS_CACHE)
 
-    @patch("addon.ai_client.BLACKLIST_FILE", "tests/test_blacklist.json")
     def test_key_blacklist_persistence(self):
         import time
-        # Clean test file if exists
-        if os.path.exists("tests/test_blacklist.json"):
-            os.remove("tests/test_blacklist.json")
+        # Clear mock config key if present
+        if "model_blacklist_data" in self.client.config:
+            del self.client.config["model_blacklist_data"]
             
         try:
             # Mark a combo as failed
@@ -223,8 +222,11 @@ class TestKeyRotation(unittest.TestCase):
             # Verify it is in cache
             self.assertIn(("gemini", "gemini-flash-latest", "my_failed_key"), FAILED_COMBOS_CACHE)
             
-            # Verify file was created
-            self.assertTrue(os.path.exists("tests/test_blacklist.json"))
+            # Verify it was saved to config
+            self.assertIn("model_blacklist_data", self.client.config)
+            saved_data = self.client.config["model_blacklist_data"]
+            self.assertEqual(saved_data.get("version"), 3)
+            self.assertIn("gemini|gemini-flash-latest|my_failed_key", saved_data.get("combos_expiries", {}))
             
             # Clear cache and reload
             FAILED_COMBOS_CACHE.clear()
@@ -237,8 +239,8 @@ class TestKeyRotation(unittest.TestCase):
             self.assertGreater(FAILED_COMBOS_CACHE[("gemini", "gemini-flash-latest", "my_failed_key")], time.time())
             
         finally:
-            if os.path.exists("tests/test_blacklist.json"):
-                os.remove("tests/test_blacklist.json")
+            if "model_blacklist_data" in self.client.config:
+                del self.client.config["model_blacklist_data"]
 
     @patch("urllib.request.urlopen")
     def test_gemini_rate_limit_checks_other_models_before_blacklisting(self, mock_urlopen):

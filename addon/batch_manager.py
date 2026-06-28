@@ -10,7 +10,6 @@ from .ai_client import AIClient
 from .card_parser import CardParser
 
 ADDON_PATH = os.path.dirname(__file__)
-STATE_FILE = os.path.join(ADDON_PATH, "batch_state.json")
 
 class BatchManager:
     def __init__(self):
@@ -42,12 +41,25 @@ class BatchManager:
         
         self.load_state()
 
+    def _state_file_path(self) -> str:
+        """Returns the path to the batch state file, storing it in the active profile directory if available."""
+        try:
+            from aqt import mw
+            if mw is not None and "Mock" not in type(mw).__name__ and getattr(mw, "pm", None) is not None:
+                profile_dir = mw.pm.profileFolder()
+                if profile_dir:
+                    return os.path.join(profile_dir, "ai_hints_batch_state.json")
+        except Exception:
+            pass
+        return os.path.join(ADDON_PATH, "batch_state.json")
+
     def load_state(self):
-        if not os.path.exists(STATE_FILE):
+        state_file = self._state_file_path()
+        if not os.path.exists(state_file):
             self.jobs = {}
             return
         try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
+            with open(state_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             
             # Detect new nested structure vs legacy plain jobs dict
@@ -103,7 +115,8 @@ class BatchManager:
                         "last_run_stats": self.last_run_stats
                     }
                 }
-                with open(STATE_FILE, "w", encoding="utf-8") as f:
+                state_file = self._state_file_path()
+                with open(state_file, "w", encoding="utf-8") as f:
                     json.dump(payload, f, indent=2)
             except Exception as e:
                 logger.error(f"AI-Hints BatchManager failed save: {e}")

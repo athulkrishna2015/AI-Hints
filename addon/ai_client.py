@@ -1317,7 +1317,7 @@ class AIClient:
         return self.config.get("model_cooldown_minutes", 10) * 60
 
     def _save_blacklist(self):
-        """Persists the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK to disk."""
+        """Persists the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK to meta.json config."""
         try:
             # Convert tuple keys to strings for JSON
             expiries = {f"{p}|{m}|{k}": e for (p, m, k), e in FAILED_COMBOS_CACHE.items()}
@@ -1330,28 +1330,36 @@ class AIClient:
                 "version": 3
             }
             
-            with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            # Update self.config in memory
+            self.config["model_blacklist_data"] = data
+            
+            # Save to meta.json via writeConfig
+            try:
+                from aqt import mw
+                if mw is not None and mw.addonManager is not None:
+                    addon_package = __name__.split(".")[0]
+                    mw.addonManager.writeConfig(addon_package, self.config)
+            except Exception:
+                pass
         except Exception as e:
             logger.error(f"AI-Hints: Failed to save blacklist: {e}")
 
     def _load_blacklist(self):
-        """Loads the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK from disk."""
+        """Loads the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK from meta.json config."""
         global _BLACKLIST_LOADED
         _BLACKLIST_LOADED = True
-        if not os.path.exists(BLACKLIST_FILE):
-            return
         try:
-            with open(BLACKLIST_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = self.config.get("model_blacklist_data")
+            if not isinstance(data, dict):
+                return
             
             now = time.time()
             
-            # Clear existing memory caches to stay in sync with disk
+            # Clear existing memory caches to stay in sync
             FAILED_COMBOS_CACHE.clear()
             RATE_LIMIT_STREAK.clear()
 
-            if isinstance(data, dict) and data.get("version") == 3:
+            if data.get("version") == 3:
                 expiries = data.get("combos_expiries", {})
                 streaks = data.get("streaks", {})
                 

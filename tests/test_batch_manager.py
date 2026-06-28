@@ -50,7 +50,8 @@ sys.dont_write_bytecode = True
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-from addon.batch_manager import BatchManager, initialize_batch_manager, STATE_FILE, batch_manager
+from addon.batch_manager import BatchManager, initialize_batch_manager, batch_manager
+STATE_FILE = batch_manager._state_file_path()
 
 class TestBatchManager(unittest.TestCase):
 

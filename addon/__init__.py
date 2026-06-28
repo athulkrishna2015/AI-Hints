@@ -15,6 +15,7 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         from .proxy_manager import proxy_manager
         from .mobile_sync import auto_update_mobile_setup, sync_mobile_script
         from aqt.qt import QTimer
+        import os
         
         # Clear logs on startup if enabled
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
@@ -29,6 +30,23 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         else:
             logger.setLevel(logging.INFO)
 
+        # Migrate batch_state.json to profile folder if present in addon folder
+        try:
+            addon_dir = os.path.dirname(os.path.abspath(__file__))
+            addon_batch_state = os.path.join(addon_dir, "batch_state.json")
+            if os.path.exists(addon_batch_state):
+                profile_dir = mw.pm.profileFolder()
+                if profile_dir:
+                    dest = os.path.join(profile_dir, "ai_hints_batch_state.json")
+                    if not os.path.exists(dest):
+                        import shutil
+                        shutil.move(addon_batch_state, dest)
+                        logger.info("AI-Hints: Migrated batch_state.json to profile folder.")
+                    else:
+                        os.remove(addon_batch_state)
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to migrate batch_state.json: {e}")
+
         # Delay startup tasks to avoid resource contention and potential crashes.
         # This also ensures we don't interfere with Anki's initial startup sync.
         def _delayed_startup():
@@ -36,6 +54,13 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
                 return
             proxy_manager.start(config)
             auto_update_mobile_setup()
+            
+            # Reload batch state once profile folder is fully available
+            try:
+                from .batch_manager import batch_manager
+                batch_manager.load_state()
+            except Exception as e:
+                logger.error(f"AI-Hints: Failed to reload batch state on startup: {e}")
             
         QTimer.singleShot(2000, _delayed_startup)
 
