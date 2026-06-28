@@ -31,6 +31,12 @@ class LatexFixerTests(unittest.TestCase):
             # Mixed content
             ("The slope (m) is delta_y / delta_x.", "The slope (m) is \\(\\delta_y / \\delta_x\\)."),
             ("Here is lambda: lambda_0.", "Here is \\(\\lambda\\): \\(\\lambda_0\\)."),
+
+            # Control character restoration (representing what happens when JSON parses unescaped LaTeX backslashes)
+            ("a\neq b\neq c", "\\(a\\neq b\\neq c\\)"),
+            ("\to", "\\(\\to\\)"),
+            ("\frac{1}{2}", "\\(\\frac{1}{2}\\)"),
+            ("\beta", "\\(\\beta\\)"),
         ]
 
         for input_text, expected in test_cases:

@@ -12,6 +12,11 @@ from typing import List, Dict, Any, Tuple
 from .logger import logger, state
 
 try:
+    from .latex_fixer import repair_latex_control_chars
+except ImportError:
+    repair_latex_control_chars = lambda x: x
+
+try:
     from .json_repair import loads as repair_loads
 except ImportError:
     repair_loads = json.loads
@@ -977,7 +982,7 @@ class AIClient:
             "options": self._normalize_string_list(parsed.get("options", [])),
         }
         if "correct_answer" in parsed:
-            result["correct_answer"] = parsed["correct_answer"]
+            result["correct_answer"] = self._clean_ai_math_output(str(parsed["correct_answer"]))
         if "distractors" in parsed:
             result["distractors"] = self._normalize_string_list(parsed["distractors"])
         return result
@@ -1617,6 +1622,8 @@ class AIClient:
     def _clean_ai_math_output(self, text: str) -> str:
         if not text:
             return ""
+        
+        text = repair_latex_control_chars(text)
         
         # 1. Strip trailing JSON or technical metadata hallucinations
         # (e.g. "Answer: C {"hints": [...], "options": [...]} ")

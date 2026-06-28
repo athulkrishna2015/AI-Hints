@@ -338,10 +338,11 @@ class TestPregeneration(unittest.TestCase):
         
         # Verify separators and actions
         parent_menu_mock.addSeparator.assert_called_once()
-        self.assertEqual(submenu_mock.addAction.call_count, 3)
+        self.assertEqual(submenu_mock.addAction.call_count, 4)
         submenu_mock.addAction.assert_any_call("✨ Batch Generation...")
         submenu_mock.addAction.assert_any_call("Skip AI for Selected Cards")
         submenu_mock.addAction.assert_any_call("Clear AI-Hints")
+        submenu_mock.addAction.assert_any_call("🧹 Clean Orphaned Hints...")
 
 if __name__ == '__main__':
     unittest.main()

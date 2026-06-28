@@ -3,11 +3,12 @@ import json
 import html
 from typing import Any, List, Optional, Tuple, Dict
 try:
-    from .latex_fixer import fix_latex, normalize_math_text
+    from .latex_fixer import fix_latex, normalize_math_text, repair_latex_control_chars
 except ImportError:
     # Fallback/debug info
     fix_latex = lambda x, **kwargs: x
     normalize_math_text = lambda x, **kwargs: x
+    repair_latex_control_chars = lambda x: x
 
 class CardParser:
 
@@ -1091,7 +1092,18 @@ class CardParser:
         # Clean up any HTML line breaks, divs, p tags, or styling tags that Anki's editor might have inserted
         cleaned = raw_payload.replace("&nbsp;", " ").replace("\xa0", " ")
         cleaned = re.sub(r'</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>', '\n', cleaned)
-        return json.loads(html.unescape(cleaned))
+        parsed = json.loads(html.unescape(cleaned))
+
+        def repair_val(val: Any) -> Any:
+            if isinstance(val, dict):
+                return {k: repair_val(v) for k, v in val.items()}
+            elif isinstance(val, list):
+                return [repair_val(item) for item in val]
+            elif isinstance(val, str):
+                return repair_latex_control_chars(val)
+            return val
+
+        return repair_val(parsed)
 
     def _is_keyed_payload(self, payload: Dict[str, Any]) -> bool:
         if not isinstance(payload, dict):
