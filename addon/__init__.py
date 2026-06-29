@@ -30,22 +30,67 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         else:
             logger.setLevel(logging.INFO)
 
-        # Migrate batch_state.json to profile folder if present in addon folder
+        # Migrate batch_state.json and proxy bin files to profile folder
         try:
             addon_dir = os.path.dirname(os.path.abspath(__file__))
-            addon_batch_state = os.path.join(addon_dir, "batch_state.json")
-            if os.path.exists(addon_batch_state):
-                profile_dir = mw.pm.profileFolder()
-                if profile_dir:
-                    dest = os.path.join(profile_dir, "ai_hints_batch_state.json")
+            profile_dir = mw.pm.profileFolder()
+            if profile_dir:
+                # 1. Batch state migration
+                addon_batch_state = os.path.join(addon_dir, "batch_state.json")
+                root_batch_state = os.path.join(profile_dir, "ai_hints_batch_state.json")
+                dest_bin_dir = os.path.join(profile_dir, "ai_hints_bin")
+                os.makedirs(dest_bin_dir, exist_ok=True)
+                dest = os.path.join(dest_bin_dir, "ai_hints_batch_state.json")
+                
+                if os.path.exists(addon_batch_state):
                     if not os.path.exists(dest):
                         import shutil
                         shutil.move(addon_batch_state, dest)
-                        logger.info("AI-Hints: Migrated batch_state.json to profile folder.")
+                        logger.info("AI-Hints: Migrated batch_state.json to profile bin folder.")
                     else:
                         os.remove(addon_batch_state)
+                
+                if os.path.exists(root_batch_state):
+                    if not os.path.exists(dest):
+                        import shutil
+                        shutil.move(root_batch_state, dest)
+                        logger.info("AI-Hints: Migrated root profile batch state to profile bin folder.")
+                    else:
+                        os.remove(root_batch_state)
+
+                # 2. Proxy bin folder migration
+                addon_bin_dir = os.path.join(addon_dir, "bin")
+                if os.path.exists(addon_bin_dir):
+                    dest_bin_dir = os.path.join(profile_dir, "ai_hints_bin")
+                    os.makedirs(dest_bin_dir, exist_ok=True)
+                    
+                    for filename in os.listdir(addon_bin_dir):
+                        src_file = os.path.join(addon_bin_dir, filename)
+                        dest_file = os.path.join(dest_bin_dir, filename)
+                        if os.path.isfile(src_file):
+                            # Move binary executables
+                            if filename.startswith("antigravity-proxy-"):
+                                if not os.path.exists(dest_file):
+                                    import shutil
+                                    shutil.move(src_file, dest_file)
+                                    logger.info(f"AI-Hints: Migrated proxy binary {filename} to profile bin folder.")
+                                else:
+                                    os.remove(src_file)
+                            # Move user credentials/accounts DB
+                            elif filename == "antigravity-accounts.json":
+                                if not os.path.exists(dest_file):
+                                    import shutil
+                                    shutil.move(src_file, dest_file)
+                                    logger.info("AI-Hints: Migrated antigravity-accounts.json to profile bin folder.")
+                                else:
+                                    os.remove(src_file)
+                            # Copy the binary's config.json (always keep it up-to-date with current addon bundle)
+                            elif filename == "config.json":
+                                import shutil
+                                shutil.copy2(src_file, dest_file)
+                                logger.info("AI-Hints: Copied proxy config.json to profile bin folder.")
         except Exception as e:
-            logger.error(f"AI-Hints: Failed to migrate batch_state.json: {e}")
+            logger.error(f"AI-Hints: Failed to migrate batch_state or bin folder: {e}")
 
         # Delay startup tasks to avoid resource contention and potential crashes.
         # This also ensures we don't interfere with Anki's initial startup sync.

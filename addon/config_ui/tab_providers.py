@@ -1054,6 +1054,17 @@ class ProvidersTabMixin:
         self.ag_status_label = QLabel("Status: <span style='color: grey;'>Checking...</span>")
         ag_layout.addRow(self.ag_status_label)
         
+        self.ag_path_label = QLabel(f"Path: <span style='color: grey;'>{proxy_manager.executable}</span>")
+        self.ag_path_label.setWordWrap(True)
+        try:
+            self.ag_path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        except AttributeError:
+            try:
+                self.ag_path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            except:
+                pass
+        ag_layout.addRow(self.ag_path_label)
+        
         btn_hbox = QHBoxLayout()
         btn_hbox.addWidget(self.ag_fetch_btn)
         btn_hbox.addWidget(self.ag_dashboard_btn)

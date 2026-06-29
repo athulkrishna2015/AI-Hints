@@ -48,7 +48,9 @@ class BatchManager:
             if mw is not None and "Mock" not in type(mw).__name__ and getattr(mw, "pm", None) is not None:
                 profile_dir = mw.pm.profileFolder()
                 if profile_dir:
-                    return os.path.join(profile_dir, "ai_hints_batch_state.json")
+                    p = os.path.join(profile_dir, "ai_hints_bin")
+                    os.makedirs(p, exist_ok=True)
+                    return os.path.join(p, "ai_hints_batch_state.json")
         except Exception:
             pass
         return os.path.join(ADDON_PATH, "batch_state.json")

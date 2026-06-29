@@ -11,10 +11,6 @@ class ProxyManager:
     def __init__(self):
         self.process = None
         
-        # Determine paths
-        addon_dir = os.path.dirname(os.path.abspath(__file__))
-        self.bin_dir = os.path.join(addon_dir, "bin")
-        
         # OS and Architecture detection
         import platform
         arch = platform.machine().lower()
@@ -29,10 +25,28 @@ class ProxyManager:
         else:
             self.remote_asset = "antigravity-proxy-linux"
 
-        # Local filename now includes VERSION so that version bump updates trigger redownload automatically
-        # e.g. antigravity-proxy-linux-v0.7.1
+    @property
+    def bin_dir(self) -> str:
+        try:
+            from aqt import mw
+            if mw is not None and "Mock" not in type(mw).__name__ and getattr(mw, "pm", None) is not None:
+                profile_dir = mw.pm.profileFolder()
+                if profile_dir:
+                    p = os.path.join(profile_dir, "ai_hints_bin")
+                    os.makedirs(p, exist_ok=True)
+                    return p
+        except Exception:
+            pass
+        # Fallback to local addon folder during import or tests
+        addon_dir = os.path.dirname(os.path.abspath(__file__))
+        p = os.path.join(addon_dir, "bin")
+        os.makedirs(p, exist_ok=True)
+        return p
+
+    @property
+    def executable(self) -> str:
         local_name = f"{self.remote_asset}-{PROXY_VERSION}"
-        self.executable = os.path.join(self.bin_dir, local_name)
+        return os.path.join(self.bin_dir, local_name)
 
     def is_enabled(self, config):
         """Check if the proxy should be running based on config."""
