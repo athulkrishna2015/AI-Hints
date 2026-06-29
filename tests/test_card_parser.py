@@ -260,7 +260,60 @@ class CardParserTests(unittest.TestCase):
         self.assertIsNone(parser.find_hints_block(note, FakeCard(1, 0)))
         self.assertNotIn("ai-hints-json", note["Text"])
 
+    def test_unskip_hints_from_note(self):
+        # 1. JSON storage mode
+        parser_json = CardParser(storage_mode="json")
+        note_json = FakeNote("Cloze", {"Text": "Prompt", "Back": ""})
+        
+        # Mark card 1 (ord 0) and card 2 (ord 1) as skipped
+        parser_json.update_note_with_hints(note_json, {"hints": [], "options": [], "_skipped": True}, card=FakeCard(1, 0))
+        parser_json.update_note_with_hints(note_json, {"hints": [], "options": [], "_skipped": True}, card=FakeCard(2, 1))
+        
+        # Unskip card 1 (ord 0)
+        self.assertTrue(parser_json.unskip_hints_from_note(note_json, FakeCard(1, 0)))
+        
+        # Verify JSON block is still there (for card 2) and card 1 key remains, but its _skipped is gone
+        block_text = note_json["Text"]
+        self.assertIn("ai-hints-json", block_text)
+        self.assertIn('"c1"', block_text)
+        self.assertNotIn('"_skipped": true', block_text.split('"c1"')[1].split('"c2"')[0])
+        self.assertIn('"c2"', block_text)
+        self.assertIn('"_skipped": true', block_text.split('"c2"')[1])
+        
+        # Unskip card 2 (ord 1)
+        self.assertTrue(parser_json.unskip_hints_from_note(note_json, FakeCard(2, 1)))
+        # Verify entire block is now cleared (since no active data remains)
+        self.assertNotIn("ai-hints-json", note_json["Text"])
+
+        # 2. HTML storage mode
+        parser_html = CardParser(storage_mode="html")
+        note_html = FakeNote("Cloze", {"Text": "Prompt", "Back": ""})
+        
+        # Mark card 1 (ord 0) as skipped
+        parser_html.update_note_with_hints(note_html, {"hints": [], "options": [], "_skipped": True}, card=FakeCard(1, 0))
+        self.assertIn("_skipped", note_html["Text"])
+        
+        # Unskip
+        self.assertTrue(parser_html.unskip_hints_from_note(note_html, FakeCard(1, 0)))
+        self.assertNotIn("_skipped", note_html["Text"])
+
+    def test_skip_clears_existing_hints(self):
+        parser = CardParser()
+        note = FakeNote("Cloze", {"Text": "Prompt", "Back": ""})
+        
+        # 1. Update with active hints
+        parser.update_note_with_hints(note, {"hints": ["H1", "H2"], "options": ["A", "B"]}, card=FakeCard(1, 0))
+        
+        # 2. Skip the card
+        parser.update_note_with_hints(note, {"hints": [], "options": [], "_skipped": True}, card=FakeCard(1, 0))
+        
+        # 3. Verify skip replaces the card's AI data instead of preserving stale hints/options
+        block_text = note["Text"]
+        self.assertIn('"hints"', block_text)
+        self.assertNotIn('"H1"', block_text)
+        self.assertIn('"options"', block_text)
+        self.assertNotIn('"A"', block_text)
+        self.assertIn('"_skipped": true', block_text)
 
 if __name__ == "__main__":
     unittest.main()
-

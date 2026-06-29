@@ -12,8 +12,7 @@ except ImportError:
 
 class CardParser:
 
-    def __init__(self, storage_mode: str = "json", mathjax_format: str = "delimiters", fix_latex: bool = False, **kwargs):
-        self.storage_mode = storage_mode
+    def __init__(self, mathjax_format: str = "delimiters", fix_latex: bool = False, **kwargs):
         self.mathjax_format = mathjax_format
         self.fix_latex = fix_latex
         self.container_class = "ai-hints-container"
@@ -470,12 +469,7 @@ class CardParser:
         if not isinstance(current_val, str):
             current_val = str(current_val or "")
         
-        if self.storage_mode == "json":
-            new_val = self._update_json_block_in_field(current_val, data, card_key, toggles, card, note)
-        else:
-            content_block = self.build_hints_block(data, toggles, card)
-            new_val = self._replace_or_append_block(current_val, content_block, card)
-
+        new_val = self._update_json_block_in_field(current_val, data, card_key, toggles, card, note)
         note[field_name] = new_val
         return True
 
@@ -507,8 +501,6 @@ class CardParser:
                                        parsed = {"c1": parsed}
                                   else:
                                        parsed = {}
-                             
-                             # (cloze-answer matching removed — key presence is sufficient)
                              
                              parsed[card_key] = new_data
                         else:
@@ -838,6 +830,100 @@ class CardParser:
                 cleared = True
         return cleared
 
+    def unskip_hints_from_note(self, note, card=None) -> bool:
+        """Removes only the skipped AI hints indicators matching the card from all fields (both JSON and HTML blocks)."""
+        card_ord = self._card_ord(card)
+        card_key = f"c{card_ord + 1}" if card_ord is not None else None
+        cleared = False
+
+        # Regex to match div blocks of either class
+        ws_pattern = r'(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*'
+        pattern = re.compile(
+            rf'{ws_pattern}<div\b[^>]*class=["\']([^"\']*)(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>{ws_pattern}',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+
+        for f_name in note.keys():
+            current_val = note[f_name]
+            if not isinstance(current_val, str):
+                continue
+
+            new_val = current_val
+            field_cleared = False
+            matches = list(pattern.finditer(current_val))
+
+            for match in reversed(matches):
+                block_html = match.group(0)
+                class_str = match.group(1)
+                
+                # Check if it matches this card
+                if not self._block_matches_card(block_html, card):
+                    continue
+
+                # Case A: JSON block
+                if self.json_class in block_html:
+                    try:
+                        raw_payload = match.group(2)
+                        parsed = self._parse_json_payload(raw_payload)
+                        if isinstance(parsed, dict):
+                            # Keyed JSON format
+                            if self._is_keyed_payload(parsed):
+                                if card_key and card_key in parsed:
+                                    card_data = parsed[card_key]
+                                    if isinstance(card_data, dict) and "_skipped" in card_data:
+                                        # Only delete the "_skipped" attribute, preserve other data (hints/options)
+                                        del card_data["_skipped"]
+                                        # If the card's data is now completely empty (meaning no hints or options),
+                                        # and there are no other cards with active hints/options in this JSON,
+                                        # we can delete the block. Otherwise, save the updated JSON block.
+                                        has_active_data = False
+                                        for k, v in parsed.items():
+                                            if isinstance(v, dict) and (v.get("hints") or v.get("options") or v.get("_skipped")):
+                                                has_active_data = True
+                                                break
+                                                
+                                        if has_active_data:
+                                            new_payload = self.serialize_json_payload(parsed)
+                                            inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
+                                            if inner_match:
+                                                new_block = block_html.replace(inner_match.group(1), new_payload)
+                                                new_val = new_val[:match.start()] + new_block + new_val[match.end():]
+                                                field_cleared = True
+                                        else:
+                                            # No active cards left in this JSON block, remove entire block
+                                            new_val = new_val[:match.start()] + new_val[match.end():]
+                                            field_cleared = True
+                            else:
+                                # Legacy/Universal block
+                                if "_skipped" in parsed:
+                                    del parsed["_skipped"]
+                                    # If it still has other data, update the JSON. Otherwise, remove the block.
+                                    if parsed.get("hints") or parsed.get("options"):
+                                        new_payload = self.serialize_json_payload(parsed)
+                                        inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
+                                        if inner_match:
+                                            new_block = block_html.replace(inner_match.group(1), new_payload)
+                                            new_val = new_val[:match.start()] + new_block + new_val[match.end():]
+                                            field_cleared = True
+                                    else:
+                                        new_val = new_val[:match.start()] + new_val[match.end():]
+                                        field_cleared = True
+                    except Exception as e:
+                        logger.error(f"Error parsing JSON block during unskip: {e}")
+
+                # Case B: HTML block
+                elif self.container_class in block_html:
+                    if 'data-ai-hints-skipped="true"' in block_html or "data-ai-hints-skipped='true'" in block_html:
+                        # Remove the entire HTML block
+                        new_val = new_val[:match.start()] + new_val[match.end():]
+                        field_cleared = True
+
+            if field_cleared:
+                note[f_name] = new_val
+                cleared = True
+
+        return cleared
+
     def clear_hints_from_note(self, note, card=None) -> bool:
         """Removes AI hints blocks matching the card from all fields, including HTML line breaks."""
         # Regex updated to match leading/trailing whitespace, <br> tags, and &nbsp;
@@ -1130,10 +1216,17 @@ class CardParser:
 
         if self._is_keyed_payload(parsed):
             if card_ord is None:
-                # If no card provided, just check if ANY keys exist
-                return bool(parsed)
+                return any(
+                    isinstance(val, dict) and (bool(val.get("hints")) or bool(val.get("options")) or bool(val.get("_skipped")))
+                    for val in parsed.values()
+                )
             card_key = f"c{card_ord + 1}"
-            return card_key in parsed
+            if card_key not in parsed:
+                return False
+            card_data = parsed[card_key]
+            if not isinstance(card_data, dict):
+                return False
+            return bool(card_data.get("hints")) or bool(card_data.get("options")) or bool(card_data.get("_skipped"))
             
         # Legacy/Universal block: check for hints/options
         has_hints = bool(parsed.get("hints")) or bool(parsed.get("options")) or bool(parsed.get("_skipped"))
