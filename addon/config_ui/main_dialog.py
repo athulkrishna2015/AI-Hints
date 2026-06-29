@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from aqt import mw
 from aqt.utils import askUser
 from aqt.qt import *
@@ -112,15 +113,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.status_timer.stop()
 
     def update_provider_status(self):
-        """Refreshes the live status indicators for background daemons."""
-        if not hasattr(self, "ag_status_label"):
-            return
-
-        from ..proxy_manager import proxy_manager
-        if proxy_manager.is_running():
-            self.ag_status_label.setText("Status: <span style='color: #28a745; font-weight: bold;'>● Running</span>")
-        else:
-            self.ag_status_label.setText("Status: <span style='color: #dc3545; font-weight: bold;'>○ Stopped</span>")
+        """Proxy integration removed; keep this as a no-op for compatibility."""
+        return
 
     def setup_ui(self):
 
@@ -442,6 +436,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         if "antigravity_proxy" not in self.config or not isinstance(self.config["antigravity_proxy"], dict):
                             self.config["antigravity_proxy"] = {}
                         self.config["antigravity_proxy"]["enabled"] = True
+                        from ..config_io import write_pretty_config
+                        write_pretty_config(ADDON_PACKAGE, self._normalize_config(self.config))
                         proxy_manager.start(self.config)
                     else:
                         self.ag_dl_progress.setVisible(False)
@@ -462,7 +458,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.refresh_blacklist_list()
         if hasattr(self, 'config'):
              self.config["last_active_tab"] = index
-             try: mw.addonManager.writeConfig(ADDON_PACKAGE, self.config)
+             try:
+                 from ..config_io import write_pretty_config
+                 write_pretty_config(ADDON_PACKAGE, self.config)
              except Exception: pass
 
     def on_delete_binary(self):
@@ -1268,7 +1266,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         try:
             if hasattr(self, 'raw_toggle') and self.raw_toggle.isChecked():
                 raw_config = json.loads(self.raw_editor.toPlainText() or "{}")
-                mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(raw_config))
+                from ..config_io import write_pretty_config
+                write_pretty_config(ADDON_PACKAGE, self._normalize_config(raw_config))
                 if close: self.accept()
                 else: tooltip("Configuration saved.")
                 return
@@ -1353,7 +1352,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         disabled.append(w.provider)
             new_config["provider_priority"] = priority
             new_config["disabled_providers"] = disabled
-            mw.addonManager.writeConfig(ADDON_PACKAGE, self._normalize_config(new_config))
+            from ..config_io import write_pretty_config
+            write_pretty_config(ADDON_PACKAGE, self._normalize_config(new_config))
             try:
                 from ..proxy_manager import proxy_manager
                 from ..mobile_sync import auto_update_mobile_setup

@@ -1011,76 +1011,16 @@ class ProvidersTabMixin:
         
         self.api_key_edits = {}
         self.model_edits = {}
-
-        # Antigravity Proxy Group
-        ag_group = QGroupBox("Antigravity Cloud Proxy (Native Daemon)")
-        ag_layout = QFormLayout()
-        
-        self.ag_enable_cb = QCheckBox("Enable Background Proxy Daemon")
-        self.ag_enable_cb.setToolTip("Automatically run the bundled proxy in the background when Anki starts.")
-        
-        self.ag_dashboard_btn = QPushButton("🚀 Open Setup Dashboard")
-        self.ag_dashboard_btn.setToolTip("Open the local web interface to configure Google accounts.")
-        self.ag_dashboard_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("http://localhost:3000/frontend/index.html")))
-        
-        self.ag_fetch_btn = QPushButton("📥 Fetch Native Binary")
-        self.ag_fetch_btn.setToolTip("Manually download the latest executable from GitHub if missing.")
-        self.ag_fetch_btn.clicked.connect(self.on_fetch_binary)
-        
-        self.ag_delete_btn = QPushButton("🗑️ Delete Binary")
-        self.ag_delete_btn.setToolTip("Removes the proxy and credential files from disk to free space.")
-        self.ag_delete_btn.clicked.connect(self.on_delete_binary)
-        
-        # Button state logic
-        from ..proxy_manager import proxy_manager
-        has_bin = os.path.exists(proxy_manager.executable)
-        self.ag_dashboard_btn.setEnabled(has_bin)
-        self.ag_enable_cb.setEnabled(has_bin)
-        self.ag_fetch_btn.setEnabled(not has_bin)
-        self.ag_delete_btn.setEnabled(has_bin)
-        
-        if not has_bin:
-             self.ag_dashboard_btn.setToolTip("Download the binary first to enable dashboard access.")
-             self.ag_enable_cb.setToolTip("Download the binary first to enable this feature.")
-        else:
-             self.ag_fetch_btn.setToolTip("Binary is already downloaded locally.")
-             
-        # Initialize dummy components to prevent crashes on startup references
         self.ag_model_edit = QComboBox()
-        self.ag_test_status_label = QLabel()
-        
-        ag_layout.addRow(self.ag_enable_cb)
-        
-        self.ag_status_label = QLabel("Status: <span style='color: grey;'>Checking...</span>")
-        ag_layout.addRow(self.ag_status_label)
-        
-        self.ag_path_label = QLabel(f"Path: <span style='color: grey;'>{proxy_manager.executable}</span>")
-        self.ag_path_label.setWordWrap(True)
-        try:
-            self.ag_path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        except AttributeError:
-            try:
-                self.ag_path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            except:
-                pass
-        ag_layout.addRow(self.ag_path_label)
-        
-        btn_hbox = QHBoxLayout()
-        btn_hbox.addWidget(self.ag_fetch_btn)
-        btn_hbox.addWidget(self.ag_dashboard_btn)
-        btn_hbox.addWidget(self.ag_delete_btn)
-        ag_layout.addRow("", btn_hbox)
-        
+        self.ag_enable_cb = QCheckBox()
+        self.ag_status_label = QLabel()
+        self.ag_path_label = QLabel()
+        self.ag_fetch_btn = QPushButton()
+        self.ag_dashboard_btn = QPushButton()
+        self.ag_delete_btn = QPushButton()
         self.ag_dl_progress = QProgressBar()
-        self.ag_dl_progress.setVisible(False)
-        self.ag_dl_status = QLabel("")
-        self.ag_dl_status.setVisible(False)
-        ag_layout.addRow(self.ag_dl_progress)
-        ag_layout.addRow(self.ag_dl_status)
+        self.ag_dl_status = QLabel()
 
-        ag_group.setLayout(ag_layout)
-        self.prov_layout.addRow(ag_group)
-            
         # Local Endpoint Group
         local_group = QGroupBox("Local AI / Ollama Settings")
         local_layout = QFormLayout()

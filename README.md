@@ -10,11 +10,10 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 
 ## Features
 
-- **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, **Antigravity Proxy**, and any OpenAI-compatible local API (like Ollama or LM Studio).
+- **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, and any OpenAI-compatible local API (like Ollama or LM Studio).
 - **Queued Batch Jobs (v4.2.0)**: Start multiple batch generation jobs back-to-back, monitor the active job separately from queued jobs, reorder/cancel pending jobs, and keep progress safely persisted between sessions.
 - **Bulk Skip/Unskip Controls (v4.2.0)**: Browser, sidebar, and deck menus now include skip and unskip actions for selected cards or whole groups. Skipping a card clears stale AI hint data and saves only the skipped marker.
 - **Inline Editing (v4.0.0)**: Hold `Ctrl` (or `Cmd` on macOS) to highlight any hint or option during review, and click to edit it inline instantly inside a dynamic `<textarea>`. Press `Enter` (without Shift) or blur to save, or `Escape` to cancel. Saves edits directly to the note's JSON block in the database, updates the cache, and updates the webview dynamically with zero page flicker.
-- **Native Antigravity Daemon**: Features seamless embedded integration of the [Antigravity Cloud Proxy](https://github.com/frieser/antigravity-proxy). Automatically manages background executable lifecycle, offers one-click account setup dashboard, and provides direct gateway to premier LLMs completely locally.
 - **Unified UI System**: Desktop and Mobile now share the exact same rendering engine (`template.js`), ensuring consistent features (like shuffling and MathJax) across all devices.
 - **Optimized Prompt Efficiency (v3.4.1)**: Re-engineered system prompts for maximum token efficiency (~1k tokens saved per request) while improving distractor quality via **Sequential Parallelism**.
 - **Granular Key Blacklisting & Gemini 3.5 Flash Support (v3.6.1)**: Refactored key rotation blacklist to block specific model-key-provider combinations rather than entire keys or models. Added support and defaults for Google's new `gemini-3.5-flash` model.
@@ -50,8 +49,7 @@ The add-on features a multi-tiered, intelligence-driven fallback system. If your
 11. **NVIDIA**
 12. **Mistral**
 13. **Cerebras**
-14. **Antigravity Proxy** (Embedded Cloud Relay)
-15. **Local AI** (Ollama/LM Studio)
+14. **Local AI** (Ollama/LM Studio)
 
 ---
 

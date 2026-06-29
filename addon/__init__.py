@@ -12,7 +12,6 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
 
     def on_profile_loaded():
         from .logger import clear_log_file
-        from .proxy_manager import proxy_manager
         from .mobile_sync import auto_update_mobile_setup, sync_mobile_script
         from aqt.qt import QTimer
         import os
@@ -30,7 +29,7 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         else:
             logger.setLevel(logging.INFO)
 
-        # Migrate batch_state.json and proxy bin files to profile folder
+        # Migrate batch_state.json to profile folder
         try:
             addon_dir = os.path.dirname(os.path.abspath(__file__))
             profile_dir = mw.pm.profileFolder()
@@ -57,47 +56,14 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
                         logger.info("AI-Hints: Migrated root profile batch state to profile bin folder.")
                     else:
                         os.remove(root_batch_state)
-
-                # 2. Proxy bin folder migration
-                addon_bin_dir = os.path.join(addon_dir, "bin")
-                if os.path.exists(addon_bin_dir):
-                    dest_bin_dir = os.path.join(profile_dir, "ai_hints_bin")
-                    os.makedirs(dest_bin_dir, exist_ok=True)
-                    
-                    for filename in os.listdir(addon_bin_dir):
-                        src_file = os.path.join(addon_bin_dir, filename)
-                        dest_file = os.path.join(dest_bin_dir, filename)
-                        if os.path.isfile(src_file):
-                            # Move binary executables
-                            if filename.startswith("antigravity-proxy-"):
-                                if not os.path.exists(dest_file):
-                                    import shutil
-                                    shutil.move(src_file, dest_file)
-                                    logger.info(f"AI-Hints: Migrated proxy binary {filename} to profile bin folder.")
-                                else:
-                                    os.remove(src_file)
-                            # Move user credentials/accounts DB
-                            elif filename == "antigravity-accounts.json":
-                                if not os.path.exists(dest_file):
-                                    import shutil
-                                    shutil.move(src_file, dest_file)
-                                    logger.info("AI-Hints: Migrated antigravity-accounts.json to profile bin folder.")
-                                else:
-                                    os.remove(src_file)
-                            # Copy the binary's config.json (always keep it up-to-date with current addon bundle)
-                            elif filename == "config.json":
-                                import shutil
-                                shutil.copy2(src_file, dest_file)
-                                logger.info("AI-Hints: Copied proxy config.json to profile bin folder.")
         except Exception as e:
-            logger.error(f"AI-Hints: Failed to migrate batch_state or bin folder: {e}")
+            logger.error(f"AI-Hints: Failed to migrate batch_state: {e}")
 
         # Delay startup tasks to avoid resource contention and potential crashes.
         # This also ensures we don't interfere with Anki's initial startup sync.
         def _delayed_startup():
             if not mw or not mw.col:
                 return
-            proxy_manager.start(config)
             auto_update_mobile_setup()
             
             # Reload batch state once profile folder is fully available
@@ -110,13 +76,6 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         QTimer.singleShot(2000, _delayed_startup)
 
     def on_profile_will_close():
-        # Stop proxy manager daemon cleanly
-        try:
-            from .proxy_manager import proxy_manager
-            proxy_manager.stop()
-        except Exception:
-            pass
-
         # Stop and release any active batch/polling timers to avoid exit-time Qt SEGV
         try:
             from .batch_manager import batch_manager
