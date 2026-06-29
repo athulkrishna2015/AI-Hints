@@ -11,6 +11,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 ## Features
 
 - **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, and any OpenAI-compatible local API (like Ollama or LM Studio).
+- **Multiple Local Providers (v4.3.0)**: Configure, reorder, enable, fetch, and test multiple local endpoints from the Providers tab, with a unified edit dialog for each local provider.
 - **Queued Batch Jobs (v4.2.0)**: Start multiple batch generation jobs back-to-back, monitor the active job separately from queued jobs, reorder/cancel pending jobs, and keep progress safely persisted between sessions.
 - **Bulk Skip/Unskip Controls (v4.2.0)**: Browser, sidebar, and deck menus now include skip and unskip actions for selected cards or whole groups. Skipping a card clears stale AI hint data and saves only the skipped marker.
 - **Inline Editing (v4.0.0)**: Hold `Ctrl` (or `Cmd` on macOS) to highlight any hint or option during review, and click to edit it inline instantly inside a dynamic `<textarea>`. Press `Enter` (without Shift) or blur to save, or `Escape` to cancel. Saves edits directly to the note's JSON block in the database, updates the cache, and updates the webview dynamically with zero page flicker.

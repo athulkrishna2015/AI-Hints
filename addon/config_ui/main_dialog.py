@@ -52,6 +52,13 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.default_config = {}
 
         self.custom_providers_data = self.config.get("custom_providers", {}) or {}
+        self.local_providers_data = self.config.get("local_providers", {}) or {}
+        # Compatibility fields kept for older code paths; not shown in the UI.
+        self.local_url_edit = QLineEdit()
+        self.local_model_edit = QComboBox()
+        self.local_api_key_edit = QLineEdit()
+        self.local_fallback_cb = QCheckBox()
+        self.local_test_status_label = QLabel()
         
         self.setup_ui()
         self.load_config_into_ui()
@@ -295,6 +302,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.local_model_edit.setCurrentText(model_name)
         self.local_api_key_edit.setText(local.get("api_key", ""))
         self.local_fallback_cb.setChecked(local.get("enabled", False))
+        self.refresh_local_providers_list()
         
         self.system_prompt_edit.setPlainText(c.get("additional_system_instructions", ""))
         
@@ -920,6 +928,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if self.local_model_edit.findText(model_name) == -1: self.local_model_edit.addItem(model_name)
         self.local_model_edit.setCurrentText(model_name)
         self.local_fallback_cb.setChecked(local.get("enabled", False))
+        self.local_providers_data = c.get("local_providers", {}) or {}
+        self.refresh_local_providers_list()
         tooltip("Provider defaults restored.")
 
     def on_restore_advanced(self):
@@ -1226,6 +1236,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 "model": self.local_model_edit.currentText().strip() or DEFAULT_MODELS["local"],
                 "api_key": self.local_api_key_edit.text().strip()
             }
+            if hasattr(self, "_sync_local_provider_order_from_ui"):
+                self._sync_local_provider_order_from_ui()
+            new_config["local_providers"] = self.local_providers_data
             new_config["system_prompt"] = self.default_config.get("system_prompt", "")
             new_config["additional_system_instructions"] = self.system_prompt_edit.toPlainText()
             new_config["custom_providers"] = self.custom_providers_data
@@ -1313,6 +1326,20 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         raw_local = config.get("local_endpoint", {}) or {}
         if isinstance(raw_local, dict): local.update(raw_local)
         config["local_endpoint"] = local
+        local_providers = config.get("local_providers", {}) or {}
+        if not isinstance(local_providers, dict):
+            local_providers = {}
+        if not local_providers and local.get("base_url"):
+            local_providers = {
+                "local": {
+                    "url": local.get("base_url", "http://localhost:11434/v1"),
+                    "api_key": local.get("api_key", ""),
+                    "model": local.get("model", DEFAULT_MODELS["local"]),
+                    "headers": {},
+                    "enabled": local.get("enabled", False),
+                }
+            }
+        config["local_providers"] = local_providers
         config.setdefault("ai_provider", "openai")
         config.setdefault("mathjax_format", "delimiters")
         config.setdefault("fix_latex", False)
@@ -1324,6 +1351,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("show_options_button", True)
         if not isinstance(config.get("custom_providers", {}), dict): config["custom_providers"] = {}
         else: config.setdefault("custom_providers", {})
+        if not isinstance(config.get("local_providers", {}), dict): config["local_providers"] = {}
+        else: config.setdefault("local_providers", {})
         try: config["options_count"] = max(1, min(int(config.get("options_count", 4)), 10))
         except: config["options_count"] = 4
         config.setdefault("show_on_card", True)

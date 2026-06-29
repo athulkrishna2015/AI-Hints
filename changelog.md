@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.3.0 (2026-06-29)
+- **Multiple Local Providers**: Local AI setup now supports multiple endpoints with drag-and-drop ordering, per-endpoint enable toggles, and fetch/test controls inside the edit dialog.
+- **Local Provider Fallback Cleanup**: Removed the duplicate single-local settings block so the providers tab now uses one unified local provider list.
+- **Local Provider Validation Fixes**: Normalized local endpoint config handling so `url` and `base_url` both work consistently when fetching and testing.
+
 ## 4.2.0 (2026-06-29)
 - **Queued Batch Jobs**: Batch generation now supports multiple queued jobs instead of rejecting new requests while one queue is active. The Batch tab shows the active job, pending jobs, and controls to reorder, cancel, or clear queued jobs.
 - **Expanded Bulk Skip/Unskip Actions**: Added unskip actions for selected browser cards, browser sidebar groups, and deck browser deck menus, alongside the existing skip/clear workflows.

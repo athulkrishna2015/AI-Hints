@@ -1,10 +1,11 @@
 import os
+import json
 from aqt import mw
 from aqt.qt import *
 from ..logger import info, tooltip
 from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS, MODEL_FALLBACKS, PROVIDER_ORDER
 from ..ai_client import is_model_blacklisted
-from .widgets import ProviderRowWidget, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS
+from .widgets import CustomProviderDialog, ProviderRowWidget, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS
 
 DEFAULT_TEST_QUESTION = "Why does a rotating magnet fall slower through a copper tube than a non-magnetic mass of the same size?"
 DEFAULT_TEST_ANSWER = "Due to Faraday's law of induction and Lenz's law, the falling magnet induces eddy currents in the copper tube, creating an opposing magnetic field that exerts an upward electromagnetic braking force."
@@ -1008,65 +1009,6 @@ class ProvidersTabMixin:
         self.ag_dl_progress = QProgressBar()
         self.ag_dl_status = QLabel()
 
-        # Local Endpoint Group
-        local_group = QGroupBox("Local AI / Ollama Settings")
-        local_layout = QFormLayout()
-        self.local_url_edit = QLineEdit()
-        self.local_url_edit.setToolTip("Point to an OpenAI-compatible backend or Ollama instance (e.g., http://localhost:11434/v1).")
-        
-        self.local_model_layout = QHBoxLayout()
-        self.local_model_edit = QComboBox()
-        self.local_model_edit.setEditable(True)
-        self.local_model_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.local_model_edit.setToolTip("Define the specific locally installed model tag to run inference with.")
-        
-        self.local_fetch_btn = QPushButton("Fetch")
-        self.local_fetch_btn.setFixedWidth(85)
-        self.local_fetch_btn.setToolTip("Fetch available models from the specified local Base URL")
-        self.local_fetch_btn.clicked.connect(lambda: self.on_fetch_models("local", self.local_model_edit, fetch_btn=self.local_fetch_btn))
-        
-        self.local_test_btn = QPushButton("Test")
-        self.local_test_btn.setFixedWidth(75)
-        self.local_test_btn.setToolTip("Run a test generation against your local AI endpoint.")
-        
-        self.local_test_status_label = QLabel("")
-        self.local_test_status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
-        
-        self.local_model_edit.currentTextChanged.connect(lambda: self.update_special_blacklist_status("local", self.local_model_edit, self.local_test_status_label))
-        self.update_special_blacklist_status("local", self.local_model_edit, self.local_test_status_label)
-            
-        self.local_test_btn.clicked.connect(lambda: self.on_test_model("local", self.local_model_edit, status_label=self.local_test_status_label))
-
-        self.local_model_layout.addWidget(self.local_model_edit)
-        self.local_model_layout.addWidget(self.local_fetch_btn)
-        self.local_model_layout.addWidget(self.local_test_btn)
-        self.local_model_layout.addWidget(self.local_test_status_label)
-        
-        self.local_api_key_edit = QLineEdit()
-        self.local_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.local_api_key_edit.setToolTip("Provide auth key if running a secured local relay (usually blank for localhost).")
-        
-        local_key_btn = QPushButton("👁️")
-        local_key_btn.setToolTip("Toggle API Key visibility")
-        local_key_btn.setFixedWidth(30)
-        local_key_btn.setStyleSheet("padding: 2px;")
-        local_key_btn.clicked.connect(lambda checked=False, e=self.local_api_key_edit: e.setEchoMode(
-            QLineEdit.EchoMode.Normal if e.echoMode() == QLineEdit.EchoMode.Password else QLineEdit.EchoMode.Password
-        ))
-        
-        local_key_layout = QHBoxLayout()
-        local_key_layout.addWidget(self.local_api_key_edit, 1)
-        local_key_layout.addWidget(local_key_btn)
-
-        self.local_fallback_cb = QCheckBox("Use Local AI as fallback")
-        self.local_fallback_cb.setToolTip("Automatically attempt connection to the local instance below if all cloud endpoints time out or report failures.")
-        local_layout.addRow(self.local_fallback_cb)
-        local_layout.addRow("Base URL:", self.local_url_edit)
-        local_layout.addRow("Model Name:", self.local_model_layout)
-        local_layout.addRow("API Key (optional):", local_key_layout)
-        local_group.setLayout(local_layout)
-        self.prov_layout.addRow(local_group)
-
         model_group = QGroupBox("Model Names & Fallback Priority")
         model_main_layout = QVBoxLayout()
         
@@ -1149,9 +1091,138 @@ class ProvidersTabMixin:
         
         custom_group.setLayout(custom_layout)
         self.prov_layout.addRow(custom_group)
+
+        # Local Providers Group
+        local_providers_group = QGroupBox("Local Providers")
+        local_providers_layout = QVBoxLayout()
+        self.local_providers_list = QListWidget()
+        self.local_providers_list.setDragEnabled(True)
+        self.local_providers_list.setAcceptDrops(True)
+        self.local_providers_list.setDropIndicatorShown(True)
+        self.local_providers_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.local_providers_list.model().rowsMoved.connect(self._sync_local_provider_order_from_ui)
+        self.local_providers_list.model().layoutChanged.connect(self._sync_local_provider_order_from_ui)
+        self.local_providers_list.itemChanged.connect(self.on_local_provider_item_changed)
+        local_providers_layout.addWidget(self.local_providers_list)
+
+        local_hint = QLabel(
+            "Add one or more local endpoints here. Checkboxes enable or disable each endpoint, and rows can be reordered by drag and drop."
+        )
+        local_hint.setWordWrap(True)
+        local_hint.setStyleSheet("color: #666;")
+        local_providers_layout.insertWidget(0, local_hint)
+
+        local_btn_layout = QHBoxLayout()
+        self.add_local_provider_btn = QPushButton("Add")
+        self.add_local_provider_btn.clicked.connect(self.on_add_local_provider)
+        self.edit_local_provider_btn = QPushButton("Edit")
+        self.edit_local_provider_btn.clicked.connect(self.on_edit_local_provider)
+        self.remove_local_provider_btn = QPushButton("Remove")
+        self.remove_local_provider_btn.clicked.connect(self.on_remove_local_provider)
+        local_btn_layout.addWidget(self.add_local_provider_btn)
+        local_btn_layout.addWidget(self.edit_local_provider_btn)
+        local_btn_layout.addWidget(self.remove_local_provider_btn)
+        local_providers_layout.addLayout(local_btn_layout)
+
+        local_providers_group.setLayout(local_providers_layout)
+        self.prov_layout.addRow(local_providers_group)
         
         prov_scroll.setWidget(prov_content)
         prov_main_layout.addWidget(prov_scroll)
         
         self.providers_tab.setLayout(prov_main_layout)
         return self.providers_tab
+
+    def refresh_local_providers_list(self):
+        if not hasattr(self, "local_providers_list"):
+            return
+        self.local_providers_list.blockSignals(True)
+        self.local_providers_list.clear()
+        for name in list((self.local_providers_data or {}).keys()):
+            data = self.local_providers_data.get(name, {}) or {}
+            url = data.get("url", "")
+            model = data.get("model", "")
+            enabled = data.get("enabled", True)
+            item = QListWidgetItem(f"{name} - {url} - {model}" if model else f"{name} - {url}")
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsDropEnabled)
+            item.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
+            self.local_providers_list.addItem(item)
+        self.local_providers_list.blockSignals(False)
+        self.update_local_provider_labels()
+
+    def update_local_provider_labels(self):
+        if not hasattr(self, "local_providers_list"):
+            return
+        for i in range(self.local_providers_list.count()):
+            item = self.local_providers_list.item(i)
+            name = item.data(Qt.ItemDataRole.UserRole)
+            data = self.local_providers_data.get(name, {}) or {}
+            url = data.get("url", "")
+            model = data.get("model", "")
+            base = f"{name} - {url} - {model}" if model else f"{name} - {url}"
+            if item.checkState() == Qt.CheckState.Unchecked:
+                base = f"{base} (disabled)"
+            item.setText(base)
+
+    def on_local_provider_item_changed(self, item):
+        name = item.data(Qt.ItemDataRole.UserRole)
+        if not name or name not in self.local_providers_data:
+            return
+        self.local_providers_data[name]["enabled"] = item.checkState() == Qt.CheckState.Checked
+        self.update_local_provider_labels()
+
+    def _sync_local_provider_order_from_ui(self):
+        if not hasattr(self, "local_providers_list"):
+            return
+        ordered = {}
+        for i in range(self.local_providers_list.count()):
+            item = self.local_providers_list.item(i)
+            name = item.data(Qt.ItemDataRole.UserRole)
+            if name in self.local_providers_data:
+                ordered[name] = self.local_providers_data[name]
+        self.local_providers_data = ordered
+
+    def on_add_local_provider(self):
+        dlg = CustomProviderDialog(self, config=self.config)
+        if dlg.exec():
+            name = dlg.name_edit.text().strip()
+            self.local_providers_data[name] = {
+                "url": dlg.url_edit.text().strip(),
+                "base_url": dlg.url_edit.text().strip(),
+                "api_key": dlg.key_edit.text().strip(),
+                "model": dlg.model_edit.text().strip(),
+                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}"),
+                "enabled": True,
+            }
+            self.refresh_local_providers_list()
+
+    def on_edit_local_provider(self):
+        item = self.local_providers_list.currentItem()
+        if not item:
+            return
+        name = item.data(Qt.ItemDataRole.UserRole)
+        data = self.local_providers_data.get(name, {})
+        dlg = CustomProviderDialog(self, name=name, data=data, config=self.config)
+        if dlg.exec():
+            new_name = dlg.name_edit.text().strip()
+            if new_name != name:
+                del self.local_providers_data[name]
+            self.local_providers_data[new_name] = {
+                "url": dlg.url_edit.text().strip(),
+                "base_url": dlg.url_edit.text().strip(),
+                "api_key": dlg.key_edit.text().strip(),
+                "model": dlg.model_edit.text().strip(),
+                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}"),
+                "enabled": data.get("enabled", True),
+            }
+            self.refresh_local_providers_list()
+
+    def on_remove_local_provider(self):
+        item = self.local_providers_list.currentItem()
+        if not item:
+            return
+        name = item.data(Qt.ItemDataRole.UserRole)
+        if name in self.local_providers_data:
+            del self.local_providers_data[name]
+        self.refresh_local_providers_list()

@@ -54,9 +54,18 @@ class CustomProviderDialog(QDialog):
         self.model_edit = QLineEdit(data.get("model", "") if data else "")
         model_row.addWidget(self.model_edit)
         self.fetch_btn = QPushButton("Fetch")
-        self.fetch_btn.setFixedWidth(50)
+        self.fetch_btn.setFixedWidth(44)
+        self.fetch_btn.setMinimumHeight(24)
+        self.fetch_btn.setStyleSheet("padding: 1px 4px;")
         self.fetch_btn.clicked.connect(self.on_fetch)
         model_row.addWidget(self.fetch_btn)
+
+        self.test_btn = QPushButton("Test")
+        self.test_btn.setFixedWidth(44)
+        self.test_btn.setMinimumHeight(24)
+        self.test_btn.setStyleSheet("padding: 1px 4px;")
+        self.test_btn.clicked.connect(self.on_test)
+        model_row.addWidget(self.test_btn)
         layout.addRow("Model Name:", model_row)
         
         layout.addRow("Headers (JSON):", self.headers_edit)
@@ -112,6 +121,56 @@ class CustomProviderDialog(QDialog):
             info(f"Fetch failed: {e}")
         finally:
             self.fetch_btn.setEnabled(True)
+
+    def on_test(self):
+        url = self.url_edit.text().strip()
+        api_key = self.key_edit.text().strip()
+        model = self.model_edit.text().strip()
+        if not url:
+            info("Please enter an endpoint URL first.")
+            return
+        if not model:
+            info("Please enter a model name first.")
+            return
+
+        try:
+            headers = json.loads(self.headers_edit.toPlainText() or "{}")
+        except:
+            headers = {}
+
+        temp_config = self.config.copy()
+        temp_config["local_providers"] = {
+            "TEMP": {
+                "url": url,
+                "base_url": url,
+                "api_key": api_key,
+                "model": model,
+                "headers": headers,
+                "enabled": True,
+            }
+        }
+        temp_config["local_provider_override"] = "TEMP"
+        temp_config["models"] = temp_config.get("models", {}) or {}
+        temp_config["models"]["local"] = model
+
+        client = AIClient(temp_config)
+        self.test_btn.setEnabled(False)
+        tooltip("Testing local provider...")
+        try:
+            res = client.generate_options(
+                "What is the capital of France?",
+                "Paris.",
+                override_provider="local",
+                only_this_provider=True,
+            )
+            if res and (res.get("hints") or res.get("options")):
+                info("Test succeeded.")
+            else:
+                info("Test returned no usable data.")
+        except Exception as e:
+            info(f"Test failed: {e}")
+        finally:
+            self.test_btn.setEnabled(True)
 
     def validate_and_accept(self):
         if not self.name_edit.text().strip():
