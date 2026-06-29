@@ -338,11 +338,42 @@ class TestPregeneration(unittest.TestCase):
         
         # Verify separators and actions
         parent_menu_mock.addSeparator.assert_called_once()
-        self.assertEqual(submenu_mock.addAction.call_count, 4)
+        self.assertEqual(submenu_mock.addAction.call_count, 5)
         submenu_mock.addAction.assert_any_call("✨ Batch Generation...")
         submenu_mock.addAction.assert_any_call("Skip AI for Selected Cards")
+        submenu_mock.addAction.assert_any_call("Unskip AI for Selected Cards")
         submenu_mock.addAction.assert_any_call("Clear AI-Hints")
         submenu_mock.addAction.assert_any_call("🧹 Clean Orphaned Hints...")
+
+    @patch('addon.reviewer_hooks.QMenu')
+    def test_on_sidebar_context_menu(self, MockQMenu):
+        from addon.reviewer_hooks import on_sidebar_context_menu
+        
+        sidebar_mock = MagicMock()
+        sidebar_mock.col.build_search_string.return_value = "tag:test"
+        sidebar_mock.col.find_cards.return_value = [101, 102]
+        
+        item_mock = MagicMock()
+        item_mock.search_node = MagicMock()
+        
+        parent_menu_mock = MagicMock()
+        submenu_mock = MagicMock()
+        MockQMenu.return_value = submenu_mock
+        
+        # Run function
+        on_sidebar_context_menu(sidebar_mock, parent_menu_mock, item_mock, None)
+        
+        # Verify submenu was created and added
+        MockQMenu.assert_called_once_with("AI Hints", parent_menu_mock)
+        parent_menu_mock.addMenu.assert_called_once_with(submenu_mock)
+        
+        # Verify separators and actions
+        parent_menu_mock.addSeparator.assert_called_once()
+        self.assertEqual(submenu_mock.addAction.call_count, 4)
+        submenu_mock.addAction.assert_any_call("✨ Batch Generation...")
+        submenu_mock.addAction.assert_any_call("Skip AI for Group")
+        submenu_mock.addAction.assert_any_call("Unskip AI for Group")
+        submenu_mock.addAction.assert_any_call("Clear AI-Hints")
 
 if __name__ == '__main__':
     unittest.main()

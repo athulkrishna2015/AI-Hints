@@ -1116,6 +1116,75 @@ def clear_ai_hints_from_browser_selection(browser):
 
     return res
 
+def unskip_ai_hints_for_cards(card_ids) -> tuple[int, int, int]:
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
+    )
+
+    notes_by_id = {}
+    changed_notes = {}
+    changed_cards = 0
+    missing_cards = 0
+
+    for card_id in card_ids:
+        try:
+            card = _get_card_from_collection(card_id)
+            if not card:
+                missing_cards += 1
+                continue
+
+            note_id = getattr(card, "nid", None)
+            if note_id is not None and note_id in notes_by_id:
+                note = notes_by_id[note_id]
+            else:
+                note = card.note()
+                if note_id is not None:
+                    notes_by_id[note_id] = note
+
+            if parser.unskip_hints_from_note(note, card):
+                changed_cards += 1
+                changed_notes[note_id if note_id is not None else id(note)] = note
+        except Exception as e:
+            missing_cards += 1
+            logger.error(f"Failed to unskip AI-Hints for card {card_id}: {e}")
+
+    for note in changed_notes.values():
+        try:
+            mw.col.update_note(note)
+        except Exception as e:
+            logger.error(f"Failed to update note after unskipping AI-Hints: {e}")
+
+    return len(card_ids), changed_cards, len(changed_notes)
+
+def unskip_ai_hints_from_browser_selection(browser):
+    card_ids = _selected_browser_card_ids(browser)
+    if not card_ids:
+        tooltip("AI-Hints: Select one or more cards first.")
+        return 0, 0, 0
+
+    res = unskip_ai_hints_for_cards(card_ids)
+    changed_cards = res[1]
+
+    if changed_cards:
+        refresh_browser = getattr(browser, "onReset", None)
+        if callable(refresh_browser):
+            try:
+                refresh_browser()
+            except Exception as e:
+                logger.error(f"Failed to refresh browser after unskipping AI-Hints: {e}")
+
+    if changed_cards:
+        tooltip(
+            f"AI-Hints: Re-enabled AI generation for {changed_cards} "
+            f"selected card{'s' if changed_cards != 1 else ''}."
+        )
+    else:
+        tooltip("AI-Hints: Selected cards were not in skipped status.")
+
+    return res
+
 def skip_ai_hints_for_cards(card_ids) -> tuple[int, int, int]:
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     parser = CardParser(
@@ -1214,6 +1283,11 @@ def on_browser_context_menu(browser, menu):
     act_skip.setEnabled(has_selection)
     act_skip.triggered.connect(lambda _checked=False, b=browser: skip_ai_hints_from_browser_selection(b))
 
+    # Action 2.5: Unskip AI for Selected Cards
+    act_unskip = ai_menu.addAction("Unskip AI for Selected Cards")
+    act_unskip.setEnabled(has_selection)
+    act_unskip.triggered.connect(lambda _checked=False, b=browser: unskip_ai_hints_from_browser_selection(b))
+
     # Action 3: Clear
     act_clear = ai_menu.addAction("Clear AI-Hints")
     act_clear.setEnabled(has_selection)
@@ -1229,6 +1303,113 @@ def on_browser_context_menu(browser, menu):
             query = "cid:" + ",".join(map(str, card_ids))
             on_clean_orphaned_hints(query, f"selected cards ({len(card_ids)})")
     act_orphans.triggered.connect(on_clean_orphans_triggered)
+
+def on_sidebar_context_menu(sidebar, menu, item, index) -> None:
+    search_node = getattr(item, "search_node", None)
+    if not search_node:
+        return
+
+    try:
+        search_string = sidebar.col.build_search_string(search_node)
+    except Exception:
+        return
+
+    if not search_string:
+        return
+
+    try:
+        card_ids = sidebar.col.find_cards(search_string)
+    except Exception as e:
+        logger.error(f"Failed to find cards for sidebar search query '{search_string}': {e}")
+        return
+
+    if not card_ids:
+        return
+
+    from aqt.utils import askUser
+    from .config_ui import on_config_dialog
+
+    # Add separator before our menu
+    menu.addSeparator()
+
+    # Create AI Hints sub-menu
+    ai_menu = QMenu("AI Hints", menu)
+    menu.addMenu(ai_menu)
+
+    # Action 1: Batch Generation...
+    act_batch = ai_menu.addAction("✨ Batch Generation...")
+    act_batch.triggered.connect(
+        lambda _checked=False, cids=card_ids: on_config_dialog(mw, tab_index=4, card_ids=cids)
+    )
+
+    # Action 2: Skip AI for Group
+    act_skip = ai_menu.addAction("Skip AI for Group")
+    def on_skip_triggered() -> None:
+        mw.checkpoint("Skip AI Hints")
+        res = skip_ai_hints_for_cards(card_ids)
+        changed_cards = res[1]
+        
+        # Trigger reload of browser if active
+        browser = getattr(sidebar, "browser", None)
+        if browser:
+            refresh_browser = getattr(browser, "onReset", None)
+            if callable(refresh_browser):
+                try:
+                    refresh_browser()
+                except Exception as e:
+                    logger.error(f"Failed to refresh browser after skipping: {e}")
+                    
+        if changed_cards:
+            tooltip(f"AI-Hints: Skipped AI generation for {changed_cards} cards.")
+        else:
+            tooltip("AI-Hints: Selected cards were already marked as skipped or couldn't be updated.")
+    act_skip.triggered.connect(on_skip_triggered)
+
+    # Action 3: Unskip AI for Group
+    act_unskip = ai_menu.addAction("Unskip AI for Group")
+    def on_unskip_triggered() -> None:
+        mw.checkpoint("Unskip AI Hints")
+        res = unskip_ai_hints_for_cards(card_ids)
+        changed_cards = res[1]
+        
+        browser = getattr(sidebar, "browser", None)
+        if browser:
+            refresh_browser = getattr(browser, "onReset", None)
+            if callable(refresh_browser):
+                try:
+                    refresh_browser()
+                except Exception as e:
+                    logger.error(f"Failed to refresh browser after unskipping: {e}")
+                    
+        if changed_cards:
+            tooltip(f"AI-Hints: Re-enabled AI generation for {changed_cards} cards.")
+        else:
+            tooltip("AI-Hints: No skipped card indicators found in selected group.")
+    act_unskip.triggered.connect(on_unskip_triggered)
+
+    # Action 4: Clear AI-Hints
+    act_clear = ai_menu.addAction("Clear AI-Hints")
+    def on_clear_triggered() -> None:
+        if not askUser(f"Are you sure you want to clear AI Hints from all {len(card_ids)} cards in this group?"):
+            return
+        mw.checkpoint("Clear AI Hints")
+        res = clear_ai_hints_for_cards(card_ids)
+        changed_cards = res[1]
+        
+        browser = getattr(sidebar, "browser", None)
+        if browser:
+            refresh_browser = getattr(browser, "onReset", None)
+            if callable(refresh_browser):
+                try:
+                    refresh_browser()
+                except Exception as e:
+                    logger.error(f"Failed to refresh browser after clearing: {e}")
+                    
+        if changed_cards:
+            tooltip(f"AI-Hints: Cleared cached data from {changed_cards} cards.")
+        else:
+            tooltip("AI-Hints: No cached data found on the selected cards.")
+    act_clear.triggered.connect(on_clear_triggered)
 
 def on_deck_browser_context_menu(menu, did) -> None:
     from aqt.qt import QMenu, QAction
@@ -1307,6 +1488,49 @@ def on_deck_browser_context_menu(menu, did) -> None:
         ).run_in_background()
         
     act_skip.triggered.connect(on_skip_triggered)
+    
+    # Action 2.5: Unskip AI for All Cards in Deck
+    act_unskip = ai_menu.addAction("Unskip AI for All Cards in Deck")
+    
+    def on_unskip_triggered() -> None:
+        from aqt.operations import QueryOp
+        
+        def run_unskip(col) -> tuple[str, list[int]]:
+            deck_name = get_deck_name(col)
+            card_ids = col.find_cards(f'\"deck:{deck_name}\"')
+            return deck_name, card_ids
+            
+        def on_success(res) -> None:
+            deck_name, card_ids = res
+            if not card_ids:
+                tooltip("AI-Hints: No cards found in this deck.")
+                return
+            if not askUser(f"Are you sure you want to re-enable AI hints for all {len(card_ids)} cards in deck '{deck_name}'?"):
+                return
+            
+            def do_unskip(col):
+                return unskip_ai_hints_for_cards(card_ids)
+                
+            def on_unskip_done(unskip_res):
+                total, changed, changed_notes = unskip_res
+                if changed > 0:
+                    tooltip(f"AI-Hints: Re-enabled AI generation for {changed} cards.")
+                else:
+                    tooltip("AI-Hints: Selected cards were not in skipped status.")
+                    
+            QueryOp(
+                parent=mw,
+                op=do_unskip,
+                success=on_unskip_done,
+            ).run_in_background()
+            
+        QueryOp(
+            parent=mw,
+            op=run_unskip,
+            success=on_success,
+        ).run_in_background()
+        
+    act_unskip.triggered.connect(on_unskip_triggered)
     
     # Action 3: Clear AI-Hints for All Cards in Deck
     act_clear = ai_menu.addAction("Clear AI-Hints for All Cards in Deck")
@@ -2124,6 +2348,8 @@ def init_hooks():
     gui_hooks.webview_did_receive_js_message.append(on_webview_did_receive_js_message)
     gui_hooks.browser_will_show_context_menu.append(on_browser_context_menu)
     gui_hooks.deck_browser_will_show_options_menu.append(on_deck_browser_context_menu)
+    if hasattr(gui_hooks, "browser_sidebar_will_show_context_menu"):
+        gui_hooks.browser_sidebar_will_show_context_menu.append(on_sidebar_context_menu)
     gui_hooks.state_shortcuts_will_change.append(on_state_shortcuts_will_change)
     
     # Initialize background tracking layer for ongoing batch processing jobs

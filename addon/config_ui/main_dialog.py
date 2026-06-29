@@ -1031,7 +1031,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         mw.checkpoint("Migrate AI Data")
 
         from ..card_parser import CardParser
-        parser = CardParser(storage_mode=self.config.get("storage_mode", "json"))
+        parser = CardParser(
+            mathjax_format=self.config.get("mathjax_format", "delimiters"),
+            fix_latex=self.config.get("fix_latex", False)
+        )
         
         self._migration_running = True
         self._migration_stop_requested = False
@@ -1169,7 +1172,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         from ..card_parser import CardParser
         # Force JSON mode for this task
-        parser = CardParser(storage_mode="json")
+        parser = CardParser(
+            mathjax_format=self.config.get("mathjax_format", "delimiters"),
+            fix_latex=self.config.get("fix_latex", False)
+        )
         
         self._migration_running = True
         self._migration_stop_requested = False
@@ -1392,7 +1398,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if isinstance(raw_local, dict): local.update(raw_local)
         config["local_endpoint"] = local
         config.setdefault("ai_provider", "openai")
-        config.setdefault("storage_mode", "json")
         config.setdefault("mathjax_format", "delimiters")
         config.setdefault("fix_latex", False)
         config.setdefault("answer_display_position", "between")
@@ -1448,7 +1453,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         mw.checkpoint("Convert Unicode Escapes")
 
         parser = CardParser(
-            storage_mode=self.config.get("storage_mode", "json"),
             mathjax_format=self.config.get("mathjax_format", "delimiters"),
             fix_latex=self.config.get("fix_latex", False)
         )
@@ -2171,7 +2175,7 @@ def init_config_ui():
     
     mw.addonManager.setConfigAction(ADDON_PACKAGE, on_config_dialog)
 
-    # 1. Add "Clean Orphaned Hints" right below "Empty Cards..."
+    from aqt.qt import QAction
     orphan_action = QAction("Clean Orphaned Hints", mw)
     orphan_action.triggered.connect(on_clean_orphaned_hints)
     

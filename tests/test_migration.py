@@ -65,11 +65,7 @@ class MigrationTests(unittest.TestCase):
             card_key = block.get("card_key")
             toggles = block.get("toggles", {})
             
-            if parser.storage_mode == "json":
-                current_val = parser._update_json_block_in_field(current_val, data, card_key, toggles)
-            else:
-                content = parser.build_hints_block(data, toggles)
-                current_val = current_val.strip() + "\n\n" + content
+            current_val = parser._update_json_block_in_field(current_val, data, card_key, toggles)
         
         note[first_field] = current_val
         

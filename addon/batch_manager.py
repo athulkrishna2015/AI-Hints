@@ -19,16 +19,112 @@ class BatchManager:
         self.active_providers = []
         self._polling_lock = threading.Lock()
         
-        # Sequential Queue Runtime State
-        self.local_queue = []
-        self.local_queue_total = 0
+        # Sequential Queue Runtime State (Backing fields/Master list of jobs)
+        self.local_queue_jobs = []
         self.local_queue_active = False
         self.local_queue_paused = False
-        self.local_queue_errors = 0
-        self.local_queue_pass = 1
-        self.local_queue_failed_cards = []
-        self.saved_config = {}
-        self.saved_provider = None
+        
+        # Live Runtime Diagnostic Hooks
+        self.current_local_cid = None
+        self.current_local_model = ""
+        self.current_local_provider = ""
+        self.last_run_stats = None
+        
+        self.active_threads_status = {}
+        self._db_lock = threading.RLock()
+        
+        self.load_state()
+
+    def _ensure_current_job(self):
+        if not hasattr(self, "local_queue_jobs"):
+            self.local_queue_jobs = []
+        if not self.local_queue_jobs:
+            self.local_queue_jobs.append({
+                "id": "default",
+                "queue": [],
+                "total": 0,
+                "failed_cards": [],
+                "config": {},
+                "provider": None,
+                "pass": 1,
+                "errors": 0
+            })
+
+    @property
+    def current_job(self) -> Optional[Dict[str, Any]]:
+        if hasattr(self, "local_queue_jobs") and self.local_queue_jobs:
+            return self.local_queue_jobs[0]
+        return None
+
+    @property
+    def local_queue(self) -> List[int]:
+        self._ensure_current_job()
+        return self.local_queue_jobs[0].setdefault("queue", [])
+
+    @local_queue.setter
+    def local_queue(self, val: List[int]):
+        self._ensure_current_job()
+        self.local_queue_jobs[0]["queue"] = val
+
+    @property
+    def local_queue_total(self) -> int:
+        self._ensure_current_job()
+        return self.local_queue_jobs[0].setdefault("total", 0)
+
+    @local_queue_total.setter
+    def local_queue_total(self, val: int):
+        self._ensure_current_job()
+        self.local_queue_jobs[0]["total"] = val
+
+    @property
+    def local_queue_failed_cards(self) -> List[int]:
+        self._ensure_current_job()
+        return self.local_queue_jobs[0].setdefault("failed_cards", [])
+
+    @local_queue_failed_cards.setter
+    def local_queue_failed_cards(self, val: List[int]):
+        self._ensure_current_job()
+        self.local_queue_jobs[0]["failed_cards"] = val
+
+    @property
+    def saved_config(self) -> Dict[str, Any]:
+        self._ensure_current_job()
+        return self.local_queue_jobs[0].setdefault("config", {})
+
+    @saved_config.setter
+    def saved_config(self, val: Dict[str, Any]):
+        self._ensure_current_job()
+        self.local_queue_jobs[0]["config"] = val
+
+    @property
+    def saved_provider(self) -> Optional[str]:
+        self._ensure_current_job()
+        return self.local_queue_jobs[0].get("provider", None)
+
+    @saved_provider.setter
+    def saved_provider(self, val: Optional[str]):
+        self._ensure_current_job()
+        self.local_queue_jobs[0]["provider"] = val
+
+    @property
+    def local_queue_pass(self) -> int:
+        self._ensure_current_job()
+        return self.local_queue_jobs[0].setdefault("pass", 1)
+
+    @local_queue_pass.setter
+    def local_queue_pass(self, val: int):
+        self._ensure_current_job()
+        self.local_queue_jobs[0]["pass"] = val
+
+    @property
+    def local_queue_errors(self) -> int:
+        self._ensure_current_job()
+        return self.local_queue_jobs[0].setdefault("errors", 0)
+
+    @local_queue_errors.setter
+    def local_queue_errors(self, val: int):
+        self._ensure_current_job()
+        self.local_queue_jobs[0]["errors"] = val
         
         # Live Runtime Diagnostic Hooks
         self.current_local_cid = None
@@ -71,17 +167,26 @@ class BatchManager:
                 # Restore Local Sequential Cache state
                 cache = data.get("local_cache", {})
                 if cache and isinstance(cache, dict):
-                     self.local_queue = cache.get("queue", [])
-                     self.local_queue_total = cache.get("total", len(self.local_queue))
                      self.local_queue_active = cache.get("active", False)
                      self.local_queue_paused = cache.get("paused", False)
-                     self.local_queue_errors = cache.get("errors", 0)
-                     self.local_queue_pass = cache.get("pass", 1)
-                     self.local_queue_failed_cards = cache.get("failed_cards", [])
-                     self.saved_config = cache.get("config", {})
-                     self.saved_provider = cache.get("provider", None)
                      self.last_run_stats = cache.get("last_run_stats", None)
-                     logger.info(f"BatchManager restored state. Queue: {len(self.local_queue)} items (Active: {self.local_queue_active}, Paused: {self.local_queue_paused}).")
+                     self.local_queue_jobs = cache.get("jobs", [])
+                     
+                     # Backward compatibility: Reconstruct legacy job from individual fields if missing
+                     if not self.local_queue_jobs and cache.get("queue"):
+                          legacy_job = {
+                              "id": f"legacy_{int(time.time())}",
+                              "queue": cache.get("queue", []),
+                              "total": cache.get("total", len(cache.get("queue", []))),
+                              "failed_cards": cache.get("failed_cards", []),
+                              "config": cache.get("config", {}),
+                              "provider": cache.get("provider", None),
+                              "pass": cache.get("pass", 1),
+                              "errors": cache.get("errors", 0)
+                          }
+                          self.local_queue_jobs = [legacy_job]
+                          
+                     logger.info(f"BatchManager restored state. Active jobs: {len(self.local_queue_jobs)} (Active: {self.local_queue_active}, Paused: {self.local_queue_paused}).")
             else:
                 # Legacy format
                 self.jobs = data if isinstance(data, dict) else {}
@@ -96,25 +201,44 @@ class BatchManager:
         with self._db_lock:
             try:
                 # Package combined persisted bundle
-                # Strip sensitive API keys from the saved config to prevent redundancy and data exposure.
-                # The keys will be re-merged from the main addon config during resume.
-                stripped_config = dict(getattr(self, "saved_config", {}))
+                serialized_jobs = []
+                for job in getattr(self, "local_queue_jobs", []):
+                    job_copy = dict(job)
+                    stripped_config = dict(job.get("config", {}))
+                    if "api_keys" in stripped_config:
+                        stripped_config.pop("api_keys")
+                    job_copy["config"] = stripped_config
+                    serialized_jobs.append(job_copy)
+
+                # Get active job fields for top-level backward compatibility
+                active_job = self.current_job or {
+                    "queue": [],
+                    "total": 0,
+                    "errors": 0,
+                    "pass": 1,
+                    "failed_cards": [],
+                    "config": {},
+                    "provider": None
+                }
+                stripped_config = dict(active_job.get("config", {}))
                 if "api_keys" in stripped_config:
                     stripped_config.pop("api_keys")
 
                 payload = {
                     "native_jobs": self.jobs,
                     "local_cache": {
-                        "queue": self.local_queue,
-                        "total": self.local_queue_total,
-                        "errors": self.local_queue_errors,
-                        "pass": self.local_queue_pass,
+                        "jobs": serialized_jobs,
                         "active": self.local_queue_active,
                         "paused": self.local_queue_paused,
-                        "failed_cards": getattr(self, "local_queue_failed_cards", []),
+                        "last_run_stats": self.last_run_stats,
+                        # Top-level duplicate keys for backward compatibility
+                        "queue": active_job.get("queue", []),
+                        "total": active_job.get("total", 0),
+                        "errors": active_job.get("errors", 0),
+                        "pass": active_job.get("pass", 1),
+                        "failed_cards": active_job.get("failed_cards", []),
                         "config": stripped_config,
-                        "provider": getattr(self, "saved_provider", None),
-                        "last_run_stats": self.last_run_stats
+                        "provider": active_job.get("provider", None)
                     }
                 }
                 state_file = self._state_file_path()
@@ -134,6 +258,12 @@ class BatchManager:
             
             pass_str = f" (Pass #{self.local_queue_pass})" if self.local_queue_pass > 1 else ""
             html_parts.append(f"<div style='font-size:12px; padding-bottom:4px;'>{status_txt} <b>Local Sequential Queue{pass_str}</b></div>")
+            
+            # Show friendly description of the active job
+            active_job = self.current_job
+            if active_job and active_job.get("description"):
+                html_parts.append(f"📦 Active Job: <b>{active_job['description']}</b><br/>")
+                
             html_parts.append(f"📊 Progress: <b>{done}</b> / {self.local_queue_total} cards generated. ({remaining} left)<br/>")
             failed_cards = getattr(self, "local_queue_failed_cards", [])
             if failed_cards:
@@ -174,7 +304,7 @@ class BatchManager:
             
             if self.local_queue:
                  html_parts.append("<div style='margin-top:6px; font-size:11px;'>")
-                 html_parts.append("<b>Pending in Queue (Next 5):</b><br/>")
+                 html_parts.append("<b>Pending in Active Job (Next 5):</b><br/>")
                  # Use a copy to avoid thread safety issues while iterating
                  with self._db_lock:
                      queue_snapshot = list(self.local_queue[:5])
@@ -188,6 +318,11 @@ class BatchManager:
                       html_parts.append(f"<i>... and {total_remaining - 5} more.</i>")
                  html_parts.append("</div>")
 
+            # Queue list helper
+            queue_html = self._render_queued_jobs_html()
+            if queue_html:
+                 html_parts.append(queue_html)
+
             html_parts.append("<hr style='border:0; border-top:1px solid #ccc; margin:8px 0;'/>")
 
         elif self.local_queue:
@@ -195,6 +330,12 @@ class BatchManager:
             remaining = len(self.local_queue)
             done = self.local_queue_total - remaining
             html_parts.append(f"💾 <b style='color:#fd7e14;'>Saved Dormant Queue</b> ({remaining} cards pending)<br/>")
+            
+            # Show friendly description of the active job
+            active_job = self.current_job
+            if active_job and active_job.get("description"):
+                html_parts.append(f"📦 Job: <b>{active_job['description']}</b><br/>")
+
             html_parts.append(f"Completed so far: {done} / {self.local_queue_total} total.<br/>")
             failed_cards = getattr(self, "local_queue_failed_cards", [])
             if failed_cards:
@@ -210,7 +351,7 @@ class BatchManager:
             
             if self.local_queue:
                  html_parts.append("<div style='margin-top:6px; font-size:11px;'>")
-                 html_parts.append("<b>Pending in Queue (Next 5):</b><br/>")
+                 html_parts.append("<b>Pending in Active Job (Next 5):</b><br/>")
                  with self._db_lock:
                      queue_snapshot = list(self.local_queue[:5])
                  
@@ -221,6 +362,11 @@ class BatchManager:
                  if remaining > 5:
                       html_parts.append(f"<i>... and {remaining - 5} more.</i>")
                  html_parts.append("</div>")
+
+            # Queue list helper
+            queue_html = self._render_queued_jobs_html()
+            if queue_html:
+                 html_parts.append(queue_html)
 
             html_parts.append("<i>Click 'Resume Saved Queue' below to restart.</i><br/><br/>")
             
@@ -260,6 +406,93 @@ class BatchManager:
                 html_parts.append(f"🔹 <b>{name}</b>: {cards} cards queued ({minutes} mins ago)<br/>")
         
         return "\n".join(html_parts)
+
+    def _render_queued_jobs_html(self) -> str:
+        """Helper to build a beautiful HTML queue list widget."""
+        if not hasattr(self, "local_queue_jobs") or len(self.local_queue_jobs) <= 1:
+            return ""
+            
+        html_parts = []
+        html_parts.append("<div style='margin-top:10px; font-size:11px; padding:8px; background-color:rgba(0,0,0,0.03); border:1px solid rgba(0,0,0,0.05); border-radius:6px;'>")
+        html_parts.append("<div style='font-weight:bold; margin-bottom:6px; color:#495057;'>📋 Queued Jobs List:</div>")
+        
+        for idx, job in enumerate(self.local_queue_jobs[1:], 1):
+            job_id = job.get("id")
+            desc = job.get("description", f"{job['total']} cards")
+            prov_str = f" ({job.get('provider') or 'Default'})"
+            
+            # Build control links
+            controls = []
+            # Move Up
+            if idx > 1:
+                controls.append(f"<a href='job_up:{job_id}' style='color:#0d6efd; text-decoration:none;'>[▲ Up]</a>")
+            # Move Down
+            if idx < len(self.local_queue_jobs) - 1:
+                controls.append(f"<a href='job_down:{job_id}' style='color:#0d6efd; text-decoration:none;'>[▼ Down]</a>")
+            # Cancel
+            controls.append(f"<a href='job_cancel:{job_id}' style='color:#dc3545; text-decoration:none; font-weight:bold;'>[✖ Cancel]</a>")
+            
+            controls_str = " ".join(controls)
+            html_parts.append(
+                f"<div style='margin-bottom:4px; display:flex; justify-content:space-between;'>"
+                f"<span>• Job #{idx}: <b>{desc}</b>{prov_str}</span> "
+                f"<span style='float:right;'>{controls_str}</span>"
+                f"</div>"
+            )
+        
+        html_parts.append("<div style='margin-top:6px; text-align:right;'>")
+        html_parts.append("<a href='job_clear_all' style='color:#dc3545; text-decoration:none; font-size:10px;'>🗑️ Clear All Queued Jobs</a>")
+        html_parts.append("</div>")
+        html_parts.append("</div>")
+        return "\n".join(html_parts)
+
+    def discard_job(self, job_id: str) -> bool:
+        """Removes a specific job from the jobs queue."""
+        with self._db_lock:
+             for idx, job in enumerate(self.local_queue_jobs):
+                  if job.get("id") == job_id:
+                       self.local_queue_jobs.pop(idx)
+                       if idx == 0:
+                            # We discarded the active job!
+                            if not self.local_queue_jobs:
+                                 self.local_queue_active = False
+                                 self.local_queue_paused = False
+                       self.save_state()
+                       return True
+        return False
+
+    def move_job_up(self, job_id: str) -> bool:
+        """Moves a job up in the queue list."""
+        with self._db_lock:
+             for idx, job in enumerate(self.local_queue_jobs):
+                  if job.get("id") == job_id:
+                       if idx > 1: # Index 0 is active job, so we can only swap idx >= 2 with idx - 1
+                            self.local_queue_jobs[idx], self.local_queue_jobs[idx - 1] = \
+                                 self.local_queue_jobs[idx - 1], self.local_queue_jobs[idx]
+                            self.save_state()
+                            return True
+        return False
+
+    def move_job_down(self, job_id: str) -> bool:
+        """Moves a job down in the queue list."""
+        with self._db_lock:
+             for idx, job in enumerate(self.local_queue_jobs):
+                  if job.get("id") == job_id:
+                       if 0 < idx < len(self.local_queue_jobs) - 1: # Can't move active job (idx 0) or last job down
+                            self.local_queue_jobs[idx], self.local_queue_jobs[idx + 1] = \
+                                 self.local_queue_jobs[idx + 1], self.local_queue_jobs[idx]
+                            self.save_state()
+                            return True
+        return False
+
+    def clear_all_queued_jobs(self) -> bool:
+        """Discards all jobs in the queue."""
+        with self._db_lock:
+             self.local_queue_jobs = []
+             self.local_queue_active = False
+             self.local_queue_paused = False
+             self.save_state()
+        return True
 
     def register_job(self, job_name: str, card_ids: List[int]):
         self.jobs[job_name] = {
@@ -441,9 +674,6 @@ class BatchManager:
     def start_local_sequential_queue(self, card_ids: List[int] = None, config: Dict[str, Any] = None, provider_override: str = None):
         """Launches/Resumes a background thread loop to run sequential generation."""
         state.GLOBAL_STOP = False
-        if self.local_queue_active:
-             info("⚠️ Another Local Queue is already active! Wait for it to finish.")
-             return False
         
         # 🚀 RESUME Logic
         if card_ids is None:
@@ -454,72 +684,121 @@ class BatchManager:
              # Use previously persisted config/provider
              config = self.saved_config or config
              provider_override = self.saved_provider
-
+ 
              # Re-inject fresh API keys from global config if missing in the resumed state.
-             # This prevents batch_state.json from needing to store sensitive keys.
              if config and not config.get("api_keys"):
                   try:
                        from aqt import mw
-                       # Get addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
                        pkg = __name__.split(".")[0]
                        global_config = mw.addonManager.getConfig(pkg) or {}
                        config["api_keys"] = global_config.get("api_keys", {})
                   except Exception as e:
                        logger.error(f"Failed to re-inject API keys during batch resume: {e}")
-        else:
-             # 🆕 START FRESH Logic
-             self.local_queue = list(card_ids)
-             self.local_queue_total = len(card_ids)
-             self.local_queue_errors = 0
-             self.local_queue_pass = 1
-             self.local_queue_failed_cards = []
-             self.saved_config = config or {}
-             self.saved_provider = provider_override
-             self.last_run_stats = None 
-        
-        if not config:
-             logger.error("Cannot start background queue without valid config map.")
-             return False
-
-        self.local_queue_active = True
-        if card_ids is not None:
+             
+             self.local_queue_active = True
              self.local_queue_paused = False
+             self.save_state()
+             
+             t = threading.Thread(
+                 target=self._run_local_queue,
+                 args=(config, provider_override),
+                 daemon=True
+             )
+             t.start()
+             return True
+
+        # Determine deck name description
+        desc = f"{len(card_ids)} cards"
+        try:
+             from aqt import mw
+             if card_ids and mw and mw.col:
+                  deck_ids = set()
+                  for cid in card_ids[:5]:
+                       card = mw.col.get_card(cid)
+                       if card:
+                            deck_ids.add(card.did)
+                  if len(deck_ids) == 1:
+                       dname = mw.col.decks.get(list(deck_ids)[0]).get("name")
+                       if dname:
+                            desc = f"Deck: {dname} ({len(card_ids)} cards)"
+        except Exception:
+             pass
+
+        # 🆕 START FRESH / QUEUE NEW JOB Logic
+        new_job = {
+            "id": f"job_{int(time.time())}_{len(self.local_queue_jobs)}",
+            "queue": list(card_ids),
+            "total": len(card_ids),
+            "failed_cards": [],
+            "config": config or {},
+            "provider": provider_override,
+            "pass": 1,
+            "errors": 0,
+            "description": desc
+        }
         
-        # Immediately persist setup state to disk in case of crash 1ms later
-        self.save_state()
+        is_already_active = self.local_queue_active
         
-        # Fire and forget daemon
-        t = threading.Thread(
-            target=self._run_local_queue,
-            args=(config, provider_override),
-            daemon=True
-        )
-        t.start()
+        with self._db_lock:
+            # If the current job list only has a dummy empty/default job, replace it
+            if len(self.local_queue_jobs) == 1 and self.local_queue_jobs[0]["id"] == "default" and not self.local_queue_jobs[0]["queue"]:
+                self.local_queue_jobs = [new_job]
+            else:
+                self.local_queue_jobs.append(new_job)
+                
+        logger.info(f"Queued new batch job {new_job['id']} with {len(card_ids)} cards.")
+        
+        if not is_already_active:
+             self.local_queue_active = True
+             self.local_queue_paused = False
+             self.save_state()
+             
+             t = threading.Thread(
+                 target=self._run_local_queue,
+                 args=(config, provider_override),
+                 daemon=True
+             )
+             t.start()
+        else:
+             self.save_state()
+             from aqt.utils import tooltip
+             tooltip(f"📋 Queued {len(card_ids)} cards to local queue.")
+             
         return True
 
     def stop_local_queue(self):
-        """Requests the background worker to halt immediate next-loop."""
-        if not self.local_queue_active:
-             # Wipe persistent cache even if thread isn't running (force clear saved state)
-             self.local_queue = []
-             self.last_run_stats = None
-             self.save_state()
-             return True
+        """Stops/Discards the current active job. Remaining jobs in queue are preserved."""
+        with self._db_lock:
+             if not self.local_queue_jobs or (len(self.local_queue_jobs) == 1 and self.local_queue_jobs[0]["id"] == "default"):
+                  self.local_queue_active = False
+                  self.local_queue_paused = False
+                  self.local_queue_jobs = []
+                  self.last_run_stats = None
+                  self.save_state()
+                  return True
+                  
+             # Discard the current job
+             discarded_job = self.local_queue_jobs.pop(0)
+             logger.info(f"Local Sequential Queue: Discarded active job {discarded_job.get('id')}.")
              
-        self.local_queue_active = False
-        self.local_queue_paused = False
-        self.local_queue = [] # Clear remaining list
-        self.last_run_stats = None
-        self.save_state() # Persist full stop clearing cache
-        logger.debug("Local Sequential Queue ABORT manually triggered by user.")
+             if not self.local_queue_jobs:
+                  self.local_queue_active = False
+                  self.local_queue_paused = False
+                  self.last_run_stats = None
+             self.save_state()
         return True
 
     def stop_all(self):
         """Emergency stop for ALL activity (Local Queue + Cloud Batches)."""
         state.GLOBAL_STOP = True
         logger.info("🚨 EMERGENCY STOP: Aborting all active generations.")
-        self.stop_local_queue()
         
+        # Clear all jobs in queue
+        with self._db_lock:
+             self.local_queue_jobs = []
+             self.local_queue_active = False
+             self.local_queue_paused = False
+             
         # Clear cloud batches from tracking
         if self.jobs:
             count = len(self.jobs)
@@ -529,6 +808,7 @@ class BatchManager:
             logger.info(f"Cleared {count} cloud batch jobs from tracking.")
             
         self.save_state()
+        from aqt.utils import tooltip
         tooltip("🛑 All generations stopped.")
         return True
 
@@ -541,121 +821,146 @@ class BatchManager:
     def discard_from_queue(self, cid: int):
         """Removes a specific card ID from the queue."""
         with self._db_lock:
-            if cid in self.local_queue:
-                self.local_queue.remove(cid)
-                if hasattr(self, "local_queue_failed_cards") and cid in self.local_queue_failed_cards:
-                    try:
-                        self.local_queue_failed_cards.remove(cid)
-                    except ValueError:
-                        pass
-                self.save_state()
-                return True
+             for job in getattr(self, "local_queue_jobs", []):
+                  if cid in job.get("queue", []):
+                       job["queue"].remove(cid)
+                       job["total"] = max(0, job["total"] - 1)
+                       self.save_state()
+                       return True
+                  if cid in job.get("failed_cards", []):
+                       job["failed_cards"].remove(cid)
+                       self.save_state()
+                       return True
         return False
 
     def _run_local_queue(self, config: Dict, provider_override: str):
-        """Core iterative engine thread that drives the sequential queue."""
-        logger.info(f"STARTING local sequential queue for {self.local_queue_total} cards.")
+        """Core iterative engine thread that drives the sequential queue, processing multiple jobs."""
+        from .reviewer_hooks import card_has_hints, _get_card_from_collection
         
-        self.card_attempts = {}
-        self.active_threads_status = {}
         if not hasattr(self, "_db_lock"):
              self._db_lock = threading.RLock()
              
-        client = AIClient(config)
-        parser = CardParser()
-        
-        # Keep track of the full set of cards we intend to process
-        # This is used for the verification passes.
-        original_request = list(self.local_queue)
-        from .reviewer_hooks import card_has_hints, _get_card_from_collection
-
         while self.local_queue_active:
-            use_multithread = config.get("multithread_providers", False)
+            with self._db_lock:
+                if not getattr(self, "local_queue_jobs", []):
+                    break
+                # Fetch the active job
+                job = self.local_queue_jobs[0]
+                current_job_id = job.get("id", "default")
+                
+            logger.info(f"STARTING local sequential queue job {current_job_id} for {self.local_queue_total} cards.")
+            self.card_attempts = {}
+            self.active_threads_status = {}
             
-            if use_multithread and (not provider_override or provider_override == "Standard Config (Follows Fallback Matrix)"):
-                 primary = config.get("ai_provider", "openai")
-                 providers = client._candidate_providers(primary)
-                 if not providers:
-                      logger.error("No configured providers are ready for multithreading.")
-                      self.local_queue_active = False
-                      self.save_state()
-                      return
+            client = AIClient(self.saved_config)
+            parser = CardParser()
+            original_request = list(self.local_queue)
+
+            while self.local_queue_active:
+                # Double check that we are still on the same job
+                with self._db_lock:
+                    if not self.local_queue_jobs or self.local_queue_jobs[0].get("id") != current_job_id:
+                        break
+                        
+                use_multithread = self.saved_config.get("multithread_providers", False)
+                if use_multithread and (not self.saved_provider or self.saved_provider == "Standard Config (Follows Fallback Matrix)"):
+                     primary = self.saved_config.get("ai_provider", "openai")
+                     providers = client._candidate_providers(primary)
+                     if not providers:
+                          logger.error("No configured providers are ready for multithreading.")
+                          self.local_queue_active = False
+                          self.save_state()
+                          return
+                else:
+                     target_prov = self.saved_provider or self.saved_config.get("ai_provider", "openai")
+                     providers = [target_prov]
+                     
+                self.active_providers = providers
+                logger.info(f"Local Queue Pass #{self.local_queue_pass}: Running with {len(self.local_queue)} cards using providers: {providers}")
+                
+                threads = []
+                for prov in providers:
+                     t = threading.Thread(
+                          target=self._run_local_queue_thread,
+                          args=(prov, client, parser, self.saved_config),
+                          daemon=True
+                     )
+                     threads.append(t)
+                     t.start()
+                     
+                for t in threads:
+                     t.join()
+                
+                # --- Verification Pass Logic ---
+                if not self.local_queue_active:
+                    break
+                with self._db_lock:
+                    if not self.local_queue_jobs or self.local_queue_jobs[0].get("id") != current_job_id:
+                        break
+
+                # Check if any cards from the original request are still missing hints
+                missing_cids = []
+                for cid in original_request:
+                    card = _get_card_from_collection(cid)
+                    if card and not card_has_hints(card):
+                        missing_cids.append(cid)
+                
+                if not missing_cids:
+                    logger.info(f"Verification Pass: All {len(original_request)} cards successfully have hints now.")
+                    break
+                
+                with self._db_lock:
+                    self.local_queue = list(missing_cids)
+                    self.local_queue_pass += 1
+                    self.card_attempts = {} # Reset attempts for new pass
+                    self.save_state()
+                
+                logger.info(f"Verification Pass: {len(missing_cids)} cards still missing hints. Starting Pass #{self.local_queue_pass} in 3 seconds...")
+                time.sleep(3) # Small cooldown between passes
+                
+                if self.local_queue_pass > 10:
+                    logger.warning(f"Batch Sequential Queue reached maximum pass limit (10).")
+                    break
+
+            # Check if this job finished or was aborted/skipped
+            with self._db_lock:
+                if self.local_queue_jobs and self.local_queue_jobs[0].get("id") == current_job_id:
+                    # Calculate final error count for stats
+                    final_missing = []
+                    for cid in original_request:
+                        card = _get_card_from_collection(cid)
+                        if card and not card_has_hints(card):
+                            final_missing.append(cid)
+                    
+                    self.last_run_stats = {
+                        "total": self.local_queue_total,
+                        "errors": len(final_missing),
+                        "failed_cards": list(final_missing),
+                        "time": time.time()
+                    }
+                    
+                    if len(final_missing) == 0:
+                        logger.info(f"FINISHED local sequential queue job {current_job_id}. Successfully processed all {self.local_queue_total} cards.")
+                        mw.taskman.run_on_main(lambda cid_count=self.local_queue_total: tooltip(f"✨ Batch Sequential Queue Finished! {cid_count} cards processed."))
+                    else:
+                        logger.info(f"FINISHED local sequential queue job {current_job_id}. Processed {self.local_queue_total - len(final_missing)} cards. {len(final_missing)} cards failed.")
+                        mw.taskman.run_on_main(lambda m=len(final_missing): tooltip(f"✨ Batch Finished. {m} cards failed all retry attempts."))
+                    
+                    self.local_queue_jobs.pop(0)
+                    self.save_state()
+                else:
+                    logger.info(f"Job {current_job_id} was removed/discarded from queue.")
+
+            # If there are more jobs, loop again
+            if self.local_queue_active and getattr(self, "local_queue_jobs", []):
+                logger.info("Transitioning to the next queued job...")
+                time.sleep(1)
             else:
-                 target_prov = provider_override or config.get("ai_provider", "openai")
-                 providers = [target_prov]
-                 
-            self.active_providers = providers
-            logger.info(f"Local Queue Pass #{self.local_queue_pass}: Running with {len(self.local_queue)} cards using providers: {providers}")
-            
-            threads = []
-            for prov in providers:
-                 t = threading.Thread(
-                      target=self._run_local_queue_thread,
-                      args=(prov, client, parser, config),
-                      daemon=True
-                 )
-                 threads.append(t)
-                 t.start()
-                 
-            for t in threads:
-                 t.join()
-            
-            # --- Verification Pass Logic ---
-            if not self.local_queue_active:
                 break
 
-            # Check if any cards from the original request are still missing hints
-            missing_cids = []
-            for cid in original_request:
-                # We fetch card from collection because its hints might have been updated by other threads/passes
-                card = _get_card_from_collection(cid)
-                if card and not card_has_hints(card):
-                    missing_cids.append(cid)
-            
-            if not missing_cids:
-                # 🏁 All done!
-                logger.info(f"Verification Pass: All {len(original_request)} cards successfully have hints now.")
-                break
-            
-            # If we reached here, some cards are still missing. 
-            # Re-queue them and start another pass.
-            with self._db_lock:
-                self.local_queue = list(missing_cids)
-                self.local_queue_pass += 1
-                self.card_attempts = {} # Reset attempts for new pass
-                self.save_state()
-            
-            logger.info(f"Verification Pass: {len(missing_cids)} cards still missing hints. Starting Pass #{self.local_queue_pass} in 3 seconds...")
-            time.sleep(3) # Small cooldown between passes
-            
-            if self.local_queue_pass > 10:
-                logger.warning(f"Batch Sequential Queue reached maximum pass limit (10). Stopping with {len(missing_cids)} cards unfinished.")
-                break
-             
         self.local_queue_active = False
         self.active_threads_status = {}
-        
-        # Calculate final error count for stats
-        final_missing = []
-        for cid in original_request:
-            card = _get_card_from_collection(cid)
-            if card and not card_has_hints(card):
-                final_missing.append(cid)
-        
-        self.last_run_stats = {
-            "total": self.local_queue_total,
-            "errors": len(final_missing),
-            "failed_cards": list(final_missing),
-            "time": time.time()
-        }
-            
         self.save_state()
-        if len(final_missing) == 0:
-            logger.info(f"FINISHED local sequential queue. Successfully processed all {self.local_queue_total} cards.")
-            mw.taskman.run_on_main(lambda: tooltip("✨ Batch Sequential Queue Finished! All cards processed."))
-        else:
-            logger.info(f"FINISHED local sequential queue. Processed {self.local_queue_total - len(final_missing)} cards. {len(final_missing)} cards failed after {self.local_queue_pass} passes.")
-            mw.taskman.run_on_main(lambda m=len(final_missing): tooltip(f"✨ Batch Finished. {m} cards failed all retry attempts."))
 
     def _handle_card_failure(self, cid: int, provider: str):
         failed_provs = self.card_attempts.setdefault(cid, [])

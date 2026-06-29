@@ -289,6 +289,80 @@ class TestBatchManager(unittest.TestCase):
         self.assertEqual(args[1], {"hints": [], "options": [], "_skipped": True})
         mock_mw.col.update_note.assert_called_once_with(mock_note)
 
+    @patch('addon.batch_manager.threading.Thread')
+    def test_multiple_jobs_queuing(self, mock_thread):
+        """Test starting multiple sequential queue jobs, appending them, and stopping individually."""
+        manager = BatchManager()
+        manager.local_queue_jobs = []
+        manager.local_queue_active = False
+        
+        # Start first job
+        started = manager.start_local_sequential_queue(card_ids=[101, 102], config={"ai_provider": "gemini"}, provider_override="gemini")
+        self.assertTrue(started)
+        self.assertTrue(manager.local_queue_active)
+        self.assertEqual(len(manager.local_queue_jobs), 1)
+        self.assertEqual(manager.local_queue, [101, 102])
+        self.assertEqual(manager.local_queue_total, 2)
+        
+        # Start second job while active (this should append/queue it)
+        started_second = manager.start_local_sequential_queue(card_ids=[201, 202, 203], config={"ai_provider": "gemini"}, provider_override="gemini")
+        self.assertTrue(started_second)
+        self.assertEqual(len(manager.local_queue_jobs), 2)
+        # Active job should still be the first one
+        self.assertEqual(manager.local_queue, [101, 102])
+        self.assertEqual(manager.local_queue_total, 2)
+        # Verify second job is queued
+        self.assertEqual(manager.local_queue_jobs[1]["queue"], [201, 202, 203])
+        self.assertEqual(manager.local_queue_jobs[1]["total"], 3)
+        
+        # Discard the current paused/active job
+        manager.stop_local_queue()
+        # Verify second job is now the active one
+        self.assertEqual(len(manager.local_queue_jobs), 1)
+        self.assertEqual(manager.local_queue, [201, 202, 203])
+        self.assertEqual(manager.local_queue_total, 3)
+
+    @patch('addon.batch_manager.threading.Thread')
+    def test_queue_reordering_and_management(self, mock_thread):
+        """Test moving jobs up, down, canceling queued jobs, and clearing the entire queue."""
+        manager = BatchManager()
+        manager.local_queue_jobs = []
+        manager.local_queue_active = False
+        
+        # Start 3 jobs
+        manager.start_local_sequential_queue(card_ids=[101], config={"ai_provider": "gemini"}, provider_override="gemini")
+        manager.start_local_sequential_queue(card_ids=[201], config={"ai_provider": "gemini"}, provider_override="gemini")
+        manager.start_local_sequential_queue(card_ids=[301], config={"ai_provider": "gemini"}, provider_override="gemini")
+        
+        self.assertEqual(len(manager.local_queue_jobs), 3)
+        job_1_id = manager.local_queue_jobs[0]["id"]
+        job_2_id = manager.local_queue_jobs[1]["id"]
+        job_3_id = manager.local_queue_jobs[2]["id"]
+        
+        # Test moving job 3 up (swaps index 2 with index 1)
+        success = manager.move_job_up(job_3_id)
+        self.assertTrue(success)
+        self.assertEqual(manager.local_queue_jobs[1]["id"], job_3_id)
+        self.assertEqual(manager.local_queue_jobs[2]["id"], job_2_id)
+        
+        # Test moving job 3 down (swaps index 1 with index 2)
+        success = manager.move_job_down(job_3_id)
+        self.assertTrue(success)
+        self.assertEqual(manager.local_queue_jobs[1]["id"], job_2_id)
+        self.assertEqual(manager.local_queue_jobs[2]["id"], job_3_id)
+        
+        # Test canceling job 2
+        success = manager.discard_job(job_2_id)
+        self.assertTrue(success)
+        self.assertEqual(len(manager.local_queue_jobs), 2)
+        self.assertEqual(manager.local_queue_jobs[0]["id"], job_1_id)
+        self.assertEqual(manager.local_queue_jobs[1]["id"], job_3_id)
+        
+        # Test clearing queue
+        manager.clear_all_queued_jobs()
+        self.assertEqual(len(manager.local_queue_jobs), 0)
+        self.assertFalse(manager.local_queue_active)
+
 if __name__ == "__main__":
     unittest.main()
 

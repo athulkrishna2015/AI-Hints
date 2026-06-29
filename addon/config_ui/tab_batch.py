@@ -81,6 +81,7 @@ class BatchTabMixin:
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         completer.setFilterMode(Qt.MatchFlag.MatchContains) 
         self.batch_deck_chooser.setCompleter(completer)
+        self.batch_deck_chooser.currentTextChanged.connect(self._on_deck_chooser_changed)
         
         s_layout.addRow("Source Deck:", self.batch_deck_chooser)
         
@@ -332,6 +333,45 @@ class BatchTabMixin:
              except Exception as e:
                   logger.error(f"Failed to discard card from batch UI: {e}")
 
+        elif url.startswith("job_cancel:"):
+             try:
+                  job_id = url.split(":", 1)[1]
+                  from ..batch_manager import batch_manager
+                  if batch_manager.discard_job(job_id):
+                       tooltip("🗑️ Queued job canceled.")
+                       self.update_batch_status_tab()
+             except Exception as e:
+                  logger.error(f"Failed to cancel job from batch UI: {e}")
+                  
+        elif url.startswith("job_up:"):
+             try:
+                  job_id = url.split(":", 1)[1]
+                  from ..batch_manager import batch_manager
+                  if batch_manager.move_job_up(job_id):
+                       self.update_batch_status_tab()
+             except Exception as e:
+                  logger.error(f"Failed to move job up: {e}")
+                  
+        elif url.startswith("job_down:"):
+             try:
+                  job_id = url.split(":", 1)[1]
+                  from ..batch_manager import batch_manager
+                  if batch_manager.move_job_down(job_id):
+                       self.update_batch_status_tab()
+             except Exception as e:
+                  logger.error(f"Failed to move job down: {e}")
+                  
+        elif url == "job_clear_all":
+             try:
+                  from ..batch_manager import batch_manager
+                  from aqt.utils import askUser
+                  if askUser("Are you sure you want to clear all queued jobs?"):
+                       batch_manager.clear_all_queued_jobs()
+                       tooltip("🗑️ All queued jobs cleared.")
+                       self.update_batch_status_tab()
+             except Exception as e:
+                  logger.error(f"Failed to clear all queued jobs: {e}")
+
     def on_batch_control_clicked(self):
         from ..batch_manager import batch_manager
         
@@ -372,13 +412,34 @@ class BatchTabMixin:
             self.batch_deck_chooser.clear()
             all_decks = mw.col.decks.all_names()
             self.batch_deck_chooser.addItems(all_decks)
+            
+            # 1. First, check if currentText is a valid deck name
             if current_text in all_decks:
-                self.batch_deck_chooser.setCurrentText(current_text)
-            else:
-                curr = mw.col.decks.current().get('name', '')
-                if curr in all_decks:
-                    self.batch_deck_chooser.setCurrentText(curr)
+                 self.batch_deck_chooser.setCurrentText(current_text)
+                 return
+                 
+            # 2. Otherwise, check if we have a valid saved selected_deck_name
+            saved_deck = getattr(self, "selected_deck_name", None)
+            if saved_deck in all_decks:
+                 self.batch_deck_chooser.setCurrentText(saved_deck)
+                 return
+                 
+            # 3. Last fallback: Anki's current selected deck
+            curr = mw.col.decks.current().get('name', '')
+            if curr in all_decks:
+                 self.batch_deck_chooser.setCurrentText(curr)
         except: pass
+
+    def _on_deck_chooser_changed(self, text):
+        text = text.strip()
+        # Avoid saving the temporary "Selected Cards" or "(Selected: X cards)" values
+        if text and not text.startswith("Selected") and not text.startswith("(Selected:"):
+            try:
+                all_decks = mw.col.decks.all_names()
+                if text in all_decks:
+                    self.selected_deck_name = text
+            except:
+                pass
 
     def set_selected_deck(self, deck_name):
         """External hook to select a specific deck in the Batch tab."""
@@ -587,7 +648,8 @@ class BatchTabMixin:
                 from ..reviewer_hooks import _get_card_from_collection
 
                 parser = CardParser(
-                    config.get("storage_mode", "json")
+                    mathjax_format=config.get("mathjax_format", "delimiters"),
+                    fix_latex=config.get("fix_latex", False)
                 )
                 
                 items = []

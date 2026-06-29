@@ -11,6 +11,8 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 ## Features
 
 - **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, **Antigravity Proxy**, and any OpenAI-compatible local API (like Ollama or LM Studio).
+- **Queued Batch Jobs (v4.2.0)**: Start multiple batch generation jobs back-to-back, monitor the active job separately from queued jobs, reorder/cancel pending jobs, and keep progress safely persisted between sessions.
+- **Bulk Skip/Unskip Controls (v4.2.0)**: Browser, sidebar, and deck menus now include skip and unskip actions for selected cards or whole groups. Skipping a card clears stale AI hint data and saves only the skipped marker.
 - **Inline Editing (v4.0.0)**: Hold `Ctrl` (or `Cmd` on macOS) to highlight any hint or option during review, and click to edit it inline instantly inside a dynamic `<textarea>`. Press `Enter` (without Shift) or blur to save, or `Escape` to cancel. Saves edits directly to the note's JSON block in the database, updates the cache, and updates the webview dynamically with zero page flicker.
 - **Native Antigravity Daemon**: Features seamless embedded integration of the [Antigravity Cloud Proxy](https://github.com/frieser/antigravity-proxy). Automatically manages background executable lifecycle, offers one-click account setup dashboard, and provides direct gateway to premier LLMs completely locally.
 - **Unified UI System**: Desktop and Mobile now share the exact same rendering engine (`template.js`), ensuring consistent features (like shuffling and MathJax) across all devices.
@@ -58,6 +60,7 @@ The add-on features a multi-tiered, intelligence-driven fallback system. If your
 The batch generation queue is designed for heavy-duty background processing with maximum reliability:
 
 - **Concurrent Multi-Provider Generation**: Leverages multiple AI providers concurrently to process batches significantly faster, with independent fallback queues per provider.
+- **Multiple Queued Jobs**: Add another deck, browser selection, or sidebar group while a batch is already running. Pending jobs can be reordered, canceled, or cleared from the Batch tab.
 - **Granular Queue Management**: View the next 5 pending cards in the queue directly in the Batch tab status. Includes individual **[✖ Discard]** buttons to surgically remove cards from the current batch.
 - **Deck Browser Cogwheel Option**: Start batch generation for any deck directly from the deck browser's options menu.
 - **Continuous Checkpointing**: The add-on saves its progress to disk (`batch_state.json`) after *every single card* processed. 

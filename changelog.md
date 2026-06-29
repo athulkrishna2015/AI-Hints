@@ -2,6 +2,12 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.2.0 (2026-06-29)
+- **Queued Batch Jobs**: Batch generation now supports multiple queued jobs instead of rejecting new requests while one queue is active. The Batch tab shows the active job, pending jobs, and controls to reorder, cancel, or clear queued jobs.
+- **Expanded Bulk Skip/Unskip Actions**: Added unskip actions for selected browser cards, browser sidebar groups, and deck browser deck menus, alongside the existing skip/clear workflows.
+- **Skip Clears Stale AI Data**: Marking a card as skipped now replaces that card's saved AI payload with a clean skipped marker, preventing old hints/options from lingering under skipped state.
+- **JSON-Only Storage Cleanup**: Removed the legacy `storage_mode` configuration path and updated migration/batch code to use the hidden JSON storage engine consistently.
+
 ## 4.1.0 (2026-06-29)
 - **Decoupled System Prompt**: Separated the core system prompt from user-specific instructions. The core prompt is now loaded dynamically from `config.json` at runtime, ensuring prompt updates are applied automatically upon addon updates. Custom instructions are now stored in `additional_system_instructions` in `meta.json` and appended to the core prompt.
 - **Persistent Profile-Relative Batch State**: Relocated the batch queue state file (`ai_hints_batch_state.json`) from the addon folder to the user's active Anki profile directory. Added automatic startup migration for existing queue states and deferred loading to prevent conflicts during startup.
