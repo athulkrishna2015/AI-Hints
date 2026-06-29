@@ -322,6 +322,41 @@ class TestBatchManager(unittest.TestCase):
         self.assertEqual(manager.local_queue, [201, 202, 203])
         self.assertEqual(manager.local_queue_total, 3)
 
+    def test_save_state_preserves_regular_config_but_strips_secrets_and_blacklist_snapshot(self):
+        manager = BatchManager()
+        manager.local_queue_jobs = [{
+            "id": "job_test",
+            "queue": [101],
+            "total": 1,
+            "failed_cards": [],
+            "config": {
+                "api_keys": {"gemini": "secret"},
+                "ai_provider": "gemini",
+                "provider_priority": ["openrouter", "gemini", "openai"],
+                "model_fallbacks": {"gemini": ["gemini-3.1-flash-lite", "gemini-2.5-flash"]},
+                "global_model_priority": ["gemini:gemini-3.1-flash-lite"],
+                "use_global_model_priority": True,
+                "disabled_fallback_models": {"gemini": ["gemini-flash-latest"]},
+                "model_blacklist_data": {"version": 3, "stale": True},
+            },
+            "provider": "gemini",
+            "pass": 1,
+            "errors": 0,
+        }]
+        manager.save_state()
+
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        saved_config = payload["local_cache"]["jobs"][0]["config"]
+        self.assertNotIn("api_keys", saved_config)
+        self.assertNotIn("model_blacklist_data", saved_config)
+        self.assertEqual(saved_config["provider_priority"], ["openrouter", "gemini", "openai"])
+        self.assertEqual(saved_config["model_fallbacks"], {"gemini": ["gemini-3.1-flash-lite", "gemini-2.5-flash"]})
+        self.assertEqual(saved_config["global_model_priority"], ["gemini:gemini-3.1-flash-lite"])
+        self.assertTrue(saved_config["use_global_model_priority"])
+        self.assertEqual(saved_config["disabled_fallback_models"], {"gemini": ["gemini-flash-latest"]})
+
     @patch('addon.batch_manager.threading.Thread')
     def test_queue_reordering_and_management(self, mock_thread):
         """Test moving jobs up, down, canceling queued jobs, and clearing the entire queue."""
@@ -365,4 +400,3 @@ class TestBatchManager(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -278,14 +278,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         # AI Provider Logic
 
-        ag_model = models.get("antigravity", DEFAULT_MODELS.get("antigravity", ""))
-        if self.ag_model_edit.findText(ag_model) == -1:
-            self.ag_model_edit.addItem(ag_model)
-        self.ag_model_edit.setCurrentText(ag_model)
-            
-        ag_cfg = c.get("antigravity_proxy", {}) or {}
-        self.ag_enable_cb.setChecked(ag_cfg.get("enabled", False))
-            
         self.model_fallbacks_data = c.get("model_fallbacks", {}).copy()
         disabled_models = c.get("disabled_fallback_models", {}) or {}
         if not isinstance(disabled_models, dict):
@@ -390,66 +382,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 self.provider_widgets[p] = w
                 self.models_layout.addWidget(w)
             
-            # Link self.ag_model_edit to the newly created antigravity edit combobox
-            if "antigravity" in self.model_edits:
-                self.ag_model_edit = self.model_edits["antigravity"]
     def on_fetch_binary(self):
-        try:
-            from ..proxy_manager import proxy_manager
-            self.ag_dl_progress.setRange(0, 100)
-            self.ag_dl_progress.setValue(0)
-            self.ag_dl_progress.setVisible(True)
-            self.ag_dl_status.setText("Connecting to GitHub...")
-            self.ag_dl_status.setVisible(True)
-            self.ag_fetch_btn.setEnabled(False) 
-            
-            def _progress_hook(downloaded, total, elapsed):
-                def _update_ui():
-                    total_mb = total / (1024*1024)
-                    done_mb = downloaded / (1024*1024)
-                    rate_mb_s = (done_mb / elapsed) if elapsed > 0 else 0
-                    remaining_mb = max(0, total_mb - done_mb)
-                    eta_s = (remaining_mb / rate_mb_s) if rate_mb_s > 0 else 0
-                    pct = int((downloaded / total) * 100) if total > 0 else 0
-                    status_txt = f"{done_mb:.1f}MB / {total_mb:.1f}MB ({pct}%) @ {rate_mb_s:.1f} MB/s - ETA: {int(eta_s)}s"
-                    self.ag_dl_status.setText(status_txt)
-                    self.ag_dl_progress.setValue(pct)
-                mw.taskman.run_on_main(_update_ui)
-
-            def _task():
-                success = False
-                err_msg = ""
-                try:
-                    success = proxy_manager.download_binary(progress_callback=_progress_hook)
-                except Exception as e:
-                    err_msg = str(e)
-                
-                def _done():
-                    if success:
-                        self.ag_dl_progress.setVisible(False)
-                        self.ag_dl_status.setText("✅ Antigravity Proxy is fully updated & active.")
-                        self.ag_dashboard_btn.setEnabled(True)
-                        self.ag_enable_cb.setEnabled(True)
-                        self.ag_enable_cb.setChecked(True)
-                        self.ag_fetch_btn.setEnabled(False)
-                        self.ag_delete_btn.setEnabled(True)
-                        if "antigravity_proxy" not in self.config or not isinstance(self.config["antigravity_proxy"], dict):
-                            self.config["antigravity_proxy"] = {}
-                        self.config["antigravity_proxy"]["enabled"] = True
-                        from ..config_io import write_pretty_config
-                        write_pretty_config(ADDON_PACKAGE, self._normalize_config(self.config))
-                        proxy_manager.start(self.config)
-                    else:
-                        self.ag_dl_progress.setVisible(False)
-                        self.ag_dl_status.setText(f"❌ Failed: {err_msg}")
-                        self.ag_fetch_btn.setEnabled(True) 
-                mw.taskman.run_on_main(_done)
-            
-            import threading
-            threading.Thread(target=_task, daemon=True).start()
-        except Exception as e:
-            from aqt.utils import showWarning
-            showWarning(f"Setup failed: {e}")
+        from aqt.utils import showWarning
+        showWarning("Antigravity support has been removed from the AI Providers tab.")
 
     def _on_tab_changed_tracker(self, index):
         global LAST_ACTIVE_TAB_INDEX
@@ -501,14 +436,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         providers_to_fetch = []
         for provider, combobox in self.model_edits.items():
             api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
-            if api_key or provider in ["local", "antigravity"]:
+            if api_key or provider == "local":
                 providers_to_fetch.append((provider, combobox))
         
-        # Also local and antigravity
+        # Also local
         if hasattr(self, 'local_model_edit'):
             providers_to_fetch.append(("local", self.local_model_edit))
-        if hasattr(self, 'ag_model_edit'):
-            providers_to_fetch.append(("antigravity", self.ag_model_edit))
         
         if not providers_to_fetch:
             tooltip("No providers configured to fetch.")
@@ -542,8 +475,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             fetch_btn = None
             if provider == "local" and hasattr(self, "local_fetch_btn"):
                 fetch_btn = self.local_fetch_btn
-            elif provider == "antigravity" and hasattr(self, "ag_model_fetch_btn"):
-                fetch_btn = self.ag_model_fetch_btn
             elif hasattr(self, "provider_widgets") and provider in self.provider_widgets:
                 fetch_btn = self.provider_widgets[provider].fetch_btn
                 
@@ -564,7 +495,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             return
 
         api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
-        if not api_key and provider not in ["local", "antigravity"]:
+        if not api_key and provider not in ["local"]:
             if status_label:
                 st, tt, col = "❌ No API Key", "Please enter an API key first.", "red"
                 PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
@@ -590,9 +521,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 "model": model_name
             }
         
-        if provider == "antigravity":
-            temp_config["antigravity_proxy"] = {"enabled": True, "port": 3000}
-
         client = AIClient(temp_config)
         combobox.setEnabled(False)
         if status_label:
@@ -696,7 +624,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             for provider, combobox, status_label in targets:
                 # Only test if configured/enabled
                 api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
-                if not api_key and provider not in ["local", "antigravity"]:
+                if not api_key and provider not in ["local"]:
                     continue
                 
                 # Update UI to Testing...
@@ -726,9 +654,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                             "model": model_name
                         }
                     
-                    if provider == "antigravity":
-                        temp_config["antigravity_proxy"] = {"enabled": True, "port": 3000}
-                        
                     client = AIClient(temp_config)
                     from .tab_providers import DEFAULT_TEST_QUESTION, DEFAULT_TEST_ANSWER
                     test_front = self.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION
@@ -783,7 +708,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             fetch_btn.setText("Stop Fetch")
             
         api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
-        if not api_key and provider not in ["local", "antigravity"]:
+        if not api_key and provider not in ["local"]:
             if not silent:
                 info(f"Please enter an API key for {provider.capitalize()} first.")
             if fetch_btn:
@@ -933,9 +858,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             model_name = models.get(p, DEFAULT_MODELS.get(p, ""))
             if edit.findText(model_name) == -1: edit.addItem(model_name)
             edit.setCurrentText(model_name)
-        ag_model = models.get("antigravity", DEFAULT_MODELS.get("antigravity", ""))
-        if self.ag_model_edit.findText(ag_model) == -1: self.ag_model_edit.addItem(ag_model)
-        self.ag_model_edit.setCurrentText(ag_model)
         local_model = c.get("local_endpoint", {}).get("model", "")
         if self.local_model_edit.findText(local_model) == -1: self.local_model_edit.addItem(local_model)
         self.local_model_edit.setCurrentText(local_model)
@@ -998,9 +920,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if self.local_model_edit.findText(model_name) == -1: self.local_model_edit.addItem(model_name)
         self.local_model_edit.setCurrentText(model_name)
         self.local_fallback_cb.setChecked(local.get("enabled", False))
-        ag_model = models.get("antigravity", DEFAULT_MODELS.get("antigravity", ""))
-        if self.ag_model_edit.findText(ag_model) == -1: self.ag_model_edit.addItem(ag_model)
-        self.ag_model_edit.setCurrentText(ag_model)
         tooltip("Provider defaults restored.")
 
     def on_restore_advanced(self):
@@ -1301,8 +1220,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["shortcuts"]["modifier"] = self.modifier_cb.currentText()
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {p: (edit.currentText().strip() or DEFAULT_MODELS.get(p, "")) for p, edit in self.model_edits.items()}
-            new_config["models"]["antigravity"] = self.ag_model_edit.currentText().strip() or DEFAULT_MODELS.get("antigravity", "")
-            new_config["antigravity_proxy"] = {"enabled": self.ag_enable_cb.isChecked(), "port": 3000}
             new_config["local_endpoint"] = {
                 "enabled": self.local_fallback_cb.isChecked(),
                 "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
@@ -1337,7 +1254,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["mobile_use_emojis"] = self.mobile_emojis_cb.isChecked()
             new_config["mobile_show_extra_buttons"] = self.mobile_extra_cb.isChecked()
             new_config["mobile_setup_completed"] = self.config.get("mobile_setup_completed", False)
-            new_config["antigravity_accounts"] = self.config.get("antigravity_accounts", "")
             new_config["model_blacklist_data"] = self.config.get("model_blacklist_data", {})
 
             priority = []

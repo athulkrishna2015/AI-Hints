@@ -231,7 +231,8 @@ class ProxyManager:
                 # Check if it differs from what is stored in config
                 if local_data and local_data != stored_data:
                     config["antigravity_accounts"] = local_data
-                    mw.addonManager.writeConfig(addon_package, config)
+                    from .config_io import write_pretty_config
+                    write_pretty_config(addon_package, config)
                     logger.info("AI-Hints: Backed up antigravity-accounts.json to meta.json config.")
             elif stored_data:
                 # Local file is missing, restore from config

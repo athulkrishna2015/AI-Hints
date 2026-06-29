@@ -8,7 +8,7 @@ This repository contains the source code for the **AI-Hints** Anki add-on.
 - **Install via AnkiWeb**: https://ankiweb.net/shared/info/2119980872
 - **Report an Issue**: https://github.com/athulkrishna2015/AI-Hints/issues
 - **LaTeX Fixer Submodule**: https://github.com/athulkrishna2015/ai-latex-fixer
-- **Antigravity Proxy Releases**: https://github.com/athulkrishna2015/AI-Hints/releases
+- **Releases**: https://github.com/athulkrishna2015/AI-Hints/releases
 
 ---
 
@@ -29,7 +29,7 @@ AI-Hints/
 │   │   ├── main_dialog.py        # Core dialog shell: save, load, timers, tab routing
 │   │   ├── widgets.py            # ProviderRowWidget, CustomProviderDialog, ADDON_PACKAGE
 │   │   ├── tab_general.py        # Tab 1: General settings
-│   │   ├── tab_providers.py      # Tab 2: API keys, models, Antigravity, Local, priority
+│   │   ├── tab_providers.py      # Tab 2: API keys, models, Local, priority
 │   │   ├── tab_advanced.py       # Tab 3: System prompt, note type fields, raw JSON
 │   │   ├── tab_shortcuts.py      # Tab 4: Keyboard shortcuts
 │   │   ├── tab_batch.py          # Tab 5: Batch generation controls
@@ -37,8 +37,7 @@ AI-Hints/
 │   │   └── tab_logs.py           # Tab 7: Live log viewer
 │   ├── bin/                      # Runtime-only assets (not full source)
 │   │   ├── config.json           # ✅ Proxy daemon static configuration (tracked in git)
-│   │   ├── antigravity-proxy-*   # ❌ OS-specific binary (downloaded at runtime, gitignored)
-│   │   └── antigravity-accounts.json  # ❌ User's Google account tokens (gitignored, sensitive)
+│   │   └── runtime assets        # ❌ OS-specific binaries / tokens are not tracked
 │   ├── latex_fixer/              # Git submodule: ai-latex-fixer library
 │   ├── json_repair/              # Vendored: json_repair library
 │   └── config.json               # Default configuration (factory reset source)
@@ -100,8 +99,6 @@ AI-Hints vendors some third-party libraries and configurations directly in the `
 
 - **`json_repair`** (`addon/json_repair/`): Robust AI response JSON parser.
 - **`latex_fixer`** (`addon/latex_fixer/`): LaTeX/MathJax normalization engine.
-- **Proxy Config** (`addon/bin/config.json`): Default runtime configuration for the Antigravity daemon.
-
 To refresh all vendored dependencies to their latest versions from their respective GitHub master/main branches:
 ```shell
 python3 update_deps.py
@@ -156,8 +153,6 @@ This produces a timestamped file like `AI_Hints_v1.6.1_202605121420.ankiaddon`.
 - `addon/config.json` (default config)
 
 **What is excluded:**
-- `addon/bin/antigravity-proxy-*` (binaries, downloaded at runtime)
-- `addon/bin/antigravity-accounts.json` (user secrets)
 - `__pycache__/`, `.pyc`, `.md`, `.png` files
 - `meta.json`, `ai_hints.log`, `tests/`
 
@@ -201,9 +196,6 @@ python3 tests/test_sanitization_regex.py
 ### 3. Lifecycle and Integration
 Verifies the orchestration of background processes and UI states.
 ```shell
-# Antigravity Proxy daemon lifecycle (start/stop/generate):
-python3 tests/test_antigravity_lifecycle.py
-
 # Reviewer state management (generation cycle and UI reset):
 python3 tests/test_generation_cycle.py
 
@@ -251,9 +243,6 @@ python3 -B -m unittest discover -s tests -p "test_*.py"
 4. **Upload to AnkiWeb:**
    - Log in to https://ankiweb.net/shared/upload
    - Upload the `.ankiaddon` file to update the listing
-
-> [!IMPORTANT]
-> If this release also bumps the Antigravity Proxy binary, create a **separate** GitHub Release tagged `proxy-vX.Y.Z` and upload all 4 OS binaries to it (Linux, Windows, macOS x64, macOS arm64). Then update `PROXY_VERSION` in `proxy_manager.py` before building the `.ankiaddon`.
 
 ---
 

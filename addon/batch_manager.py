@@ -207,6 +207,8 @@ class BatchManager:
                     stripped_config = dict(job.get("config", {}))
                     if "api_keys" in stripped_config:
                         stripped_config.pop("api_keys")
+                    if "model_blacklist_data" in stripped_config:
+                        stripped_config.pop("model_blacklist_data")
                     job_copy["config"] = stripped_config
                     serialized_jobs.append(job_copy)
 
@@ -223,6 +225,8 @@ class BatchManager:
                 stripped_config = dict(active_job.get("config", {}))
                 if "api_keys" in stripped_config:
                     stripped_config.pop("api_keys")
+                if "model_blacklist_data" in stripped_config:
+                    stripped_config.pop("model_blacklist_data")
 
                 payload = {
                     "native_jobs": self.jobs,

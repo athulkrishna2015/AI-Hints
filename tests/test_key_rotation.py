@@ -242,6 +242,47 @@ class TestKeyRotation(unittest.TestCase):
             if "model_blacklist_data" in self.client.config:
                 del self.client.config["model_blacklist_data"]
 
+    def test_blacklist_save_preserves_live_meta_config(self):
+        stripped_batch_config = {
+            "ai_provider": "gemini",
+            "models": {"gemini": "gemini-flash-latest"},
+            "model_cooldown_minutes": 10,
+        }
+        live_meta_config = {
+            "api_keys": {"gemini": "real_saved_key"},
+            "additional_system_instructions": "keep this",
+            "antigravity_accounts": "keep accounts",
+            "provider_priority": ["openrouter", "gemini", "openai"],
+            "model_fallbacks": {"gemini": ["gemini-3.1-flash-lite", "gemini-2.5-flash"]},
+            "global_model_priority": ["gemini:gemini-3.1-flash-lite", "openrouter:openrouter/auto"],
+            "use_global_model_priority": True,
+            "disabled_fallback_models": {"gemini": ["gemini-flash-latest"]},
+            "model_blacklist_data": {"version": 3, "old": True},
+        }
+
+        client = AIClient(stripped_batch_config)
+        fake_mw = MagicMock()
+        fake_mw.addonManager.getConfig.return_value = dict(live_meta_config)
+
+        with patch.dict(sys.modules, {"aqt": MagicMock(mw=fake_mw)}):
+            client._mark_combo_failed("gemini", "gemini-flash-latest", "failed_key", delay_seconds=100)
+
+        fake_mw.addonManager.writeConfig.assert_called()
+        _package, saved_config = fake_mw.addonManager.writeConfig.call_args.args
+        self.assertEqual(saved_config["api_keys"], live_meta_config["api_keys"])
+        self.assertEqual(saved_config["additional_system_instructions"], "keep this")
+        self.assertEqual(saved_config["antigravity_accounts"], "keep accounts")
+        self.assertEqual(saved_config["provider_priority"], live_meta_config["provider_priority"])
+        self.assertEqual(saved_config["model_fallbacks"], live_meta_config["model_fallbacks"])
+        self.assertEqual(saved_config["global_model_priority"], live_meta_config["global_model_priority"])
+        self.assertEqual(saved_config["use_global_model_priority"], True)
+        self.assertEqual(saved_config["disabled_fallback_models"], live_meta_config["disabled_fallback_models"])
+        self.assertIn("model_blacklist_data", saved_config)
+        self.assertIn(
+            "gemini|gemini-flash-latest|failed_key",
+            saved_config["model_blacklist_data"].get("combos_expiries", {}),
+        )
+
     @patch("urllib.request.urlopen")
     def test_gemini_rate_limit_checks_other_models_before_blacklisting(self, mock_urlopen):
         # Configure multiple models for gemini

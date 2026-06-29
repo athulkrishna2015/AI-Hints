@@ -174,7 +174,8 @@ class MobileTabMixin:
         # Update flag
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         config["mobile_setup_completed"] = True
-        mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+        from ..config_io import write_pretty_config
+        write_pretty_config(ADDON_PACKAGE, config)
 
         # 2. Inject into all templates
         count = 0
@@ -243,7 +244,8 @@ class MobileTabMixin:
         # Update flag
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         config["mobile_setup_completed"] = False
-        mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+        from ..config_io import write_pretty_config
+        write_pretty_config(ADDON_PACKAGE, config)
 
         count = 0
         pattern = r"(\n\n)?<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"

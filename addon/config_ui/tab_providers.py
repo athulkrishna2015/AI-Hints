@@ -164,7 +164,7 @@ class FallbackOrderDialog(QDialog):
         self.restore_btn.setEnabled(False)
         
         api_key = self.main_dialog.api_key_edits[self.provider].text().strip() if self.provider in self.main_dialog.api_key_edits else ""
-        if not api_key and self.provider not in ["local", "antigravity"]:
+        if not api_key and self.provider not in ["local"]:
             info(f"Please enter an API key for {self.provider.capitalize()} first.")
             self.list_fetch_btn.setText("Fetch All")
             self.list_test_btn.setEnabled(True)
@@ -289,9 +289,6 @@ class FallbackOrderDialog(QDialog):
                             "api_key": self.main_dialog.local_api_key_edit.text().strip(),
                             "model": model
                         }
-                    if self.provider == "antigravity":
-                        temp_config["antigravity_proxy"] = {"enabled": True, "port": 3000}
-                        
                     client = AIClient(temp_config)
                     test_front = self.main_dialog.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION
                     test_back = self.main_dialog.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
@@ -495,10 +492,6 @@ class AddModelDialog(QDialog):
             # Read from main dialog's comboboxes if they exist
             if p == "local" and hasattr(self.main_dialog, "local_model_edit"):
                 cb = self.main_dialog.local_model_edit
-                for i in range(cb.count()):
-                    models_set.add(cb.itemText(i))
-            elif p == "antigravity" and hasattr(self.main_dialog, "ag_model_edit"):
-                cb = self.main_dialog.ag_model_edit
                 for i in range(cb.count()):
                     models_set.add(cb.itemText(i))
             elif hasattr(self.main_dialog, "model_edits") and p in self.main_dialog.model_edits:
@@ -723,14 +716,11 @@ class GlobalFallbackOrderDialog(QDialog):
         providers_to_fetch = []
         for provider, combobox in self.main_dialog.model_edits.items():
             api_key = self.main_dialog.api_key_edits[provider].text().strip() if provider in self.main_dialog.api_key_edits else ""
-            if api_key or provider in ["local", "antigravity"]:
+            if api_key or provider == "local":
                 providers_to_fetch.append(provider)
         
         if "local" not in providers_to_fetch and hasattr(self.main_dialog, 'local_model_edit'):
             providers_to_fetch.append("local")
-        if "antigravity" not in providers_to_fetch and hasattr(self.main_dialog, 'ag_model_edit'):
-            providers_to_fetch.append("antigravity")
-            
         if not providers_to_fetch:
             tooltip("No providers configured to fetch.")
             self.list_fetch_btn.setText("Fetch All")
@@ -849,9 +839,6 @@ class GlobalFallbackOrderDialog(QDialog):
                             "api_key": self.main_dialog.local_api_key_edit.text().strip(),
                             "model": model
                         }
-                    if provider == "antigravity":
-                        temp_config["antigravity_proxy"] = {"enabled": True, "port": 3000}
-                        
                     client = AIClient(temp_config)
                     test_front = self.main_dialog.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION
                     test_back = self.main_dialog.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER

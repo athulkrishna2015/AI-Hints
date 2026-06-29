@@ -74,7 +74,6 @@ PROVIDER_ORDER = [
     "nvidia",
     "mistral",
     "cerebras",
-    "antigravity",
     "local",
 ]
 
@@ -92,7 +91,6 @@ DEFAULT_MODELS = {
     "together":   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.3-70B-Instruct",
     "cerebras":   "llama3.1-8b",
-    "antigravity":"gemini-3.5-flash",
     "local":      "llama3.3",
 }
 
@@ -168,14 +166,6 @@ MODEL_SUGGESTIONS = {
         "deepseek-ai/DeepSeek-V3",
         "meta-llama/Llama-3.3-70B-Instruct",
         "Qwen/Qwen2.5-72B-Instruct",
-    ],
-    "antigravity": [
-        "gemini-3.5-flash",
-        "gemini-3.1-flash-lite",
-        "gemini-3-flash",
-        "gemini-2.5-flash",
-        "gemini-2-flash",
-        "gemini-2.5-pro",
     ],
 }
 
@@ -1333,12 +1323,21 @@ class AIClient:
             # Update self.config in memory
             self.config["model_blacklist_data"] = data
             
-            # Save to meta.json via writeConfig
+            # Save to meta.json via writeConfig. Background batch queues can run
+            # with sanitized or stale config snapshots, so only persist the
+            # blacklist payload here.
             try:
                 from aqt import mw
                 if mw is not None and mw.addonManager is not None:
                     addon_package = __name__.split(".")[0]
-                    mw.addonManager.writeConfig(addon_package, self.config)
+                    current_config = mw.addonManager.getConfig(addon_package) or {}
+                    if isinstance(current_config, dict):
+                        merged_config = dict(current_config)
+                        merged_config["model_blacklist_data"] = data
+                    else:
+                        merged_config = dict(self.config)
+                    from .config_io import write_pretty_config
+                    write_pretty_config(addon_package, merged_config)
             except Exception:
                 pass
         except Exception as e:
@@ -1684,12 +1683,26 @@ class AIClient:
 
 def load_blacklist():
     """Globally loads the blacklist into memory caches."""
-    client = AIClient(None)
+    config = {}
+    try:
+        from aqt import mw
+        if mw is not None and mw.addonManager is not None:
+            config = mw.addonManager.getConfig(__name__.split(".")[0]) or {}
+    except Exception:
+        config = {}
+    client = AIClient(config)
     client._load_blacklist()
 
 def save_blacklist():
     """Globally saves the blacklist from memory caches."""
-    client = AIClient(None)
+    config = {}
+    try:
+        from aqt import mw
+        if mw is not None and mw.addonManager is not None:
+            config = mw.addonManager.getConfig(__name__.split(".")[0]) or {}
+    except Exception:
+        config = {}
+    client = AIClient(config)
     client._save_blacklist()
 
 def is_model_blacklisted(provider: str, model: str) -> bool:
