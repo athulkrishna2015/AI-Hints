@@ -232,6 +232,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
             
         self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
+        self.auto_regenerate_if_modified_cb.setChecked(c.get("auto_regenerate_if_modified", False))
+        self.auto_regenerate_if_modified_cb.setEnabled(self.auto_generate_new_cb.isChecked())
         self.auto_regenerate_all_cb.setChecked(c.get("auto_regenerate_all", False))
         self.auto_regenerate_all_cb.setEnabled(self.auto_generate_new_cb.isChecked())
         auto_gen_on = self.auto_generate_new_cb.isChecked()
@@ -308,6 +310,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         if hasattr(self, "cooldown_spin"):
             self.cooldown_spin.setValue(c.get("model_cooldown_minutes", 10))
+            
+        if hasattr(self, "timeout_spin"):
+            self.timeout_spin.setValue(c.get("request_timeout", 10))
+            
+        if hasattr(self, "pregen_timeout_spin"):
+            self.pregen_timeout_spin.setValue(c.get("pregen_request_timeout", 20))
             
         if hasattr(self, "font_size_combo"):
             font_size = c.get("hints_font_size", "")
@@ -882,6 +890,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
         if hasattr(self, 'auto_clear_cb'): self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
         self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
+        self.auto_regenerate_if_modified_cb.setChecked(c.get("auto_regenerate_if_modified", False))
+        self.auto_regenerate_if_modified_cb.setEnabled(self.auto_generate_new_cb.isChecked())
         self.auto_regenerate_all_cb.setChecked(c.get("auto_regenerate_all", False))
         self.auto_regenerate_all_cb.setEnabled(self.auto_generate_new_cb.isChecked())
         auto_gen_on = self.auto_generate_new_cb.isChecked()
@@ -1214,6 +1224,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             if hasattr(self, 'auto_clear_cb'):
                 new_config["auto_clear_logs"] = self.auto_clear_cb.isChecked()
             new_config["auto_generate_new"] = self.auto_generate_new_cb.isChecked()
+            new_config["auto_regenerate_if_modified"] = self.auto_regenerate_if_modified_cb.isChecked()
             new_config["auto_regenerate_all"] = self.auto_regenerate_all_cb.isChecked()
             new_config["auto_regenerate_if_old_version"] = self.auto_regenerate_old_version_cb.isChecked()
             new_config["auto_regenerate_min_version"] = self.auto_regenerate_min_version_edit.text().strip()
@@ -1247,6 +1258,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["test_question_back"] = self.test_answer_edit.text().strip()
             if hasattr(self, "cooldown_spin"):
                 new_config["model_cooldown_minutes"] = self.cooldown_spin.value()
+                
+            if hasattr(self, "timeout_spin"):
+                new_config["request_timeout"] = self.timeout_spin.value()
+                
+            if hasattr(self, "pregen_timeout_spin"):
+                new_config["pregen_request_timeout"] = self.pregen_timeout_spin.value()
                 
             if hasattr(self, "font_size_combo"):
                 font_size = self.font_size_combo.currentText().strip()
@@ -1340,7 +1357,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("show_in_bottom_bar", False)
         config.setdefault("show_in_popup", False)
         config.setdefault("auto_clear_logs", True)
+        config.setdefault("request_timeout", 10)
+        config.setdefault("pregen_request_timeout", 20)
         config.setdefault("auto_generate_new", False)
+        config.setdefault("auto_regenerate_if_modified", False)
         config.setdefault("auto_regenerate_all", False)
         config.setdefault("auto_regenerate_if_old_version", False)
         config.setdefault("auto_regenerate_min_version", "")

@@ -1952,7 +1952,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         mathjax_format=config.get("mathjax_format", "delimiters"),
         fix_latex=config.get("fix_latex", False)
     )
-    client = AIClient(config)
+    client = AIClient(config, is_pregen=is_pregen)
     if not client.has_any_ready_provider():
         _generating_card_ids.discard(card_id)
         if not is_pregen:
@@ -2435,8 +2435,47 @@ def init_hooks():
                         card.id, saved_time, min_time
                     )
 
-            if needs_generation or force_regen or regen_old or regen_old_time:
-                logger.info(f"AI-Hints: Auto-generating hints for card {card.id} (force_regen={force_regen}, regen_old={regen_old}, regen_old_time={regen_old_time}).")
+            # Modified-gated regeneration: regenerate if the card's note modified time is newer than its generation time.
+            regen_modified = False
+            gen_timestamp = 0
+            saved_time = ""
+            note_mod = 0
+            if (
+                not force_regen
+                and not regen_old
+                and not regen_old_time
+                and config.get("auto_regenerate_if_modified", False)
+                and card_has_hints(card)
+            ):
+                saved_time = _card_saved_generation_time(card)
+                if saved_time:
+                    try:
+                        from datetime import datetime
+                        dt_gen = datetime.strptime(saved_time, "%Y-%m-%d %H:%M:%S")
+                        gen_timestamp = dt_gen.timestamp()
+                    except Exception:
+                        gen_timestamp = 0
+                else:
+                    gen_timestamp = 0
+
+                try:
+                    note = card.note()
+                    if note and hasattr(note, "mod"):
+                        note_mod = int(note.mod)
+                except Exception:
+                    pass
+
+                # Using a 2-second buffer to prevent race conditions or rollover differences
+                if note_mod > (gen_timestamp + 2):
+                    regen_modified = True
+                    from datetime import datetime
+                    logger.info(
+                        "AI-Hints: Card %s note modified time (%s) > saved generation time (%s); queuing regeneration.",
+                        card.id, datetime.fromtimestamp(note_mod).strftime("%Y-%m-%d %H:%M:%S"), saved_time or "none"
+                    )
+
+            if needs_generation or force_regen or regen_old or regen_old_time or regen_modified:
+                logger.info(f"AI-Hints: Auto-generating hints for card {card.id} (force_regen={force_regen}, regen_old={regen_old}, regen_old_time={regen_old_time}, regen_modified={regen_modified}).")
                 generate_hints(is_manual=False, card=card)
             else:
                 # Current card is already good. Pre-generate the NEXT one.

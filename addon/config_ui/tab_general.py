@@ -111,6 +111,14 @@ class GeneralTabMixin:
         time_row.addStretch()
         show_layout.addRow(time_container)
 
+        self.auto_regenerate_if_modified_cb = QCheckBox("└─ Regenerate if Card Modified > Generated Date")
+        self.auto_regenerate_if_modified_cb.setToolTip(
+            "Automatically regenerate hints/options if the card/note modified date is newer than the AI data generation timestamp. "
+            "Requires Auto Generate to be active."
+        )
+        self.auto_regenerate_if_modified_cb.setStyleSheet("margin-left: 15px;")
+        show_layout.addRow(self.auto_regenerate_if_modified_cb)
+
         pregen_container = QWidget()
         pregen_row = QHBoxLayout(pregen_container)
         pregen_row.setContentsMargins(0, 0, 0, 0)
@@ -134,6 +142,7 @@ class GeneralTabMixin:
         # Couple all sub-checkboxes to the primary Auto-Generate checkbox
         def _update_regen_controls(enabled):
             self.auto_regenerate_all_cb.setEnabled(enabled)
+            self.auto_regenerate_if_modified_cb.setEnabled(enabled)
             self.auto_regenerate_old_version_cb.setEnabled(enabled)
             self.auto_regenerate_min_version_edit.setEnabled(
                 enabled and self.auto_regenerate_old_version_cb.isChecked()

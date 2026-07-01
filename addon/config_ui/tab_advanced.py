@@ -47,6 +47,23 @@ class AdvancedTabMixin:
         cooldown_row.addStretch()
         blacklist_layout.addLayout(cooldown_row)
         
+        # Request Timeout setting
+        timeout_row = QHBoxLayout()
+        timeout_row.addWidget(QLabel("API Request Timeout (seconds):"))
+        self.timeout_spin = QSpinBox()
+        self.timeout_spin.setRange(1, 300)
+        self.timeout_spin.setToolTip("Set the timeout limit (in seconds) for API requests to the AI providers during active review or manual generation.")
+        timeout_row.addWidget(self.timeout_spin)
+        
+        timeout_row.addWidget(QLabel("Pregen Timeout (seconds):"))
+        self.pregen_timeout_spin = QSpinBox()
+        self.pregen_timeout_spin.setRange(1, 300)
+        self.pregen_timeout_spin.setToolTip("Set the timeout limit (in seconds) for background pre-generation requests.")
+        timeout_row.addWidget(self.pregen_timeout_spin)
+        
+        timeout_row.addStretch()
+        blacklist_layout.addLayout(timeout_row)
+        
         blacklist_group.setLayout(blacklist_layout)
         adv_layout.addWidget(blacklist_group)
 

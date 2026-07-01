@@ -270,9 +270,38 @@ MODEL_FALLBACKS = {
 
 
 class AIClient:
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], is_pregen: bool = False):
         self.config = config or {}
         self._key_names: Dict[Tuple[str, str], str] = {}
+        self.is_pregen = is_pregen
+
+    @property
+    def timeout(self) -> int:
+        try:
+            if self.is_pregen:
+                return int(self.config.get("pregen_request_timeout", 20))
+            return int(self.config.get("request_timeout", 10))
+        except Exception:
+            return 20 if self.is_pregen else 10
+
+    def _is_network_or_timeout_error(self, e: Exception) -> bool:
+        import socket
+        import urllib.error
+        if isinstance(e, (socket.timeout, TimeoutError, ConnectionError)):
+            return True
+        if isinstance(e, urllib.error.URLError):
+            if isinstance(e, urllib.error.HTTPError):
+                return e.code in (408, 504)
+            if isinstance(e.reason, (socket.timeout, TimeoutError)):
+                return True
+            if hasattr(e.reason, "strerror") and "timed out" in str(e.reason.strerror).lower():
+                return True
+            if "timed out" in str(e.reason).lower() or "connection" in str(e.reason).lower() or "offline" in str(e.reason).lower():
+                return True
+        err_str = str(e).lower()
+        if "timed out" in err_str or "timeout" in err_str or "connection refused" in err_str or "name or service not known" in err_str:
+            return True
+        return False
 
     def generate_options(self, front: str, back: str, override_provider: str = None, only_this_provider: bool = False) -> Dict[str, List[str]]:
         primary_provider = override_provider or self.config.get("ai_provider", "openai")
@@ -317,6 +346,7 @@ class AIClient:
         use_global = self.config.get("use_global_model_priority", False)
         from .logger import log_context
         is_test = getattr(log_context, "source", None) == "model_test"
+        network_failed_providers = set()
         
         if use_global and global_priority and not override_provider and not is_test:
             disabled_providers = self.config.get("disabled_providers") or []
@@ -328,8 +358,8 @@ class AIClient:
                     logger.info(f"AI-Hints: Generation aborted via Emergency Stop signal (global loop).")
                     return {"hints": [], "options": []}
                 
-                # Skip if provider is disabled
-                if provider in disabled_providers:
+                # Skip if provider is disabled or has failed with network error
+                if provider in disabled_providers or provider in network_failed_providers:
                     continue
                 # Skip if model is disabled
                 if model in disabled_fallback_models.get(provider, []):
@@ -351,6 +381,8 @@ class AIClient:
                 except Exception as e:
                     last_exception = e
                     logger.error(f"Global fallback model {provider}/{model} failed: {e}")
+                    if self._is_network_or_timeout_error(e):
+                        network_failed_providers.add(provider)
                     continue
             
             if last_exception:
@@ -372,6 +404,8 @@ class AIClient:
             if state.GLOBAL_STOP:
                 logger.info(f"AI-Hints: Generation aborted via Emergency Stop signal (provider loop).")
                 return {"hints": [], "options": []}
+            if provider in network_failed_providers:
+                continue
             try:
                 result = self._call_provider(provider, system_prompt, prompt)
                 if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
@@ -382,6 +416,8 @@ class AIClient:
             except Exception as e:
                 last_exception = e
                 logger.error(f"Provider {provider} failed: {e}")
+                if self._is_network_or_timeout_error(e):
+                    network_failed_providers.add(provider)
                 continue
                 
         if last_exception:
@@ -547,9 +583,13 @@ class AIClient:
 
                     delay = self._extract_retry_delay(provider_name, model, api_key, e, body)
                     self._mark_combo_failed(provider_name, model, api_key, delay)
+                    if e.code in (408, 504):
+                        raise e
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
                     self._mark_combo_failed(provider_name, model, api_key)
+                    if self._is_network_or_timeout_error(e):
+                        raise e
 
         return {"hints": [], "options": []}
 
@@ -662,9 +702,13 @@ class AIClient:
 
                     delay = self._extract_retry_delay(provider, model, api_key, e, body)
                     self._mark_combo_failed(provider, model, api_key, delay)
+                    if e.code in (408, 504):
+                        raise e
                 except Exception as e:
                     logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
                     self._mark_combo_failed(provider, model, api_key)
+                    if self._is_network_or_timeout_error(e):
+                        raise e
 
         return {"hints": [], "options": []}
 
@@ -729,9 +773,13 @@ class AIClient:
 
                     delay = self._extract_retry_delay("anthropic", model, api_key, e, body)
                     self._mark_combo_failed("anthropic", model, api_key, delay)
+                    if e.code in (408, 504):
+                        raise e
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
                     self._mark_combo_failed("anthropic", model, api_key)
+                    if self._is_network_or_timeout_error(e):
+                        raise e
 
         return {"hints": [], "options": []}
 
@@ -812,9 +860,13 @@ class AIClient:
 
                     delay = self._extract_retry_delay("gemini", model, api_key, e, body)
                     self._mark_combo_failed("gemini", model, api_key, delay)
+                    if e.code in (408, 504):
+                        raise e
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
                     self._mark_combo_failed("gemini", model, api_key)
+                    if self._is_network_or_timeout_error(e):
+                        raise e
 
         return {"hints": [], "options": []}
 
@@ -1572,13 +1624,13 @@ class AIClient:
 
     def _get_json(self, url: str, headers: Dict[str, str]) -> Dict[str, Any]:
         req = urllib.request.Request(url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(req, timeout=self.timeout) as response:
             return json.loads(response.read().decode("utf-8"))
 
     def _post_json(self, url: str, data: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
         body = json.dumps(self._drop_none(data)).encode("utf-8")
         req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(req, timeout=self.timeout) as response:
             return json.loads(response.read().decode("utf-8"))
 
     def _drop_none(self, value: Any) -> Any:

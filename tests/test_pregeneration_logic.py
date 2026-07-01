@@ -375,6 +375,111 @@ class TestPregeneration(unittest.TestCase):
         submenu_mock.addAction.assert_any_call("Unskip AI for Group")
         submenu_mock.addAction.assert_any_call("Clear AI-Hints")
 
+    @patch('addon.reviewer_hooks._trigger_next_pregeneration')
+    @patch('addon.reviewer_hooks.card_has_hints')
+    @patch('addon.reviewer_hooks._card_saved_generation_time')
+    @patch('addon.reviewer_hooks.generate_hints')
+    def test_auto_regenerate_if_modified(self, mock_generate_hints, mock_saved_time, mock_has_hints, mock_trigger_pregen):
+        """Verify that cards are auto-regenerated if modified date is newer than generation date."""
+        reviewer_hooks._hooks_registered = False
+        reviewer_hooks.init_hooks()
+        
+        on_show_question = None
+        for call in reviewer_hooks.gui_hooks.reviewer_did_show_question.append.call_args_list:
+            func = call[0][0]
+            if callable(func) and getattr(func, '__name__', '') == 'on_show_question':
+                on_show_question = func
+                break
+        
+        self.assertIsNotNone(on_show_question, "on_show_question hook not found in gui_hooks")
+        
+        import time
+        from datetime import datetime
+        
+        # Current local time
+        now_ts = time.time()
+        now_dt = datetime.fromtimestamp(now_ts)
+        now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Setup mocks
+        mock_card = MagicMock()
+        mock_card.id = 112233
+        mock_note = MagicMock()
+        mock_note.mod = int(now_ts + 10) # note is newer by 10s
+        mock_card.note.return_value = mock_note
+        
+        # Test case 1: auto_regenerate_if_modified is False
+        self.config["auto_generate_new"] = True
+        self.config["auto_regenerate_if_modified"] = False
+        mock_has_hints.return_value = True
+        mock_saved_time.return_value = now_str
+        
+        on_show_question(mock_card)
+        mock_generate_hints.assert_not_called()
+        
+        # Test case 2: auto_regenerate_if_modified is True, but note is NOT newer (note is older)
+        self.config["auto_regenerate_if_modified"] = True
+        mock_note.mod = int(now_ts - 10) # note is older by 10s
+        mock_saved_time.return_value = now_str
+        
+        on_show_question(mock_card)
+        mock_generate_hints.assert_not_called()
+        
+        # Test case 3: auto_regenerate_if_modified is True, and note IS newer (note is newer by 10s)
+        mock_note.mod = int(now_ts + 10)
+        mock_saved_time.return_value = now_str
+        
+        on_show_question(mock_card)
+        mock_generate_hints.assert_called_once_with(is_manual=False, card=mock_card)
+
+    def test_request_timeout_config(self):
+        """Verify that AIClient timeout property dynamically matches the config value for both normal and pregen paths."""
+        from addon.ai_client import AIClient
+        
+        # Normal Mode Tests
+        client = AIClient({}, is_pregen=False)
+        self.assertEqual(client.timeout, 10)
+        
+        client = AIClient({"request_timeout": "invalid"}, is_pregen=False)
+        self.assertEqual(client.timeout, 10)
+        
+        client = AIClient({"request_timeout": 45}, is_pregen=False)
+        self.assertEqual(client.timeout, 45)
+        
+        # Pregen Mode Tests
+        client = AIClient({}, is_pregen=True)
+        self.assertEqual(client.timeout, 20)
+        
+        client = AIClient({"pregen_request_timeout": "invalid"}, is_pregen=True)
+        self.assertEqual(client.timeout, 20)
+        
+        client = AIClient({"pregen_request_timeout": 35}, is_pregen=True)
+        self.assertEqual(client.timeout, 35)
+
+    def test_network_timeout_short_circuit(self):
+        """Verify that a network timeout/connection error aborts key/model iteration for that provider."""
+        from addon.ai_client import AIClient
+        import socket
+        
+        client = AIClient({
+            "ai_provider": "gemini",
+            "gemini_api_key": "key1,key2,key3",
+            "gemini_model": "gemini-3.1-flash-lite",
+            "gemini_model_fallbacks": ["gemini-flash-latest"]
+        })
+        
+        # Test that _is_network_or_timeout_error correctly identifies network exceptions
+        self.assertTrue(client._is_network_or_timeout_error(socket.timeout("timed out")))
+        self.assertTrue(client._is_network_or_timeout_error(TimeoutError("connection timed out")))
+        self.assertTrue(client._is_network_or_timeout_error(ConnectionError("refused")))
+        
+        import urllib.error
+        http_timeout = urllib.error.HTTPError("http://test", 504, "Gateway Timeout", {}, None)
+        self.assertTrue(client._is_network_or_timeout_error(http_timeout))
+        
+        http_normal_err = urllib.error.HTTPError("http://test", 400, "Bad Request", {}, None)
+        self.assertFalse(client._is_network_or_timeout_error(http_normal_err))
+
 if __name__ == '__main__':
     unittest.main()
 
