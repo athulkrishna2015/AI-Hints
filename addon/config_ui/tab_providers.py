@@ -175,11 +175,6 @@ class FallbackOrderDialog(QDialog):
         temp_config = self.main_dialog.config.copy()
         if "api_keys" not in temp_config: temp_config["api_keys"] = {}
         temp_config["api_keys"][self.provider] = api_key
-        if self.provider == "local":
-            temp_config["local_endpoint"] = {
-                "base_url": self.main_dialog.local_url_edit.text().strip() or "http://localhost:11434/v1",
-                "api_key": self.main_dialog.local_api_key_edit.text().strip()
-            }
             
         import threading
         from ..ai_client import AIClient

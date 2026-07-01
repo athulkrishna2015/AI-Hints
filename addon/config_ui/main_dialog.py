@@ -725,11 +725,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         temp_config = self.config.copy()
         if "api_keys" not in temp_config: temp_config["api_keys"] = {}
         temp_config["api_keys"][provider] = api_key
-        if provider == "local":
-            temp_config["local_endpoint"] = {
-                "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
-                "api_key": self.local_api_key_edit.text().strip()
-            }
             
         client = AIClient(temp_config)
         combobox.setEnabled(False)
