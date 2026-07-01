@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.2.1 (2026-07-01)
+- **Generalized Proximity and Symmetry Rules**: Refined and generalized system prompt rules in `config.json` for numbers, percentages, years, dates, and measurements to ensure clean distractor formatting.
+- **Visual Outlier Prevention**: Enforced the strict "Odd One Out" rule in prompt instructions to prevent single visual or structural outliers from giving away the correct answer.
+- **Symmetric Distractor Options**: Balanced sections and months using pattern guides to avoid predictable default prefixes.
+
 ## 4.2.0 (2026-06-29)
 - **Queued Batch Jobs**: Batch generation now supports multiple queued jobs instead of rejecting new requests while one queue is active. The Batch tab shows the active job, pending jobs, and controls to reorder, cancel, or clear queued jobs.
 - **Expanded Bulk Skip/Unskip Actions**: Added unskip actions for selected browser cards, browser sidebar groups, and deck browser deck menus, alongside the existing skip/clear workflows.
