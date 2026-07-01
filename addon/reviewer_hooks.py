@@ -2287,47 +2287,81 @@ def on_state_shortcuts_will_change(state: str, shortcuts: list) -> None:
             return key_str
         return f"{mod.capitalize()}+{key_str}"
 
+    def get_front_shortcut_string(key: str) -> str:
+        if not key:
+            return ""
+        return key.strip().upper()
+
+    def front_side_only(action):
+        def wrapped():
+            reviewer = getattr(mw, "reviewer", None)
+            if reviewer and getattr(reviewer, "state", "") == "question":
+                action()
+        return wrapped
+
+    def add_shortcut(shortcut_text: str, action) -> None:
+        if shortcut_text and not any(existing[0] == shortcut_text for existing in shortcuts):
+            shortcuts.append((shortcut_text, action))
+
     # 1. generate
     gen_key = shortcuts_cfg.get("generate", "")
     if gen_key:
         gen_sc = get_shortcut_string(modifier, gen_key)
         if gen_sc:
-            shortcuts.append((gen_sc, lambda: generate_hints(is_manual=True)))
+            add_shortcut(gen_sc, lambda: generate_hints(is_manual=True))
+        front_sc = get_front_shortcut_string(gen_key)
+        if front_sc:
+            add_shortcut(front_sc, front_side_only(lambda: generate_hints(is_manual=True)))
 
     # 2. toggle-options
     opt_key = shortcuts_cfg.get("toggle-options", "")
     if opt_key:
         opt_sc = get_shortcut_string(modifier, opt_key)
         if opt_sc:
-            shortcuts.append((opt_sc, lambda: trigger_js_click("Options", "🎯")))
+            add_shortcut(opt_sc, lambda: trigger_js_click("Options", "🎯"))
+        front_sc = get_front_shortcut_string(opt_key)
+        if front_sc:
+            add_shortcut(front_sc, front_side_only(lambda: trigger_js_click("Options", "🎯")))
 
     # 3. toggle-hints
     hints_key = shortcuts_cfg.get("toggle-hints", "")
     if hints_key:
         hints_sc = get_shortcut_string(modifier, hints_key)
         if hints_sc:
-            shortcuts.append((hints_sc, lambda: trigger_js_click("Hints", "💡")))
+            add_shortcut(hints_sc, lambda: trigger_js_click("Hints", "💡"))
+        front_sc = get_front_shortcut_string(hints_key)
+        if front_sc:
+            add_shortcut(front_sc, front_side_only(lambda: trigger_js_click("Hints", "💡")))
 
     # 4. clear
     clear_key = shortcuts_cfg.get("clear", "")
     if clear_key:
         clear_sc = get_shortcut_string(modifier, clear_key)
         if clear_sc:
-            shortcuts.append((clear_sc, lambda: clear_hints()))
+            add_shortcut(clear_sc, lambda: clear_hints())
+        front_sc = get_front_shortcut_string(clear_key)
+        if front_sc:
+            add_shortcut(front_sc, front_side_only(lambda: clear_hints()))
 
     # 5. refresh
     refresh_key = shortcuts_cfg.get("refresh", "")
     if refresh_key:
         refresh_sc = get_shortcut_string(modifier, refresh_key)
         if refresh_sc:
-            shortcuts.append((refresh_sc, lambda: refresh_current_card()))
+            add_shortcut(refresh_sc, lambda: refresh_current_card())
+        front_sc = get_front_shortcut_string(refresh_key)
+        if front_sc:
+            add_shortcut(front_sc, front_side_only(lambda: refresh_current_card()))
 
     # 6. show-json
     json_key = shortcuts_cfg.get("show-json", "")
     if json_key:
         json_sc = get_shortcut_string(modifier, json_key)
         if json_sc:
-            shortcuts.append((json_sc, lambda: trigger_js_click("JSON", "📝")))
+            add_shortcut(json_sc, lambda: trigger_js_click("JSON", "📝"))
+        front_sc = get_front_shortcut_string(json_key)
+        if front_sc:
+            add_shortcut(front_sc, front_side_only(lambda: trigger_js_click("JSON", "📝")))
 
 def init_hooks():
     global _hooks_registered, _reviewer_is_ending
