@@ -6,29 +6,42 @@ const path = require('path');
  * Mock DOM Environment Factory
  */
 function createMockDOM(env) {
-    const { isAddonActive, hasData, isAnswerSide, clozes } = env;
+    const { isAddonActive, hasData, isAnswerSide, clozes, clozeLayout } = env;
     
     let renderedBlocks = [];
     let jsonBlocks = [];
     let staticContainers = [];
-    function addJsonBlock(data = { hints: ["H1"], options: ["O1"] }, attrs = {}) {
-        const jsonBlock = {
-            textContent: JSON.stringify(data),
-            dataset: {},
-            attrs,
-            classList: {
-                contains: (cls) => cls === 'ai-hints-json'
-            },
-            getAttribute: (name) => attrs[name] || null,
-            parentNode: { insertBefore: (n, r) => renderedBlocks.push(n) },
-            remove: () => { jsonBlocks = jsonBlocks.filter(item => item !== jsonBlock); }
-        };
-        jsonBlocks.push(jsonBlock);
-        return jsonBlock;
+
+    function relinkChildren(parent) {
+        const children = parent.children || [];
+        parent.childNodes = children;
+        children.forEach((child, index) => {
+            child.parentNode = parent;
+            child.previousSibling = children[index - 1] || null;
+            child.nextSibling = children[index + 1] || null;
+        });
     }
+
+    function trackRenderedNode(node) {
+        if (node && node.className && node.className.includes('ai-hints-container') && !renderedBlocks.includes(node)) {
+            renderedBlocks.push(node);
+        }
+    }
+
+    function makeText(text) {
+        return {
+            nodeType: 3,
+            textContent: text,
+            parentNode: null,
+            previousSibling: null,
+            nextSibling: null
+        };
+    }
+
     function makeElement(tag) {
         const attrs = {};
         const el = {
+            nodeType: 1,
             tagName: tag.toUpperCase(),
             className: '',
             classList: {
@@ -48,21 +61,37 @@ function createMockDOM(env) {
             dataset: {},
             attrs,
             children: [],
+            childNodes: [],
+            parentNode: null,
+            previousSibling: null,
+            nextSibling: null,
             setAttribute: (name, value) => {
                 attrs[name] = String(value);
                 if (name === 'class') el.className = String(value);
             },
             getAttribute: (name) => attrs[name] || null,
+            addEventListener: () => {},
+            removeEventListener: () => {},
             appendChild: (child) => {
                 child.parentNode = el;
                 el.children.push(child);
+                relinkChildren(el);
+                trackRenderedNode(child);
+            },
+            insertBefore: (child, ref) => {
+                child.parentNode = el;
+                const idx = ref ? el.children.indexOf(ref) : -1;
+                if (idx >= 0) el.children.splice(idx, 0, child);
+                else el.children.push(child);
+                relinkChildren(el);
+                trackRenderedNode(child);
             },
             querySelector: (sel) => {
                 const cleanSel = sel.replace('.', '');
                 let found = null;
                 const search = (node) => {
                     if (found) return;
-                        if (node.tagName === cleanSel.toUpperCase()) { found = node; return; }
+                    if (node.tagName === cleanSel.toUpperCase()) { found = node; return; }
                     if (node.className && node.className.includes(cleanSel)) { found = node; return; }
                     if (node.children) node.children.forEach(search);
                 };
@@ -88,11 +117,45 @@ function createMockDOM(env) {
                 jsonBlocks = jsonBlocks.filter(item => item !== el);
                 if (el.parentNode && el.parentNode.children) {
                     el.parentNode.children = el.parentNode.children.filter(item => item !== el);
+                    relinkChildren(el.parentNode);
                 }
             }
         };
         return el;
     }
+
+    const bodyEl = makeElement('body');
+
+    function addJsonBlock(data = { hints: ["H1"], options: ["O1"] }, attrs = {}) {
+        const jsonBlock = makeElement('div');
+        jsonBlock.className = 'ai-hints-json';
+        jsonBlock.textContent = JSON.stringify(data);
+        jsonBlock.attrs = attrs;
+        jsonBlock.getAttribute = (name) => attrs[name] || null;
+        Object.entries(attrs).forEach(([name, value]) => jsonBlock.setAttribute(name, value));
+        jsonBlock.remove = () => {
+            jsonBlocks = jsonBlocks.filter(item => item !== jsonBlock);
+            if (jsonBlock.parentNode && jsonBlock.parentNode.children) {
+                jsonBlock.parentNode.children = jsonBlock.parentNode.children.filter(item => item !== jsonBlock);
+                relinkChildren(jsonBlock.parentNode);
+            }
+        };
+        jsonBlocks.push(jsonBlock);
+        bodyEl.appendChild(jsonBlock);
+        return jsonBlock;
+    }
+
+    if (clozeLayout) {
+        bodyEl.appendChild(makeText("Prompt before "));
+        const cloze = makeElement('span');
+        cloze.className = 'cloze';
+        cloze.textContent = (clozes && clozes[0]) || "Revealed answer";
+        bodyEl.appendChild(cloze);
+        bodyEl.appendChild(makeText(" prompt after"));
+        bodyEl.appendChild(makeElement('br'));
+        bodyEl.appendChild(makeText("Extra field"));
+    }
+
     function addStaticContainer(attrs = {}) {
         const container = makeElement('div');
         container.className = 'ai-hints-container';
@@ -111,14 +174,9 @@ function createMockDOM(env) {
 
     global.document = {
         head: { appendChild: () => {} },
-        body: { 
-            className: '',
-            classList: { contains: () => false },
-            appendChild: (el) => { renderedBlocks.push(el); }
-        },
+        body: bodyEl,
         getElementById: (id) => {
-            if (id === 'qa') return global.document.body;
-            if (id === 'answer' && isAnswerSide) return { id: 'answer' };
+            if (id === 'qa') return bodyEl;
             return null;
         },
         querySelectorAll: (selector) => {
@@ -136,15 +194,19 @@ function createMockDOM(env) {
                 return btns;
             }
             if (selector === '.cloze') {
+                const realClozes = bodyEl.querySelectorAll('.cloze');
+                if (realClozes.length) return realClozes;
                 return (clozes || []).map(txt => ({ textContent: txt, className: 'cloze' }));
             }
             return [];
         },
         querySelector: (selector) => {
             if (selector === '.answer' && isAnswerSide) return { className: 'answer' };
+            if (selector === 'hr') return bodyEl.querySelector('hr');
             if (selector === '.ai-hints-container' || selector === '.ai-hints-container-rendered') {
                 return renderedBlocks.concat(staticContainers).find(el => el.className && (el.className.includes('ai-hints-container') || el.className.includes('ai-hints-container-rendered'))) || null;
             }
+            if (selector === 'ai-hints') return bodyEl.querySelector('ai-hints');
             return null;
         },
         createElement: makeElement,
@@ -159,6 +221,8 @@ function createMockDOM(env) {
         aiHintsMobileConfig: !isAddonActive ? { useEmojis: true, showExtraButtons: true } : null,
         aiHintsLastSetupKey: undefined,
         aiHintsRetryState: undefined,
+        addEventListener: () => {},
+        removeEventListener: () => {},
         focus: () => {}
     };
 
@@ -170,6 +234,7 @@ function createMockDOM(env) {
 
     return {
         getRendered: () => renderedBlocks,
+        getBodyChildren: () => bodyEl.children,
         getJsonBlocks: () => jsonBlocks,
         addJsonBlock,
         addStaticContainer
@@ -433,7 +498,35 @@ const clozeBackHighlighted = clozeBackContainer.querySelector('.ai-hints-list').
 if (clozeBackHighlighted.length !== 1) throw new Error("The correct option should be highlighted on the back side of a cloze card via the cloze text heuristic");
 if (clozeBackHighlighted[0].innerHTML !== "The Governor of a state") throw new Error("The matching option should be highlighted");
 
-console.log("\n--- TEST 17: CLOZE FRONT SIDE DETECTION WITH CUSTOM HINTS (e.g. [case]) ---");
+console.log("\n--- TEST 17: CLOZE BACK SIDE PLACEMENT BEFORE EXTRA WITHOUT HR ---");
+global.window.aiHintsCurrentCard = { id: 'cloze_place', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, answer_display_position: 'between' };
+const clozePlacementTest = createMockDOM({
+    isAddonActive: true,
+    hasData: false,
+    isAnswerSide: false,
+    clozes: ["The Governor of a state"],
+    clozeLayout: true
+});
+clozePlacementTest.addJsonBlock(
+    {
+        hints: ["Test hint"],
+        options: ["The Governor of a state", "Opt B"],
+        correct_answer: "The Governor of a state"
+    },
+    { 'data-ai-hints-card-id': 'cloze_place', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const clozePlacementContainer = clozePlacementTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const clozePlacementChildren = clozePlacementTest.getBodyChildren();
+const clozePlacementIndex = clozePlacementChildren.indexOf(clozePlacementContainer);
+const clozeExtraIndex = clozePlacementChildren.findIndex(node => node.textContent === "Extra field");
+const clozeJsonIndex = clozePlacementChildren.findIndex(node => node.className === "ai-hints-json");
+if (clozePlacementIndex < 0) throw new Error("Cloze placement test should render a container");
+if (!(clozePlacementIndex < clozeExtraIndex)) throw new Error("Cloze answer controls should render before Extra when no HR exists");
+if (!(clozePlacementIndex < clozeJsonIndex)) throw new Error("Cloze answer controls should not be placed after trailing fallback JSON");
+
+console.log("\n--- TEST 18: CLOZE FRONT SIDE DETECTION WITH CUSTOM HINTS (e.g. [case]) ---");
 global.window.aiHintsCurrentCard = { id: 'cloze_front_hint', ord: 0 };
 global.window.aiHintsUiConfig = { is_generating: false };
 const clozeFrontHintTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: false, clozes: ["[case]"] });
@@ -450,7 +543,7 @@ const clozeFrontHintContainer = clozeFrontHintTest.getRendered().find(el => el.c
 const clozeFrontHintHighlighted = clozeFrontHintContainer.querySelector('.ai-hints-list').querySelectorAll('li').filter(li => li.className === 'ai-hints-correct');
 if (clozeFrontHintHighlighted.length !== 0) throw new Error("No option should be highlighted on the front side of a cloze card containing a custom hint like [case]");
 
-console.log("\n--- TEST 18: HTML CODE TAGS ARE ESCAPED IN OPTIONS ---");
+console.log("\n--- TEST 19: HTML CODE TAGS ARE ESCAPED IN OPTIONS ---");
 global.window.aiHintsCurrentCard = { id: 'html_escape_card', ord: 0 };
 global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true };
 const htmlEscapeTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: true });
@@ -470,7 +563,7 @@ const hasPreservedBold = htmlEscapeItems.some(item => item.innerHTML.indexOf('<b
 if (!hasEscapedLink) throw new Error("HTML tags in options should be escaped to display as text");
 if (!hasPreservedBold) throw new Error("Safe formatting tags should be preserved in options");
 
-console.log("\n--- TEST 19: ONLY THE CORRECT HTML CODE TAG OPTION IS HIGHLIGHTED ---");
+console.log("\n--- TEST 20: ONLY THE CORRECT HTML CODE TAG OPTION IS HIGHLIGHTED ---");
 global.window.aiHintsCurrentCard = { id: 'html_correct_card', ord: 0 };
 global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true };
 const htmlCorrectTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: true });

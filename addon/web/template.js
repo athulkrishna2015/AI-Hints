@@ -398,6 +398,104 @@
         });
     }
 
+    function isAiHintsNode(node) {
+        if (!node || node.nodeType !== 1) return false;
+        const tag = node.tagName;
+        if (tag === 'AI-HINTS' || tag === 'SCRIPT' || tag === 'STYLE') return true;
+        return !!(node.classList && (
+            node.classList.contains('ai-hints-json') ||
+            node.classList.contains('ai-hints-container') ||
+            node.classList.contains('ai-hints-container-rendered')
+        ));
+    }
+
+    function isIgnorablePlacementNode(node) {
+        if (!node) return true;
+        if (node.nodeType === 3 || node.nodeType === 8) return !/\S/.test(node.textContent || "");
+        if (node.nodeType !== undefined && node.nodeType !== 1) return true;
+        return isAiHintsNode(node);
+    }
+
+    function hasMeaningfulSiblingAfter(node) {
+        let cursor = node ? node.nextSibling : null;
+        while (cursor) {
+            if (!isIgnorablePlacementNode(cursor)) return true;
+            cursor = cursor.nextSibling;
+        }
+        return false;
+    }
+
+    function isTrailingFallbackAnchor(node) {
+        return !!(node && node.parentNode && !hasMeaningfulSiblingAfter(node));
+    }
+
+    function isInlineContinuation(node) {
+        if (!node || node.nodeType !== 1) return false;
+        return /^(A|ABBR|B|BDI|BDO|CITE|CODE|EM|I|KBD|MARK|MJX-CONTAINER|Q|S|SAMP|SMALL|SPAN|STRONG|SUB|SUP|TIME|U|VAR|ANKI-MATHJAX)$/.test(node.tagName);
+    }
+
+    function topLevelChildWithin(node, root) {
+        let current = node;
+        while (current && current.parentNode && current.parentNode !== root && current.parentNode !== document.body) {
+            current = current.parentNode;
+        }
+        return current;
+    }
+
+    function findClozeBetweenPoint(qa) {
+        const root = qa || document.body;
+        const clozes = root && root.querySelectorAll ? root.querySelectorAll('.cloze') : document.querySelectorAll('.cloze');
+        if (!clozes || clozes.length === 0) return null;
+
+        const anchor = topLevelChildWithin(clozes[clozes.length - 1], root);
+        if (!anchor || !anchor.parentNode) return null;
+
+        let cursor = anchor.nextSibling;
+        while (cursor) {
+            if (isIgnorablePlacementNode(cursor)) {
+                cursor = cursor.nextSibling;
+                continue;
+            }
+            if (cursor.nodeType === 1 && cursor.tagName === 'BR') {
+                return { parent: cursor.parentNode, before: cursor.nextSibling };
+            }
+            if (cursor.nodeType === 1 && !isInlineContinuation(cursor)) {
+                return { parent: cursor.parentNode, before: cursor };
+            }
+            cursor = cursor.nextSibling;
+        }
+
+        return { parent: anchor.parentNode, before: anchor.nextSibling };
+    }
+
+    function findGenericBetweenPoint(qa) {
+        const root = qa || document.body;
+        const nodes = root ? Array.from(root.childNodes || root.children || []) : [];
+        for (const node of nodes) {
+            if (node.nodeType === 1 && node.tagName === 'BR' && hasMeaningfulSiblingAfter(node)) {
+                return { parent: node.parentNode, before: node.nextSibling };
+            }
+        }
+        return null;
+    }
+
+    function insertAtPoint(container, point) {
+        if (!point || !point.parent) return false;
+        point.parent.insertBefore(container, point.before || null);
+        return true;
+    }
+
+    function findAnswerBetweenPoint(block, qa) {
+        const hr = document.getElementById('answer') || document.querySelector('hr');
+        if (hr && hr.parentNode) return { parent: hr.parentNode, before: hr.nextSibling };
+
+        if (block && block.parentNode && !isTrailingFallbackAnchor(block)) {
+            return { parent: block.parentNode, before: block.nextSibling };
+        }
+
+        return findClozeBetweenPoint(qa) || findGenericBetweenPoint(qa);
+    }
+
     function retryInitForCard(cardId, ord) {
         if (!isAddonActive) return false;
         const key = String(cardId) + '_' + String(ord);
@@ -871,16 +969,17 @@
                 }
 
                 // Inject into page
-                const qa = document.getElementById('qa');
+                const qa = document.getElementById('qa') || document.body;
                 const target = document.querySelector('ai-hints');
                 const displayPosition = uiCfg.answer_display_position || 'between';
-                const hr = document.getElementById('answer');
-                if (target && target.tagName === 'AI-HINTS') {
+                const useTarget = target && target.tagName === 'AI-HINTS' &&
+                    !(onAnswer && displayPosition === 'between' && isTrailingFallbackAnchor(target));
+                const betweenPoint = (onAnswer && displayPosition === 'between') ? findAnswerBetweenPoint(block, qa) : null;
+                if (useTarget) {
                     target.innerHTML = ''; // Ensure placeholder is clean
                     target.appendChild(container);
-                } else if (onAnswer && displayPosition === 'between' && hr && hr.parentNode) {
-                    // On answer side, if 'between' is configured, insert exactly between Front and Back (after the separator hr)
-                    hr.parentNode.insertBefore(container, hr.nextSibling);
+                } else if (betweenPoint && insertAtPoint(container, betweenPoint)) {
+                    // Place answer-side controls between the prompt/text field and answer/extra content.
                 } else if (onAnswer && displayPosition === 'bottom' && qa) {
                     // On answer side, if configured, append at the very bottom of the card
                     qa.appendChild(container);
