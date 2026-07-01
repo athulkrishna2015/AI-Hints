@@ -874,9 +874,13 @@
                 const qa = document.getElementById('qa');
                 const target = document.querySelector('ai-hints');
                 const displayPosition = uiCfg.answer_display_position || 'between';
+                const hr = document.getElementById('answer');
                 if (target && target.tagName === 'AI-HINTS') {
                     target.innerHTML = ''; // Ensure placeholder is clean
                     target.appendChild(container);
+                } else if (onAnswer && displayPosition === 'between' && hr && hr.parentNode) {
+                    // On answer side, if 'between' is configured, insert exactly between Front and Back (after the separator hr)
+                    hr.parentNode.insertBefore(container, hr.nextSibling);
                 } else if (onAnswer && displayPosition === 'bottom' && qa) {
                     // On answer side, if configured, append at the very bottom of the card
                     qa.appendChild(container);

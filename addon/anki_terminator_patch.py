@@ -200,6 +200,10 @@ def should_bypass_cleaning() -> bool:
         if "AI-Hints/addon" in filename.replace("\\", "/") or "ai_hints/addon" in filename.replace("\\", "/"):
             return True
             
+        # 4. Card rendering / Template compilation check
+        if "template" in mod_name or "template" in filename or "template" in func_name or "render" in func_name:
+            return True
+            
         frame = frame.f_back
     return False
 
