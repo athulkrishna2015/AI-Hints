@@ -1229,12 +1229,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["shortcuts"]["modifier"] = self.modifier_cb.currentText()
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {p: (edit.currentText().strip() or DEFAULT_MODELS.get(p, "")) for p, edit in self.model_edits.items()}
-            new_config["local_endpoint"] = {
-                "enabled": self.local_fallback_cb.isChecked(),
-                "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
-                "model": self.local_model_edit.currentText().strip() or DEFAULT_MODELS["local"],
-                "api_key": self.local_api_key_edit.text().strip()
-            }
             new_config["local_providers"] = self.local_providers_data
             new_config["system_prompt"] = self.default_config.get("system_prompt", "")
             new_config["additional_system_instructions"] = self.system_prompt_edit.toPlainText()
