@@ -284,10 +284,27 @@ class AIClient:
         except Exception:
             return 20 if self.is_pregen else 10
 
-    def _is_network_or_timeout_error(self, e: Exception) -> bool:
+    def _is_host_unreachable_error(self, e: Exception) -> bool:
         import socket
         import urllib.error
-        if isinstance(e, (socket.timeout, TimeoutError, ConnectionError)):
+        if isinstance(e, (ConnectionRefusedError, ConnectionResetError, ConnectionError)):
+            return True
+        if isinstance(e, urllib.error.URLError):
+            if not isinstance(e, urllib.error.HTTPError):
+                reason_str = str(e.reason).lower()
+                if "name or service not known" in reason_str or "temporary failure in name resolution" in reason_str:
+                    return True
+                if "no route to host" in reason_str or "connection refused" in reason_str:
+                    return True
+        err_str = str(e).lower()
+        if "name or service not known" in err_str or "no route to host" in err_str or "connection refused" in err_str:
+            return True
+        return False
+
+    def _is_read_timeout_error(self, e: Exception) -> bool:
+        import socket
+        import urllib.error
+        if isinstance(e, (socket.timeout, TimeoutError)):
             return True
         if isinstance(e, urllib.error.URLError):
             if isinstance(e, urllib.error.HTTPError):
@@ -296,12 +313,15 @@ class AIClient:
                 return True
             if hasattr(e.reason, "strerror") and "timed out" in str(e.reason.strerror).lower():
                 return True
-            if "timed out" in str(e.reason).lower() or "connection" in str(e.reason).lower() or "offline" in str(e.reason).lower():
+            if "timed out" in str(e.reason).lower() or "timeout" in str(e.reason).lower():
                 return True
         err_str = str(e).lower()
-        if "timed out" in err_str or "timeout" in err_str or "connection refused" in err_str or "name or service not known" in err_str:
+        if "timed out" in err_str or "timeout" in err_str:
             return True
         return False
+
+    def _is_network_or_timeout_error(self, e: Exception) -> bool:
+        return self._is_host_unreachable_error(e) or self._is_read_timeout_error(e)
 
     def generate_options(self, front: str, back: str, override_provider: str = None, only_this_provider: bool = False) -> Dict[str, List[str]]:
         primary_provider = override_provider or self.config.get("ai_provider", "openai")
@@ -532,6 +552,7 @@ class AIClient:
 
         models = [override_model] if override_model else self._models_for_provider(provider_name, custom_cfg.get("model", ""), custom_cfg.get("model_fallbacks", []))
 
+        timeouts_count = 0
         for model in models:
             if state.GLOBAL_STOP:
                 break
@@ -542,6 +563,7 @@ class AIClient:
             if not available_keys:
                 continue
 
+            model_timed_out = False
             for idx, api_key in enumerate(available_keys):
                 if state.GLOBAL_STOP:
                     break
@@ -584,12 +606,21 @@ class AIClient:
                     delay = self._extract_retry_delay(provider_name, model, api_key, e, body)
                     self._mark_combo_failed(provider_name, model, api_key, delay)
                     if e.code in (408, 504):
-                        raise e
+                        model_timed_out = True
+                        break
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
                     self._mark_combo_failed(provider_name, model, api_key)
-                    if self._is_network_or_timeout_error(e):
+                    if self._is_host_unreachable_error(e):
                         raise e
+                    if self._is_read_timeout_error(e):
+                        model_timed_out = True
+                        break
+
+            if model_timed_out:
+                timeouts_count += 1
+                if timeouts_count >= 2:
+                    raise TimeoutError(f"Multiple read timeouts for provider {provider_name}")
 
         return {"hints": [], "options": []}
 
@@ -633,6 +664,7 @@ class AIClient:
         
         url = f"{base_url}/chat/completions"
 
+        timeouts_count = 0
         for model in models:
             if state.GLOBAL_STOP:
                 break
@@ -649,6 +681,7 @@ class AIClient:
             if not available_keys:
                 continue
 
+            model_timed_out = False
             for idx, api_key in enumerate(available_keys):
                 if state.GLOBAL_STOP:
                     break
@@ -703,12 +736,21 @@ class AIClient:
                     delay = self._extract_retry_delay(provider, model, api_key, e, body)
                     self._mark_combo_failed(provider, model, api_key, delay)
                     if e.code in (408, 504):
-                        raise e
+                        model_timed_out = True
+                        break
                 except Exception as e:
                     logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
                     self._mark_combo_failed(provider, model, api_key)
-                    if self._is_network_or_timeout_error(e):
+                    if self._is_host_unreachable_error(e):
                         raise e
+                    if self._is_read_timeout_error(e):
+                        model_timed_out = True
+                        break
+
+            if model_timed_out:
+                timeouts_count += 1
+                if timeouts_count >= 2:
+                    raise TimeoutError(f"Multiple read timeouts for provider {provider}")
 
         return {"hints": [], "options": []}
 
@@ -716,6 +758,7 @@ class AIClient:
         models = [override_model] if override_model else self._models_for_provider("anthropic")
         url = "https://api.anthropic.com/v1/messages"
         
+        timeouts_count = 0
         for model in models:
             if state.GLOBAL_STOP:
                 break
@@ -730,6 +773,7 @@ class AIClient:
             if not available_keys:
                 continue
 
+            model_timed_out = False
             for idx, api_key in enumerate(available_keys):
                 if state.GLOBAL_STOP:
                     break
@@ -774,18 +818,28 @@ class AIClient:
                     delay = self._extract_retry_delay("anthropic", model, api_key, e, body)
                     self._mark_combo_failed("anthropic", model, api_key, delay)
                     if e.code in (408, 504):
-                        raise e
+                        model_timed_out = True
+                        break
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
                     self._mark_combo_failed("anthropic", model, api_key)
-                    if self._is_network_or_timeout_error(e):
+                    if self._is_host_unreachable_error(e):
                         raise e
+                    if self._is_read_timeout_error(e):
+                        model_timed_out = True
+                        break
+
+            if model_timed_out:
+                timeouts_count += 1
+                if timeouts_count >= 2:
+                    raise TimeoutError("Multiple read timeouts for provider anthropic")
 
         return {"hints": [], "options": []}
 
     def _call_gemini(self, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
         models = [override_model] if override_model else self._models_for_provider("gemini")
 
+        timeouts_count = 0
         for model in models:
             if state.GLOBAL_STOP:
                 break
@@ -800,6 +854,7 @@ class AIClient:
             if not available_keys:
                 continue
 
+            model_timed_out = False
             for idx, api_key in enumerate(available_keys):
                 if state.GLOBAL_STOP:
                     break
@@ -861,12 +916,21 @@ class AIClient:
                     delay = self._extract_retry_delay("gemini", model, api_key, e, body)
                     self._mark_combo_failed("gemini", model, api_key, delay)
                     if e.code in (408, 504):
-                        raise e
+                        model_timed_out = True
+                        break
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
                     self._mark_combo_failed("gemini", model, api_key)
-                    if self._is_network_or_timeout_error(e):
+                    if self._is_host_unreachable_error(e):
                         raise e
+                    if self._is_read_timeout_error(e):
+                        model_timed_out = True
+                        break
+
+            if model_timed_out:
+                timeouts_count += 1
+                if timeouts_count >= 2:
+                    raise TimeoutError("Multiple read timeouts for provider gemini")
 
         return {"hints": [], "options": []}
 
