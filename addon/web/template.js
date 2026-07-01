@@ -1016,7 +1016,7 @@
                 saveEdit();
             } else if (e.key === 'Escape') {
                 e.preventDefault();
-                cancelEdit();
+                saveEdit();
             }
         };
 
