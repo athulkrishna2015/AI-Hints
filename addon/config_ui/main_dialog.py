@@ -117,6 +117,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         """Proxy integration removed; keep this as a no-op for compatibility."""
         return
 
+    def refresh_local_providers_list(self):
+        """Compatibility hook for older local-provider UI code paths."""
+        return
+
     def setup_ui(self):
 
         layout = QVBoxLayout()
