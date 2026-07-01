@@ -74,6 +74,29 @@ def _get_full_template_block(field_name: str, template_html: str, config_js: str
         "<!-- AI-HINTS-END -->"
     )
 
+def _insert_template_block(template_html: str, block: str, is_cloze: bool = False, is_front: bool = False) -> str:
+    """Place the template block where the frontend should render from on mobile."""
+    clean_html = (template_html or "").strip()
+    if not clean_html:
+        return block
+
+    if is_cloze and not is_front:
+        tldraw_match = re.search(
+            r'(?is)(<ae-tldraw\b[^>]*>\s*</ae-tldraw>\s*<script\b[^>]*\btldraw\.js\b[^>]*>\s*</script>)',
+            clean_html,
+        )
+        if tldraw_match:
+            return clean_html[:tldraw_match.end()].rstrip() + "\n\n" + block + "\n\n" + clean_html[tldraw_match.end():].lstrip()
+
+        cloze_match = re.search(
+            r'(?is)(\{\{\s*(?:edit:)?cloze:[^}]+\}\}(?:\s*<br\s*/?>)?)',
+            clean_html,
+        )
+        if cloze_match:
+            return clean_html[:cloze_match.end()].rstrip() + "\n\n" + block + "\n\n" + clean_html[cloze_match.end():].lstrip()
+
+    return clean_html + "\n\n" + block
+
 def auto_update_mobile_setup():
     """Silently updates script file and all templates IF the user previously opted-in 
     via the 'One-Click Install' button."""
@@ -123,7 +146,7 @@ def auto_update_mobile_setup():
                         new_block = _get_full_template_block(
                             field_name, clean_html, config_js, is_cloze=is_cloze, is_front=(side == 'qfmt')
                         )
-                        new_html = re.sub(pattern, new_block, old_html, flags=re.DOTALL)
+                        new_html = _insert_template_block(clean_html, new_block, is_cloze=is_cloze, is_front=(side == 'qfmt'))
                         if new_html != old_html:
                             tmpl[side] = new_html
                             model_changed = True

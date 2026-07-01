@@ -151,6 +151,10 @@ class MobileTabMixin:
             "<!-- AI-HINTS-END -->"
         )
 
+    def _insert_template_block(self, template_html: str, block: str, is_cloze: bool = False, is_front: bool = False) -> str:
+        from ..mobile_sync import _insert_template_block
+        return _insert_template_block(template_html, block, is_cloze=is_cloze, is_front=is_front)
+
     def on_copy_script(self):
         # Determine the likely target field for the manual script preview
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
@@ -202,15 +206,17 @@ class MobileTabMixin:
                         )
                         # Check if block exists
                         if "<!-- AI-HINTS-BEGIN -->" in old_html:
-                            # Replace existing block
-                            new_html = re.sub(pattern, new_block, old_html, flags=re.DOTALL)
+                            new_html = self._insert_template_block(
+                                clean_html, new_block, is_cloze=is_cloze, is_front=(side == 'qfmt')
+                            )
                             if new_html != old_html:
                                 tmpl[side] = new_html
                                 model_changed = True
                                 templates_updated += 1
                         else:
-                            # Append to end
-                            tmpl[side] = old_html.strip() + "\n\n" + new_block
+                            tmpl[side] = self._insert_template_block(
+                                old_html, new_block, is_cloze=is_cloze, is_front=(side == 'qfmt')
+                            )
                             model_changed = True
                             templates_updated += 1
                 

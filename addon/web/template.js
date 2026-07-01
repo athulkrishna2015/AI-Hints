@@ -1295,17 +1295,18 @@
 
             // Check modifier key
             const reqModifier = (shortcuts.modifier || 'alt').toLowerCase();
-            let modifierMatch = false;
+            const noModifierPressed = !event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
+            let modifierMatch = !isAnswerSide() && noModifierPressed;
             if (reqModifier === 'none') {
-                modifierMatch = !event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
+                modifierMatch = noModifierPressed;
             } else if (reqModifier === 'alt') {
-                modifierMatch = event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
+                modifierMatch = modifierMatch || (event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey);
             } else if (reqModifier === 'ctrl') {
-                modifierMatch = event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
+                modifierMatch = modifierMatch || (event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey);
             } else if (reqModifier === 'shift') {
-                modifierMatch = event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey;
+                modifierMatch = modifierMatch || (event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey);
             } else if (reqModifier === 'meta') {
-                modifierMatch = event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey;
+                modifierMatch = modifierMatch || (event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey);
             }
 
             if (!modifierMatch) return;

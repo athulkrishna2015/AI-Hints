@@ -11,6 +11,7 @@ function createMockDOM(env) {
     let renderedBlocks = [];
     let jsonBlocks = [];
     let staticContainers = [];
+    const listeners = {};
 
     function relinkChildren(parent) {
         const children = parent.children || [];
@@ -72,6 +73,14 @@ function createMockDOM(env) {
             getAttribute: (name) => attrs[name] || null,
             addEventListener: () => {},
             removeEventListener: () => {},
+            click: () => {
+                if (typeof el.onclick === 'function') {
+                    el.onclick({
+                        stopPropagation: () => {},
+                        preventDefault: () => {}
+                    });
+                }
+            },
             appendChild: (child) => {
                 child.parentNode = el;
                 el.children.push(child);
@@ -211,7 +220,10 @@ function createMockDOM(env) {
         },
         createElement: makeElement,
         readyState: 'complete',
-        addEventListener: () => {}
+        addEventListener: (name, handler) => {
+            listeners[name] = listeners[name] || [];
+            listeners[name].push(handler);
+        }
     };
 
     if (!global.window) global.window = {};
@@ -221,6 +233,7 @@ function createMockDOM(env) {
         aiHintsMobileConfig: !isAddonActive ? { useEmojis: true, showExtraButtons: true } : null,
         aiHintsLastSetupKey: undefined,
         aiHintsRetryState: undefined,
+        aiHintsKeyboardListenerAdded: undefined,
         addEventListener: () => {},
         removeEventListener: () => {},
         focus: () => {}
@@ -237,7 +250,21 @@ function createMockDOM(env) {
         getBodyChildren: () => bodyEl.children,
         getJsonBlocks: () => jsonBlocks,
         addJsonBlock,
-        addStaticContainer
+        addStaticContainer,
+        triggerKeydown: (event) => {
+            const handlers = listeners.keydown || [];
+            const fullEvent = Object.assign({
+                key: '',
+                altKey: false,
+                ctrlKey: false,
+                shiftKey: false,
+                metaKey: false,
+                preventDefaultCalled: false,
+                preventDefault() { this.preventDefaultCalled = true; }
+            }, event);
+            handlers.forEach(handler => handler(fullEvent));
+            return fullEvent;
+        }
     };
 }
 
@@ -586,5 +613,38 @@ const htmlCorrectItems = htmlCorrectContainer.querySelector('.ai-hints-list').qu
 const highlightedCorrect = htmlCorrectItems.filter(li => li.className === 'ai-hints-correct');
 if (highlightedCorrect.length !== 1) throw new Error("Exactly one correct HTML option should be highlighted");
 if (highlightedCorrect[0].innerHTML.indexOf('&lt;a href=') === -1) throw new Error("The highlighted option should be the correct escaped anchor tag");
+
+console.log("\n--- TEST 21: FRONT SIDE SHORTCUTS DO NOT REQUIRE MODIFIER ---");
+global.window.aiHintsCurrentCard = { id: 'front_shortcuts', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, shortcuts: { modifier: "alt", "toggle-hints": "2" } };
+const frontShortcutTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: false });
+frontShortcutTest.addJsonBlock(
+    { hints: ["Shortcut hint"], options: ["Shortcut option"] },
+    { 'data-ai-hints-card-id': 'front_shortcuts', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const frontShortcutEvent = frontShortcutTest.triggerKeydown({ key: '2' });
+const frontShortcutContainer = frontShortcutTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const frontHintsSection = frontShortcutContainer.querySelector('.ai-hints-hint-list').parentNode;
+if (!frontShortcutEvent.preventDefaultCalled) throw new Error("Front-side bare shortcut should be handled");
+if (frontHintsSection.style.display !== 'block') throw new Error("Front-side bare shortcut should toggle hints");
+
+console.log("\n--- TEST 22: ANSWER SIDE SHORTCUTS STILL REQUIRE MODIFIER ---");
+global.window.aiHintsCurrentCard = { id: 'answer_shortcuts', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true, shortcuts: { modifier: "alt", "toggle-hints": "2" } };
+const answerShortcutTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: true });
+answerShortcutTest.addJsonBlock(
+    { hints: ["Shortcut hint"], options: ["Shortcut option"] },
+    { 'data-ai-hints-card-id': 'answer_shortcuts', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const answerShortcutContainer = answerShortcutTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const answerHintsButton = answerShortcutContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button').find(btn => (btn.textContent || '').includes('Hints'));
+const answerBareEvent = answerShortcutTest.triggerKeydown({ key: '2' });
+if (answerBareEvent.preventDefaultCalled) throw new Error("Answer-side bare rating key should not be intercepted");
+if ((answerHintsButton.textContent || '').includes('Show Hints')) throw new Error("Answer-side hints start visible and should not be toggled by bare key");
+const answerAltEvent = answerShortcutTest.triggerKeydown({ key: '2', altKey: true });
+if (!answerAltEvent.preventDefaultCalled) throw new Error("Answer-side configured modifier shortcut should be handled");
+if (!(answerHintsButton.textContent || '').includes('Show Hints')) throw new Error("Answer-side Alt shortcut should toggle hints");
 
 console.log("\nALL JS TESTS PASSED."); process.exit(0);
