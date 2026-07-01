@@ -46,8 +46,14 @@ class BatchTabMixin:
         self.batch_provider_cb.addItem("⚡ Standard Config (Follows Fallback Matrix)")
         # Load list of active providers
         from ..ai_client import PROVIDER_ORDER
+        seen = set()
         for prov in PROVIDER_ORDER:
+             if prov in seen:
+                  continue
+             seen.add(prov)
              self.batch_provider_cb.addItem(prov.capitalize(), prov)
+        if "local" not in seen:
+             self.batch_provider_cb.addItem("Local", "local")
         
         s_layout.addRow("Force Provider:", self.batch_provider_cb)
 
