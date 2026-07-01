@@ -13,14 +13,16 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, and any OpenAI-compatible local API (like Ollama or LM Studio).
 - **Queued Batch Jobs (v4.2.0)**: Start multiple batch generation jobs back-to-back, monitor the active job separately from queued jobs, reorder/cancel pending jobs, and keep progress safely persisted between sessions.
 - **Bulk Skip/Unskip Controls (v4.2.0)**: Browser, sidebar, and deck menus now include skip and unskip actions for selected cards or whole groups. Skipping a card clears stale AI hint data and saves only the skipped marker.
-- **Inline Editing (v4.0.0)**: Hold `Ctrl` (or `Cmd` on macOS) to highlight any hint or option during review, and click to edit it inline instantly inside a dynamic `<textarea>`. Press `Enter` (without Shift) or blur to save, or `Escape` to cancel. Saves edits directly to the note's JSON block in the database, updates the cache, and updates the webview dynamically with zero page flicker.
+- **Smarter Auto-Regeneration**: Optional regeneration can now refresh cards when the note was edited after AI data was generated, when stored data is older than a target version, or when it predates a configured date/time.
+- **Configurable Timeout Handling**: Separate active-review and background pregeneration request timeouts keep slow providers from blocking study flow. Host/network failures fail fast, while read timeouts still allow limited same-provider model fallback attempts.
+- **Inline Editing (v4.0.0)**: Hold `Ctrl` (or `Cmd` on macOS) to highlight any hint or option during review, and click to edit it inline instantly inside a dynamic `<textarea>`. Press `Enter` (without Shift), blur, or `Escape` to save changed text; unchanged edits are reverted cleanly. Saves edits directly to the note's JSON block in the database, updates the cache, and updates the webview dynamically with zero page flicker.
 - **Unified UI System**: Desktop and Mobile now share the exact same rendering engine (`template.js`), ensuring consistent features (like shuffling and MathJax) across all devices.
 - **Optimized Prompt Efficiency (v3.4.1)**: Re-engineered system prompts for maximum token efficiency (~1k tokens saved per request) while improving distractor quality via **Sequential Parallelism**.
 - **Granular Key Blacklisting & Gemini 3.5 Flash Support (v3.6.1)**: Refactored key rotation blacklist to block specific model-key-provider combinations rather than entire keys or models. Added support and defaults for Google's new `gemini-3.5-flash` model.
 - **Factual Error Warnings & Fixed Pregen Styling (v3.6.0)**: Automatically highlights factual errors in the card content with a dedicated warning indicator explaining why it is wrong and what the correct answer is. Includes polished pregeneration button styling for both light and dark themes.
 - **Multiple API Keys Rotation (v3.5.0)**: Supports prioritizing, labeling, and rotating multiple API keys per provider. Includes visual key management (enabling/disabling individual keys) and persistent disk-based key blacklisting.
 - **Cross-Platform Support**: Includes a **Unified UI** script that works on AnkiDroid, AnkiMobile, and AnkiWeb even without the add-on installed. Includes a **Smart One-Click Installer** that automatically manages your templates and keep them in sync.
-- **Front-Side Quick Shortcuts**: On the question/front side, AI-Hints actions can use the configured number keys (`1`-`6`) directly. On the answer/back side, the configured modifier key is still required so Anki's rating keys remain untouched.
+- **Front-Side Quick Shortcuts**: On the question/front side, AI-Hints actions can use the configured keys (`1`-`6` by default) with or without the modifier. On the answer/back side, the configured modifier key is still required so Anki's rating keys remain untouched.
 - **Smart Auto-Updates**: Once you've opted-in via the Installer, the addon automatically keeps your mobile setup up to date whenever you update the addon or change settings.
 - **Compact Emoji Mode**: Optional ultra-compact UI for mobile that uses pure emojis (💡, 🎯, 🗑️) instead of text labels.
 - **HTML-Aware Clearing**: Re-engineered the "Clear" logic to aggressively remove redundant `<br>` tags and empty lines to keep your cards perfectly clean.
@@ -100,11 +102,11 @@ If you want to remove AI-Hints from mobile:
 
 Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configuration window.
 
-- **General Tab**: Select your default provider, MCQ options count, and database storage mode.
+- **General Tab**: Select your default provider, MCQ options count, database storage mode, and auto-generation rules including modified-card, version, and generation-time based regeneration.
 - **AI Providers Tab**: Unified settings where each provider is grouped into a clean card layout containing its API Key (with eye visibility 👁️ toggles), active model selection, Up/Down priority sorting, dynamic fetch and test features, and checkbox toggles to **completely disable fallbacks** to specific providers.
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
 - **Shortcuts Tab**: Customize AI-Hints action keys and the modifier used on the answer side. The front side also accepts the action keys without the modifier for faster review.
-- **Advanced Tab**: Customize your system prompt, migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist**.
+- **Advanced Tab**: Customize your system prompt, tune active-review and pregeneration API request timeouts, migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist**.
 - **Scrollbar Support**: Smooth scrollbars automatically wrap the Advanced, Mobile, and Batch tabs, ensuring the GUI scales perfectly to fit compact laptops and high-DPI screens.
 
 ## Get Your API Keys

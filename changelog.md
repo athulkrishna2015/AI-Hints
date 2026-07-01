@@ -2,6 +2,12 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.2.4 (2026-07-02)
+- **Front-Side Shortcut Flexibility**: AI-Hints shortcuts now work with or without the configured modifier on the question/front side, while the answer/back side still requires the modifier so Anki rating keys remain safe.
+- **Smarter Auto-Regeneration Controls**: Added modified-card regeneration alongside version-gated and time-gated regeneration, so edited notes can refresh stale AI data automatically when auto-generation is enabled.
+- **Configurable Request Timeouts**: Added separate active-review and pregeneration API timeout settings. Host/network failures now fail fast, while read timeouts can still try limited model fallbacks.
+- **Inline Editing Escape Save Documentation**: Clarified that `Escape` saves changed inline edits and reverts only unchanged edits.
+
 ## 4.2.2 (2026-07-01)
 - **Visual Alignment & Card Layout Fixes**: Ensured that the hints/options container is placed directly between the Front and Back sides (or right after the Cloze text field) on both desktop Anki and AnkiDroid, preventing it from incorrectly shifting to the bottom of the card (after the `Extra` field).
 - **Escape Key Saves Inline Edits**: Pressing the `Escape` key inside the inline editor now saves the edit (using `saveEdit()`) instead of discarding changes, with automatic reversion if the value remains unchanged.
@@ -26,7 +32,7 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Config-Managed Model Blacklist**: Migrated the model lockout/blacklist cache from a volatile local file (`blacklist.json`) to the persistent `meta.json` config under `"model_blacklist_data"`, preserving cooldown states during upgrades.
 
 ## June 25, 2026 (v4.0.0)
-- **Inline Editing of Hints and Options**: Introduced interactive inline editing for hints and multiple-choice options directly during review. Holding `Ctrl` (or `Cmd` on macOS) highlights editable items on hover. Ctrl-clicking (or Cmd-clicking) an item turns it into an inline editor (`<textarea>`). Edits are saved on `Enter` or blur (and cancelled with `Escape`), which surgically updates the note's JSON block in the Anki database, synchronizes the `correct_answer` field if the correct option (index 0) was modified, updates the generated hint cache, and pushes the updated data back to the frontend dynamically with zero page flicker.
+- **Inline Editing of Hints and Options**: Introduced interactive inline editing for hints and multiple-choice options directly during review. Holding `Ctrl` (or `Cmd` on macOS) highlights editable items on hover. Ctrl-clicking (or Cmd-clicking) an item turns it into an inline editor (`<textarea>`). Edits are saved on `Enter`, blur, or `Escape` when the value changed, which surgically updates the note's JSON block in the Anki database, synchronizes the `correct_answer` field if the correct option (index 0) was modified, updates the generated hint cache, and pushes the updated data back to the frontend dynamically with zero page flicker.
  
 ## June 22, 2026 (v3.8.2)
 - **Tools Menu Clean Orphans Fix**: Fixed a `TypeError: bad argument type for built-in operation` crash when running the "Clean Orphaned Hints..." maintenance tool from the Tools menu. This was caused by PyQt passing a boolean argument to the trigger slot, which overrode the default query string. We now strictly validate and sanitize the parameter type.
