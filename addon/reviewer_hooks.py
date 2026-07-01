@@ -140,13 +140,6 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
                 except Exception as e:
                     logger.error(f"AI-Hints card refresh failed: {e}")
         
-        if is_manual and config.get("show_in_popup", False):
-            global _popup_dialog_instance
-            close_popup_if_open()
-            html_content = parser._build_html_block(data)
-            _popup_dialog_instance = ResultsPopup(mw, html_content)
-            _popup_dialog_instance.show()
-            
         return True
     return False
 
@@ -520,9 +513,6 @@ def _get_ui_config(card, auto_reveal=False, is_answer=False, has_data=False):
 
 def on_webview_will_set_content(web_content, context):
     if type(context).__name__ == "ReviewerBottomBar":
-        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-        if config.get("show_in_bottom_bar", False):
-            web_content.body += f"<script>{_bottom_bar_button_script()}</script>"
         return
 
     # Determine if we are in the reviewer or previewer context

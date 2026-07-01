@@ -223,8 +223,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
         self.show_options_cb.setChecked(c.get("show_options_button", True))
         self.show_on_card_cb.setChecked(c.get("show_on_card", True))
-        self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", True))
-        self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
+        if hasattr(self, "show_in_bottom_bar_cb"):
+            self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", False))
+        if hasattr(self, "show_in_popup_cb"):
+            self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
         
         if hasattr(self, 'auto_clear_cb'):
             self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
@@ -874,8 +876,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
         self.show_options_cb.setChecked(c.get("show_options_button", True))
         self.show_on_card_cb.setChecked(c.get("show_on_card", True))
-        self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", True))
-        self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
+        if hasattr(self, "show_in_bottom_bar_cb"):
+            self.show_in_bottom_bar_cb.setChecked(c.get("show_in_bottom_bar", False))
+        if hasattr(self, "show_in_popup_cb"):
+            self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
         if hasattr(self, 'auto_clear_cb'): self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
         self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
         self.auto_regenerate_all_cb.setChecked(c.get("auto_regenerate_all", False))
@@ -1199,8 +1203,14 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["show_hints_button"] = self.show_hints_cb.isChecked()
             new_config["show_options_button"] = self.show_options_cb.isChecked()
             new_config["show_on_card"] = self.show_on_card_cb.isChecked()
-            new_config["show_in_bottom_bar"] = self.show_in_bottom_bar_cb.isChecked()
-            new_config["show_in_popup"] = self.show_in_popup_cb.isChecked()
+            if hasattr(self, "show_in_bottom_bar_cb"):
+                new_config["show_in_bottom_bar"] = self.show_in_bottom_bar_cb.isChecked()
+            else:
+                new_config["show_in_bottom_bar"] = False
+            if hasattr(self, "show_in_popup_cb"):
+                new_config["show_in_popup"] = self.show_in_popup_cb.isChecked()
+            else:
+                new_config["show_in_popup"] = False
             if hasattr(self, 'auto_clear_cb'):
                 new_config["auto_clear_logs"] = self.auto_clear_cb.isChecked()
             new_config["auto_generate_new"] = self.auto_generate_new_cb.isChecked()
@@ -1327,7 +1337,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         try: config["options_count"] = max(1, min(int(config.get("options_count", 4)), 10))
         except: config["options_count"] = 4
         config.setdefault("show_on_card", True)
-        config.setdefault("show_in_bottom_bar", True)
+        config.setdefault("show_in_bottom_bar", False)
         config.setdefault("show_in_popup", False)
         config.setdefault("auto_clear_logs", True)
         config.setdefault("auto_generate_new", False)

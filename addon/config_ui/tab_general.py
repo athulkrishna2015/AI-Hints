@@ -54,14 +54,6 @@ class GeneralTabMixin:
         self.show_on_card_cb.setToolTip("Embed generation controls (Generate, Regenerate, Clear) inline inside the card itself.")
         button_layout.addRow(self.show_on_card_cb)
         
-        self.show_in_bottom_bar_cb = QCheckBox("Show Generate Button in Review Bar")
-        self.show_in_bottom_bar_cb.setToolTip("Place generation controls at the very bottom of the reviewer, next to answer buttons.")
-        button_layout.addRow(self.show_in_bottom_bar_cb)
-
-        self.show_in_popup_cb = QCheckBox("Show Results in Popup Window")
-        self.show_in_popup_cb.setToolTip("Open successful generations in a non-blocking popup window for review before storing.")
-        button_layout.addRow(self.show_in_popup_cb)
-        
         button_group.setLayout(button_layout)
         
         # --- Auto-Show & Generation Group ---
