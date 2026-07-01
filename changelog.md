@@ -2,6 +2,13 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.2.2 (2026-07-01)
+- **Visual Alignment & Card Layout Fixes**: Ensured that the hints/options container is placed directly between the Front and Back sides (or right after the Cloze text field) on both desktop Anki and AnkiDroid, preventing it from incorrectly shifting to the bottom of the card (after the `Extra` field).
+- **Escape Key Saves Inline Edits**: Pressing the `Escape` key inside the inline editor now saves the edit (using `saveEdit()`) instead of discarding changes, with automatic reversion if the value remains unchanged.
+- **Rendering Bypass & DOM Persistence**: Prevented the note fields cleanup patch from stripping out the hidden JSON blocks during card rendering, and updated reviewer hooks to preserve JSON blocks in the webview DOM.
+- **Formula Generation Enhancements**: Updated system prompt instructions to allow modifying both sides of equations to generate realistic distractor formulas, and added the physics Binet equation as a reference pattern.
+- **UI Cleanups**: Removed the "Generate" button from the review bottom bar and disabled showing results in popup windows for a cleaner, inline-only review experience.
+
 ## 4.2.1 (2026-07-01)
 - **Generalized Proximity and Symmetry Rules**: Refined and generalized system prompt rules in `config.json` for numbers, percentages, years, dates, and measurements to ensure clean distractor formatting.
 - **Visual Outlier Prevention**: Enforced the strict "Odd One Out" rule in prompt instructions to prevent single visual or structural outliers from giving away the correct answer.
