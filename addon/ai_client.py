@@ -492,12 +492,9 @@ class AIClient:
 
     def _is_provider_ready(self, provider: str, primary: bool = False) -> bool:
         if provider == "local":
-            local_cfg = self.config.get("local_endpoint") or {}
-            if not isinstance(local_cfg, dict):
-                local_cfg = {}
             if primary:
                 return True
-            return bool(local_cfg.get("enabled", False))
+            return bool(self._local_provider_configs())
 
         if provider == "antigravity":
             ag_cfg = self.config.get("antigravity_proxy") or {}
@@ -519,6 +516,36 @@ class AIClient:
             return bool(url and model)
 
         return bool(self._api_key_for(provider))
+
+    def _local_provider_configs(self) -> List[Dict[str, Any]]:
+        local_providers = self.config.get("local_providers") or {}
+        if not isinstance(local_providers, dict):
+            local_providers = {}
+        override_name = str(self.config.get("local_provider_override", "") or "").strip()
+        configs: List[Dict[str, Any]] = []
+        for name, cfg in local_providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            if override_name and name != override_name:
+                continue
+            merged = dict(cfg)
+            if "base_url" not in merged and merged.get("url"):
+                merged["base_url"] = merged.get("url")
+            merged.setdefault("name", name)
+            merged.setdefault("enabled", True)
+            configs.append(merged)
+
+        legacy_local = self.config.get("local_endpoint") or {}
+        if isinstance(legacy_local, dict) and (legacy_local.get("base_url") or legacy_local.get("url") or legacy_local.get("model")):
+            merged = dict(legacy_local)
+            if "base_url" not in merged and merged.get("url"):
+                merged["base_url"] = merged.get("url")
+            merged.setdefault("name", "local")
+            merged.setdefault("enabled", True)
+            if not any(cfg.get("name") == merged["name"] for cfg in configs):
+                configs.insert(0, merged)
+
+        return [cfg for cfg in configs if cfg.get("enabled", True)]
 
     def _call_provider(self, provider: str, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
         custom_providers = self.config.get("custom_providers") or {}
@@ -642,7 +669,7 @@ class AIClient:
             local_cfg = self.config.get("local_endpoint") or {}
             if not isinstance(local_cfg, dict):
                 local_cfg = {}
-            base_url = local_cfg.get("base_url", "http://localhost:11434/v1")
+            base_url = local_cfg.get("base_url", local_cfg.get("url", "http://localhost:11434/v1"))
             models = [override_model] if override_model else self._models_for_provider(provider, local_cfg.get("model", "") or DEFAULT_MODELS["local"])
         elif provider == "antigravity":
             ag_cfg = self.config.get("antigravity_proxy") or {}
@@ -665,12 +692,16 @@ class AIClient:
         url = f"{base_url}/chat/completions"
 
         timeouts_count = 0
+        local_configs = self._local_provider_configs() if provider == "local" else []
+
         for model in models:
             if state.GLOBAL_STOP:
                 break
 
             keys = self._available_api_keys(provider)
-            if not keys and provider in ["local", "antigravity"]:
+            if provider == "local":
+                keys = [""]
+            elif not keys and provider in ["antigravity"]:
                 keys = [""]
             elif not keys:
                 continue
@@ -687,8 +718,53 @@ class AIClient:
                     break
 
                 if provider == "local":
-                    local_cfg = self.config.get("local_endpoint") or {}
-                    actual_key = str(local_cfg.get("api_key", "") or api_key).strip()
+                    for local_cfg in (local_configs or [self.config.get("local_endpoint") or {}]):
+                        if state.GLOBAL_STOP:
+                            break
+                        if not isinstance(local_cfg, dict):
+                            continue
+                        base_url = str(local_cfg.get("base_url", local_cfg.get("url", "http://localhost:11434/v1"))).rstrip("/")
+                        local_model = str(local_cfg.get("model", "") or DEFAULT_MODELS["local"]).strip()
+                        local_models = [override_model] if override_model else self._models_for_provider(provider, local_model)
+                        actual_key = str(local_cfg.get("api_key", "") or api_key).strip()
+                        headers = self._json_headers(actual_key)
+                        url = f"{base_url}/chat/completions"
+                        for local_model_name in local_models:
+                            if state.GLOBAL_STOP:
+                                break
+                            data = {
+                                "model": local_model_name,
+                                "messages": [
+                                    {"role": "system", "content": system_prompt},
+                                    {"role": "user", "content": prompt}
+                                ],
+                            }
+                            if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "together", "sambanova", "cerebras", "nvidia"]:
+                                data["response_format"] = {"type": "json_object"}
+                            try:
+                                self._log_model_attempt(provider, local_model_name, local_models)
+                                result = self._post_json(url, data, headers)
+                                content = self._extract_content(result)
+                                parsed = self._parse_json_result(content)
+                                if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
+                                    self._on_combo_success(provider, local_model_name, api_key)
+                                    parsed["_provider"] = provider
+                                    parsed["_model"] = local_model_name
+                                    parsed["_generated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                                    return parsed
+                                self._mark_combo_failed(provider, local_model_name, api_key)
+                            except urllib.error.HTTPError as e:
+                                body = self._read_http_error(e)
+                                logger.error(f"AI-Hints Error ({provider}, model {local_model_name}): {e} - {body}")
+                                if getattr(log_context, "source", None) == "model_test":
+                                    self._mark_combo_failed(provider, local_model_name, api_key)
+                                    continue
+                                delay = self._extract_retry_delay(provider, local_model_name, api_key, e, body)
+                                self._mark_combo_failed(provider, local_model_name, api_key, delay)
+                            except Exception as e:
+                                logger.error(f"AI-Hints Error ({provider}, model {local_model_name}): {e}")
+                                self._mark_combo_failed(provider, local_model_name, api_key)
+                    continue
                 elif provider == "antigravity":
                     actual_key = "antigravity"
                 else:
@@ -1578,7 +1654,28 @@ class AIClient:
 
     def fetch_models(self, provider: str) -> List[str]:
         """Fetch available models from the provider's API."""
-        if provider in ["local", "antigravity"]:
+        if provider == "local":
+            local_cfgs = self._local_provider_configs()
+            if not local_cfgs:
+                local_cfgs = [self.config.get("local_endpoint") or {}]
+            last_err = None
+            for local_cfg in local_cfgs:
+                if not isinstance(local_cfg, dict):
+                    continue
+                try:
+                    base_url = str(local_cfg.get("base_url", local_cfg.get("url", "http://localhost:11434/v1"))).rstrip("/")
+                    url = f"{base_url}/models"
+                    headers = self._json_headers(str(local_cfg.get("api_key", "") or "").strip())
+                    result = self._get_json(url, headers)
+                    models = [m.get("id") for m in result.get("data", []) if m.get("id")]
+                    if models:
+                        return models
+                except Exception as e:
+                    last_err = e
+            if last_err:
+                raise last_err
+            return []
+        if provider in ["antigravity"]:
             keys = [""]
         else:
             keys = self._available_api_keys(provider)
