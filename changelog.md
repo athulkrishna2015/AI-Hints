@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.3.0 (2026-07-02)
+- **Multi-Local Provider Support**: Local AI can now be configured as multiple endpoints with independent enable/disable state, ordering, and per-endpoint fetch/test actions from the Providers tab.
+- **Batch Queue Recovery**: Saved local batch queues now rehydrate after Anki restarts, so interrupted queues can resume from disk instead of only surviving in-memory sessions.
+- **Release Cleanup**: Removed stale single-endpoint local UI references and aligned packaging metadata for the new release.
+
 ## 4.2.4 (2026-07-02)
 - **Front-Side Shortcut Flexibility**: AI-Hints shortcuts now work with or without the configured modifier on the question/front side, while the answer/back side still requires the modifier so Anki rating keys remain safe.
 - **Smarter Auto-Regeneration Controls**: Added modified-card regeneration alongside version-gated and time-gated regeneration, so edited notes can refresh stale AI data automatically when auto-generation is enabled.
