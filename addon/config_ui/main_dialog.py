@@ -292,14 +292,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.advanced_fallback_cb.setChecked(c.get("use_global_model_priority", False))
         self.update_fallback_ui_states()
             
-        local = c.get("local_endpoint", {}) or {}
-        self.local_url_edit.setText(local.get("base_url", ""))
-        model_name = local.get("model", "")
-        if self.local_model_edit.findText(model_name) == -1:
-            self.local_model_edit.addItem(model_name)
-        self.local_model_edit.setCurrentText(model_name)
-        self.local_api_key_edit.setText(local.get("api_key", ""))
-        self.local_fallback_cb.setChecked(local.get("enabled", False))
         self.refresh_local_providers_list()
         
         self.system_prompt_edit.setPlainText(c.get("additional_system_instructions", ""))
@@ -930,12 +922,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             w.edit.setCurrentText(model_name)
             self.model_edits[p] = w.edit
             self.models_layout.addWidget(w)
-        local = c.get("local_endpoint", {}) or {}
-        self.local_url_edit.setText(local.get("base_url", ""))
-        model_name = local.get("model", "")
-        if self.local_model_edit.findText(model_name) == -1: self.local_model_edit.addItem(model_name)
-        self.local_model_edit.setCurrentText(model_name)
-        self.local_fallback_cb.setChecked(local.get("enabled", False))
         tooltip("Provider defaults restored.")
 
     def on_restore_advanced(self):
