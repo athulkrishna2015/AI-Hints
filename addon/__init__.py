@@ -66,10 +66,11 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
                 return
             auto_update_mobile_setup()
             
-            # Reload batch state once profile folder is fully available
+            # Reload batch state once profile folder is fully available, then
+            # re-evaluate whether an interrupted queue should auto-resume.
             try:
-                from .batch_manager import batch_manager
-                batch_manager.load_state()
+                from .batch_manager import initialize_batch_manager
+                initialize_batch_manager()
             except Exception as e:
                 logger.error(f"AI-Hints: Failed to reload batch state on startup: {e}")
             

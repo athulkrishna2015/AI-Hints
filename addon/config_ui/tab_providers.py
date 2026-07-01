@@ -914,10 +914,6 @@ class ProvidersTabMixin:
                     w.enabled_cb.setEnabled(not use_global)
                     w.fallbacks_btn.setEnabled(not use_global)
                     
-        # 2. Disable local fallback checkbox
-        if hasattr(self, "local_fallback_cb") and self.local_fallback_cb is not None:
-            self.local_fallback_cb.setEnabled(not use_global)
-
     def update_special_blacklist_status(self, provider, combobox, status_label):
         model = combobox.currentText().strip()
         status_info = PERSISTENT_TEST_STATUSES.get(provider)

@@ -291,8 +291,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.global_model_priority_data = list(c.get("global_model_priority", []))
         self.advanced_fallback_cb.setChecked(c.get("use_global_model_priority", False))
         self.update_fallback_ui_states()
-            
-        self.refresh_local_providers_list()
+        if hasattr(self, "refresh_local_providers_list"):
+            self.refresh_local_providers_list()
         
         self.system_prompt_edit.setPlainText(c.get("additional_system_instructions", ""))
         
@@ -1291,6 +1291,14 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             else: tooltip("Configuration saved.")
         except Exception as e:
             info(f"Error saving configuration: {e}")
+
+    def refresh_local_providers_list(self):
+        if hasattr(ProvidersTabMixin, "refresh_local_providers_list"):
+            return ProvidersTabMixin.refresh_local_providers_list(self)
+
+    def update_local_provider_labels(self):
+        if hasattr(ProvidersTabMixin, "update_local_provider_labels"):
+            return ProvidersTabMixin.update_local_provider_labels(self)
 
     def _normalize_config(self, config):
         config = dict(config or {})
