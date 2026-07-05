@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.3.1 (2026-07-05)
+- **Refined Timeout & Fallback Logic**: Added configurable active-review (`request_timeout`) and background pre-generation (`pregen_request_timeout`) timeout settings. Refined the fallback logic to fail-fast on host unreachable network errors, while allowing read operation timeouts to try other models of the same provider with a maximum cap of 2 consecutive failures.
+- **Smarter Auto-Regeneration Controls**: Integrated the `auto_regenerate_if_modified` option in the General settings UI to automatically refresh hints/options when edited notes are newer than their saved generation time.
+- **Sequence Distractor Generation Refinement**: Updated the default system prompt to request actual, unmodified adjacent sequence provisions (e.g. adjacent constitutional amendments) as distractors instead of forcing grammatical prefix-aligned placeholders.
+
 ## 4.3.0 (2026-07-02)
 - **Multi-Local Provider Support**: Local AI can now be configured as multiple endpoints with independent enable/disable state, ordering, and per-endpoint fetch/test actions from the Providers tab.
 - **Batch Queue Recovery**: Saved local batch queues now rehydrate after Anki restarts, so interrupted queues can resume from disk instead of only surviving in-memory sessions.
