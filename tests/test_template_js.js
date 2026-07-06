@@ -647,4 +647,17 @@ const answerAltEvent = answerShortcutTest.triggerKeydown({ key: '2', altKey: tru
 if (!answerAltEvent.preventDefaultCalled) throw new Error("Answer-side configured modifier shortcut should be handled");
 if (!(answerHintsButton.textContent || '').includes('Show Hints')) throw new Error("Answer-side Alt shortcut should toggle hints");
 
+console.log("\n--- TEST 23: IGNORE GENERIC CLASS SELECTORS WHEN PYTHON EXPLICITLY SAYS NOT ANSWER SIDE ---");
+global.window.aiHintsCurrentCard = { id: 'c_ignore_class', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: false, auto_show_hints: false, auto_show_options: false };
+const ignoreClassTest = createMockDOM({ isAddonActive: true, hasData: true, isAnswerSide: true });
+eval(scriptContent);
+const ignoreContainer = ignoreClassTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const ignoreHintsSec = ignoreContainer.querySelector('.ai-hints-hint-list').parentNode;
+const ignoreOptsSec = ignoreContainer.querySelector('.ai-hints-list').parentNode;
+console.log("Hints display style (expect none):", ignoreHintsSec.style.display);
+console.log("Options display style (expect none):", ignoreOptsSec.style.display);
+if (ignoreHintsSec.style.display !== 'none') throw new Error("Hints should NOT auto-reveal on front side even if .answer class exists");
+if (ignoreOptsSec.style.display !== 'none') throw new Error("Options should NOT auto-reveal on front side even if .answer class exists");
+
 console.log("\nALL JS TESTS PASSED."); process.exit(0);

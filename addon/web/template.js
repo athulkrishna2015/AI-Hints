@@ -109,7 +109,12 @@
     }
 
     function isAnswerSide() {
-        // 1. Check cloze blanks (for Cloze cards on mobile/desktop without Python)
+        // 1. Python configuration first (if available and positive)
+        if (window.aiHintsUiConfig && window.aiHintsUiConfig.is_answer_side) {
+            return true;
+        }
+
+        // 2. Check cloze blanks (for Cloze cards on mobile/desktop without Python)
         const clozes = document.querySelectorAll('.cloze');
         if (clozes.length > 0) {
             let hasBlank = false;
@@ -123,8 +128,24 @@
             if (!hasBlank) return true;
         }
 
-        // 2. Standard template fallback
-        return !!document.getElementById('answer') || !!document.querySelector('.answer') || !!document.querySelector('#answer') || document.body.classList.contains('answer') || (window.aiHintsUiConfig && window.aiHintsUiConfig.is_answer_side);
+        // 3. Reliable standard templates separator (always present on back side of standard cards)
+        if (document.getElementById('answer') || document.querySelector('#answer')) {
+            return true;
+        }
+
+        // 4. Body class indicator (standard reviewer back side)
+        if (document.body.classList.contains('answer')) {
+            return true;
+        }
+
+        // 5. If we have Python and it explicitly said we are NOT on the answer side,
+        // we can confidently return false here and ignore generic class selectors like `.answer`.
+        if (isAddonActive && window.aiHintsUiConfig && typeof window.aiHintsUiConfig.is_answer_side !== 'undefined') {
+            return window.aiHintsUiConfig.is_answer_side;
+        }
+
+        // 6. Generic class selector fallback for mobile/offline mode
+        return !!document.querySelector('.answer');
     }
 
     function getCardOrd() {
