@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.3.4 (2026-07-07)
+- **Dollar-sign delimiter normalization**: The reviewer webview now automatically converts AI-generated `$...$` (inline) and `$$...$$` (display) math delimiters to Anki-standard `\(...\)` and `\[...\]` at render time, so mixed-delimiter hints and options (e.g. `"the new $x'$-axis"`) display correctly without any manual fixup.
+
 ## 4.3.3 (2026-07-07)
 - **Tabular option formatting**: Instructed the default system prompt to output multi-row/tabular lists of values (e.g. microprocessor status signal tables) using line breaks (`\n`) matching the row structure of the question rather than formatting them all in a single line. Added `white-space: pre-wrap` to the reviewer CSS so newline characters render as actual line breaks.
 - **Targeted math inline formatting**: Fixed a bug where a whole hint sentence containing a bare LaTeX expression (like `\overline{M}`) was wrapped in inline math delimiters (`\(` and `\)`), causing MathJax to strip all spaces and render the whole sentence in math-italic font. Now only the specific LaTeX math segments are wrapped.
