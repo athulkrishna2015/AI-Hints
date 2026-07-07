@@ -315,5 +315,33 @@ class CardParserTests(unittest.TestCase):
         self.assertNotIn('"A"', block_text)
         self.assertIn('"_skipped": true', block_text)
 
+    def test_clear_hints_preserves_div_wrapper_for_remaining_cards(self):
+        parser = CardParser()
+        html_input = """Active LPF diagram,<br>
+<div class="ai-hints-json" data-ai-hints-addon-id="2119980872" contenteditable="false" data-show-hints="true" data-show-options="true" style="display:none">{
+  "c2": {
+    "hints": ["Hint 2"],
+    "options": ["Opt 2"],
+    "correct_answer": "Opt 2"
+  },
+  "c1": {
+    "hints": ["Hint 1"],
+    "options": ["Opt 1"],
+    "correct_answer": "Opt 1"
+  }
+}</div>"""
+        note = FakeNote("Cloze", {"Text": html_input})
+        
+        # Clear c1 (ord 0)
+        self.assertTrue(parser.clear_hints_from_note(note, FakeCard(1, 0)))
+        
+        # Verify the div wrapper is preserved
+        result = note["Text"]
+        self.assertIn('class="ai-hints-json"', result)
+        self.assertIn('style="display:none"', result)
+        self.assertIn('c2', result)
+        self.assertNotIn('c1', result)
+        self.assertIn('</div>', result)
+
 if __name__ == "__main__":
     unittest.main()

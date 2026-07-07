@@ -1632,11 +1632,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                                 if keys_removed > 0:
                                     if parsed:
                                         new_payload = parser.serialize_json_payload(parsed)
-                                        inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
-                                        if inner_match:
-                                            new_block = block_html.replace(inner_match.group(1), new_payload)
-                                            new_val = new_val[:match.start()] + new_block + new_val[match.end():]
-                                            note_changed = True
+                                        new_val = new_val[:match.start(1)] + new_payload + new_val[match.end(1):]
+                                        note_changed = True
                                     else:
                                         new_val = new_val[:match.start()] + new_val[match.end():]
                                         note_changed = True
@@ -2057,11 +2054,8 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
                             if keys_removed > 0:
                                 if parsed_block:
                                     new_payload = parser.serialize_json_payload(parsed_block)
-                                    inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
-                                    if inner_match:
-                                        new_block = block_html.replace(inner_match.group(1), new_payload)
-                                        new_val = new_val[:match.start()] + new_block + new_val[match.end():]
-                                        note_changed = True
+                                    new_val = new_val[:match.start(1)] + new_payload + new_val[match.end(1):]
+                                    note_changed = True
                                 else:
                                     new_val = new_val[:match.start()] + new_val[match.end():]
                                     note_changed = True

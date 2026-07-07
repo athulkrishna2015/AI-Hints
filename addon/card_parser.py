@@ -745,18 +745,14 @@ class CardParser:
             return []
             
         pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>.*?</div>',
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
             flags=re.DOTALL | re.IGNORECASE,
         )
         
         extracted = []
         for match in pattern.finditer(field_val):
             block = match.group(0)
-            inner_match = re.search(r'>(.*?)</div>', block, re.DOTALL)
-            if not inner_match:
-                continue
-            
-            content = inner_match.group(1)
+            content = match.group(1)
             parsed = None
             try:
                 parsed = self._parse_json_payload(content)
@@ -884,11 +880,8 @@ class CardParser:
                                                 
                                         if has_active_data:
                                             new_payload = self.serialize_json_payload(parsed)
-                                            inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
-                                            if inner_match:
-                                                new_block = block_html.replace(inner_match.group(1), new_payload)
-                                                new_val = new_val[:match.start()] + new_block + new_val[match.end():]
-                                                field_cleared = True
+                                            new_val = new_val[:match.start(2)] + new_payload + new_val[match.end(2):]
+                                            field_cleared = True
                                         else:
                                             # No active cards left in this JSON block, remove entire block
                                             new_val = new_val[:match.start()] + new_val[match.end():]
@@ -900,11 +893,8 @@ class CardParser:
                                     # If it still has other data, update the JSON. Otherwise, remove the block.
                                     if parsed.get("hints") or parsed.get("options"):
                                         new_payload = self.serialize_json_payload(parsed)
-                                        inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
-                                        if inner_match:
-                                            new_block = block_html.replace(inner_match.group(1), new_payload)
-                                            new_val = new_val[:match.start()] + new_block + new_val[match.end():]
-                                            field_cleared = True
+                                        new_val = new_val[:match.start(2)] + new_payload + new_val[match.end(2):]
+                                        field_cleared = True
                                     else:
                                         new_val = new_val[:match.start()] + new_val[match.end():]
                                         field_cleared = True
@@ -962,12 +952,9 @@ class CardParser:
                                 # Re-save updated JSON
                                 new_payload = self.serialize_json_payload(parsed)
                                 # We only replace the inner payload, keep the outer div
-                                inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
-                                if inner_match:
-                                    new_block = block_html.replace(inner_match.group(1), new_payload)
-                                    new_val = new_val[:match.start()] + new_block + new_val[match.end():]
-                                    field_cleared = True
-                                    continue
+                                new_val = new_val[:match.start(1)] + new_payload + new_val[match.end(1):]
+                                field_cleared = True
+                                continue
                             # Else if empty, fall through to full removal
                         elif isinstance(parsed, dict) and self._is_keyed_payload(parsed):
                             continue
@@ -1320,11 +1307,8 @@ class CardParser:
                     # 3. If either it was flat, or raw_payload has unicode escapes, or has different whitespace:
                     if is_flat or raw_payload != formatted_payload:
                         # Rebuild the div block
-                        inner_match = re.search(r'>(.*?)</div>', block_html, re.DOTALL)
-                        if inner_match:
-                            new_block = block_html.replace(inner_match.group(1), formatted_payload)
-                            new_val = new_val[:match.start()] + new_block + new_val[match.end():]
-                            note_changed = True
+                        new_val = new_val[:match.start(1)] + formatted_payload + new_val[match.end(1):]
+                        note_changed = True
                 except Exception as e:
                     from .logger import logger
                     logger.error(f"Error checking/formatting JSON block: {e}")
