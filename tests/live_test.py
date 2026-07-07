@@ -61,19 +61,24 @@ async def run_live_tests():
         full_meta = json.load(f)
         config = full_meta.get("config", {})
             
+    # Set model to a more capable version for testing
+    if "models" not in config:
+        config["models"] = {}
+    config["models"]["gemini"] = "gemini-2.5-flash"
+            
     client = AIClient(config)
     
     test_note = {
         "fields": {
-            "Text": "What is the formula for the area of a circle?",
-            "Back": "A = \\pi r^2"
+            "Text": """<h3>The Standard z-x'-z'' Convention</h3><div>The full Direction Cosine Matrix (DCM) for Euler angles</div><ol><li><div><b>Rotation by&nbsp;<anki-mathjax>\phi</anki-mathjax>&nbsp;(Precession):</b>&nbsp;A rotation about the original&nbsp;<anki-mathjax>z</anki-mathjax>-axis.</div><div><anki-mathjax block="true">D = \begin{pmatrix} [...] \end{pmatrix}</anki-mathjax></div></li><li><div><b>Rotation by&nbsp;<anki-mathjax>\theta</anki-mathjax>&nbsp;(Nutation):</b>&nbsp;A rotation about the intermediate&nbsp;<anki-mathjax>x'</anki-mathjax>-axis.</div><div><anki-mathjax block="true">C = \begin{pmatrix} [...] \end{pmatrix}</anki-mathjax></div></li><li><div><b>Rotation by&nbsp;<anki-mathjax>\psi</anki-mathjax>&nbsp;(Spin):</b>&nbsp;A rotation about the final&nbsp;<anki-mathjax>z''</anki-mathjax>-axis.</div><div><anki-mathjax block="true">B = \begin{pmatrix} [...] \end{pmatrix}</anki-mathjax></div></li></ol>""",
+            "Back": "\\cos\\phi &amp; \\sin\\phi &amp; 0 \\\\ -\\sin\\phi &amp; \\cos\\phi &amp; 0 \\\\ 0 &amp; 0 &amp; 1, 1 &amp; 0 &amp; 0 \\\\ 0 &amp; \\cos\\theta &amp; \\sin\\theta \\\\ 0 &amp; -\\sin\\theta &amp; \\cos\\theta, \\cos\\psi &amp; \\sin\\psi &amp; 0 \\\\ -\\sin\\psi &amp; \\cos\\psi &amp; 0 \\\\ 0 &amp; 0 &amp; 1"
         },
-        "modelName": "Basic"
+        "modelName": "Cloze"
     }
     
     # Try current provider
     primary = config.get("ai_provider", "gemini")
-    print(f"\nTesting provider: {primary}")
+    print(f"\nTesting provider: {primary} with model: {config['models'].get(primary)}")
     
     try:
         front = test_note['fields']['Text']
@@ -83,9 +88,16 @@ async def run_live_tests():
         future = loop.run_in_executor(None, client.generate_options, front, back)
         result = await future
         
-        if result and (result.get("hints") or result.get("options")):
-            print(f"SUCCESS: Received data from {primary}:")
+        if result and (result.get("hints") or result.get("options") or result.get("distractors")):
+            print(f"SUCCESS: Received raw data from {primary}:")
             print(json.dumps(result, indent=2))
+            
+            # Normalize using CardParser
+            from addon.card_parser import CardParser
+            parser = CardParser()
+            normalized = parser.normalize_hint_data(result)
+            print("\nNormalized for Anki card display:")
+            print(json.dumps(normalized, indent=2))
         else:
             print(f"FAILED: No data generated for {primary}.")
             

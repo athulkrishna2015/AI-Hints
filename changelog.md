@@ -2,6 +2,14 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.3.3 (2026-07-07)
+- **Tabular option formatting**: Instructed the default system prompt to output multi-row/tabular lists of values (e.g. microprocessor status signal tables) using line breaks (`\n`) matching the row structure of the question rather than formatting them all in a single line. Added `white-space: pre-wrap` to the reviewer CSS so newline characters render as actual line breaks.
+- **Targeted math inline formatting**: Fixed a bug where a whole hint sentence containing a bare LaTeX expression (like `\overline{M}`) was wrapped in inline math delimiters (`\(` and `\)`), causing MathJax to strip all spaces and render the whole sentence in math-italic font. Now only the specific LaTeX math segments are wrapped.
+- **`<anki-mathjax>` tags in options/hints**: Updated `escapeHtml` to unescape `&lt;anki-mathjax&gt;` back to real tags and strip backslash escaping introduced by LLM markdown output.
+- **Matrix environment auto-wrapping**: Fixed rendering of options that use `\begin{pmatrix}...\end{pmatrix}` syntax (without outer `\(` delimiters) — the entire option is now automatically wrapped in `\(...)` so MathJax compiles it correctly.
+- **Double-delimiter bug fix**: Fixed a bug where hints already containing inline `\(` math (e.g. `"...the scale \(\lambda_L\)."`) were incorrectly getting an extra `\(` prefix, producing broken `\(\(\lambda_L\)\)` output. Mixed inline-math text is now returned as-is.
+- **Column-aligned matrix detection**: Options encoded as `&`-separated column values (e.g. from Anki's native HTML entity `&amp;`) are now auto-wrapped in `\begin{matrix}...\end{matrix}` environments. HTML comparison entities (`&lt;`, `&gt;`, etc.) are correctly excluded from this detection.
+
 ## 4.3.2 (2026-07-07)
 - **Fix div wrapper deletion bug**: Fixed a bug where clearing a single card's hints (e.g. `c1` only) from a multi-card note also stripped out the hidden `<div class="ai-hints-json" ...>` container wrapper, leaving raw JSON visible as plain text on the card.
 - **STEM pre-factors / constants outlier balancing**: Updated prompt rules to require that physical and mathematical pre-factors or constants (such as $\frac{1}{i\hbar}$ or $2\pi$) be balanced evenly (e.g. 2-vs-2 split) across multiple-choice options to prevent them from becoming visual outliers.

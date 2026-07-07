@@ -20,7 +20,7 @@
         .ai-hints-btn:active { background-color: #d0d0d0; transform: translateY(1px); }
         .ai-hints-btn:disabled { opacity: 0.5; cursor: default; }
         .ai-hints-list, .ai-hints-hint-list { margin-top: 6px; padding-left: 20px; margin-bottom: 0; }
-        .ai-hints-list li, .ai-hints-hint-list li { margin-bottom: 4px; line-height: 1.3; }
+        .ai-hints-list li, .ai-hints-hint-list li { margin-bottom: 4px; line-height: 1.3; white-space: pre-wrap; }
         .ai-hints-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.12); padding-left: 8px; font-weight: 600; border-radius: 0 4px 4px 0; }
         .nightMode .ai-hints-content-active { background-color: rgba(255,255,255,0.04); border-color: #555; }
         .nightMode .ai-hints-btn { background-color: #333; color: #eee; border-color: #666; }
@@ -189,7 +189,11 @@
 
     function escapeHtml(text) {
         if (!text) return "";
-        let escaped = text
+        // Clean up escaped anki-mathjax tags like \<anki-mathjax> or \</anki-mathjax>
+        let cleaned = text
+            .replace(/\\<anki-mathjax/gi, "<anki-mathjax")
+            .replace(/\\<\/anki-mathjax/gi, "</anki-mathjax>");
+        let escaped = cleaned
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;");
         return escaped
@@ -204,7 +208,9 @@
             .replace(/&lt;strong&gt;/gi, "<strong>")
             .replace(/&lt;\/strong&gt;/gi, "</strong>")
             .replace(/&lt;em&gt;/gi, "<em>")
-            .replace(/&lt;\/em&gt;/gi, "</em>");
+            .replace(/&lt;\/em&gt;/gi, "</em>")
+            .replace(/&lt;anki-mathjax([^&]*)&gt;/gi, "<anki-mathjax$1>")
+            .replace(/&lt;\/anki-mathjax&gt;/gi, "</anki-mathjax>");
     }
 
     function renderMath(el) {
@@ -217,22 +223,71 @@
     }
 
     // Helper to ensure mathematical formulas are parsed correctly by Anki's MathJax engine.
-    // If standard LaTeX delimiters are already present (like \(...\) in hints), we leave the text as-is.
-    // If the text is bare math/LaTeX (contains math operators but no delimiters), we wrap it in inline \( and \) tags.
+    // Handles three cases:
+    //   1. Outer \(...\) or \[...\] wrapping entire string — strip, process internals, re-wrap.
+    //   2. Text already contains inline \( markers — return as-is (MathJax handles them).
+    //   3. Bare LaTeX with no delimiters — wrap whole if pure-math, or wrap individual segments.
     function convertMathDelimitersToTags(text) {
         if (!text) return "";
         let processed = text.trim();
         
-        // Return immediately if standard math delimiters are already present
-        let hasDelimiters = /\\\(|\\\[|\$\$|\$/.test(processed);
-        if (hasDelimiters) {
+        // Strip existing delimiters ONLY if the entire string is wrapped in them
+        let hasOuterDelimiters = false;
+        if (processed.startsWith('\\(') && processed.endsWith('\\)')) {
+            processed = processed.substring(2, processed.length - 2);
+            hasOuterDelimiters = true;
+        } else if (processed.startsWith('\\[') && processed.endsWith('\\]')) {
+            processed = processed.substring(2, processed.length - 2);
+            hasOuterDelimiters = true;
+        } else if (processed.startsWith('$$') && processed.endsWith('$$')) {
+            processed = processed.substring(2, processed.length - 2);
+            hasOuterDelimiters = true;
+        } else if (processed.startsWith('$') && processed.endsWith('$')) {
+            processed = processed.substring(1, processed.length - 1);
+            hasOuterDelimiters = true;
+        }
+
+        // Process segments (e.g., split by comma or newline) to wrap bare matrices in begin/end matrix blocks
+        let parts = processed.split(/(,|\n|<br\s*\/?>)/);
+        let updatedParts = parts.map(part => {
+            let trimmed = part.trim();
+            // Match only matrix column separators (& or &amp;) but ignore HTML entities like &lt;, &gt;, &quot;, etc.
+            const hasMatrixSeparator = /(?:&amp;|&(?!lt;|gt;|quot;|apos;|nbsp;))/.test(trimmed);
+            if (hasMatrixSeparator && !trimmed.includes('\\begin{')) {
+                // Keep original leading/trailing whitespace
+                let leading = part.match(/^\s*/)[0];
+                let trailing = part.match(/\s*$/)[0];
+                return leading + '\\begin{matrix}' + trimmed + '\\end{matrix}' + trailing;
+            }
+            return part;
+        });
+        processed = updatedParts.join("");
+
+        // If outer delimiters were stripped, re-wrap the (now possibly matrix-wrapped) content
+        if (hasOuterDelimiters) {
+            return '\\(' + processed + '\\)';
+        }
+
+        // Case: entire string is pure math (starts with \begin{...}) — wrap it all
+        if (/^[^a-z]*\\begin\{/.test(processed)) {
+            return '\\(' + processed + '\\)';
+        }
+
+        // Case: text already contains inline \( or \[ delimiters — return as-is
+        // (MathJax will typeset them; we must NOT add extra wrapping)
+        if (/\\\(|\\\[/.test(processed)) {
             return processed;
         }
 
-        // Auto-wrap bare LaTeX math in inline delimiters \( ... \) so MathJax recognizes it
-        const mathIndicators = /\\[A-Za-z]+|[\^\_]\{|\\int|\\sqrt|\\frac|\\sin|\\cos|\\omega|\\pi|\\lambda|\\theta|\\alpha|\\beta|\\gamma|\\delta|\\partial/;
-        if (mathIndicators.test(processed)) {
-            return '\\(' + processed + '\\)';
+        // Case: bare LaTeX with no delimiters — auto-wrap segments individually
+        const mathRegex = /(\\[A-Za-z]+(?:\{[^{}]*\})*|[\^\_]\{[^{}]*\})/g;
+        if (mathRegex.test(processed)) {
+            // If whole string has no spaces, wrap entirely
+            if (!/\s/.test(processed)) {
+                return '\\(' + processed + '\\)';
+            }
+            // Otherwise wrap only the individual math segments
+            return processed.replace(mathRegex, (match) => '\\(' + match + '\\)');
         }
 
         return processed;
