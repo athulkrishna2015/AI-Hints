@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.3.2 (2026-07-07)
+- **Fix div wrapper deletion bug**: Fixed a bug where clearing a single card's hints (e.g. `c1` only) from a multi-card note also stripped out the hidden `<div class="ai-hints-json" ...>` container wrapper, leaving raw JSON visible as plain text on the card.
+- **STEM pre-factors / constants outlier balancing**: Updated prompt rules to require that physical and mathematical pre-factors or constants (such as $\frac{1}{i\hbar}$ or $2\pi$) be balanced evenly (e.g. 2-vs-2 split) across multiple-choice options to prevent them from becoming visual outliers.
+
 ## 4.3.1 (2026-07-05)
 - **Refined Timeout & Fallback Logic**: Added configurable active-review (`request_timeout`) and background pre-generation (`pregen_request_timeout`) timeout settings. Refined the fallback logic to fail-fast on host unreachable network errors, while allowing read operation timeouts to try other models of the same provider with a maximum cap of 2 consecutive failures.
 - **Smarter Auto-Regeneration Controls**: Integrated the `auto_regenerate_if_modified` option in the General settings UI to automatically refresh hints/options when edited notes are newer than their saved generation time.
