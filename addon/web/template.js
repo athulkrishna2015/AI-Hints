@@ -287,18 +287,14 @@
             return processed;
         }
 
-        // Case: bare LaTeX with no delimiters — auto-wrap segments individually.
-        // We only want to auto-wrap segments starting with an actual backslash command, e.g. \lambda or \frac{}{}
-        const mathRegex = /(\\[A-Za-z]+(?:\{[^{}]*\})*)/g;
-        if (mathRegex.test(processed)) {
-            // If whole string has no spaces, wrap entirely
+        // Case: bare LaTeX with no delimiters — auto-wrap if it contains math indicators
+        const mathIndicators = /\\[A-Za-z]+|[\^\_]\{|\\int|\\sqrt|\\frac|\\sin|\\cos|\\omega|\\pi|\\lambda|\\theta|\\alpha|\\beta|\\gamma|\\delta|\\partial/;
+        if (mathIndicators.test(processed)) {
+            // Only wrap if it doesn't have spaces (is a single equation block)
             if (!/\s/.test(processed)) {
                 return '\\(' + processed + '\\)';
             }
-            // Otherwise wrap only the individual math segments
-            return processed.replace(mathRegex, (match) => '\\(' + match + '\\)');
         }
-
         return processed;
     }
 
