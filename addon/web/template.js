@@ -260,7 +260,21 @@
         let updatedParts = parts.map(part => {
             let trimmed = part.trim();
             // Match only matrix column separators (& or &amp;) but ignore HTML entities like &lt;, &gt;, &quot;, etc.
-            const hasMatrixSeparator = /(?:&amp;|&(?!lt;|gt;|quot;|apos;|nbsp;))/.test(trimmed);
+            // Match matrix column separators (unescaped '&' or '&amp;') only when acting as LaTeX matrix column delimiters.
+            // A LaTeX matrix column separator is typically surrounded by math variables, numbers, backslash commands, or brackets.
+            // English/Malayalam text ampersands (e.g. "AEW&C", "AEW&amp;C", "Research & Development") should be ignored.
+            let hasMatrixSeparator = false;
+            const ampMatch = trimmed.match(/(?:&amp;|&)/g);
+            if (ampMatch) {
+                // Check if the ampersand is a math matrix separator by ensuring it is NOT part of a word or common abbreviation.
+                // Standard LaTeX matrix separators have math terms/numbers/delimiters on both sides, rather than letters immediately adjacent.
+                const mathAmpRegex = /(?:[0-9\-+\\(\)\]\}A-Za-z\s])(?:&amp;|&)(?:\s*[0-9\-+\\(\[\{A-Za-z])/;
+                // If it looks like a word boundary (e.g. AEW&C, R&D, &lt; or &gt;), it is not a matrix separator.
+                const isWordAmp = /(?:[A-Za-z]{2,}(?:&amp;|&)[A-Za-z]|[A-Za-z](?:&amp;|&)[A-Za-z]{2,}|&(?:lt|gt|quot|apos|nbsp);)/i.test(trimmed);
+                if (mathAmpRegex.test(trimmed) && !isWordAmp) {
+                    hasMatrixSeparator = true;
+                }
+            }
             if (hasMatrixSeparator && !trimmed.includes('\\begin{')) {
                 // Keep original leading/trailing whitespace
                 let leading = part.match(/^\s*/)[0];
