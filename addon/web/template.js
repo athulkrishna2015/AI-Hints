@@ -230,6 +230,14 @@
     function convertMathDelimitersToTags(text) {
         if (!text) return "";
         let processed = text.trim();
+
+        // Normalize AI-generated dollar delimiters → standard LaTeX delimiters.
+        // Do this first so all downstream logic only needs to handle \( and \[.
+        // $$ ... $$ → \[ ... \]  (display math)
+        processed = processed.replace(/\$\$([^$]+?)\$\$/g, '\\[$1\\]');
+        // $ ... $ → \( ... \)  (inline math), but only when not already inside \(
+        // Avoid matching lone $ signs (currency) by requiring at least one non-space char
+        processed = processed.replace(/\$([^$\n]+?)\$/g, '\\($1\\)');
         
         // Strip existing delimiters ONLY if the entire string is wrapped in them
         let hasOuterDelimiters = false;
