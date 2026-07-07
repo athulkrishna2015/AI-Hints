@@ -11,7 +11,7 @@
 
     // 1. Configuration & Styling
     const STYLES = `
-        .ai-hints-container { margin-top: 10px; text-align: left; font-family: sans-serif; clear: both; font-size: inherit; }
+        .ai-hints-container { margin-top: 10px; text-align: left; font-family: inherit; clear: both; font-size: inherit; }
         .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; }
         .ai-hints-content-active { display: block; border: 1px dashed #aaa; background-color: rgba(128,128,128,0.06); }
         .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }

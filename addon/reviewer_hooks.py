@@ -1901,7 +1901,7 @@ class ResultsPopup(QDialog):
         layout = QVBoxLayout(self)
         self.web = mw.reviewer.web.__class__(self)
         layout.addWidget(self.web)
-        self.web.setHtml(f"<html><head><style>body {{ font-family: sans-serif; }}</style></head><body>{html_content}</body></html>")
+        self.web.setHtml(f"<html><head><style>body {{ font-family: inherit; }}</style></head><body>{html_content}</body></html>")
         self.resize(400, 300)
 
 def close_popup_if_open():
