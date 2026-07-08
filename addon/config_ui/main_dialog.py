@@ -1913,10 +1913,18 @@ def on_clean_orphaned_hints(query="", scope_str="entire collection"):
         query = ""
     if not isinstance(scope_str, str):
         scope_str = "entire collection"
-    from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton
-    from .main_dialog import _show_orphans_cleanup_dialog_standalone
     _show_orphans_cleanup_dialog_standalone(mw, query, scope_str)
 
+
+def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire collection"):
+    """Standalone version of the orphan scan + cleanup dialog that does not require ConfigDialog."""
+    if not isinstance(query, str):
+        query = ""
+    if not isinstance(scope_str, str):
+        scope_str = "entire collection"
+    from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton
+    from ..card_parser import CardParser
+    import json, html, re
 
     from ..widgets import ADDON_PACKAGE
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
