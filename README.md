@@ -30,7 +30,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next provider.
 - **Model Fallbacks**: Each provider has its own **intelligence-ranked fallback hierarchy** to automatically retry next-best models before switching to a different provider.
 - **Advanced Global Fallback**: Optionally configure and enable a flat, global priority sequence to mix-and-match fallback models across different providers in any custom order.
-- **Multi-Cloze Support**: Optimized for cards with multiple cloze deletions of the same ID.
+- **Multi-Cloze Support**: Optimized for cards with multiple cloze deletions of the same ID. Multiple correct answers are separated cleanly using a semicolon (` ; `) delimiter to avoid formatting collisions.
 - **Smart LaTeX Normalization**: Powered by the bundled `ai-latex-fixer` library for robust math formula rendering.
 - **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
 

@@ -2,6 +2,13 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.3.6 (2026-07-08)
+- **Semicolon cloze deletion separator**: Switched the multi-cloze same-ID answer separator from a comma (`, `) to a semicolon (` ; `) to prevent collisions with standard text punctuation and digit separators. Updated the default system prompt, backend card parser, and reviewer JavaScript to format and parse multiple cloze answers using the new delimiter.
+
+## 4.3.5 (2026-07-07)
+- **Malayalam dotted-circle rendering fixes**: Simplified LaTeX math detection regex to prevent catastrophic backtracking and infinite loops when compiling cards.
+- **Ampersand matrix collision avoidance**: Updated the reviewer matrix column detector to ignore standard textual ampersands (e.g., `"AEW&C"`, `"R&D"`), fixing Malayalam options from being incorrectly wrapped and broken.
+
 ## 4.3.4 (2026-07-07)
 - **Dollar-sign delimiter normalization**: The reviewer webview now automatically converts AI-generated `$...$` (inline) and `$$...$$` (display) math delimiters to Anki-standard `\(...\)` and `\[...\]` at render time, so mixed-delimiter hints and options (e.g. `"the new $x'$-axis"`) display correctly without any manual fixup.
 
