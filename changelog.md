@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.4.0 (2026-07-08)
+- **Time-based Orphaned Card Scan Optimization**: Introduced a new toggle options checkbox (`[x] Only scan notes modified since last clean scan`) to speed up orphaned card checking. The scanner uses Anki's native `edited:X` search parameters combined with config-managed timestamp tracking to scan only notes modified since the last clean run, making checks almost instantaneous.
+- **Circular Import Fix**: Resolved a circular import `ImportError` when running "Clean Orphaned Hints..." directly from Tools or browser context menus outside the config UI.
+
 ## 4.3.6 (2026-07-08)
 - **Semicolon cloze deletion separator**: Switched the multi-cloze same-ID answer separator from a comma (`, `) to a semicolon (` ; `) to prevent collisions with standard text punctuation and digit separators. Updated the default system prompt, backend card parser, and reviewer JavaScript to format and parse multiple cloze answers using the new delimiter.
 
