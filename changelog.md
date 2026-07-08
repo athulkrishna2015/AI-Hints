@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.4.1 (2026-07-08)
+- **High-Quality Exam Distractor Guidelines**: Re-engineered the default system prompt to strictly forbid fabricated, synthetic, or fake facts, names, dates, or formulas across all subjects.
+- **Subject-Specific MCQ Rules**: Integrated universal and subject-specific MCQ test design rules (Math calculation traps, Science conceptual misconceptions, Language faux-amis, and PSC Cluster sequencing) to generate challenging, high-quality exam distractors resembling actual board and competitive exams.
+
 ## 4.4.0 (2026-07-08)
 - **Time-based Orphaned Card Scan Optimization**: Introduced a new toggle options checkbox (`[x] Only scan notes modified since last clean scan`) to speed up orphaned card checking. The scanner uses Anki's native `edited:X` search parameters combined with config-managed timestamp tracking to scan only notes modified since the last clean run, making checks almost instantaneous.
 - **Circular Import Fix**: Resolved a circular import `ImportError` when running "Clean Orphaned Hints..." directly from Tools or browser context menus outside the config UI.
