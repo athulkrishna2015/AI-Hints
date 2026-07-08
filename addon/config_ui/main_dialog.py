@@ -1926,7 +1926,7 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
     from ..card_parser import CardParser
     import json, html, re
 
-    from ..widgets import ADDON_PACKAGE
+    from .widgets import ADDON_PACKAGE
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     last_check = config.get("last_orphans_check_time", 0)
     
