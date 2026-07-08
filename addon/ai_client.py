@@ -357,7 +357,7 @@ class AIClient:
             "- Return ONLY strictly valid raw JSON. No markdown, no preambles.\n"
             "- If using 'distractors' key, provide only incorrect options. If 'options', include the correct answer.\n"
             "- Ensure all options match the correct answer's format, length, and style perfectly.\n"
-            "- For multiple clozes with same ID, use comma-separated values (e.g., 'val1, val2').\n"
+            "- For multiple clozes with same ID, use semicolon-separated values (e.g., 'val1 ; val2').\n"
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
 

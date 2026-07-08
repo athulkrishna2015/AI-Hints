@@ -435,7 +435,7 @@ class CardParser:
         focused_text = process_recursive(text)
         sorted_answers = [answers_map[k] for k in sorted(answers_map.keys())]
         cloze_found = len(answers_map) > 0
-        return focused_text, ", ".join(sorted_answers), cloze_found
+        return focused_text, " ; ".join(sorted_answers), cloze_found
 
     def update_note_with_hints(self, note, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None, skip_if_exists: bool = False) -> bool:
         """Appends or replaces the AI hints block in the target field."""
