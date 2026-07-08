@@ -1453,16 +1453,35 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         query = self._get_maint_search_query()
         scope_str = "entire collection" if not query else f"deck '{self.maint_deck_cb.currentText()}'"
 
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        last_check = config.get("last_orphans_check_time", 0)
+        
+        # Only check modified notes if checkbox is checked and we have a previous clean timestamp
+        only_modified = hasattr(self, "maint_only_modified_cb") and self.maint_only_modified_cb.isChecked()
+        
+        time_filter_msg = ""
+        if only_modified and last_check > 0:
+            elapsed_seconds = max(0.0, time.time() - last_check)
+            elapsed_days = int(elapsed_seconds / 86400) + 1
+            if query:
+                query = f"({query}) edited:{elapsed_days}"
+            else:
+                query = f"edited:{elapsed_days}"
+            time_filter_msg = f" (modified in the last {elapsed_days} day(s))"
+
         parser = CardParser()
 
         nids = mw.col.find_notes(query)
         total = len(nids)
         if total == 0:
-            QMessageBox.information(self, "AI-Hints", f"No notes found in the selected scope ({scope_str})!")
+            if only_modified and last_check > 0:
+                config["last_orphans_check_time"] = int(time.time())
+                mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+            QMessageBox.information(self, "AI-Hints", f"No notes found in the selected scope ({scope_str}){time_filter_msg}!")
             return
 
         # Show a progress dialog
-        progress = QProgressDialog(f"Scanning {scope_str} for orphaned hints...", "Cancel", 0, total, self)
+        progress = QProgressDialog(f"Scanning {scope_str}{time_filter_msg} for orphaned hints...", "Cancel", 0, total, self)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(200)
 
@@ -1501,6 +1520,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         _log_orphaned_results(orphaned_hints, is_standalone=False)
 
         if not orphaned_hints:
+            config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+            config["last_orphans_check_time"] = int(time.time())
+            mw.addonManager.writeConfig(ADDON_PACKAGE, config)
             QMessageBox.information(self, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
             return
 
@@ -1648,6 +1670,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
             dialog.accept()
             mw.reset()
+            config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+            config["last_orphans_check_time"] = int(time.time())
+            mw.addonManager.writeConfig(ADDON_PACKAGE, config)
             logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
             QMessageBox.information(
                 self, "Cleanup Complete",
@@ -1888,30 +1913,43 @@ def on_clean_orphaned_hints(query="", scope_str="entire collection"):
     _show_orphans_cleanup_dialog_standalone(mw, query, scope_str)
 
 
-def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire collection"):
-    """Standalone version of the orphan scan + cleanup dialog that does not require ConfigDialog."""
-    if not isinstance(query, str):
-        query = ""
-    if not isinstance(scope_str, str):
-        scope_str = "entire collection"
-    from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton
-    from ..card_parser import CardParser
-    import json, html, re
+    from ..widgets import ADDON_PACKAGE
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    last_check = config.get("last_orphans_check_time", 0)
+    
+    # Try to find if the config dialog checkbox was checked, default to True (safer standalone behavior is Full scan by default if dialog is not open, but since standalone has no UI checkbox, we can inspect a config setting or just default to modified if user checked it last time. Let's see if ConfigDialog is active and copy its toggle, else default to Full scan to be safe).
+    from .main_dialog import _config_dialog_instance
+    only_modified = False
+    if _config_dialog_instance and hasattr(_config_dialog_instance, "maint_only_modified_cb"):
+        only_modified = _config_dialog_instance.maint_only_modified_cb.isChecked()
+    
+    time_filter_msg = ""
+    if only_modified and last_check > 0:
+        elapsed_seconds = max(0.0, time.time() - last_check)
+        elapsed_days = int(elapsed_seconds / 86400) + 1
+        if query:
+            query = f"({query}) edited:{elapsed_days}"
+        else:
+            query = f"edited:{elapsed_days}"
+        time_filter_msg = f" (modified in the last {elapsed_days} day(s))"
 
     parser = CardParser()
 
     nids = mw.col.find_notes(query)
     total = len(nids)
     if total == 0:
-        QMessageBox.information(parent, "AI-Hints", f"No notes found in {scope_str}!")
+        if only_modified and last_check > 0:
+            config["last_orphans_check_time"] = int(time.time())
+            mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+        QMessageBox.information(parent, "AI-Hints", f"No notes found in {scope_str}{time_filter_msg}!")
         return
 
-    progress = QProgressDialog(f"Scanning {scope_str} for orphaned hints...", "Cancel", 0, total, parent)
+    progress = QProgressDialog(f"Scanning {scope_str}{time_filter_msg} for orphaned hints...", "Cancel", 0, total, parent)
     progress.setWindowModality(Qt.WindowModality.WindowModal)
     progress.setMinimumDuration(200)
 
     orphaned_hints = []
-    logger.info(f"AI-Hints: Starting standalone scan for orphaned AI hints in {scope_str}.")
+    logger.info(f"AI-Hints: Starting standalone scan for orphaned AI hints in {scope_str}{time_filter_msg}.")
 
     for i, nid in enumerate(nids):
         if progress.wasCanceled():
@@ -1943,6 +1981,9 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
     _log_orphaned_results(orphaned_hints, is_standalone=True)
 
     if not orphaned_hints:
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        config["last_orphans_check_time"] = int(time.time())
+        mw.addonManager.writeConfig(ADDON_PACKAGE, config)
         QMessageBox.information(parent, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
         return
 
@@ -2069,6 +2110,9 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
 
         dialog.accept()
         mw.reset()
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        config["last_orphans_check_time"] = int(time.time())
+        mw.addonManager.writeConfig(ADDON_PACKAGE, config)
         logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
         QMessageBox.information(
             parent, "Cleanup Complete",

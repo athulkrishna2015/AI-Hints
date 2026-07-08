@@ -126,6 +126,11 @@ class AdvancedTabMixin:
         self.unicode_btn.clicked.connect(self.on_convert_unicode_escapes)
         maint_layout.addWidget(self.unicode_btn)
 
+        self.maint_only_modified_cb = QCheckBox("Only scan notes modified since last clean scan")
+        self.maint_only_modified_cb.setToolTip("Speeds up scanning by only checking notes edited since the last successful clean scan.")
+        self.maint_only_modified_cb.setChecked(True)
+        maint_layout.addWidget(self.maint_only_modified_cb)
+
         self.orphan_btn = QPushButton("🧹 Clean Orphaned Hints")
         self.orphan_btn.setToolTip("Finds and removes AI hint data for clozes that no longer exist on the note.")
         self.orphan_btn.clicked.connect(self.on_scan_orphans)
