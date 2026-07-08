@@ -178,5 +178,6 @@
   "batch_limit": 1000,
   "multithread_providers": false,
   "additional_system_instructions": "",
-  "model_blacklist_data": {}
+  "model_blacklist_data": {},
+  "maint_only_modified": true
 }

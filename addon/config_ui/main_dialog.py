@@ -260,6 +260,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.do_not_auto_collapse_cb.setChecked(c.get("do_not_auto_collapse", False))
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
         self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
+        if hasattr(self, "maint_only_modified_cb"):
+            self.maint_only_modified_cb.setChecked(c.get("maint_only_modified", True))
         
         shortcuts = c.get("shortcuts", {}) or {}
         self.modifier_cb.setCurrentText(shortcuts.get("modifier", "alt"))
@@ -1220,6 +1222,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["do_not_auto_collapse"] = self.do_not_auto_collapse_cb.isChecked()
             new_config["manual_show_hints"] = self.manual_show_hints_cb.isChecked()
             new_config["manual_show_options"] = self.manual_show_options_cb.isChecked()
+            if hasattr(self, "maint_only_modified_cb"):
+                new_config["maint_only_modified"] = self.maint_only_modified_cb.isChecked()
             new_config["shortcuts"] = {key: edit.text().strip() for key, edit in self.shortcut_edits.items()}
             new_config["shortcuts"]["modifier"] = self.modifier_cb.currentText()
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
@@ -1374,6 +1378,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("do_not_auto_collapse", False)
         config.setdefault("manual_show_hints", True)
         config.setdefault("manual_show_options", False)
+        config.setdefault("maint_only_modified", True)
         
         # Mobile Support Defaults
         config.setdefault("mobile_use_emojis", False)
@@ -1917,9 +1922,9 @@ def on_clean_orphaned_hints(query="", scope_str="entire collection"):
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     last_check = config.get("last_orphans_check_time", 0)
     
-    # Try to find if the config dialog checkbox was checked, default to True (safer standalone behavior is Full scan by default if dialog is not open, but since standalone has no UI checkbox, we can inspect a config setting or just default to modified if user checked it last time. Let's see if ConfigDialog is active and copy its toggle, else default to Full scan to be safe).
+    # Check config settings first to respect user checkbox preference at all times
+    only_modified = config.get("maint_only_modified", True)
     from .main_dialog import _config_dialog_instance
-    only_modified = False
     if _config_dialog_instance and hasattr(_config_dialog_instance, "maint_only_modified_cb"):
         only_modified = _config_dialog_instance.maint_only_modified_cb.isChecked()
     
