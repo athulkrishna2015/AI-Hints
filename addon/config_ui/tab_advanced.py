@@ -22,6 +22,16 @@ class AdvancedTabMixin:
         bl_info.setStyleSheet("color: #666; font-size: 11px;")
         blacklist_layout.addWidget(bl_info)
         
+        # Sort options row
+        sort_layout = QHBoxLayout()
+        sort_layout.addWidget(QLabel("Sort By:"))
+        self.blacklist_sort_cb = QComboBox()
+        self.blacklist_sort_cb.addItems(["Name", "Time Remaining (Descending)", "Time Remaining (Ascending)", "Failure Streak"])
+        self.blacklist_sort_cb.currentTextChanged.connect(self.refresh_blacklist_list)
+        sort_layout.addWidget(self.blacklist_sort_cb)
+        sort_layout.addStretch()
+        blacklist_layout.addLayout(sort_layout)
+
         self.blacklist_list = QListWidget()
         self.blacklist_list.setMinimumHeight(150)
         blacklist_layout.addWidget(self.blacklist_list)
@@ -224,10 +234,37 @@ class AdvancedTabMixin:
         for key in expired_combos:
             del FAILED_COMBOS_CACHE[key]
 
-        all_combos = sorted(
-            set(FAILED_COMBOS_CACHE) | set(RATE_LIMIT_STREAK),
-            key=lambda key: (key[0].casefold(), key[1].casefold(), key[2].casefold()),
-        )
+        # Fetch current sorting preference from UI
+        sort_mode = "Name"
+        if hasattr(self, "blacklist_sort_cb"):
+            sort_mode = self.blacklist_sort_cb.currentText()
+
+        combos_list = list(set(FAILED_COMBOS_CACHE) | set(RATE_LIMIT_STREAK))
+
+        if sort_mode == "Time Remaining (Descending)":
+            # Expiry descending. Put items without cooldown (None) at the bottom.
+            def get_descending_key(key):
+                exp = FAILED_COMBOS_CACHE.get(key)
+                return (exp if exp is not None else 0.0, key[0].casefold(), key[1].casefold(), key[2].casefold())
+            all_combos = sorted(combos_list, key=get_descending_key, reverse=True)
+        elif sort_mode == "Time Remaining (Ascending)":
+            # Expiry ascending. Put items without cooldown (None) at the bottom.
+            def get_ascending_key(key):
+                exp = FAILED_COMBOS_CACHE.get(key)
+                return (exp if exp is not None else float('inf'), key[0].casefold(), key[1].casefold(), key[2].casefold())
+            all_combos = sorted(combos_list, key=get_ascending_key)
+        elif sort_mode == "Failure Streak":
+            # Sort by streak descending, then alphabetically
+            def get_streak_key(key):
+                streak = RATE_LIMIT_STREAK.get(key, 0)
+                return (-streak, key[0].casefold(), key[1].casefold(), key[2].casefold())
+            all_combos = sorted(combos_list, key=get_streak_key)
+        else:
+            # Default sorting: Name/Alphabetical
+            all_combos = sorted(
+                combos_list,
+                key=lambda key: (key[0].casefold(), key[1].casefold(), key[2].casefold()),
+            )
         for provider, model, api_key in all_combos:
             expiry = FAILED_COMBOS_CACHE.get((provider, model, api_key))
             streak = RATE_LIMIT_STREAK.get((provider, model, api_key), 0)
