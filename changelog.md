@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 4.5.0 (2026-07-09)
+- **Model Blacklist Cooldown Sorting**: Added a new "Sort By" dropdown selection box in the Advanced Settings panel. Users can now sort active provider/model cooldown locks and failure streaks alphabetically by **Name**, by remaining cooldown duration (**Time Remaining Descending/Ascending**), or by the magnitude of consecutive API rate-limiting failure **Streaks**.
+
 ## 4.4.1 (2026-07-08)
 - **High-Quality Exam Distractor Guidelines**: Re-engineered the default system prompt to strictly forbid fabricated, synthetic, or fake facts, names, dates, or formulas across all subjects.
 - **Subject-Specific MCQ Rules**: Integrated universal and subject-specific MCQ test design rules (Math calculation traps, Science conceptual misconceptions, Language faux-amis, and PSC Cluster sequencing) to generate challenging, high-quality exam distractors resembling actual board and competitive exams.
