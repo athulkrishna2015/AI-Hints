@@ -423,26 +423,6 @@
                         state.selectedOptionIdx = index;
                         persistence.save(stateKey, state);
 
-                        // Check if this option is the correct one
-                        const isOptCorrect = (correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text));
-                        
-                        // Highlight correct green, incorrect red + green for correct answer
-                        if (isOptCorrect) {
-                            li.className = 'ai-hints-selected-correct';
-                        } else {
-                            li.className = 'ai-hints-selected-wrong';
-                            // Find and highlight correct answer green
-                            const siblings = list.querySelectorAll('li');
-                            siblings.forEach(sib => {
-                                const sText = sib.dataset.rawText;
-                                const sIdx = parseInt(sib.dataset.idx);
-                                const isSibCorrect = (correctIndex !== undefined && correctIndex !== null && sIdx === correctIndex) || (isCorrectFn && isCorrectFn(sText));
-                                if (isSibCorrect) {
-                                    sib.className = 'ai-hints-selected-correct';
-                                }
-                            });
-                        }
-
                         // Reveal back side of the card immediately
                         if (typeof pycmd === 'function') {
                             pycmd('ans');
