@@ -315,7 +315,7 @@
         return processed;
     }
 
-    function renderSection(parent, title, items, isCorrectFn, seed, showTitle, correctIndex) {
+    function renderSection(parent, title, items, isCorrectFn, seed, showTitle, correctIndex, selectedOptionIdx) {
         if (!items || items.length === 0) return null;
         
         const section = document.createElement('div');
@@ -375,9 +375,24 @@
                 li.dataset.type = title.toLowerCase().includes('hint') ? 'hints' : 'options';
                 li.dataset.rawText = text;
                 li.innerHTML = convertMathDelimitersToTags(escapeHtml(text));
-                if ((correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text))) {
-                    li.className = 'ai-hints-correct';
+                
+                const isCorrect = (correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text));
+                
+                // If this option is currently selected (or was selected on the question side)
+                const isSelected = selectedOptionIdx !== undefined && selectedOptionIdx !== null && selectedOptionIdx === index;
+                
+                if (isSelected) {
+                    li.className = isCorrect ? 'ai-hints-selected-correct' : 'ai-hints-selected-wrong';
+                } else if (isCorrect) {
+                    if (selectedOptionIdx !== undefined && selectedOptionIdx !== null) {
+                        // If any option was chosen, reveal the correct one in green
+                        li.className = 'ai-hints-selected-correct';
+                    } else {
+                        // Standard correct highlight
+                        li.className = 'ai-hints-correct';
+                    }
                 }
+                
                 if (title.toLowerCase().includes('option')) {
                     li.addEventListener('click', (event) => {
                         if (isAddonActive && (event.ctrlKey || event.metaKey)) {
@@ -390,11 +405,29 @@
                         // Ignore if we are already showing answer/locked
                         if (isAnswerSide()) return;
 
+                        // Save the selected option index in state
+                        const ord = getCardOrd();
+                        let cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+                        if (cardId === 'temp') {
+                            const firstJson = document.querySelector('.ai-hints-json');
+                            if (firstJson) {
+                                cardId = 'h' + hashCode(firstJson.textContent);
+                            } else {
+                                const qa = document.getElementById('qa') || document.body;
+                                cardId = 'h' + hashCode(qa.innerText || qa.textContent || '');
+                            }
+                        }
+                        const stateKey = 'state_' + cardId + '_' + ord;
+                        const persistence = getPersistence();
+                        const state = persistence.get(stateKey) || {};
+                        state.selectedOptionIdx = index;
+                        persistence.save(stateKey, state);
+
                         // Check if this option is the correct one
-                        const isCorrect = (correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text));
+                        const isOptCorrect = (correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text));
                         
                         // Highlight correct green, incorrect red + green for correct answer
-                        if (isCorrect) {
+                        if (isOptCorrect) {
                             li.className = 'ai-hints-selected-correct';
                         } else {
                             li.className = 'ai-hints-selected-wrong';
@@ -927,7 +960,7 @@
                 const hSection = renderSection(contentBox, "Hints:", (data ? data.hints : []), null, 0, showTitles);
                 const oSection = renderSection(contentBox, "Options:", (data ? data.options : []), (txt) => 
                     onAnswer && data.correct_answer && answersMatch(txt, data.correct_answer),
-                    state.seed, showTitles, correctIndex
+                    state.seed, showTitles, correctIndex, state.selectedOptionIdx
                 );
 
                 const updateVisibility = () => {
