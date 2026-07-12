@@ -1424,7 +1424,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             "clear": "4", 
             "refresh": "5", 
             "show-json": "6",
-            "select-options-modifier": "ctrl",
+            "select-options-modifier": "ctrl+alt",
             "select-options-keys": "1-9"
         }
         shortcuts = dict(default_shortcuts)
