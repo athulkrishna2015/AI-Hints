@@ -19,12 +19,31 @@
         .ai-hints-btn:hover { background-color: #e0e0e0; }
         .ai-hints-btn:active { background-color: #d0d0d0; transform: translateY(1px); }
         .ai-hints-btn:disabled { opacity: 0.5; cursor: default; }
-        .ai-hints-list, .ai-hints-hint-list { margin-top: 6px; padding-left: 20px; margin-bottom: 0; }
+        .ai-hints-list, .ai-hints-hint-list { margin-top: 6px; padding-left: 0; margin-bottom: 0; list-style-type: none; }
         .ai-hints-list li, .ai-hints-hint-list li { margin-bottom: 4px; line-height: 1.3; white-space: pre-wrap; font-style: normal !important; }
-        .ai-hints-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.12); padding-left: 8px; font-weight: 600; border-radius: 0 4px 4px 0; }
-        .ai-hints-selected-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.18) !important; padding-left: 8px; font-weight: 600; border-radius: 0 4px 4px 0; }
-        .ai-hints-selected-wrong { border-left: 3px solid #e74c3c; background-color: rgba(231, 76, 60, 0.18) !important; padding-left: 8px; font-weight: 600; border-radius: 0 4px 4px 0; }
-        .ai-hints-list li { cursor: pointer; }
+        .ai-hints-list li { 
+            cursor: pointer; 
+            padding: 6px 12px; 
+            background-color: rgba(0, 0, 0, 0.03); 
+            border: 1px solid rgba(0, 0, 0, 0.1); 
+            border-radius: 6px; 
+            transition: background-color 0.15s ease, border-color 0.15s ease;
+        }
+        .ai-hints-list li:hover { 
+            background-color: rgba(0, 0, 0, 0.07); 
+            border-color: rgba(0, 0, 0, 0.2); 
+        }
+        .nightMode .ai-hints-list li { 
+            background-color: rgba(255, 255, 255, 0.05); 
+            border-color: rgba(255, 255, 255, 0.1); 
+        }
+        .nightMode .ai-hints-list li:hover { 
+            background-color: rgba(255, 255, 255, 0.1); 
+            border-color: rgba(255, 255, 255, 0.2); 
+        }
+        .ai-hints-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.12); padding-left: 12px !important; font-weight: 600; border-radius: 0 6px 6px 0; }
+        .ai-hints-selected-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.18) !important; padding-left: 12px !important; font-weight: 600; border-radius: 0 6px 6px 0; }
+        .ai-hints-selected-wrong { border-left: 3px solid #e74c3c; background-color: rgba(231, 76, 60, 0.18) !important; padding-left: 12px !important; font-weight: 600; border-radius: 0 6px 6px 0; }
         .nightMode .ai-hints-content-active { background-color: rgba(255,255,255,0.04); border-color: #555; }
         .nightMode .ai-hints-btn { background-color: #333; color: #eee; border-color: #666; }
         .nightMode .ai-hints-btn:hover { background-color: #444; }
