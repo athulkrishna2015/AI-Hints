@@ -867,6 +867,7 @@
             // while preventing 'jumping' during background pushes on the same card view.
             if (isFreshCardShow || isFirstLoad || isManualAction === true) {
                 state.seed = Math.floor(Math.random() * 1000000);
+                state.selectedOptionIdx = null;
             }
             persistence.save(stateKey, state);
         }
