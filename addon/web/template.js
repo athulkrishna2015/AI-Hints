@@ -22,6 +22,9 @@
         .ai-hints-list, .ai-hints-hint-list { margin-top: 6px; padding-left: 20px; margin-bottom: 0; }
         .ai-hints-list li, .ai-hints-hint-list li { margin-bottom: 4px; line-height: 1.3; white-space: pre-wrap; font-style: normal !important; }
         .ai-hints-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.12); padding-left: 8px; font-weight: 600; border-radius: 0 4px 4px 0; }
+        .ai-hints-selected-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.18) !important; padding-left: 8px; font-weight: 600; border-radius: 0 4px 4px 0; }
+        .ai-hints-selected-wrong { border-left: 3px solid #e74c3c; background-color: rgba(231, 76, 60, 0.18) !important; padding-left: 8px; font-weight: 600; border-radius: 0 4px 4px 0; }
+        .ai-hints-list li { cursor: pointer; }
         .nightMode .ai-hints-content-active { background-color: rgba(255,255,255,0.04); border-color: #555; }
         .nightMode .ai-hints-btn { background-color: #333; color: #eee; border-color: #666; }
         .nightMode .ai-hints-btn:hover { background-color: #444; }
@@ -375,7 +378,48 @@
                 if ((correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text))) {
                     li.className = 'ai-hints-correct';
                 }
-                if (isAddonActive) {
+                if (title.toLowerCase().includes('option')) {
+                    li.addEventListener('click', (event) => {
+                        if (isAddonActive && (event.ctrlKey || event.metaKey)) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            startInlineEditing(li);
+                            return;
+                        }
+                        
+                        // Ignore if we are already showing answer/locked
+                        if (isAnswerSide()) return;
+
+                        // Check if this option is the correct one
+                        const isCorrect = (correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text));
+                        
+                        // Highlight correct green, incorrect red + green for correct answer
+                        if (isCorrect) {
+                            li.className = 'ai-hints-selected-correct';
+                        } else {
+                            li.className = 'ai-hints-selected-wrong';
+                            // Find and highlight correct answer green
+                            const siblings = list.querySelectorAll('li');
+                            siblings.forEach(sib => {
+                                const sText = sib.dataset.rawText;
+                                const sIdx = parseInt(sib.dataset.idx);
+                                const isSibCorrect = (correctIndex !== undefined && correctIndex !== null && sIdx === correctIndex) || (isCorrectFn && isCorrectFn(sText));
+                                if (isSibCorrect) {
+                                    sib.className = 'ai-hints-selected-correct';
+                                }
+                            });
+                        }
+
+                        // Reveal back side of the card immediately
+                        if (typeof pycmd === 'function') {
+                            pycmd('ans');
+                        } else if (typeof window.anki !== 'undefined' && typeof window.anki.showAnswer === 'function') {
+                            window.anki.showAnswer();
+                        } else if (typeof showAnswer === 'function') {
+                            showAnswer();
+                        }
+                    });
+                } else if (isAddonActive) {
                     li.addEventListener('click', (event) => {
                         if (event.ctrlKey || event.metaKey) {
                             event.preventDefault();
@@ -1402,6 +1446,19 @@
                 modifierMatch = modifierMatch || (event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey);
             } else if (reqModifier === 'meta') {
                 modifierMatch = modifierMatch || (event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey);
+            }
+
+            // Match numeric keys (1-9) without modifiers to click options in displayed order
+            const isDigit = /^[1-9]$/.test(event.key);
+            if (isDigit && noModifierPressed && !isAnswerSide()) {
+                const listItems = document.querySelectorAll('.ai-hints-list li');
+                const index = parseInt(event.key) - 1;
+                if (listItems && listItems[index]) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    listItems[index].click();
+                    return;
+                }
             }
 
             if (!modifierMatch) return;
