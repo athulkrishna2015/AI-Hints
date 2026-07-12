@@ -267,6 +267,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.modifier_cb.setCurrentText(shortcuts.get("modifier", "alt"))
         for key, edit in self.shortcut_edits.items():
             edit.setText(shortcuts.get(key, ""))
+        self.select_options_modifier_cb.setCurrentText(shortcuts.get("select-options-modifier", "ctrl"))
+        self.select_options_keys_edit.setText(shortcuts.get("select-options-keys", "1-9"))
 
         keys = c.get("api_keys", {}) or {}
         for p, edit in self.api_key_edits.items():
@@ -1226,6 +1228,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 new_config["maint_only_modified"] = self.maint_only_modified_cb.isChecked()
             new_config["shortcuts"] = {key: edit.text().strip() for key, edit in self.shortcut_edits.items()}
             new_config["shortcuts"]["modifier"] = self.modifier_cb.currentText()
+            new_config["shortcuts"]["select-options-modifier"] = self.select_options_modifier_cb.currentText()
+            new_config["shortcuts"]["select-options-keys"] = self.select_options_keys_edit.text().strip()
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {p: (edit.currentText().strip() or DEFAULT_MODELS.get(p, "")) for p, edit in self.model_edits.items()}
             new_config["local_providers"] = self.local_providers_data
@@ -1385,7 +1389,17 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("mobile_show_extra_buttons", False)
         config.setdefault("mobile_setup_completed", False)
 
-        default_shortcuts = {"modifier": "alt", "generate": "1", "toggle-options": "3", "toggle-hints": "2", "clear": "4", "refresh": "5", "show-json": "6"}
+        default_shortcuts = {
+            "modifier": "alt", 
+            "generate": "1", 
+            "toggle-options": "3", 
+            "toggle-hints": "2", 
+            "clear": "4", 
+            "refresh": "5", 
+            "show-json": "6",
+            "select-options-modifier": "ctrl",
+            "select-options-keys": "1-9"
+        }
         shortcuts = dict(default_shortcuts)
         raw_shortcuts = config.get("shortcuts", {}) or {}
         if isinstance(raw_shortcuts, dict): shortcuts.update(raw_shortcuts)

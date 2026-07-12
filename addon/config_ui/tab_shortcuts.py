@@ -36,5 +36,19 @@ class ShortcutsTabMixin:
             self.shortcut_edits[key] = edit
             short_layout.addRow(label, edit)
         
+        # Option Selection Keys Section
+        short_layout.addRow(QLabel("--- MCQ Option Selection Keys ---"))
+        
+        self.select_options_modifier_cb = QComboBox()
+        self.select_options_modifier_cb.addItems(["ctrl", "alt", "shift", "meta", "none"])
+        self.select_options_modifier_cb.setToolTip("Modifier key to select MCQ options on the question/front side.")
+        short_layout.addRow("Select Options Modifier:", self.select_options_modifier_cb)
+        
+        self.select_options_keys_edit = QLineEdit()
+        self.select_options_keys_edit.setPlaceholderText("e.g. 1-9")
+        self.select_options_keys_edit.setFixedWidth(50)
+        self.select_options_keys_edit.setToolTip("Keys to select corresponding options in order (1 for 1st, 2 for 2nd, etc.). Defaults to 1-9.")
+        short_layout.addRow("Select Options Keys:", self.select_options_keys_edit)
+
         self.shortcuts_tab.setLayout(short_layout)
         return self.shortcuts_tab

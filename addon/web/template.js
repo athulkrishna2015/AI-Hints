@@ -1511,11 +1511,48 @@
                 modifierMatch = modifierMatch || (event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey);
             }
 
-            // Match numeric keys (1-9) without modifiers to click options in displayed order
-            const isDigit = /^[1-9]$/.test(event.key);
-            if (isDigit && noModifierPressed && !isAnswerSide()) {
+            // Match configurable numeric keys to select options
+            const optMod = (shortcuts["select-options-modifier"] || "ctrl").toLowerCase();
+            const optKeys = (shortcuts["select-options-keys"] || "1-9").trim().toLowerCase();
+            
+            // Check if options modifier matches
+            let optModMatch = false;
+            if (optMod === "none") {
+                optModMatch = !event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
+            } else if (optMod === "alt") {
+                optModMatch = event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
+            } else if (optMod === "ctrl") {
+                optModMatch = event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
+            } else if (optMod === "shift") {
+                optModMatch = event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey;
+            } else if (optMod === "meta") {
+                optModMatch = event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey;
+            }
+
+            // Check if pressed key matches selection range
+            let keyMatch = false;
+            let digitVal = null;
+            if (/^[1-9]$/.test(event.key)) {
+                const num = parseInt(event.key);
+                digitVal = num;
+                if (optKeys === "1-9") {
+                    keyMatch = num >= 1 && num <= 9;
+                } else if (optKeys.includes("-")) {
+                    const rangeParts = optKeys.split("-");
+                    const start = parseInt(rangeParts[0]);
+                    const end = parseInt(rangeParts[1]);
+                    if (!isNaN(start) && !isNaN(end)) {
+                        keyMatch = num >= start && num <= end;
+                    }
+                } else {
+                    // Match exact digit sequence or character
+                    keyMatch = optKeys.split(",").map(k => k.trim()).includes(event.key);
+                }
+            }
+
+            if (optModMatch && keyMatch && !isAnswerSide() && digitVal !== null) {
                 const listItems = document.querySelectorAll('.ai-hints-list li');
-                const index = parseInt(event.key) - 1;
+                const index = digitVal - 1;
                 if (listItems && listItems[index]) {
                     event.preventDefault();
                     event.stopPropagation();
