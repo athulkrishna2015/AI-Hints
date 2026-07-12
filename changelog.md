@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.0.1 (2026-07-12)
+- **Checkable Multiple Modifiers**: Replaced single modifier dropdowns in the Shortcuts settings tab with checkboxes for Ctrl, Alt, Shift, and Meta, allowing compound modifiers (like `Ctrl+Alt`) to be configured independently for both primary shortcuts and option selection shortcuts.
+- **Default Modifier Change**: Changed default MCQ options selection modifier key combination to `Ctrl+Alt` to prevent collisions.
+- **Python Keypress Interception**: Options selection hotkeys are now registered on the Python side, intercepting shortcuts (like `Ctrl+Alt+1-9`) and routing them to the card view before Anki's global handlers can catch them.
+
 ## 5.0.0 (2026-07-12)
 - **Interactive MCQ Option Selection**: Click or tap on generated MCQ options during review to test your knowledge.
 - **De-deferred Color Highlighting**: Clicked options are saved in state and colored on the back (answer) side of the card—highlighting green for correct, red for incorrect (with the true correct answer highlighted green next to it).
