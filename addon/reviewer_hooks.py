@@ -2368,6 +2368,50 @@ def on_state_shortcuts_will_change(state: str, shortcuts: list) -> None:
         if front_sc:
             add_shortcut(front_sc, front_side_only(lambda: trigger_js_click("JSON", "📝")))
 
+    # 7. Intercept MCQ option selection hotkeys globally on Python/Qt side to prevent Anki's defaults (like flag triggers) from capturing them
+    opt_mod = shortcuts_cfg.get("select-options-modifier", "ctrl+alt")
+    opt_keys_str = shortcuts_cfg.get("select-options-keys", "")
+    
+    if opt_keys_str:
+        # Parse key digits
+        digits = []
+        if opt_keys_str == "1-9":
+            digits = list(range(1, 10))
+        elif "-" in opt_keys_str:
+            try:
+                parts = opt_keys_str.split("-")
+                start = int(parts[0])
+                end = int(parts[1])
+                digits = list(range(start, end + 1))
+            except Exception:
+                digits = []
+        else:
+            for k in opt_keys_str.split(","):
+                try:
+                    digits.append(int(k.strip()))
+                except Exception:
+                    pass
+
+        def select_option_js(index: int):
+            web = getattr(mw.reviewer, "web", None)
+            if not web:
+                return
+            # Execute click on option node in webview
+            web.eval(f"""
+                (function() {{
+                    const listItems = document.querySelectorAll('.ai-hints-list li');
+                    if (listItems && listItems[{index}]) {{
+                        listItems[{index}].click();
+                    }}
+                }})();
+            """)
+
+        for d in digits:
+            opt_sc_text = get_shortcut_string(opt_mod, str(d))
+            if opt_sc_text:
+                # Bind the shortcut so Python intercepts it, but only run when on the question front side
+                add_shortcut(opt_sc_text, front_side_only(lambda idx=d-1: select_option_js(idx)))
+
 def init_hooks():
     global _hooks_registered, _reviewer_is_ending
     if _hooks_registered:
