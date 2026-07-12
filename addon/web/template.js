@@ -1512,6 +1512,6 @@
                 event.preventDefault();
                 clickButton("JSON", "📝");
             }
-        });
+        }, true);
     }
 })();
