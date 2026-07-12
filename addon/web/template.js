@@ -1515,18 +1515,23 @@
             const optMod = (shortcuts["select-options-modifier"] || "ctrl").toLowerCase();
             const optKeys = (shortcuts["select-options-keys"] || "1-9").trim().toLowerCase();
             
-            // Check if options modifier matches
+            // Check if options modifier matches (supports compound modifiers separated by '+')
             let optModMatch = false;
-            if (optMod === "none") {
+            const mods = optMod.split("+").map(m => m.trim());
+            const hasCtrl = mods.includes("ctrl");
+            const hasAlt = mods.includes("alt");
+            const hasShift = mods.includes("shift");
+            const hasMeta = mods.includes("meta");
+            const isNone = optMod === "none" || mods.includes("none");
+
+            if (isNone) {
                 optModMatch = !event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
-            } else if (optMod === "alt") {
-                optModMatch = event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
-            } else if (optMod === "ctrl") {
-                optModMatch = event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
-            } else if (optMod === "shift") {
-                optModMatch = event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey;
-            } else if (optMod === "meta") {
-                optModMatch = event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey;
+            } else {
+                const ctrlOk = hasCtrl ? event.ctrlKey : !event.ctrlKey;
+                const altOk = hasAlt ? event.altKey : !event.altKey;
+                const shiftOk = hasShift ? event.shiftKey : !event.shiftKey;
+                const metaOk = hasMeta ? event.metaKey : !event.metaKey;
+                optModMatch = ctrlOk && altOk && shiftOk && metaOk;
             }
 
             // Check if pressed key matches selection range

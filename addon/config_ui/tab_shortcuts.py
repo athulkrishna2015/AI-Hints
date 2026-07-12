@@ -40,8 +40,8 @@ class ShortcutsTabMixin:
         short_layout.addRow(QLabel("--- MCQ Option Selection Keys ---"))
         
         self.select_options_modifier_cb = QComboBox()
-        self.select_options_modifier_cb.addItems(["ctrl", "alt", "shift", "meta", "none"])
-        self.select_options_modifier_cb.setToolTip("Modifier key to select MCQ options on the question/front side.")
+        self.select_options_modifier_cb.addItems(["ctrl", "alt", "shift", "meta", "ctrl+shift", "alt+shift", "ctrl+alt", "none"])
+        self.select_options_modifier_cb.setToolTip("Modifier key(s) to select MCQ options on the question/front side.")
         short_layout.addRow("Select Options Modifier:", self.select_options_modifier_cb)
         
         self.select_options_keys_edit = QLineEdit()
