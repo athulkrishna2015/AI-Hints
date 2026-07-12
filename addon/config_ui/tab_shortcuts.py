@@ -6,10 +6,29 @@ class ShortcutsTabMixin:
         self.shortcuts_tab = QWidget()
         short_layout = QFormLayout()
         
-        self.modifier_cb = QComboBox()
-        self.modifier_cb.addItems(["alt", "ctrl", "shift", "meta", "none"])
-        self.modifier_cb.setToolTip("The modifier key to use with shortcuts. 'meta' is the Command key on Mac or Windows key on Windows. 'none' means no modifier.")
-        short_layout.addRow("Shortcut Modifier:", self.modifier_cb)
+        # Helper to construct multiple checkbox modifiers row
+        def create_modifiers_row():
+            container = QWidget()
+            layout = QHBoxLayout()
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(10)
+            
+            ctrl_cb = QCheckBox("Ctrl")
+            alt_cb = QCheckBox("Alt")
+            shift_cb = QCheckBox("Shift")
+            meta_cb = QCheckBox("Meta")
+            
+            layout.addWidget(ctrl_cb)
+            layout.addWidget(alt_cb)
+            layout.addWidget(shift_cb)
+            layout.addWidget(meta_cb)
+            layout.addStretch()
+            container.setLayout(layout)
+            return container, (ctrl_cb, alt_cb, shift_cb, meta_cb)
+
+        # 1. Primary Shortcuts Modifiers
+        self.modifier_container, (self.mod_ctrl, self.mod_alt, self.mod_shift, self.mod_meta) = create_modifiers_row()
+        short_layout.addRow("Shortcut Modifier(s):", self.modifier_container)
         
         self.shortcut_edits = {}
         shortcut_labels = {
@@ -39,10 +58,9 @@ class ShortcutsTabMixin:
         # Option Selection Keys Section
         short_layout.addRow(QLabel("--- MCQ Option Selection Keys ---"))
         
-        self.select_options_modifier_cb = QComboBox()
-        self.select_options_modifier_cb.addItems(["ctrl", "alt", "shift", "meta", "ctrl+shift", "alt+shift", "ctrl+alt", "none"])
-        self.select_options_modifier_cb.setToolTip("Modifier key(s) to select MCQ options on the question/front side.")
-        short_layout.addRow("Select Options Modifier:", self.select_options_modifier_cb)
+        # 2. Options Selection Modifiers
+        self.opt_modifier_container, (self.opt_ctrl, self.opt_alt, self.opt_shift, self.opt_meta) = create_modifiers_row()
+        short_layout.addRow("Select Options Modifier(s):", self.opt_modifier_container)
         
         self.select_options_keys_edit = QLineEdit()
         self.select_options_keys_edit.setPlaceholderText("e.g. 1-9")
@@ -53,9 +71,10 @@ class ShortcutsTabMixin:
         # Collision Info Label
         collision_label = QLabel(
             "<b>Shortcut Collision Recommendations:</b><br/>"
-            "• <b>ctrl:</b> Recommended / safest. Zero conflicts with Anki or standard Linux window managers.<br/>"
-            "• <b>alt:</b> Highly conflicted. Matches default AI-Hints system triggers (Alt + 1-6).<br/>"
-            "• <b>meta:</b> Highly conflicted. Super/Windows key triggers dock window launches on Linux.<br/>"
+            "• <b>ctrl+shift:</b> Recommended / safest combination for option selection. Zero conflicts with Anki or standard Linux window managers.<br/>"
+            "• <b>ctrl:</b> Conflicted. Ctrl+1-4 conflicts with card flag sets in Anki.<br/>"
+            "• <b>alt:</b> Conflicted. Matches default system triggers (Alt + 1-6).<br/>"
+            "• <b>meta:</b> Conflicted. Super/Windows key triggers dock window launches on Linux.<br/>"
             "• <b>none / shift:</b> Conflicts with raw keyboard entry, space ratings, or key symbols."
         )
         collision_label.setWordWrap(True)

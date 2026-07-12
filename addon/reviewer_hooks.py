@@ -2283,9 +2283,14 @@ def on_state_shortcuts_will_change(state: str, shortcuts: list) -> None:
         key_str = key.strip().upper()
         if not key_str:
             return ""
-        if mod == "none":
+        if not mod or mod.lower() == "none":
             return key_str
-        return f"{mod.capitalize()}+{key_str}"
+        
+        # Support compound modifiers like ctrl+shift -> Ctrl+Shift+Key
+        parts = [p.strip().capitalize() for p in mod.split("+") if p.strip()]
+        if not parts:
+            return key_str
+        return "+".join(parts) + "+" + key_str
 
     def get_front_shortcut_string(key: str) -> str:
         if not key:

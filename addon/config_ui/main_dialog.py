@@ -264,10 +264,23 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.maint_only_modified_cb.setChecked(c.get("maint_only_modified", True))
         
         shortcuts = c.get("shortcuts", {}) or {}
-        self.modifier_cb.setCurrentText(shortcuts.get("modifier", "alt"))
+        # Parse primary shortcuts modifier
+        prim_mods = [m.strip().lower() for m in shortcuts.get("modifier", "alt").split("+") if m.strip()]
+        self.mod_ctrl.setChecked("ctrl" in prim_mods)
+        self.mod_alt.setChecked("alt" in prim_mods)
+        self.mod_shift.setChecked("shift" in prim_mods)
+        self.mod_meta.setChecked("meta" in prim_mods)
+
         for key, edit in self.shortcut_edits.items():
             edit.setText(shortcuts.get(key, ""))
-        self.select_options_modifier_cb.setCurrentText(shortcuts.get("select-options-modifier", "ctrl"))
+        
+        # Parse options selection modifier
+        opt_mods = [m.strip().lower() for m in shortcuts.get("select-options-modifier", "ctrl").split("+") if m.strip()]
+        self.opt_ctrl.setChecked("ctrl" in opt_mods)
+        self.opt_alt.setChecked("alt" in opt_mods)
+        self.opt_shift.setChecked("shift" in opt_mods)
+        self.opt_meta.setChecked("meta" in opt_mods)
+
         self.select_options_keys_edit.setText(shortcuts.get("select-options-keys", "1-9"))
 
         keys = c.get("api_keys", {}) or {}
@@ -1227,8 +1240,22 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             if hasattr(self, "maint_only_modified_cb"):
                 new_config["maint_only_modified"] = self.maint_only_modified_cb.isChecked()
             new_config["shortcuts"] = {key: edit.text().strip() for key, edit in self.shortcut_edits.items()}
-            new_config["shortcuts"]["modifier"] = self.modifier_cb.currentText()
-            new_config["shortcuts"]["select-options-modifier"] = self.select_options_modifier_cb.currentText()
+            
+            # Save primary shortcut modifiers
+            prim_list = []
+            if self.mod_ctrl.isChecked(): prim_list.append("ctrl")
+            if self.mod_alt.isChecked(): prim_list.append("alt")
+            if self.mod_shift.isChecked(): prim_list.append("shift")
+            if self.mod_meta.isChecked(): prim_list.append("meta")
+            new_config["shortcuts"]["modifier"] = "+".join(prim_list) if prim_list else "none"
+
+            # Save select options modifier
+            opt_list = []
+            if self.opt_ctrl.isChecked(): opt_list.append("ctrl")
+            if self.opt_alt.isChecked(): opt_list.append("alt")
+            if self.opt_shift.isChecked(): opt_list.append("shift")
+            if self.opt_meta.isChecked(): opt_list.append("meta")
+            new_config["shortcuts"]["select-options-modifier"] = "+".join(opt_list) if opt_list else "none"
             new_config["shortcuts"]["select-options-keys"] = self.select_options_keys_edit.text().strip()
             new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
             new_config["models"] = {p: (edit.currentText().strip() or DEFAULT_MODELS.get(p, "")) for p, edit in self.model_edits.items()}
