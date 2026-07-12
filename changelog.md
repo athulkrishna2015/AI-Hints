@@ -2,6 +2,12 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.0.0 (2026-07-12)
+- **Interactive MCQ Option Selection**: Click or tap on generated MCQ options during review to test your knowledge.
+- **De-deferred Color Highlighting**: Clicked options are saved in state and colored on the back (answer) side of the card—highlighting green for correct, red for incorrect (with the true correct answer highlighted green next to it).
+- **Keyboard Selection Shortcuts**: Press number keys `1-9` on the front/question side to select options and automatically flip the card. Reviewer rating hotkeys continue to function on the back side as normal.
+- **Improved Option Box Styling**: Added distinct rounded boundaries, padding, and subtle light mode / night mode hover shading to option list items.
+
 ## 4.5.0 (2026-07-09)
 - **Model Blacklist Cooldown Sorting**: Added a new "Sort By" dropdown selection box in the Advanced Settings panel. Users can now sort active provider/model cooldown locks and failure streaks alphabetically by **Name**, by remaining cooldown duration (**Time Remaining Descending/Ascending**), or by the magnitude of consecutive API rate-limiting failure **Streaks**.
 
