@@ -41,9 +41,39 @@
             background-color: rgba(255, 255, 255, 0.1); 
             border-color: rgba(255, 255, 255, 0.2); 
         }
-        .ai-hints-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.12); padding-left: 12px !important; font-weight: 600; border-radius: 0 6px 6px 0; }
-        .ai-hints-selected-correct { border-left: 3px solid #2ecc71; background-color: rgba(46, 204, 113, 0.18) !important; padding-left: 12px !important; font-weight: 600; border-radius: 0 6px 6px 0; }
-        .ai-hints-selected-wrong { border-left: 3px solid #e74c3c; background-color: rgba(231, 76, 60, 0.18) !important; padding-left: 12px !important; font-weight: 600; border-radius: 0 6px 6px 0; }
+        .ai-hints-correct { 
+            border: 1px solid #2ecc71 !important; 
+            border-left: 4px solid #2ecc71 !important; 
+            background-color: rgba(46, 204, 113, 0.12) !important; 
+            padding-left: 12px !important; 
+            font-weight: 600; 
+            border-radius: 6px; 
+        }
+        .ai-hints-selected-correct { 
+            border: 1px solid #2ecc71 !important; 
+            border-left: 4px solid #2ecc71 !important; 
+            background-color: rgba(46, 204, 113, 0.18) !important; 
+            padding-left: 12px !important; 
+            font-weight: 600; 
+            border-radius: 6px; 
+        }
+        .ai-hints-selected-wrong { 
+            border: 1px solid #e74c3c !important; 
+            border-left: 4px solid #e74c3c !important; 
+            background-color: rgba(231, 76, 60, 0.18) !important; 
+            padding-left: 12px !important; 
+            font-weight: 600; 
+            border-radius: 6px; 
+        }
+        .nightMode .ai-hints-correct {
+            background-color: rgba(46, 204, 113, 0.15) !important;
+        }
+        .nightMode .ai-hints-selected-correct {
+            background-color: rgba(46, 204, 113, 0.22) !important;
+        }
+        .nightMode .ai-hints-selected-wrong {
+            background-color: rgba(231, 76, 60, 0.22) !important;
+        }
         .nightMode .ai-hints-content-active { background-color: rgba(255,255,255,0.04); border-color: #555; }
         .nightMode .ai-hints-btn { background-color: #333; color: #eee; border-color: #666; }
         .nightMode .ai-hints-btn:hover { background-color: #444; }
