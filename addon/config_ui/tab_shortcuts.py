@@ -50,5 +50,17 @@ class ShortcutsTabMixin:
         self.select_options_keys_edit.setToolTip("Keys to select corresponding options in order (1 for 1st, 2 for 2nd, etc.). Defaults to 1-9.")
         short_layout.addRow("Select Options Keys:", self.select_options_keys_edit)
 
+        # Collision Info Label
+        collision_label = QLabel(
+            "<b>Shortcut Collision Recommendations:</b><br/>"
+            "• <b>ctrl:</b> Recommended / safest. Zero conflicts with Anki or standard Linux window managers.<br/>"
+            "• <b>alt:</b> Highly conflicted. Matches default AI-Hints system triggers (Alt + 1-6).<br/>"
+            "• <b>meta:</b> Highly conflicted. Super/Windows key triggers dock window launches on Linux.<br/>"
+            "• <b>none / shift:</b> Conflicts with raw keyboard entry, space ratings, or key symbols."
+        )
+        collision_label.setWordWrap(True)
+        collision_label.setStyleSheet("color: #555; font-size: 11px; margin-top: 8px;")
+        short_layout.addRow(collision_label)
+
         self.shortcuts_tab.setLayout(short_layout)
         return self.shortcuts_tab
