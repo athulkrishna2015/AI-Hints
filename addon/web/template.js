@@ -451,6 +451,9 @@
                             return;
                         }
                         
+                        // Ignore click if the element is currently in editing mode
+                        if (li.dataset.editing === 'true') return;
+                        
                         // Ignore if we are already showing answer/locked
                         if (isAnswerSide()) return;
 
