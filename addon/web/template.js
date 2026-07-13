@@ -1195,12 +1195,26 @@
                 if (onAnswer && hasContent) {
                     renderMath(container);
                     // Check if clicked option is correct and auto-grade rating is enabled
-                    if (uiCfg.rate_good_on_correct && state.selectedOptionIdx !== undefined && state.selectedOptionIdx !== null) {
+                    if (state.selectedOptionIdx !== undefined && state.selectedOptionIdx !== null) {
                         const clickedText = data.options[state.selectedOptionIdx];
                         const matches = clickedText && data.correct_answer && answersMatch(clickedText, data.correct_answer);
                         if (matches) {
-                            if (typeof pycmd === 'function') {
-                                pycmd('ai_hints_rate_good');
+                            if (uiCfg.rate_good_on_correct) {
+                                const delay = typeof uiCfg.rate_good_delay_ms !== 'undefined' ? uiCfg.rate_good_delay_ms : 0;
+                                setTimeout(() => {
+                                    if (typeof pycmd === 'function') {
+                                        pycmd('ai_hints_rate_good');
+                                    }
+                                }, delay);
+                            }
+                        } else {
+                            if (uiCfg.rate_again_on_wrong) {
+                                const delay = typeof uiCfg.rate_again_delay_ms !== 'undefined' ? uiCfg.rate_again_delay_ms : 1000;
+                                setTimeout(() => {
+                                    if (typeof pycmd === 'function') {
+                                        pycmd('ai_hints_rate_again');
+                                    }
+                                }, delay);
                             }
                         }
                     }

@@ -511,6 +511,9 @@ def _get_ui_config(card, auto_reveal=False, is_answer=False, has_data=False):
         "auto_show_options": config.get("auto_show_options", False),
         "do_not_auto_collapse": config.get("do_not_auto_collapse", False),
         "rate_good_on_correct": config.get("rate_good_on_correct", False),
+        "rate_again_on_wrong": config.get("rate_again_on_wrong", False),
+        "rate_good_delay_ms": config.get("rate_good_delay_ms", 0),
+        "rate_again_delay_ms": config.get("rate_again_delay_ms", 1000),
         "manual_show_hints": config.get("manual_show_hints", True),
         "manual_show_options": config.get("manual_show_options", False),
         "mathjax_format": config.get("mathjax_format", "delimiters"),
@@ -950,6 +953,15 @@ def on_webview_did_receive_js_message(handled, message, context):
                 mw.reviewer._answerCard(3)
         except Exception as e:
             logger.error(f"AI-Hints: Failed to answer card via auto-rate: {e}")
+        return (True, None)
+    if message == "ai_hints_rate_again":
+        # Rate card as "Again" (ease level 1 in Anki) and move forward
+        try:
+            if mw.reviewer and mw.reviewer.state == "answer":
+                # Ensure the reviewer is in the answer state when grading
+                mw.reviewer._answerCard(1)
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to answer card via auto-rate again: {e}")
         return (True, None)
     if message == "ai_hints_skip":
         skip_ai_for_card(card=card, web=web)

@@ -260,6 +260,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.do_not_auto_collapse_cb.setChecked(c.get("do_not_auto_collapse", False))
         if hasattr(self, "rate_good_on_correct_cb"):
             self.rate_good_on_correct_cb.setChecked(c.get("rate_good_on_correct", False))
+            self.rate_good_delay_spin.setValue(c.get("rate_good_delay_ms", 0) / 1000.0)
+            self.rate_good_delay_spin.setEnabled(self.rate_good_on_correct_cb.isChecked())
+        if hasattr(self, "rate_again_on_wrong_cb"):
+            self.rate_again_on_wrong_cb.setChecked(c.get("rate_again_on_wrong", False))
+            self.rate_again_delay_spin.setValue(c.get("rate_again_delay_ms", 1000) / 1000.0)
+            self.rate_again_delay_spin.setEnabled(self.rate_again_on_wrong_cb.isChecked())
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
         self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
         if hasattr(self, "maint_only_modified_cb"):
@@ -1239,6 +1245,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["do_not_auto_collapse"] = self.do_not_auto_collapse_cb.isChecked()
             if hasattr(self, "rate_good_on_correct_cb"):
                 new_config["rate_good_on_correct"] = self.rate_good_on_correct_cb.isChecked()
+                new_config["rate_good_delay_ms"] = int(self.rate_good_delay_spin.value() * 1000)
+            if hasattr(self, "rate_again_on_wrong_cb"):
+                new_config["rate_again_on_wrong"] = self.rate_again_on_wrong_cb.isChecked()
+                new_config["rate_again_delay_ms"] = int(self.rate_again_delay_spin.value() * 1000)
             new_config["manual_show_hints"] = self.manual_show_hints_cb.isChecked()
             new_config["manual_show_options"] = self.manual_show_options_cb.isChecked()
             if hasattr(self, "maint_only_modified_cb"):

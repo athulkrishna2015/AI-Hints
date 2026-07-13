@@ -181,5 +181,8 @@
   "additional_system_instructions": "",
   "model_blacklist_data": {},
   "maint_only_modified": true,
-  "rate_good_on_correct": false
+  "rate_good_on_correct": false,
+  "rate_again_on_wrong": false,
+  "rate_good_delay_ms": 0,
+  "rate_again_delay_ms": 1000
 }
