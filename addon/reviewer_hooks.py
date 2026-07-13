@@ -99,6 +99,23 @@ def get_addon_version() -> str:
     """Return the addon version string (e.g. '1.4.2')."""
     return _ADDON_VERSION
 
+def _note_set_tag(note, tag: str, add: bool) -> bool:
+    """Add or remove a tag from a note. Returns True if the note was changed."""
+    if not tag:
+        return False
+    try:
+        tags = note.tags
+        has_tag = any(t == tag or t.lower() == tag.lower() for t in tags)
+        if add and not has_tag:
+            note.tags.append(tag)
+            return True
+        elif not add and has_tag:
+            note.tags = [t for t in tags if t.lower() != tag.lower()]
+            return True
+    except Exception as e:
+        logger.error(f"AI-Hints: Failed to modify tag '{tag}' on note: {e}")
+    return False
+
 def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=False):
     if not card or not data:
         return False
@@ -137,6 +154,18 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
     
     if parser.update_note_with_hints(note, data, toggles, fresh_card):
         logger.info(f"AI-Hints: Updating database for card {fresh_card.id} (Note {note.id}, Ord {fresh_card.ord}) with new hints.")
+        
+        # Apply note tags based on config
+        _config = config  # already loaded above
+        is_skipped = bool(data.get("_skipped"))
+        has_hints = bool(data.get("hints") or data.get("options"))
+        if _config.get("tag_hinted_notes", False):
+            hint_tag = _config.get("hint_tag", "ai-hints") or "ai-hints"
+            _note_set_tag(note, hint_tag, has_hints and not is_skipped)
+        if _config.get("tag_skipped_notes", True):
+            skip_tag = _config.get("skip_tag", "ai-hints::skipped") or "ai-hints::skipped"
+            _note_set_tag(note, skip_tag, is_skipped)
+        
         mw.col.update_note(note)
         _remember_generated_hints(fresh_card, data, toggles)
         _just_generated_card_ids.add(fresh_card.id)
@@ -993,6 +1022,15 @@ def clear_hints(card=None, web=None):
     
     note = card.note()
     if parser.clear_hints_from_note(note, card):
+        # Remove hint/skip tags when clearing
+        _clear_config = config
+        tag_changed = False
+        if _clear_config.get("tag_hinted_notes", False):
+            _hint_tag = _clear_config.get("hint_tag", "ai-hints") or "ai-hints"
+            tag_changed = _note_set_tag(note, _hint_tag, False) or tag_changed
+        if _clear_config.get("tag_skipped_notes", True):
+            _skip_tag = _clear_config.get("skip_tag", "ai-hints::skipped") or "ai-hints::skipped"
+            tag_changed = _note_set_tag(note, _skip_tag, False) or tag_changed
         mw.col.update_note(note)
         _forget_generated_hints(card)
         _just_cleared_card_ids.add(card.id)
@@ -1189,6 +1227,20 @@ def unskip_ai_hints_for_cards(card_ids) -> tuple[int, int, int]:
         except Exception as e:
             logger.error(f"Failed to update note after unskipping AI-Hints: {e}")
 
+    # Remove skip tags from all changed notes
+    try:
+        _unskip_config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        if _unskip_config.get("tag_skipped_notes", True):
+            skip_tag = _unskip_config.get("skip_tag", "ai-hints::skipped") or "ai-hints::skipped"
+            for note in changed_notes.values():
+                if _note_set_tag(note, skip_tag, False):
+                    try:
+                        mw.col.update_note(note)
+                    except Exception as e:
+                        logger.error(f"AI-Hints: Failed to remove skip tag from note: {e}")
+    except Exception as e:
+        logger.error(f"AI-Hints: Error removing skip tags after unskip: {e}")
+
     return len(card_ids), changed_cards, len(changed_notes)
 
 def unskip_ai_hints_from_browser_selection(browser):
@@ -1264,6 +1316,28 @@ def skip_ai_hints_for_cards(card_ids) -> tuple[int, int, int]:
             mw.col.update_note(note)
         except Exception as e:
             logger.error(f"Failed to update note after skipping AI-Hints: {e}")
+
+    # Add skip tags to all changed notes
+    try:
+        _skip_config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        if _skip_config.get("tag_skipped_notes", True):
+            skip_tag = _skip_config.get("skip_tag", "ai-hints::skipped") or "ai-hints::skipped"
+            for note in changed_notes.values():
+                if _note_set_tag(note, skip_tag, True):
+                    try:
+                        mw.col.update_note(note)
+                    except Exception as e:
+                        logger.error(f"AI-Hints: Failed to add skip tag to note: {e}")
+        if _skip_config.get("tag_hinted_notes", False):
+            hint_tag = _skip_config.get("hint_tag", "ai-hints") or "ai-hints"
+            for note in changed_notes.values():
+                if _note_set_tag(note, hint_tag, False):
+                    try:
+                        mw.col.update_note(note)
+                    except Exception as e:
+                        logger.error(f"AI-Hints: Failed to remove hint tag from skipped note: {e}")
+    except Exception as e:
+        logger.error(f"AI-Hints: Error applying skip tags: {e}")
 
     return len(card_ids), changed_cards, len(changed_notes)
 

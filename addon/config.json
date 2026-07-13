@@ -184,5 +184,9 @@
   "rate_good_on_correct": false,
   "rate_again_on_wrong": false,
   "rate_good_delay_ms": 0,
-  "rate_again_delay_ms": 1000
+  "rate_again_delay_ms": 1000,
+  "tag_hinted_notes": false,
+  "tag_skipped_notes": true,
+  "hint_tag": "ai-hints",
+  "skip_tag": "ai-hints::skipped"
 }

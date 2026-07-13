@@ -232,6 +232,52 @@ class GeneralTabMixin:
         self.rate_good_on_correct_cb.toggled.connect(self.rate_good_delay_spin.setEnabled)
         self.rate_again_on_wrong_cb.toggled.connect(self.rate_again_delay_spin.setEnabled)
 
+        show_layout.addRow(QLabel("<b>Note Tagging:</b>"))
+
+        # Tag hinted notes
+        tag_hinted_container = QWidget()
+        tag_hinted_row = QHBoxLayout(tag_hinted_container)
+        tag_hinted_row.setContentsMargins(0, 0, 0, 0)
+        tag_hinted_row.setSpacing(5)
+        self.tag_hinted_notes_cb = QCheckBox("Tag Notes with AI Hints")
+        self.tag_hinted_notes_cb.setToolTip(
+            "Automatically add a tag (default: 'ai-hints') to notes when hints are generated, "
+            "and remove it when hints are cleared. Useful for filtering in the Browser."
+        )
+        tag_hinted_row.addWidget(self.tag_hinted_notes_cb)
+
+        self.hint_tag_edit = QLineEdit()
+        self.hint_tag_edit.setPlaceholderText("ai-hints")
+        self.hint_tag_edit.setMaximumWidth(160)
+        self.hint_tag_edit.setToolTip("Tag name to apply to notes that have AI hints.")
+        tag_hinted_row.addWidget(self.hint_tag_edit)
+        tag_hinted_row.addStretch()
+        show_layout.addRow(tag_hinted_container)
+
+        # Tag skipped notes
+        tag_skipped_container = QWidget()
+        tag_skipped_row = QHBoxLayout(tag_skipped_container)
+        tag_skipped_row.setContentsMargins(0, 0, 0, 0)
+        tag_skipped_row.setSpacing(5)
+        self.tag_skipped_notes_cb = QCheckBox("Tag Skipped Notes")
+        self.tag_skipped_notes_cb.setToolTip(
+            "Automatically add a tag (default: 'ai-hints::skipped') to notes when AI is skipped, "
+            "and remove it when unskipped. Helps identify skipped cards in the Browser."
+        )
+        tag_skipped_row.addWidget(self.tag_skipped_notes_cb)
+
+        self.skip_tag_edit = QLineEdit()
+        self.skip_tag_edit.setPlaceholderText("ai-hints::skipped")
+        self.skip_tag_edit.setMaximumWidth(160)
+        self.skip_tag_edit.setToolTip("Tag name to apply to notes that are marked as skipped.")
+        tag_skipped_row.addWidget(self.skip_tag_edit)
+        tag_skipped_row.addStretch()
+        show_layout.addRow(tag_skipped_container)
+
+        # Enable/disable tag edit fields based on checkbox state
+        self.tag_hinted_notes_cb.toggled.connect(self.hint_tag_edit.setEnabled)
+        self.tag_skipped_notes_cb.toggled.connect(self.skip_tag_edit.setEnabled)
+
         show_layout.addRow(QLabel("<b>After Manual Generation:</b>"))
         self.manual_show_hints_cb = QCheckBox("Auto Show Hints")
         self.manual_show_hints_cb.setToolTip("Automatically expand and show hints after clicking Generate/Regenerate.")

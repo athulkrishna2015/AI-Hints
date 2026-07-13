@@ -266,6 +266,14 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.rate_again_on_wrong_cb.setChecked(c.get("rate_again_on_wrong", False))
             self.rate_again_delay_spin.setValue(c.get("rate_again_delay_ms", 1000) / 1000.0)
             self.rate_again_delay_spin.setEnabled(self.rate_again_on_wrong_cb.isChecked())
+        if hasattr(self, "tag_hinted_notes_cb"):
+            self.tag_hinted_notes_cb.setChecked(c.get("tag_hinted_notes", False))
+            self.hint_tag_edit.setText(c.get("hint_tag", "ai-hints"))
+            self.hint_tag_edit.setEnabled(self.tag_hinted_notes_cb.isChecked())
+        if hasattr(self, "tag_skipped_notes_cb"):
+            self.tag_skipped_notes_cb.setChecked(c.get("tag_skipped_notes", True))
+            self.skip_tag_edit.setText(c.get("skip_tag", "ai-hints::skipped"))
+            self.skip_tag_edit.setEnabled(self.tag_skipped_notes_cb.isChecked())
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
         self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
         if hasattr(self, "maint_only_modified_cb"):
@@ -1249,6 +1257,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             if hasattr(self, "rate_again_on_wrong_cb"):
                 new_config["rate_again_on_wrong"] = self.rate_again_on_wrong_cb.isChecked()
                 new_config["rate_again_delay_ms"] = int(self.rate_again_delay_spin.value() * 1000)
+            if hasattr(self, "tag_hinted_notes_cb"):
+                new_config["tag_hinted_notes"] = self.tag_hinted_notes_cb.isChecked()
+                new_config["hint_tag"] = self.hint_tag_edit.text().strip() or "ai-hints"
+            if hasattr(self, "tag_skipped_notes_cb"):
+                new_config["tag_skipped_notes"] = self.tag_skipped_notes_cb.isChecked()
+                new_config["skip_tag"] = self.skip_tag_edit.text().strip() or "ai-hints::skipped"
             new_config["manual_show_hints"] = self.manual_show_hints_cb.isChecked()
             new_config["manual_show_options"] = self.manual_show_options_cb.isChecked()
             if hasattr(self, "maint_only_modified_cb"):
