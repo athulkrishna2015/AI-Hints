@@ -1201,7 +1201,8 @@
                         if (matches) {
                             if (uiCfg.rate_good_on_correct) {
                                 const delay = typeof uiCfg.rate_good_delay_ms !== 'undefined' ? uiCfg.rate_good_delay_ms : 0;
-                                setTimeout(() => {
+                                if (window.aiHintsAutoRateTimeout) clearTimeout(window.aiHintsAutoRateTimeout);
+                                window.aiHintsAutoRateTimeout = setTimeout(() => {
                                     if (typeof pycmd === 'function') {
                                         pycmd('ai_hints_rate_good');
                                     }
@@ -1210,7 +1211,8 @@
                         } else {
                             if (uiCfg.rate_again_on_wrong) {
                                 const delay = typeof uiCfg.rate_again_delay_ms !== 'undefined' ? uiCfg.rate_again_delay_ms : 1000;
-                                setTimeout(() => {
+                                if (window.aiHintsAutoRateTimeout) clearTimeout(window.aiHintsAutoRateTimeout);
+                                window.aiHintsAutoRateTimeout = setTimeout(() => {
                                     if (typeof pycmd === 'function') {
                                         pycmd('ai_hints_rate_again');
                                     }
@@ -1406,6 +1408,10 @@
         });
     };
     window.aiHintsSetup = (card, hints, uiConfig) => {
+        if (window.aiHintsAutoRateTimeout) {
+            clearTimeout(window.aiHintsAutoRateTimeout);
+            window.aiHintsAutoRateTimeout = null;
+        }
         let calcId = card ? card.id : 'temp';
         const ord = card ? card.ord : getCardOrd();
         if (calcId === 'temp') {

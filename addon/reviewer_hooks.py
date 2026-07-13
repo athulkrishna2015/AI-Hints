@@ -948,6 +948,10 @@ def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_rate_good":
         # Rate card as "Good" (ease level 3 in Anki) and move forward
         try:
+            # Prevent auto-answering if the user recently performed an undo to avoid skipping cards
+            if time.time() - _last_undo_time < 0.8:
+                logger.info("AI-Hints: Skipping auto-rating Good due to recent undo lock.")
+                return (True, None)
             if mw.reviewer and mw.reviewer.state == "answer":
                 # Ensure the reviewer is in the answer state when grading
                 mw.reviewer._answerCard(3)
@@ -957,6 +961,10 @@ def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_rate_again":
         # Rate card as "Again" (ease level 1 in Anki) and move forward
         try:
+            # Prevent auto-answering if the user recently performed an undo to avoid skipping cards
+            if time.time() - _last_undo_time < 0.8:
+                logger.info("AI-Hints: Skipping auto-rating Again due to recent undo lock.")
+                return (True, None)
             if mw.reviewer and mw.reviewer.state == "answer":
                 # Ensure the reviewer is in the answer state when grading
                 mw.reviewer._answerCard(1)
