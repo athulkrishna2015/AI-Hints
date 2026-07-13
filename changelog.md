@@ -2,8 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
-## 5.0.4 (2026-07-13)
+## 5.1.0 (2026-07-13)
 - **Auto-Rate Option Selections with Custom Delays**: Added `Auto Rate Good on Correct Option` and `Auto Rate Again on Wrong Option` settings under the General settings UI tab. If active, selecting an option on the front/question side automatically rates the card as 'Good' or 'Again' after a user-specified delay duration (by default, 0.0s instant for correct selection, 1.0s delay for wrong selection to review card details first). Both are disabled by default. Supports full undo integration—cancels pending rating timers on card switches and locks pycmd auto-rating triggers for 0.8s following an undo event to prevent accidental card skips.
+- **Inline Editing Lock Fix**: Selection click auto-rate triggers are disabled on option items when holding Ctrl/Cmd (which starts inline editing) or when the option text block is already actively in edit mode.
+- **Math Parser Boundary Match Improvement**: Refactored the JavaScript LaTeX delimiters wrapper regex to enforce boundary matching (`/\\\b[A-Za-z]+\b/`). This prevents regular English/Malayalam hyphenated words (like "Re-entry") containing control character sequences from being incorrectly formatted as LaTeX, restoring normal edit-mode control.
 
 ## 5.0.3 (2026-07-13)
 - **Settings UI Argument Forwarding Fix**: Updated lazy loader wrapper parameter signatures (`on_config_dialog`) to dynamically forward variable positional and keyword arguments (*args and **kwargs) down to the config layout, fixing TypeError crashes when launching batch dialog menus from browser selections.
