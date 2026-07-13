@@ -354,7 +354,7 @@
         }
 
         // Case: bare LaTeX with no delimiters — auto-wrap if it contains math indicators
-        const mathIndicators = /\\[A-Za-z]+|[\^\_]\{|\\int|\\sqrt|\\frac|\\sin|\\cos|\\omega|\\pi|\\lambda|\\theta|\\alpha|\\beta|\\gamma|\\delta|\\partial/;
+        const mathIndicators = /\\\b[A-Za-z]+\b|[\^\_]\{|\\int|\\sqrt|\\frac|\\sin|\\cos|\\omega|\\pi|\\lambda|\\theta|\\alpha|\\beta|\\gamma|\\delta|\\partial/;
         if (mathIndicators.test(processed)) {
             // Only wrap if it doesn't have spaces (is a single equation block)
             if (!/\s/.test(processed)) {
