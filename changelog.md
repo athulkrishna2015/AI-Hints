@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.0.2 (2026-07-13)
+- **Startup Speed Optimization**: Deferred eager/premature imports of the main configuration dialog and provider modules until they are actually opened or triggered. This decreases import load time from over 1.15 seconds to under 0.32 seconds (a 3.5x speed boost), preventing resource contention at Anki startup.
+
 ## 5.0.1 (2026-07-12)
 - **Checkable Multiple Modifiers**: Replaced single modifier dropdowns in the Shortcuts settings tab with checkboxes for Ctrl, Alt, Shift, and Meta, allowing compound modifiers (like `Ctrl+Alt`) to be configured independently for both primary shortcuts and option selection shortcuts.
 - **Default Modifier Change**: Changed default MCQ options selection modifier key combination to `Ctrl+Alt` to prevent collisions.
