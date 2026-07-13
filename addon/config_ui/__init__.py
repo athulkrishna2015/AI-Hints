@@ -44,9 +44,9 @@ def init_config_ui():
     action = mw.form.menuTools.addAction("AI-Hints Config")
     action.triggered.connect(lambda: on_config_dialog(mw))
 
-def on_config_dialog(mw):
+def on_config_dialog(*args, **kwargs):
     from .main_dialog import on_config_dialog as actual_on_config
-    return actual_on_config(mw)
+    return actual_on_config(*args, **kwargs)
 
 def ConfigDialog(*args, **kwargs):
     from .main_dialog import ConfigDialog as ActualConfigDialog
