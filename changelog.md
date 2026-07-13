@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.0.3 (2026-07-13)
+- **Settings UI Argument Forwarding Fix**: Updated lazy loader wrapper parameter signatures (`on_config_dialog`) to dynamically forward variable positional and keyword arguments (*args and **kwargs) down to the config layout, fixing TypeError crashes when launching batch dialog menus from browser selections.
+
 ## 5.0.2 (2026-07-13)
 - **Startup Speed Optimization**: Deferred eager/premature imports of the main configuration dialog and provider modules until they are actually opened or triggered. This decreases import load time from over 1.15 seconds to under 0.32 seconds (a 3.5x speed boost), preventing resource contention at Anki startup.
 
