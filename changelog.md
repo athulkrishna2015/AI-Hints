@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.1.1 (2026-07-13)
+- **LaTeX False-Positive Fix for Text Conjunctions**: Fixed a bug where hints containing `&amp;` as a text conjunction (e.g. "Commerce &amp; Industry", "Power &amp; Coal") were incorrectly parsed as LaTeX matrix column separators and wrapped in math delimiters. The `isWordAmp` guard regex now accounts for optional spaces around `&amp;` and `&` in word contexts.
+- **Windows / Python 3.13 Config Crash Fix**: Fixed `NameError: name 'Optional' is not defined` in `batch_manager.py` that crashed the Settings dialog on Anki 26.05 (Windows). Added `Optional` to the `typing` imports.
+
 ## 5.1.0 (2026-07-13)
 - **Auto-Rate Option Selections with Custom Delays**: Added `Auto Rate Good on Correct Option` and `Auto Rate Again on Wrong Option` settings under the General settings UI tab. If active, selecting an option on the front/question side automatically rates the card as 'Good' or 'Again' after a user-specified delay duration (by default, 0.0s instant for correct selection, 1.0s delay for wrong selection to review card details first). Both are disabled by default. Supports full undo integration—cancels pending rating timers on card switches and locks pycmd auto-rating triggers for 0.8s following an undo event to prevent accidental card skips.
 - **Inline Editing Lock Fix**: Selection click auto-rate triggers are disabled on option items when holding Ctrl/Cmd (which starts inline editing) or when the option text block is already actively in edit mode.

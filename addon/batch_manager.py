@@ -2,7 +2,7 @@ import os
 import json
 import time
 import threading
-from typing import List, Dict, Set, Any
+from typing import List, Dict, Set, Any, Optional
 from aqt import mw
 from aqt.qt import QTimer
 from .logger import logger, info, tooltip, state
