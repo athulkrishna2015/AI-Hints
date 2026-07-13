@@ -321,8 +321,8 @@
                 // Check if the ampersand is a math matrix separator by ensuring it is NOT part of a word or common abbreviation.
                 // Standard LaTeX matrix separators have math terms/numbers/delimiters on both sides, rather than letters immediately adjacent.
                 const mathAmpRegex = /(?:[0-9\-+\\(\)\]\}A-Za-z\s])(?:&amp;|&)(?:\s*[0-9\-+\\(\[\{A-Za-z])/;
-                // If it looks like a word boundary (e.g. AEW&C, R&D, &lt; or &gt;), it is not a matrix separator.
-                const isWordAmp = /(?:[A-Za-z]{2,}(?:&amp;|&)[A-Za-z]|[A-Za-z](?:&amp;|&)[A-Za-z]{2,}|&(?:lt|gt|quot|apos|nbsp);)/i.test(trimmed);
+                // If it looks like a word boundary (e.g. AEW&C, R&D, &lt; or &gt;, or a text conjunction like "Commerce & Industry"), it is not a matrix separator.
+                const isWordAmp = /(?:[A-Za-z]{2,}(?:\s*&amp;\s*|\s*&\s*)[A-Za-z]|[A-Za-z](?:\s*&amp;\s*|\s*&\s*)[A-Za-z]{2,}|&(?:lt|gt|quot|apos|nbsp);)/i.test(trimmed);
                 if (mathAmpRegex.test(trimmed) && !isWordAmp) {
                     hasMatrixSeparator = true;
                 }
