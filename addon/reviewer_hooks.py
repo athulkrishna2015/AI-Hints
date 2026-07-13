@@ -2,12 +2,23 @@ import os
 import json
 import time
 from aqt import mw, gui_hooks
-from .ai_client import AIClient
-from .card_parser import CardParser
-from .config_ui import ADDON_PACKAGE, on_config_dialog
 from aqt.qt import QMessageBox, QMenu, QAction, QPoint, Qt, QDialog, QVBoxLayout, QTimer
 from .logger import logger, info, tooltip, state
-from .batch_manager import initialize_batch_manager
+
+ADDON_PACKAGE = __name__.split(".")[0]
+
+# Lazy imports for helper types
+def CardParser(*args, **kwargs):
+    from .card_parser import CardParser as ActualCardParser
+    return ActualCardParser(*args, **kwargs)
+
+def AIClient(*args, **kwargs):
+    from .ai_client import AIClient as ActualAIClient
+    return ActualAIClient(*args, **kwargs)
+
+def initialize_batch_manager(*args, **kwargs):
+    from .batch_manager import initialize_batch_manager as actual_init
+    return actual_init(*args, **kwargs)
 
 _hooks_registered = False
 _generating_card_ids = set()
@@ -271,6 +282,7 @@ def get_web_assets():
     return _css_cache, _js_cache
 
 def show_api_error_dialog(provider=None, is_custom=False):
+    from aqt.qt import QMessageBox
     msg = QMessageBox(mw)
     msg.setIcon(QMessageBox.Icon.Warning)
     msg.setWindowTitle("AI-Hints")
@@ -286,6 +298,7 @@ def show_api_error_dialog(provider=None, is_custom=False):
     
     msg.exec()
     if msg.clickedButton() == config_btn:
+        from .config_ui import on_config_dialog
         on_config_dialog(mw)
 
 def get_addon_dir():
@@ -1256,6 +1269,9 @@ def on_browser_context_menu(browser, menu):
     menu.addSeparator()
     
     # Create AI Hints sub-menu
+    global QMenu
+    if "QMenu" not in globals():
+        from aqt.qt import QMenu
     ai_menu = QMenu("AI Hints", menu)
     menu.addMenu(ai_menu)
     
@@ -1264,9 +1280,12 @@ def on_browser_context_menu(browser, menu):
     # Action 1: Batch Generation UI
     act_batch_ui = ai_menu.addAction("✨ Batch Generation...")
     act_batch_ui.setEnabled(has_selection)
-    act_batch_ui.triggered.connect(
-        lambda _checked=False, b=browser: on_config_dialog(mw, tab_index=4, card_ids=_selected_browser_card_ids(b))
-    )
+    
+    def open_batch_ui(_checked=False, b=browser):
+        from .config_ui import on_config_dialog
+        on_config_dialog(mw, tab_index=4, card_ids=_selected_browser_card_ids(b))
+        
+    act_batch_ui.triggered.connect(open_batch_ui)
     
     # Action 2: Skip AI for Selected Cards
     act_skip = ai_menu.addAction("Skip AI for Selected Cards")
@@ -1323,6 +1342,9 @@ def on_sidebar_context_menu(sidebar, menu, item, index) -> None:
     menu.addSeparator()
 
     # Create AI Hints sub-menu
+    global QMenu
+    if "QMenu" not in globals():
+        from aqt.qt import QMenu
     ai_menu = QMenu("AI Hints", menu)
     menu.addMenu(ai_menu)
 
@@ -1875,7 +1897,10 @@ def show_bottom_bar_menu():
     
     # 6. Config
     a_config = QAction("Settings...", menu)
-    a_config.triggered.connect(lambda: on_config_dialog(mw))
+    def open_settings():
+        from .config_ui import on_config_dialog
+        on_config_dialog(mw)
+    a_config.triggered.connect(open_settings)
     menu.addAction(a_config)
     
     menu.exec(QPoint(mw.cursor().pos()))
