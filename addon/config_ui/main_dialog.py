@@ -258,6 +258,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", True))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
         self.do_not_auto_collapse_cb.setChecked(c.get("do_not_auto_collapse", False))
+        if hasattr(self, "rate_good_on_correct_cb"):
+            self.rate_good_on_correct_cb.setChecked(c.get("rate_good_on_correct", False))
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
         self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
         if hasattr(self, "maint_only_modified_cb"):
@@ -1235,6 +1237,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
             new_config["do_not_auto_collapse"] = self.do_not_auto_collapse_cb.isChecked()
+            if hasattr(self, "rate_good_on_correct_cb"):
+                new_config["rate_good_on_correct"] = self.rate_good_on_correct_cb.isChecked()
             new_config["manual_show_hints"] = self.manual_show_hints_cb.isChecked()
             new_config["manual_show_options"] = self.manual_show_options_cb.isChecked()
             if hasattr(self, "maint_only_modified_cb"):

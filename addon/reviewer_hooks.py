@@ -510,6 +510,7 @@ def _get_ui_config(card, auto_reveal=False, is_answer=False, has_data=False):
         "auto_show_hints": config.get("auto_show_hints", False),
         "auto_show_options": config.get("auto_show_options", False),
         "do_not_auto_collapse": config.get("do_not_auto_collapse", False),
+        "rate_good_on_correct": config.get("rate_good_on_correct", False),
         "manual_show_hints": config.get("manual_show_hints", True),
         "manual_show_options": config.get("manual_show_options", False),
         "mathjax_format": config.get("mathjax_format", "delimiters"),
@@ -940,6 +941,15 @@ def on_webview_did_receive_js_message(handled, message, context):
         return (True, None)
     if message == "ai_hints_show_menu":
         show_bottom_bar_menu()
+        return (True, None)
+    if message == "ai_hints_rate_good":
+        # Rate card as "Good" (ease level 3 in Anki) and move forward
+        try:
+            if mw.reviewer and mw.reviewer.state == "answer":
+                # Ensure the reviewer is in the answer state when grading
+                mw.reviewer._answerCard(3)
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to answer card via auto-rate: {e}")
         return (True, None)
     if message == "ai_hints_skip":
         skip_ai_for_card(card=card, web=web)

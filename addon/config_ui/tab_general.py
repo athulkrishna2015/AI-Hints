@@ -186,6 +186,10 @@ class GeneralTabMixin:
         self.do_not_auto_collapse_cb.setToolTip("Remember the expanded/collapsed state of hints and options when moving to the next card.")
         show_layout.addRow(self.do_not_auto_collapse_cb)
 
+        self.rate_good_on_correct_cb = QCheckBox("Auto Rate Good and Next on Correct Option")
+        self.rate_good_on_correct_cb.setToolTip("If you click the correct option on the front/question side of the card, automatically answer 'Good' and proceed to the next card.")
+        show_layout.addRow(self.rate_good_on_correct_cb)
+
         show_layout.addRow(QLabel("<b>After Manual Generation:</b>"))
         self.manual_show_hints_cb = QCheckBox("Auto Show Hints")
         self.manual_show_hints_cb.setToolTip("Automatically expand and show hints after clicking Generate/Regenerate.")

@@ -1194,6 +1194,16 @@
                 if (block) block.dataset.aiHintsRendered = "true";
                 if (onAnswer && hasContent) {
                     renderMath(container);
+                    // Check if clicked option is correct and auto-grade rating is enabled
+                    if (uiCfg.rate_good_on_correct && state.selectedOptionIdx !== undefined && state.selectedOptionIdx !== null) {
+                        const clickedText = data.options[state.selectedOptionIdx];
+                        const matches = clickedText && data.correct_answer && answersMatch(clickedText, data.correct_answer);
+                        if (matches) {
+                            if (typeof pycmd === 'function') {
+                                pycmd('ai_hints_rate_good');
+                            }
+                        }
+                    }
                 }
 
             } catch (e) { console.error("AI-Hints Error:", e); }

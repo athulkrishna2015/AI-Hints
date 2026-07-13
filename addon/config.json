@@ -180,5 +180,6 @@
   "multithread_providers": false,
   "additional_system_instructions": "",
   "model_blacklist_data": {},
-  "maint_only_modified": true
+  "maint_only_modified": true,
+  "rate_good_on_correct": false
 }
