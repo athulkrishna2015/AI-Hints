@@ -28,10 +28,6 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Bulk Controls**: Easily bulk skip or unskip whole decks or selected card groups directly from the Anki browser and sidebar menus.
 - **Multi-Cloze Alignment**: Supports cards with multiple cloze deletions, separating answers cleanly using a semicolon (` ; `) delimiter.
 
-### 🚀 Optimization & Performance
-- **Deferred Startup Loading**: Postpones imports and configuration UI setup until requested, dropping addon startup import overhead from 1.15s to under 0.32s.
-- **Zero-Latency Card Rendering**: Clean DOM architecture instantly prunes stale metadata blocks during card transitions, and startup polling checks at 10ms to load hints instantly.
-- **Token-Efficient Prompting**: Saves ~1,000 tokens per prompt request through highly optimized instruction syntax.
 
 ## Intelligence-Ranked Fallback Hierarchy
 
