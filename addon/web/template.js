@@ -1270,7 +1270,7 @@
         
         function saveEdit() {
             const newValue = input.value.trim();
-            if (newValue && newValue !== el.dataset.rawText) {
+            if (newValue !== el.dataset.rawText) {
                 const type = el.dataset.type;
                 const idx = el.dataset.idx;
                 

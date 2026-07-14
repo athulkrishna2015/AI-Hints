@@ -910,10 +910,15 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
         data["options"] = []
 
     # 4. Modify the item
+    is_removal = not new_value or not new_value.strip()
+
     if item_type == "hints":
         items = list(data["hints"])
         if 0 <= index < len(items):
-            items[index] = new_value
+            if is_removal:
+                items.pop(index)
+            else:
+                items[index] = new_value
             data["hints"] = items
         else:
             logger.error(f"AI-Hints: Edit index {index} out of range for hints ({len(items)})")
@@ -921,10 +926,18 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
     elif item_type == "options":
         items = list(data["options"])
         if 0 <= index < len(items):
-            items[index] = new_value
-            data["options"] = items
-            if index == 0:
-                data["correct_answer"] = new_value
+            if is_removal:
+                items.pop(index)
+                data["options"] = items
+                if len(items) > 0:
+                    data["correct_answer"] = items[0]
+                elif "correct_answer" in data:
+                    del data["correct_answer"]
+            else:
+                items[index] = new_value
+                data["options"] = items
+                if index == 0:
+                    data["correct_answer"] = new_value
         else:
             logger.error(f"AI-Hints: Edit index {index} out of range for options ({len(items)})")
             return
@@ -933,6 +946,11 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
         return
 
     # 5. Save back to note and update Anki database
+    # If both hints and options are empty, clear it entirely
+    if not data.get("hints") and not data.get("options"):
+        clear_hints(card, web)
+        return
+
     if parser.update_note_with_hints(note, data, toggles, card):
         mw.col.update_note(note)
         # Update cache with the modified dict
