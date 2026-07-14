@@ -87,7 +87,7 @@ def test_full_cycle():
     mock_card.id = 999
     mock_card.ord = 0
     
-    data = {"hints": ["H1"], "options": ["O1", "O2"]}
+    data = {"hints": ["H1"], "options": ["O1", "O2"], "_generation_type": "manual"}
     parser.update_note_with_hints(mock_note, data, card=mock_card)
     
     block = parser.find_hints_block(mock_note, card=mock_card)
@@ -95,6 +95,13 @@ def test_full_cycle():
         print("  PASS: Note updated and block detected correctly.")
     else:
         print("  FAIL: Note update or detection failed.")
+        print("  Got block:", block)
+        exit(1)
+
+    if block and '"_generation_type"' in block and '"manual"' in block:
+        print("  PASS: _generation_type key written and serialized correctly.")
+    else:
+        print("  FAIL: _generation_type serialization failed.")
         print("  Got block:", block)
         exit(1)
 

@@ -599,6 +599,7 @@ class BatchManager:
                     from .reviewer_hooks import _ADDON_VERSION # Safe late import
                     if _ADDON_VERSION:
                         data["_version"] = _ADDON_VERSION
+                    data["_generation_type"] = "batch"
                     data["_provider"] = "gemini"
                     gemini_models = client._models_for_provider("gemini")
                     data["_model"] = gemini_models[0] if gemini_models else "gemini-2.5-flash-lite"
@@ -1122,7 +1123,7 @@ class BatchManager:
 
                 if not payload["front"] and not payload["back"]:
                     logger.info(f"AI-Hints: Card {cid} has empty content (e.g. empty fields or missing Cloze deletion). Skipping card and marking as skipped in DB.")
-                    resp_data = {"hints": [], "options": [], "_skipped": True}
+                    resp_data = {"hints": [], "options": [], "_skipped": True, "_generation_type": "batch"}
                     def _apply_skipped_on_main(cid_val, data_dict):
                         try:
                             card = _get_card_from_collection(cid_val)
@@ -1155,6 +1156,7 @@ class BatchManager:
                 )
 
                 if resp_data and (resp_data.get("hints") or resp_data.get("options")):
+                    resp_data["_generation_type"] = "batch"
                     actual_model = resp_data.get("_model")
                     if actual_model:
                         self.active_threads_status[provider]["model"] = actual_model

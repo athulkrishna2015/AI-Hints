@@ -1965,7 +1965,7 @@ def skip_ai_for_card(card=None, web=None):
         fix_latex=config.get("fix_latex", False)
     )
     
-    data = {"hints": [], "options": [], "_skipped": True}
+    data = {"hints": [], "options": [], "_skipped": True, "_generation_type": "skip"}
     if _apply_results_to_card(card, data, is_manual=True, web=web):
         # Trigger a refresh so the skip state is visible
         refresh_current_card(card=card, web=web)
@@ -2103,8 +2103,8 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         _generating_card_ids.discard(card_id)
         logger.info("AI-Hints: Skipping generation for card %s as no content was found (likely a missing cloze).", card_id)
         
-        # Save skipped state to database to ensure verification passes and the UI reflects skip state
-        data = {"hints": [], "options": [], "_skipped": True}
+        gtype = "pregen" if is_pregen else ("regenerate" if card_has_hints(card) else ("manual" if is_manual else "auto"))
+        data = {"hints": [], "options": [], "_skipped": True, "_generation_type": gtype}
         _apply_results_to_card(card, data, is_manual=is_manual, web=web, skip_redraw=is_pregen)
 
         # If this was a pre-generation, trigger the next one so the chain doesn't break
@@ -2150,6 +2150,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                 is_on_screen = current_reviewer_card and current_reviewer_card.id == card_id
                 
                 if data and (data.get("hints") or data.get("options")):
+                    data["_generation_type"] = "pregen"
                     if is_on_screen:
                          logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Applied immediately).")
                          _apply_results_to_card(card, data, is_manual=False, web=web, skip_redraw=True)
@@ -2191,6 +2192,12 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
                 except Exception:
                     pass
                 return
+
+            if data and (data.get("hints") or data.get("options")):
+                if is_manual:
+                    data["_generation_type"] = "regenerate" if card_has_hints(card) else "manual"
+                else:
+                    data["_generation_type"] = "auto"
 
             if _apply_results_to_card(card, data, is_manual=is_manual, web=web):
                 # If we just finished the current card, and pre-generation is on, 
