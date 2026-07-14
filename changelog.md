@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.3.0 (2026-07-14)
+- **Bulk TTS Hints Preservation**: Fixed a bug where running bulk TTS generation (PiperTTS addon 428593773) caused the `ai-hints-json` data block to be stripped from note fields. A new patch on `bulk_to_notes.add_audio_to_card` re-reads the freshest note from the database before and after each save to guarantee the hints div is always preserved, even under race conditions or stale note-object scenarios.
+- **Debug Logging Toggle in Logs Tab**: Added a **"Debug logging"** checkbox directly in the Settings → Logs tab. Enabling it immediately switches the logger to `DEBUG` level (no restart required), making it easy to trace low-level events such as the TTS patch activity without editing raw JSON config.
+
 ## 5.2.0 (2026-07-14)
 - **Reviewer Card-Transition DOM Bleed Fix**: Resolved an issue where stale AI hints and metadata from previously viewed cards bled into empty cards, which blocked automatic generation (autogen) and pre-generation (pregen) until restarting Anki or returning to the deck browser.
 - **Optimized Reviewer Startup Polling**: Reduced the initial script loading polling check interval from 50ms to 10ms, speeding up reviewer card display and hints rendering latency on the first card of a session.

@@ -231,6 +231,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         if hasattr(self, 'auto_clear_cb'):
             self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
+        if hasattr(self, 'debug_logging_cb'):
+            self.debug_logging_cb.setChecked(c.get("debug_logging", False))
             
         self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
         self.auto_regenerate_if_modified_cb.setChecked(c.get("auto_regenerate_if_modified", False))
@@ -911,6 +913,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if hasattr(self, "show_in_popup_cb"):
             self.show_in_popup_cb.setChecked(c.get("show_in_popup", False))
         if hasattr(self, 'auto_clear_cb'): self.auto_clear_cb.setChecked(c.get("auto_clear_logs", True))
+        if hasattr(self, 'debug_logging_cb'): self.debug_logging_cb.setChecked(c.get("debug_logging", False))
         self.auto_generate_new_cb.setChecked(c.get("auto_generate_new", False))
         self.auto_regenerate_if_modified_cb.setChecked(c.get("auto_regenerate_if_modified", False))
         self.auto_regenerate_if_modified_cb.setEnabled(self.auto_generate_new_cb.isChecked())
@@ -1239,6 +1242,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 new_config["show_in_popup"] = False
             if hasattr(self, 'auto_clear_cb'):
                 new_config["auto_clear_logs"] = self.auto_clear_cb.isChecked()
+            if hasattr(self, 'debug_logging_cb'):
+                new_config["debug_logging"] = self.debug_logging_cb.isChecked()
             new_config["auto_generate_new"] = self.auto_generate_new_cb.isChecked()
             new_config["auto_regenerate_if_modified"] = self.auto_regenerate_if_modified_cb.isChecked()
             new_config["auto_regenerate_all"] = self.auto_regenerate_all_cb.isChecked()
@@ -1344,6 +1349,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 proxy_manager.start(new_config)
                 auto_update_mobile_setup() # Silently update if setup was already completed
             except Exception: pass
+            # Apply debug_logging level change immediately (no restart needed)
+            try:
+                import logging
+                from ..logger import logger as _aih_logger
+                _aih_logger.setLevel(logging.DEBUG if new_config.get("debug_logging", False) else logging.INFO)
+            except Exception: pass
             self.config = new_config
             if close: self.accept()
             else: tooltip("Configuration saved.")
@@ -1423,6 +1434,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("show_in_bottom_bar", False)
         config.setdefault("show_in_popup", False)
         config.setdefault("auto_clear_logs", True)
+        config.setdefault("debug_logging", False)
         config.setdefault("request_timeout", 10)
         config.setdefault("pregen_request_timeout", 20)
         config.setdefault("auto_generate_new", False)

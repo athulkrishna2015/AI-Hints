@@ -102,6 +102,7 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
 - **Shortcuts Tab**: Customize AI-Hints action keys and the modifier used on the answer side. The front side also accepts the action keys without the modifier for faster review.
 - **Advanced Tab**: Customize your system prompt, tune active-review and pregeneration API request timeouts, migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist**.
+- **Logs Tab**: View, filter, search, and copy real-time addon logs. Includes a **Debug logging** toggle to enable verbose `DEBUG`-level output instantly (no restart needed), and a **Clear on startup** option.
 - **Scrollbar Support**: Smooth scrollbars automatically wrap the Advanced, Mobile, and Batch tabs, ensuring the GUI scales perfectly to fit compact laptops and high-DPI screens.
 
 ## Get Your API Keys

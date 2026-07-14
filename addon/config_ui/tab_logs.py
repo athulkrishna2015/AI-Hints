@@ -50,6 +50,10 @@ class LogTabMixin:
         self.auto_clear_cb.setToolTip("Automatically clear the log file every time Anki starts.")
         filter_layout.addWidget(self.auto_clear_cb)
 
+        self.debug_logging_cb = QCheckBox("Debug logging")
+        self.debug_logging_cb.setToolTip("Enable verbose DEBUG-level log entries (off by default). Useful for diagnosing issues such as the TTS addon interaction.")
+        filter_layout.addWidget(self.debug_logging_cb)
+
         self.live_label = QLabel("● Live")
         self.live_label.setStyleSheet("color: green; font-weight: bold;")
         self.live_label.setVisible(False)
