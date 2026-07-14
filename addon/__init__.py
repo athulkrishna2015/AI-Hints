@@ -97,3 +97,10 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         setup_anki_terminator_patch()
     except Exception:
         pass
+
+    # Enable PiperTTS addon support
+    try:
+        from .tts_addon_patch import setup_tts_addon_patch
+        setup_tts_addon_patch()
+    except Exception:
+        pass
