@@ -794,8 +794,8 @@ def _trigger_frontend_setup(card=None, web=None):
                     attempts += 1;
                     if (typeof window.aiHintsSetup === 'function') {{
                         applySetup();
-                    }} else if (attempts < 40) {{
-                        setTimeout(trySetup, 50);
+                    }} else if (attempts < 150) {{
+                        setTimeout(trySetup, 10);
                     }}
                 }}
                 trySetup();

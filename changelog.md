@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.2.0 (2026-07-14)
+- **Reviewer Card-Transition DOM Bleed Fix**: Resolved an issue where stale AI hints and metadata from previously viewed cards bled into empty cards, which blocked automatic generation (autogen) and pre-generation (pregen) until restarting Anki or returning to the deck browser.
+- **Optimized Reviewer Startup Polling**: Reduced the initial script loading polling check interval from 50ms to 10ms, speeding up reviewer card display and hints rendering latency on the first card of a session.
+
 ## 5.1.1 (2026-07-13)
 - **LaTeX False-Positive Fix for Text Conjunctions**: Fixed a bug where hints containing `&amp;` as a text conjunction (e.g. "Commerce &amp; Industry", "Power &amp; Coal") were incorrectly parsed as LaTeX matrix column separators and wrapped in math delimiters. The `isWordAmp` guard regex now accounts for optional spaces around `&amp;` and `&` in word contexts.
 - **Windows / Python 3.13 Config Crash Fix**: Fixed `NameError: name 'Optional' is not defined` in `batch_manager.py` that crashed the Settings dialog on Anki 26.05 (Windows). Added `Optional` to the `typing` imports.
