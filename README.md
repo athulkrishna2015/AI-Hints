@@ -10,34 +10,28 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 
 ## Features
 
-- **Multi-Provider Support**: Supports OpenAI, Anthropic, Gemini, Groq, DeepSeek, NVIDIA, Mistral, Grok, OpenRouter, **Together AI**, **Hugging Face**, **SambaNova**, **Cerebras**, and any OpenAI-compatible local API (like Ollama or LM Studio).
-- **Queued Batch Jobs (v4.2.0)**: Start multiple batch generation jobs back-to-back, monitor the active job separately from queued jobs, reorder/cancel pending jobs, and keep progress safely persisted between sessions.
-- **Bulk Skip/Unskip Controls (v4.2.0)**: Browser, sidebar, and deck menus now include skip and unskip actions for selected cards or whole groups. Skipping a card clears stale AI hint data and saves only the skipped marker.
-- **Smarter Auto-Regeneration**: Optional regeneration can now refresh cards when the note was edited after AI data was generated, when stored data is older than a target version, or when it predates a configured date/time.
-- **Fast Startup Performance (v5.0.2-5.0.3)**: Deferred main configuration UI and external client import compilation until requested. Decreases initial addon import load time from 1.15s to under 0.32s (~3.5x speed boost). Version 5.0.3 adds dynamic parameter forwarding (*args and **kwargs) to the lazy wrappers to fix browser batch context menu load errors.
-- **Interactive MCQ Option Selection (v5.0.0-5.2.0)**: Test card knowledge by selecting options during reviews (via click, touch, or keyboard digits `1-9`). Includes customizable composite shortcut modifiers checkboxes (e.g. `Ctrl+Alt` default), custom digits ranges, and python-side hotkey interception to prevent Anki global collisions. Wrong selections show red and correct green on the back side. Added **Auto Rate options** under General tab Settings to automatically trigger 'Good' (on correct options) or 'Again' (on wrong options) after customizable delays (e.g. instant or 1.0s) with full undo protection integration. Hotfix (v5.1.1): fixed LaTeX being incorrectly applied to hints containing text conjunctions like `&amp;`. Version 5.2.0 adds **optimized reviewer startup polling** (timeout decreased to 10ms) and resolves **card-transition DOM bleed** where previous cards' stale JSON metadata could show up on empty cards.
-- **Model Blacklist Cooldown Sorting (v4.5.0)**: Added sorting dropdown filter controls to the Advanced panel's Cooldown & Blacklist section. Easily sort lockouts and failure streaks by Name, Time Remaining (ascending/descending), or failure Streak counts.
-- **Realistic MCQ Distractor Engine (v4.4.1)**: Enhanced system prompt with strict factual integrity rules. Prohibits synthetic/made-up dates, names, or formulas. Integrates professional exam design patterns (Math calculation bugs, Science misconceptions, Language faux-amis, and PSC timeline clustering) to produce distractors mimicking high-quality, actual exam boards.
-- **Time-based Orphaned Card Scan Optimization (v4.4.0)**: Speed up database checks with `[x] Only scan notes modified since last clean scan` toggle option, which uses Anki's native `edited:X` search syntax alongside config-tracked timestamps to run scans almost instantly.
-- **Configurable Timeout Handling**: Separate active-review and background pregeneration request timeouts keep slow providers from blocking study flow. Host/network failures fail fast, while read timeouts still allow limited same-provider model fallback attempts.
-- **Inline Editing (v4.0.0)**: Hold `Ctrl` (or `Cmd` on macOS) to highlight any hint or option during review, and click to edit it inline instantly inside a dynamic `<textarea>`. Press `Enter` (without Shift), blur, or `Escape` to save changed text; unchanged edits are reverted cleanly. Saves edits directly to the note's JSON block in the database, updates the cache, and updates the webview dynamically with zero page flicker.
-- **Unified UI System**: Desktop and Mobile now share the exact same rendering engine (`template.js`), ensuring consistent features (like shuffling and MathJax) across all devices.
-- **Optimized Prompt Efficiency (v3.4.1)**: Re-engineered system prompts for maximum token efficiency (~1k tokens saved per request) while improving distractor quality via **Sequential Parallelism**.
-- **Granular Key Blacklisting & Gemini 3.5 Flash Support (v3.6.1)**: Refactored key rotation blacklist to block specific model-key-provider combinations rather than entire keys or models. Added support and defaults for Google's new `gemini-3.5-flash` model.
-- **Factual Error Warnings & Fixed Pregen Styling (v3.6.0)**: Automatically highlights factual errors in the card content with a dedicated warning indicator explaining why it is wrong and what the correct answer is. Includes polished pregeneration button styling for both light and dark themes.
-- **Multiple API Keys Rotation (v3.5.0)**: Supports prioritizing, labeling, and rotating multiple API keys per provider. Includes visual key management (enabling/disabling individual keys) and persistent disk-based key blacklisting.
-- **Cross-Platform Support**: Includes a **Unified UI** script that works on AnkiDroid, AnkiMobile, and AnkiWeb even without the add-on installed. Includes a **Smart One-Click Installer** that automatically manages your templates and keep them in sync.
-- **Front-Side Quick Shortcuts**: On the question/front side, AI-Hints actions can use the configured keys (`1`-`6` by default) with or without the modifier. On the answer/back side, the configured modifier key is still required so Anki's rating keys remain untouched.
-- **Smart Auto-Updates**: Once you've opted-in via the Installer, the addon automatically keeps your mobile setup up to date whenever you update the addon or change settings.
-- **Compact Emoji Mode**: Optional ultra-compact UI for mobile that uses pure emojis (💡, 🎯, 🗑️) instead of text labels.
-- **HTML-Aware Clearing**: Re-engineered the "Clear" logic to aggressively remove redundant `<br>` tags and empty lines to keep your cards perfectly clean.
-- **Edit Field Compatibility**: Improved compatibility with "Edit Field During Review Native" — UI updates now pause while you are typing to prevent focus loss.
-- **Automatic Fallback**: If your primary AI provider fails (e.g., rate limits or API downtime), the add-on automatically attempts to generate hints using your next provider.
-- **Model Fallbacks**: Each provider has its own **intelligence-ranked fallback hierarchy** to automatically retry next-best models before switching to a different provider.
-- **Advanced Global Fallback**: Optionally configure and enable a flat, global priority sequence to mix-and-match fallback models across different providers in any custom order.
-- **Multi-Cloze Support**: Optimized for cards with multiple cloze deletions of the same ID. Multiple correct answers are separated cleanly using a semicolon (` ; `) delimiter to avoid formatting collisions.
-- **Smart LaTeX Normalization**: Powered by the bundled `ai-latex-fixer` library for robust math formula rendering.
-- **Manual Control**: Generate, show, or regenerate hints with buttons on the card, the review bar, or both.
+### 🔌 Multi-Provider AI Engine
+- **Broad Provider Support**: Supports OpenAI, Anthropic, Gemini, DeepSeek, Grok (xAI), Groq, OpenRouter, NVIDIA, Mistral, SambaNova, Cerebras, Hugging Face, Together AI, and any local API (Ollama/LM Studio).
+- **Intelligence-Ranked Fallbacks**: Automatically retries using next-best models, alternative API keys, or entirely different providers in case of rate limits or failures.
+- **API Key Rotation**: Rotate and prioritize multiple API keys per provider, with visual toggle controls and disk-persistent failure-based key blacklisting.
+
+### 🎮 Interactive MCQ & Review UI
+- **Interactive Option Selection**: Select MCQ options on the front side (via click, tap, or hotkeys `1-9`) and automatically flip to see color-coded results (green for correct, red for incorrect).
+- **Auto-Rating Integrations**: Enable auto-rating to instantly rate a card `Good` (on correct option) or `Again` (on incorrect option) after selecting an MCQ option, with full undo protection.
+- **Inline Editor**: Hold `Ctrl`/`Cmd` during review and click any hint or option text block to edit it inline. Changes save directly to the card database and cache instantly.
+- **Factual Error Warnings**: Automatically highlights factual errors in card content with a dedicated warn alert explaining the error and the correct fact.
+- **Smart LaTeX Normalization**: Uses the bundled `ai-latex-fixer` library for robust math formula rendering and delimiter alignment.
+
+### ⚡ Generation & Note Management
+- **Queued Batch Jobs**: Queue multiple batch generation runs, monitor active jobs, reorder/cancel pending jobs, and automatically resume queues after Anki restarts.
+- **Smart Auto-Regeneration**: Auto-refresh generated hints when the note is edited, when stored metadata is older than a target version, or when it predates a target date.
+- **Bulk Controls**: Easily bulk skip or unskip whole decks or selected card groups directly from the Anki browser and sidebar menus.
+- **Multi-Cloze Alignment**: Supports cards with multiple cloze deletions, separating answers cleanly using a semicolon (` ; `) delimiter.
+
+### 🚀 Optimization & Performance
+- **Deferred Startup Loading**: Postpones imports and configuration UI setup until requested, dropping addon startup import overhead from 1.15s to under 0.32s.
+- **Zero-Latency Card Rendering**: Clean DOM architecture instantly prunes stale metadata blocks during card transitions, and startup polling checks at 10ms to load hints instantly.
+- **Token-Efficient Prompting**: Saves ~1,000 tokens per prompt request through highly optimized instruction syntax.
 
 ## Intelligence-Ranked Fallback Hierarchy
 
