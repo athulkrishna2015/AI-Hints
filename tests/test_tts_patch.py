@@ -28,6 +28,9 @@ def test_tts_addon_patch():
     mock_remove_codes = ModuleType("remove_codes")
     mock_remove_codes.remove_codes_from_text = lambda text: text
     
+    mock_subprocess_piper = ModuleType("subprocess_piper")
+    mock_subprocess_piper.remove_codes_from_text = lambda text: text
+
     mock_add_audio = ModuleType("add_audio_to_card")
     mock_add_audio.on_success = MagicMock()
 
@@ -35,6 +38,8 @@ def test_tts_addon_patch():
     def mock_import(name):
         if name == "428593773.bulk_add_voices.remove_codes":
             return mock_remove_codes
+        if name == "428593773.subprocess_piper":
+            return mock_subprocess_piper
         if name == "428593773.add_cards.add_audio_to_card":
             return mock_add_audio
         raise ModuleNotFoundError(f"Mocked out: {name}")
@@ -45,11 +50,13 @@ def test_tts_addon_patch():
     # 1. Verify remove_codes_from_text is wrapped and successfully strips AI data
     raw_text = 'Hello World <div class="ai-hints-json" style="display:none;">{"c1": {"hints": ["H1"], "options": ["O1"]}}</div>'
     res = mock_remove_codes.remove_codes_from_text(raw_text)
+    res_sub = mock_subprocess_piper.remove_codes_from_text(raw_text)
     print("Patched remove_codes result:", repr(res))
-    if "ai-hints-json" not in res and "Hello World" in res:
-        print("  PASS: remove_codes_from_text successfully wrapped and strips AI data.")
+    print("Patched subprocess_piper result:", repr(res_sub))
+    if "ai-hints-json" not in res and "Hello World" in res and "ai-hints-json" not in res_sub and "Hello World" in res_sub:
+        print("  PASS: remove_codes_from_text successfully wrapped in both modules and strips AI data.")
     else:
-        print("  FAIL: remove_codes_from_text did not strip AI data or corrupted text.")
+        print("  FAIL: remove_codes_from_text did not strip AI data or corrupted text in one of the modules.")
         exit(1)
 
     # 2. Verify on_success wrapper is installed and calls loadNoteKeepingFocus

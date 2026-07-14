@@ -29,6 +29,14 @@ def setup_tts_addon_patch():
 
         remove_codes_mod.remove_codes_from_text = patched_remove_codes_from_text
         logger.info("AI-Hints: Successfully patched PiperTTS remove_codes_from_text to strip AI data.")
+
+        # Also patch subprocess_piper module namespace since it binds remove_codes_from_text at import time
+        try:
+            subprocess_piper_mod = importlib.import_module("428593773.subprocess_piper")
+            subprocess_piper_mod.remove_codes_from_text = patched_remove_codes_from_text
+            logger.info("AI-Hints: Successfully patched PiperTTS subprocess_piper.remove_codes_from_text.")
+        except ModuleNotFoundError:
+            pass
     except ModuleNotFoundError:
         logger.debug("AI-Hints: PiperTTS (428593773) remove_codes module not found. Skipping patch.")
     except Exception as e:
