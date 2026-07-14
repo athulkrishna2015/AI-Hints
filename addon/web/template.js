@@ -564,6 +564,16 @@
         return compact(option) === compact(correct);
     }
 
+    function pruneStaleJsonBlocks() {
+        document.querySelectorAll('.ai-hints-json').forEach(e => {
+            const inQa = document.getElementById('qa')?.contains(e);
+            const isDirectBodyChild = e.parentNode === document.body;
+            if (isDirectBodyChild || (document.getElementById('qa') && !inQa)) {
+                e.remove();
+            }
+        });
+    }
+
     function blockBelongsToCurrentCard(block, data, cardKey, cardId, ord) {
         if (!block || !isAddonActive) return true;
         if (!window.aiHintsCurrentCard || cardId === 'temp') return true;
@@ -721,6 +731,8 @@
     function init(manualData, isManualAction) {
         // manualData presence indicates an update from Python after generation
         const hasOverrideData = !!manualData;
+        
+        pruneStaleJsonBlocks();
         
         // COMPATIBILITY: Don't re-render if user is currently editing a field 
         if (!hasOverrideData && document.activeElement && (
@@ -1411,6 +1423,7 @@
         });
     };
     window.aiHintsSetup = (card, hints, uiConfig) => {
+        pruneStaleJsonBlocks();
         if (window.aiHintsAutoRateTimeout) {
             clearTimeout(window.aiHintsAutoRateTimeout);
             window.aiHintsAutoRateTimeout = null;

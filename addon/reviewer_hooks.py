@@ -668,6 +668,13 @@ def on_webview_will_set_content(web_content, context):
     // Instantly wipe ALL stale AI-Hints elements from previous card reviews to prevent bleed.
     // We do this before the main script runs init().
     document.querySelectorAll('.ai-hints-container, .ai-hints-container-rendered').forEach(e => e.remove());
+    document.querySelectorAll('.ai-hints-json').forEach(e => {{
+        const inQa = document.getElementById('qa')?.contains(e);
+        const isDirectBodyChild = e.parentNode === document.body;
+        if (isDirectBodyChild || (document.getElementById('qa') && !inQa)) {{
+            e.remove();
+        }}
+    }});
 }})();
 window.aiHintsLastSetupKey = undefined;
 window.aiHintsSetupToken = undefined;
