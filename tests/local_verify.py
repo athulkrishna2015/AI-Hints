@@ -70,7 +70,7 @@ def run_tests():
         (r"Cases: \[ f(x)=begin{cases} x^2 & x ge 0 \\ -x & x < 0 end{cases} \]",
          r"Cases: \[ f(x)=\begin{cases} x^2 & x \ge 0 \\ -x & x < 0 \end{cases} \]"),
         (r"Vector: vec{v} cdot hat{n}", 
-         r"Vector: \( \vec{v} \) \( \cdot \) \( \hat{n} \)")
+         r"Vector: \(\vec{v} \cdot \hat{n}\)")
     ]
     
     for input_text, expected in test_cases:
