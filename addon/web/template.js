@@ -1022,8 +1022,9 @@
                     genBtn.textContent = hasContent ? "Regenerate" : "Generate AI Hints";
                     
                     if (uiCfg.is_generating) {
-                        genBtn.textContent = "✨ Generating...";
-                        genBtn.disabled = true;
+                        genBtn.textContent = "✨ Generating... (Stop)";
+                        genBtn.disabled = false;
+                        genBtn.title = "Click to stop generation";
                         genBtn.classList.add('ai-hints-btn-generating');
                     } else if (uiCfg.is_pregenerating) {
                         // Background pre-gen active for another card
@@ -1033,12 +1034,19 @@
                     
                     genBtn.onclick = (e) => {
                         if (e) { e.stopPropagation(); e.preventDefault(); }
-                        genBtn.disabled = true;
-                        genBtn.textContent = "✨ Generating...";
-                        // Switch to foreground style immediately
-                        genBtn.classList.remove('ai-hints-btn-pregenerating');
-                        genBtn.classList.add('ai-hints-btn-generating');
-                        if (typeof pycmd === 'function') pycmd('ai_hints_generate');
+                        if (genBtn.classList.contains('ai-hints-btn-generating')) {
+                            genBtn.disabled = true;
+                            genBtn.textContent = "Stopping...";
+                            if (typeof pycmd === 'function') pycmd('ai_hints_cancel');
+                        } else {
+                            genBtn.disabled = false;
+                            genBtn.textContent = "✨ Generating... (Stop)";
+                            genBtn.title = "Click to stop generation";
+                            // Switch to foreground style immediately
+                            genBtn.classList.remove('ai-hints-btn-pregenerating');
+                            genBtn.classList.add('ai-hints-btn-generating');
+                            if (typeof pycmd === 'function') pycmd('ai_hints_generate');
+                        }
                     };
                     btnBox.appendChild(genBtn);
 
@@ -1396,8 +1404,9 @@
                 btn.classList.contains('ai-hints-btn-generating') || btn.classList.contains('ai-hints-btn-pregenerating')) {
                 
                 if (uiCfg.is_generating) {
-                    btn.disabled = true;
-                    btn.textContent = "✨ Generating...";
+                    btn.disabled = false;
+                    btn.textContent = "✨ Generating... (Stop)";
+                    btn.title = "Click to stop generation";
                     btn.classList.remove('ai-hints-btn-pregenerating');
                     btn.classList.add('ai-hints-btn-generating');
                 } else if (uiCfg.is_pregenerating) {

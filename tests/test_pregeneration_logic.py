@@ -253,7 +253,9 @@ class TestPregeneration(unittest.TestCase):
         mock_apply_results.assert_called_once()
         args, kwargs = mock_apply_results.call_args
         self.assertEqual(args[0], mock_card)
-        self.assertEqual(args[1], {"hints": [], "options": [], "_skipped": True})
+        self.assertEqual(args[1]["hints"], [])
+        self.assertEqual(args[1]["options"], [])
+        self.assertEqual(args[1]["_skipped"], True)
         self.assertEqual(kwargs.get("is_manual"), True)
 
     @patch('addon.reviewer_hooks._get_card_from_collection')

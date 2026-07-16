@@ -984,6 +984,9 @@ def on_webview_did_receive_js_message(handled, message, context):
     if message == "ai_hints_generate":
         generate_hints(card=card, web=web)
         return (True, None)
+    if message == "ai_hints_cancel":
+        cancel_hints(card=card, web=web)
+        return (True, None)
     if message == "ai_hints_clear":
         clear_hints(card=card, web=web)
         return (True, None)
@@ -1029,6 +1032,25 @@ def on_webview_did_receive_js_message(handled, message, context):
         skip_ai_for_card(card=card, web=web)
         return (True, None)
     return handled
+
+def cancel_hints(card=None, web=None):
+    if card is None:
+        card = mw.reviewer.card
+    if not card:
+        return
+    if web is None:
+        web = getattr(mw.reviewer, "web", None)
+    
+    card_id = getattr(card, "id", None)
+    logger.info(f"AI-Hints: User requested cancel for card {card_id}")
+    
+    state.GLOBAL_STOP = True
+    
+    if card_id:
+        _generating_card_ids.discard(card_id)
+        
+    if web:
+        _set_frontend_generating(web, False, card_id=card_id)
 
 def clear_hints(card=None, web=None):
     if card is None:

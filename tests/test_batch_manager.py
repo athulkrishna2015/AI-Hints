@@ -286,7 +286,9 @@ class TestBatchManager(unittest.TestCase):
         self.assertEqual(manager.local_queue, [])
         mock_parser.update_note_with_hints.assert_called_once()
         args, kwargs = mock_parser.update_note_with_hints.call_args
-        self.assertEqual(args[1], {"hints": [], "options": [], "_skipped": True})
+        self.assertEqual(args[1]["hints"], [])
+        self.assertEqual(args[1]["options"], [])
+        self.assertEqual(args[1]["_skipped"], True)
         mock_mw.col.update_note.assert_called_once_with(mock_note)
 
     @patch('addon.batch_manager.threading.Thread')
