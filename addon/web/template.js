@@ -898,14 +898,14 @@
             if (uiCfg.manual_show_hints) state.hints = true;
             if (uiCfg.manual_show_options) state.options = true;
             persistence.save(stateKey, state);
-            if (doNotCollapse) {
+            if (doNotCollapse && !onAnswer) {
                 persistence.save('global_state', { hints: state.hints, options: state.options });
             }
         } else if (isManualAction === false) {
             if (uiCfg.auto_show_hints) state.hints = true;
             if (uiCfg.auto_show_options) state.options = true;
             persistence.save(stateKey, state);
-            if (doNotCollapse) {
+            if (doNotCollapse && !onAnswer) {
                 persistence.save('global_state', { hints: state.hints, options: state.options });
             }
         } else if (isFirstLoad) {
@@ -1068,7 +1068,7 @@
 
                 const saveState = () => {
                     persistence.save(stateKey, state);
-                    if (doNotCollapse) {
+                    if (doNotCollapse && !onAnswer) {
                         persistence.save('global_state', { hints: state.hints, options: state.options });
                     }
                 };
