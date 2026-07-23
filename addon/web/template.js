@@ -383,7 +383,7 @@
         list.className = title.toLowerCase().includes('hint') ? 'ai-hints-hint-list' : 'ai-hints-list';
         const listItems = items.map((text, index) => {
             const li = document.createElement('li');
-            const isWarning = text && text.includes('⚠️');
+            const isWarning = text && (text.includes('⚠️') || text.includes('⚠'));
             if (isWarning && isAddonActive) {
                 li.className = 'ai-hints-warning-item';
                 const span = document.createElement('span');
@@ -1084,7 +1084,7 @@
                     contentBox.className = 'ai-hints-content-box ai-hints-content-active';
                 }
 
-                const hasWarning = data && Array.isArray(data.hints) && data.hints.some(h => h && h.includes('⚠️'));
+                const hasWarning = data && Array.isArray(data.hints) && data.hints.some(h => h && (h.includes('⚠️') || h.includes('⚠')));
 
                 if (hasContent) {
                     if (hSection) {

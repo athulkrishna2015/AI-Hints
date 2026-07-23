@@ -222,20 +222,20 @@ class CardParserTests(unittest.TestCase):
         
         # Test JSON mode warning removal
         initial_data = {
-            "c1": {"hints": ["Fine hint", "⚠️ Warning hint", "Another hint"], "options": []}
+            "c1": {"hints": ["Fine hint", "⚠️ Warning hint", "⚠ Another warning hint", "Third hint"], "options": []}
         }
         note["Text"] = "Prompt" + parser.build_hints_block(initial_data)
         
         self.assertTrue(parser.remove_warning_hint_from_note(note, card=FakeCard(1, 0)))
         
         payload = json_payload_from_field(note["Text"])
-        self.assertEqual(payload["c1"]["hints"], ["Fine hint", "Another hint"])
+        self.assertEqual(payload["c1"]["hints"], ["Fine hint", "Third hint"])
         
         # Test HTML mode warning removal
         parser_html = CardParser(storage_mode="html")
         note_html = FakeNote("Basic", {"Front": "Front", "Back": ""})
         block = parser_html.build_hints_block({
-            "hints": ["First hint", "⚠️ Warning hint", "Third hint"],
+            "hints": ["First hint", "⚠️ Warning hint", "⚠ Another warning hint", "Fourth hint"],
             "options": []
         })
         note_html["Back"] = "Back" + block
@@ -243,7 +243,8 @@ class CardParserTests(unittest.TestCase):
         self.assertTrue(parser_html.remove_warning_hint_from_note(note_html))
         self.assertIn("First hint", note_html["Back"])
         self.assertNotIn("⚠️ Warning hint", note_html["Back"])
-        self.assertIn("Third hint", note_html["Back"])
+        self.assertNotIn("⚠ Another warning hint", note_html["Back"])
+        self.assertIn("Fourth hint", note_html["Back"])
 
     def test_clear_hints_clears_skipped_state(self):
         parser = CardParser(storage_mode="json")

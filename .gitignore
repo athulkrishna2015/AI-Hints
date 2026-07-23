@@ -9,6 +9,8 @@ addon/*.log.*
 ai_hints.log*
 addon/ai_hints.log*
 meta.json
+meta.json.bkp
+meta.bkp.json
 addon/meta.json
 addon/batch_state.json
 addon/blacklist.json

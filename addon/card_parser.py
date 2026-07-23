@@ -1073,14 +1073,14 @@ class CardParser:
                                     data = parsed[card_key]
                                     if isinstance(data, dict) and "hints" in data:
                                         orig_len = len(data["hints"])
-                                        data["hints"] = [h for h in data["hints"] if "⚠️" not in str(h)]
+                                        data["hints"] = [h for h in data["hints"] if "⚠️" not in str(h) and "⚠" not in str(h)]
                                         if len(data["hints"]) < orig_len:
                                             block_modified = True
                             else:
                                 # Not keyed format
                                 if "hints" in parsed:
                                     orig_len = len(parsed["hints"])
-                                    parsed["hints"] = [h for h in parsed["hints"] if "⚠️" not in str(h)]
+                                    parsed["hints"] = [h for h in parsed["hints"] if "⚠️" not in str(h) and "⚠" not in str(h)]
                                     if len(parsed["hints"]) < orig_len:
                                         block_modified = True
                                         
@@ -1095,8 +1095,8 @@ class CardParser:
                             logger.error(f"Error removing warning from JSON: {e}")
                     else:
                         # HTML format
-                        # Warnings are inside list items. Let's find <li> elements containing ⚠️
-                        li_pattern = re.compile(r'<li\b[^>]*>[^<]*⚠️.*?</li>', flags=re.DOTALL | re.IGNORECASE)
+                        # Warnings are inside list items. Let's find <li> elements containing ⚠️ or ⚠
+                        li_pattern = re.compile(r'<li\b[^>]*>[^<]*(?:⚠️|⚠).*?</li>', flags=re.DOTALL | re.IGNORECASE)
                         new_block_content, count = li_pattern.subn('', match.group(1))
                         if count > 0:
                             # Rebuild HTML block
