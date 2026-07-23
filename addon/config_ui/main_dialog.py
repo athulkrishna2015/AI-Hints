@@ -410,6 +410,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     if w: w.deleteLater()
 
             self.model_edits = {}
+            self.api_key_edits = {}
             self.provider_widgets = {}
             for p in new_priority:
                 w = ProviderRowWidget(p, self)
@@ -832,15 +833,22 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         threading.Thread(target=_runner, daemon=True).start()
 
     def on_add_custom(self):
-        dlg = CustomProviderDialog(self)
+        dlg = CustomProviderDialog(self, config=self.config)
         if dlg.exec():
             name = dlg.name_edit.text().strip()
+            api_key = dlg.key_edit.text().strip()
             self.custom_providers_data[name] = {
                 "url": dlg.url_edit.text().strip(),
-                "api_key": dlg.key_edit.text().strip(),
+                "api_key": api_key,
                 "model": dlg.model_edit.text().strip(),
                 "headers": json.loads(dlg.headers_edit.toPlainText() or "{}")
             }
+            if "api_keys" not in self.config or not isinstance(self.config["api_keys"], dict):
+                self.config["api_keys"] = {}
+            if api_key:
+                self.config["api_keys"][name] = api_key
+            if hasattr(self, "api_key_edits") and name in self.api_key_edits:
+                self.api_key_edits[name].setText(api_key)
             self.refresh_custom_list()
             
     def on_edit_custom(self):
@@ -848,17 +856,26 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not item: return
         name = item.text()
         data = self.custom_providers_data.get(name, {})
-        dlg = CustomProviderDialog(self, name=name, data=data)
+        dlg = CustomProviderDialog(self, name=name, data=data, config=self.config)
         if dlg.exec():
             new_name = dlg.name_edit.text().strip()
+            api_key = dlg.key_edit.text().strip()
             if new_name != name:
                 del self.custom_providers_data[name]
+                if hasattr(self, "api_key_edits") and name in self.api_key_edits:
+                    del self.api_key_edits[name]
             self.custom_providers_data[new_name] = {
                 "url": dlg.url_edit.text().strip(),
-                "api_key": dlg.key_edit.text().strip(),
+                "api_key": api_key,
                 "model": dlg.model_edit.text().strip(),
                 "headers": json.loads(dlg.headers_edit.toPlainText() or "{}")
             }
+            if "api_keys" not in self.config or not isinstance(self.config["api_keys"], dict):
+                self.config["api_keys"] = {}
+            if api_key:
+                self.config["api_keys"][new_name] = api_key
+            if hasattr(self, "api_key_edits") and new_name in self.api_key_edits:
+                self.api_key_edits[new_name].setText(api_key)
             self.refresh_custom_list()
 
     def on_remove_custom(self):
@@ -1290,8 +1307,18 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             if self.opt_meta.isChecked(): opt_list.append("meta")
             new_config["shortcuts"]["select-options-modifier"] = "+".join(opt_list) if opt_list else "none"
             new_config["shortcuts"]["select-options-keys"] = self.select_options_keys_edit.text().strip()
-            new_config["api_keys"] = {p: edit.text().strip() for p, edit in self.api_key_edits.items()}
-            new_config["models"] = {p: (edit.currentText().strip() or DEFAULT_MODELS.get(p, "")) for p, edit in self.model_edits.items()}
+            def _safe_key(p, edit):
+                try:
+                    return edit.text().strip()
+                except RuntimeError:
+                    return self.config.get("api_keys", {}).get(p, "")
+            def _safe_model(p, edit):
+                try:
+                    return edit.currentText().strip() or DEFAULT_MODELS.get(p, "")
+                except RuntimeError:
+                    return self.config.get("models", {}).get(p, DEFAULT_MODELS.get(p, ""))
+            new_config["api_keys"] = {p: _safe_key(p, edit) for p, edit in self.api_key_edits.items()}
+            new_config["models"] = {p: _safe_model(p, edit) for p, edit in self.model_edits.items()}
             new_config["local_providers"] = self.local_providers_data
             new_config["system_prompt"] = self.default_config.get("system_prompt", "")
             new_config["additional_system_instructions"] = self.system_prompt_edit.toPlainText()

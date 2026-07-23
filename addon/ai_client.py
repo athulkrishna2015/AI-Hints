@@ -569,6 +569,8 @@ class AIClient:
         if not isinstance(custom_cfg, dict):
             custom_cfg = {}
         url = str(custom_cfg.get("url", "") or "").strip()
+        if url and not url.endswith("/chat/completions"):
+            url = url.rstrip("/") + "/chat/completions"
         
         keys = self._api_keys_for_custom(provider_name, custom_cfg)
         if not keys:

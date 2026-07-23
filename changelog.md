@@ -2,6 +2,12 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.3.3 (2026-07-23)
+- **Custom Provider Key Syncing**: Adding or editing a custom provider now automatically populates and syncs its API key across the settings dialog, removing duplicate key entry steps.
+- **Custom Endpoint URL Auto-Normalization**: Custom provider endpoint URLs automatically append `/chat/completions` if omitted (supporting both `https://domain.com/v1` and `https://domain.com/v1/chat/completions`).
+- **Warning Emoji Variant Support**: Added support for both `⚠️` (U+26A0 with variation selector) and `⚠` (U+26A0) warning symbols in factual error detection and UI button rendering.
+- **QComboBox Qt Object Deletion Fix**: Resolved a `RuntimeError` crash when saving non-modal fallback dialogs after parent widget destruction.
+
 ## 5.3.0 (2026-07-14)
 - **Bulk TTS Hints Preservation**: Fixed a bug where running bulk TTS generation (PiperTTS addon 428593773) caused the `ai-hints-json` data block to be stripped from note fields. A new patch on `bulk_to_notes.add_audio_to_card` re-reads the freshest note from the database before and after each save to guarantee the hints div is always preserved, even under race conditions or stale note-object scenarios.
 - **Debug Logging Toggle in Logs Tab**: Added a **"Debug logging"** checkbox directly in the Settings → Logs tab. Enabling it immediately switches the logger to `DEBUG` level (no restart required), making it easy to trace low-level events such as the TTS patch activity without editing raw JSON config.
