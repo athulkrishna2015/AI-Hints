@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.3.4 (2026-07-23)
+- **QLineEdit Deleted Crash on Save**: Fixed `RuntimeError: wrapped C/C++ object of type QLineEdit has been deleted` when saving settings after adding/editing a custom provider. `refresh_custom_list()` now resets `api_key_edits` alongside `model_edits` when rebuilding provider rows, and the save routine safely falls back to the last persisted value for any stale deleted widget reference.
+- **Custom Provider Key Sync**: Adding or editing a custom provider immediately syncs the API key into the live config and active provider row, eliminating the need to re-enter the key after creation.
+- **Custom Endpoint URL Auto-normalization**: Custom provider URLs automatically get `/chat/completions` appended if omitted, so both `https://aihubmix.com/v1` and `https://aihubmix.com/v1/chat/completions` work without manual correction.
+
 ## 5.3.3 (2026-07-23)
 - **Custom Provider Key Syncing**: Adding or editing a custom provider now automatically populates and syncs its API key across the settings dialog, removing duplicate key entry steps.
 - **Custom Endpoint URL Auto-Normalization**: Custom provider endpoint URLs automatically append `/chat/completions` if omitted (supporting both `https://domain.com/v1` and `https://domain.com/v1/chat/completions`).
