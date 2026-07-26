@@ -1018,6 +1018,15 @@ class BatchManager:
                 available_models = client._models_for_provider(provider)
             except Exception:
                 available_models = []
+
+            if not client.is_network_available():
+                self.active_threads_status[provider] = {
+                    "model": current_model,
+                    "cid": None,
+                    "status": "🌐 Offline"
+                }
+                time.sleep(30)
+                continue
             
             if not available_models:
                  with self._db_lock:

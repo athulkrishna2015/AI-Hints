@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import sys
 from aqt import mw, gui_hooks
 from aqt.qt import QMessageBox, QMenu, QAction, QPoint, Qt, QDialog, QVBoxLayout, QTimer
 from .logger import logger, info, tooltip, state
@@ -194,6 +195,15 @@ def _trigger_next_pregeneration(current_card_id=None):
         
     if current_card_id and current_card_id in _generating_card_ids:
         logger.debug("AI-Hints pre-gen: Skipping because the current card is actively generating.")
+        return
+
+    client = AIClient(config, is_pregen=True)
+    if "unittest" not in sys.modules and not client.is_network_available():
+        logger.info("AI-Hints pre-gen: Network offline, pausing background generation until connectivity returns.")
+        QTimer.singleShot(
+            30000,
+            lambda: _trigger_next_pregeneration(current_card_id)
+        )
         return
 
     pregen_limit = int(config.get("pre_generate_count", 3))
@@ -2129,6 +2139,17 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         fix_latex=config.get("fix_latex", False)
     )
     client = AIClient(config, is_pregen=is_pregen)
+    if "unittest" not in sys.modules and not client.is_network_available():
+        if not is_pregen:
+            logger.info(f"AI-Hints: Network offline, generation paused for card {card_id}.")
+            tooltip("AI-Hints: Network offline. Generation will resume when connectivity returns.")
+        else:
+            logger.info(f"AI-Hints: Network offline, pre-generation paused for card {card_id}.")
+        if web:
+            _set_frontend_generating(web, False, card_id, is_pregen, "Offline", "Network offline")
+        _generating_card_ids.discard(card_id)
+        return
+
     if not client.has_any_ready_provider():
         _generating_card_ids.discard(card_id)
         if not is_pregen:

@@ -1498,6 +1498,10 @@ class AIClient:
             return _NETWORK_STATE["online"]
         return _check_network_online()
 
+    def is_network_available(self) -> bool:
+        """Public helper for callers that need a cheap offline gate."""
+        return self._is_actually_online()
+
     def _cooldown_seconds(self) -> float:
         return self.config.get("model_cooldown_minutes", 10) * 60
 
