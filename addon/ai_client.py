@@ -91,6 +91,7 @@ PROVIDER_ORDER = [
     "nvidia",
     "mistral",
     "cerebras",
+    "github",
     "local",
 ]
 
@@ -108,6 +109,7 @@ DEFAULT_MODELS = {
     "together":   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.3-70B-Instruct",
     "cerebras":   "llama3.1-8b",
+    "github":     "deepseek/deepseek-v3-0324",
     "local":      "llama3.3",
 }
 
@@ -183,6 +185,19 @@ MODEL_SUGGESTIONS = {
         "deepseek-ai/DeepSeek-V3",
         "meta-llama/Llama-3.3-70B-Instruct",
         "Qwen/Qwen2.5-72B-Instruct",
+    ],
+    "github": [
+        "deepseek/deepseek-v3-0324",
+        "deepseek/deepseek-r1-0528",
+        "openai/gpt-4.1",
+        "openai/gpt-4o",
+        "openai/gpt-5",
+        "openai/o3",
+        "openai/o4-mini",
+        "meta/llama-3.3-70b-instruct",
+        "meta/llama-4-maverick-17b-128e-instruct-fp8",
+        "mistral-ai/mistral-small-2503",
+        "microsoft/phi-4",
     ],
 }
 
@@ -280,6 +295,14 @@ MODEL_FALLBACKS = {
         "gemini-2.5-flash",
         "gemini-2-flash",
         "gemini-2.5-pro",
+    ],
+    "github": [
+        "deepseek/deepseek-v3-0324",
+        "deepseek/deepseek-r1-0528",
+        "openai/gpt-4.1",
+        "openai/gpt-4o",
+        "meta/llama-3.3-70b-instruct",
+        "mistral-ai/mistral-small-2503",
     ],
 }
 
@@ -594,13 +617,15 @@ class AIClient:
         custom_providers = self.config.get("custom_providers") or {}
         if not isinstance(custom_providers, dict):
             custom_providers = {}
+        custom_cfg = custom_providers.get(provider, {}) or {}
+        custom_url = str(custom_cfg.get("url", "") or "").strip()
         try:
-            if provider == "anthropic":
+            if custom_url:
+                return self._call_custom_provider(provider, system_prompt, prompt, override_model=override_model)
+            elif provider == "anthropic":
                 return self._call_anthropic(system_prompt, prompt, override_model=override_model)
             elif provider == "gemini":
                 return self._call_gemini(system_prompt, prompt, override_model=override_model)
-            elif provider in custom_providers:
-                return self._call_custom_provider(provider, system_prompt, prompt, override_model=override_model)
             else:
                 return self._call_openai_compatible(provider, system_prompt, prompt, override_model=override_model)
         finally:
@@ -736,6 +761,8 @@ class AIClient:
             base_url = "https://api.sambanova.ai/v1"
         elif provider == "cerebras":
             base_url = "https://api.cerebras.ai/v1"
+        elif provider == "github":
+            base_url = "https://models.github.ai/inference"
         
         url = f"{base_url}/chat/completions"
 
@@ -1746,6 +1773,26 @@ class AIClient:
         last_err = None
         for api_key in keys:
             try:
+                # Check custom_providers first — applies to any provider
+                custom_providers = self.config.get("custom_providers", {}) or {}
+                custom_cfg = custom_providers.get(provider, {}) or {}
+                custom_url = str(custom_cfg.get("url", "") or "").strip()
+                if custom_url:
+                    models_url = str(custom_cfg.get("models_url", "") or "").strip()
+                    if not models_url:
+                        models_url = custom_url
+                        if models_url.endswith("/chat/completions"):
+                            models_url = models_url.replace("/chat/completions", "/models")
+                        elif not models_url.endswith("/models"):
+                            models_url = models_url.rstrip("/") + "/models"
+                    custom_headers = custom_cfg.get("headers", {})
+                    headers = self._json_headers(api_key)
+                    if isinstance(custom_headers, dict):
+                        headers.update(custom_headers)
+                    result = self._get_json(models_url, headers)
+                    self._on_key_success(provider, api_key)
+                    return [m.get("id") for m in result.get("data", []) if m.get("id")]
+
                 if provider == "openrouter":
                     url = "https://openrouter.ai/api/v1/models"
                     headers = self._json_headers(api_key)
@@ -1812,26 +1859,14 @@ class AIClient:
                 elif provider == "huggingface":
                     return MODEL_SUGGESTIONS.get("huggingface", [])
 
-                # Custom providers
-                custom_providers = self.config.get("custom_providers", {}) or {}
-                if provider in custom_providers:
-                    custom_cfg = custom_providers[provider]
-                    url = str(custom_cfg.get("url", "") or "").strip()
-                    if url:
-                        models_url = url
-                        if models_url.endswith("/chat/completions"):
-                            models_url = models_url.replace("/chat/completions", "/models")
-                        elif not models_url.endswith("/models"):
-                            models_url = models_url.rstrip("/") + "/models"
-                        
-                        custom_headers = custom_cfg.get("headers", {})
-                        headers = self._json_headers(api_key)
-                        if isinstance(custom_headers, dict):
-                            headers.update(custom_headers)
-                        
-                        result = self._get_json(models_url, headers)
-                        self._on_key_success(provider, api_key)
-                        return [m.get("id") for m in result.get("data", []) if m.get("id")]
+                elif provider == "github":
+                    url = "https://models.github.ai/catalog/models"
+                    headers = self._json_headers(api_key)
+                    result = self._get_json(url, headers)
+                    self._on_key_success(provider, api_key)
+                    if isinstance(result, list):
+                        return [m.get("id") for m in result if m.get("id")]
+                    return [m.get("id") for m in result.get("data", []) if m.get("id")]
 
             except Exception as e:
                 self._mark_key_failed(provider, api_key)

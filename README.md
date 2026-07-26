@@ -8,7 +8,7 @@ Install from [anki web ](https://ankiweb.net/shared/info/2119980872)
 
 github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkrishna2015/AI-Hints)
 
-Current release: **v5.4.1**
+Current release: **v5.5.0**
 
 ## Features
 

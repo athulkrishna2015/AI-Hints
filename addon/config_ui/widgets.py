@@ -43,6 +43,8 @@ class CustomProviderDialog(QDialog):
         key_layout.addWidget(self.manage_keys_btn)
 
         self.model_edit = QLineEdit(data.get("model", "") if data else "")
+        self.models_url_edit = QLineEdit(data.get("models_url", "") if data else "")
+        self.models_url_edit.setPlaceholderText("Optional: URL to fetch models list (defaults to endpoint + /models)")
         self.headers_edit = QTextEdit()
         self.headers_edit.setPlainText(json.dumps(data.get("headers", {}), indent=2) if data else "{}")
         
@@ -59,6 +61,7 @@ class CustomProviderDialog(QDialog):
         model_row.addWidget(self.fetch_btn)
         layout.addRow("Model Name:", model_row)
         
+        layout.addRow("Models URL (optional):", self.models_url_edit)
         layout.addRow("Headers (JSON):", self.headers_edit)
         
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
@@ -74,6 +77,7 @@ class CustomProviderDialog(QDialog):
 
     def on_fetch(self):
         url = self.url_edit.text().strip()
+        models_url = self.models_url_edit.text().strip()
         api_key = self.key_edit.text().strip()
         if not url:
             info("Please enter an endpoint URL first.")
@@ -89,6 +93,7 @@ class CustomProviderDialog(QDialog):
         temp_config["custom_providers"] = {
             "TEMP": {
                 "url": url,
+                "models_url": models_url or "",
                 "api_key": api_key,
                 "headers": headers
             }

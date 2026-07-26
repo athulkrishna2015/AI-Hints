@@ -857,6 +857,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             api_key = dlg.key_edit.text().strip()
             self.custom_providers_data[name] = {
                 "url": dlg.url_edit.text().strip(),
+                "models_url": dlg.models_url_edit.text().strip(),
                 "api_key": api_key,
                 "model": dlg.model_edit.text().strip(),
                 "headers": json.loads(dlg.headers_edit.toPlainText() or "{}")
@@ -884,6 +885,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     del self.api_key_edits[name]
             self.custom_providers_data[new_name] = {
                 "url": dlg.url_edit.text().strip(),
+                "models_url": dlg.models_url_edit.text().strip(),
                 "api_key": api_key,
                 "model": dlg.model_edit.text().strip(),
                 "headers": json.loads(dlg.headers_edit.toPlainText() or "{}")

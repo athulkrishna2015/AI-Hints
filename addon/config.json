@@ -13,7 +13,8 @@
     "huggingface": "",
     "together": "",
     "sambanova": "",
-    "cerebras": ""
+    "cerebras": "",
+    "github": ""
   },
   "local_endpoint": {
     "enabled": false,
@@ -35,6 +36,7 @@
     "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova": "Meta-Llama-3.3-70B-Instruct",
     "cerebras": "llama-3.1-8b",
+    "github": "deepseek/deepseek-v3-0324",
     "local": "llama3.3"
   },
   "model_fallbacks": {
@@ -147,6 +149,7 @@
     "nvidia",
     "mistral",
     "cerebras",
+    "github",
     "local"
   ],
   "shortcuts": {
