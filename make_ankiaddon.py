@@ -86,7 +86,7 @@ def resolve_build_version(
     print(f"Using explicit version: {version}")
     return version
 
-def create_ankiaddon(explicit_version: str | None = None) -> int:
+def create_ankiaddon(explicit_version: str | None = None, clean: bool = False) -> int:
     # Get the project root and addon directory
     root_dir = Path(__file__).resolve().parent
     addon_path = root_dir / ADDON_DIR
@@ -103,12 +103,14 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
 
     zip_name, final_name = artifact_names(ADDON_NAME, build_version)
 
-    # Clean up any existing .ankiaddon files in the root directory first to keep it tidy
-    for f in root_dir.glob("*.ankiaddon"):
-        try:
-            os.remove(f)
-        except Exception:
-            pass
+    # Preserve older release packages by default. Use --clean only when
+    # intentionally removing existing root-level .ankiaddon files.
+    if clean:
+        for f in root_dir.glob("*.ankiaddon"):
+            try:
+                os.remove(f)
+            except Exception:
+                pass
 
     # Load gitignore patterns to filter files dynamically
     gitignore_patterns = load_gitignore_patterns(root_dir)
@@ -157,8 +159,9 @@ def create_ankiaddon(explicit_version: str | None = None) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Create .ankiaddon package. "
-            "If no version is provided, patch version is auto-bumped via bump.py."
+        "Create .ankiaddon package. "
+            "If no version is provided, patch version is auto-bumped via bump.py. "
+            "Existing packages are preserved unless --clean is specified."
         )
     )
     parser.add_argument(
@@ -166,11 +169,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         nargs="?",
         help="Optional explicit version (major.minor[.patch]) to set before packaging.",
     )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Delete existing root-level .ankiaddon packages before building.",
+    )
     return parser.parse_args(argv[1:])
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
-    return create_ankiaddon(args.version)
+    return create_ankiaddon(args.version, clean=args.clean)
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv))

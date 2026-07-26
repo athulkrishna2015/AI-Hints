@@ -144,6 +144,7 @@ python make_ankiaddon.py 1.6.1
 ```
 
 This produces a timestamped file like `AI_Hints_v1.6.1_202605121420.ankiaddon`.
+Existing `.ankiaddon` packages are preserved by default. Add `--clean` when you intentionally want to remove older local packages before building.
 
 **What gets included in the package:**
 - All Python source files under `addon/`
