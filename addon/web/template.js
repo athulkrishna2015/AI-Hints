@@ -1617,7 +1617,12 @@
                 }
             }
 
-            if (optModMatch && keyMatch && !isAnswerSide() && digitVal !== null) {
+            // On the question side, bare number keys select visible options.
+            // Keep the answer side untouched so Anki retains its normal 1-4
+            // rating shortcuts.  A configured modifier (such as Ctrl+Alt)
+            // remains supported for users who prefer it.
+            const frontBareOptionMatch = !isAnswerSide() && noModifierPressed;
+            if ((frontBareOptionMatch || optModMatch) && keyMatch && !isAnswerSide() && digitVal !== null) {
                 const listItems = document.querySelectorAll('.ai-hints-list li');
                 const index = digitVal - 1;
                 if (listItems && listItems[index]) {

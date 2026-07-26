@@ -2518,6 +2518,67 @@ def on_state_shortcuts_will_change(state: str, shortcuts: list) -> None:
         if shortcut_text and not any(existing[0] == shortcut_text for existing in shortcuts):
             shortcuts.append((shortcut_text, action))
 
+    # Register bare option keys before the add-on's legacy bare button keys.
+    # Anki consumes these shortcuts at the reviewer level, so JavaScript never
+    # gets a chance to handle them. The callback is question-side-only and
+    # becomes a no-op when no option with that number is rendered.
+    # Older configs may not have option-selection keys; leave those configs'
+    # existing bare shortcuts untouched until the setting is initialized.
+    opt_keys_str = shortcuts_cfg.get("select-options-keys", "")
+    option_digits = []
+    if opt_keys_str == "1-9":
+        option_digits = list(range(1, 10))
+    elif "-" in opt_keys_str:
+        try:
+            start, end = (int(part.strip()) for part in opt_keys_str.split("-", 1))
+            option_digits = list(range(start, end + 1))
+        except (TypeError, ValueError):
+            pass
+    else:
+        for key in opt_keys_str.split(","):
+            try:
+                option_digits.append(int(key.strip()))
+            except (TypeError, ValueError):
+                pass
+
+    def select_option_js(index: int):
+        web = getattr(mw.reviewer, "web", None)
+        if not web:
+            return
+        web.eval(f"""
+            (function() {{
+                const listItems = document.querySelectorAll('.ai-hints-list li');
+                if (listItems && listItems[{index}]) listItems[{index}].click();
+            }})();
+        """)
+
+    def install_option_shortcut(digit: int) -> None:
+        key = str(digit)
+        index = digit - 1
+        for pos, (existing_key, existing_action) in enumerate(shortcuts):
+            if existing_key != key:
+                continue
+
+            # Anki already owns 1-4 for answer ratings. Preserve that action
+            # on the answer side while taking priority on the question side.
+            def option_or_anki_rating(
+                original=existing_action,
+                option_index=index,
+            ):
+                reviewer = getattr(mw, "reviewer", None)
+                if reviewer and getattr(reviewer, "state", "") == "question":
+                    select_option_js(option_index)
+                else:
+                    original()
+
+            shortcuts[pos] = (key, option_or_anki_rating)
+            return
+
+        add_shortcut(key, front_side_only(lambda idx=index: select_option_js(idx)))
+
+    for digit in option_digits:
+        install_option_shortcut(digit)
+
     # 1. generate
     gen_key = shortcuts_cfg.get("generate", "")
     if gen_key:
@@ -2580,47 +2641,11 @@ def on_state_shortcuts_will_change(state: str, shortcuts: list) -> None:
 
     # 7. Intercept MCQ option selection hotkeys globally on Python/Qt side to prevent Anki's defaults (like flag triggers) from capturing them
     opt_mod = shortcuts_cfg.get("select-options-modifier", "ctrl+alt")
-    opt_keys_str = shortcuts_cfg.get("select-options-keys", "")
-    
     if opt_keys_str:
-        # Parse key digits
-        digits = []
-        if opt_keys_str == "1-9":
-            digits = list(range(1, 10))
-        elif "-" in opt_keys_str:
-            try:
-                parts = opt_keys_str.split("-")
-                start = int(parts[0])
-                end = int(parts[1])
-                digits = list(range(start, end + 1))
-            except Exception:
-                digits = []
-        else:
-            for k in opt_keys_str.split(","):
-                try:
-                    digits.append(int(k.strip()))
-                except Exception:
-                    pass
-
-        def select_option_js(index: int):
-            web = getattr(mw.reviewer, "web", None)
-            if not web:
-                return
-            # Execute click on option node in webview
-            web.eval(f"""
-                (function() {{
-                    const listItems = document.querySelectorAll('.ai-hints-list li');
-                    if (listItems && listItems[{index}]) {{
-                        listItems[{index}].click();
-                    }}
-                }})();
-            """)
-
-        for d in digits:
+        for d in option_digits:
             opt_sc_text = get_shortcut_string(opt_mod, str(d))
             if opt_sc_text:
-                # Bind the shortcut so Python intercepts it, but only run when on the question front side
-                add_shortcut(opt_sc_text, front_side_only(lambda idx=d-1: select_option_js(idx)))
+                add_shortcut(opt_sc_text, front_side_only(lambda idx=d - 1: select_option_js(idx)))
 
 def init_hooks():
     global _hooks_registered, _reviewer_is_ending
