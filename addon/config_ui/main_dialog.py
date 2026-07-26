@@ -520,6 +520,28 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 
             self.on_fetch_models(provider, combobox, silent=True, fetch_btn=fetch_btn, on_done_callback=_check_batch_done)
 
+    def _local_test_endpoint(self, model_name):
+        """Return the active local-provider endpoint for model testing."""
+        endpoint = dict(self.config.get("local_endpoint", {}) or {})
+        providers = self.local_providers_data or {}
+
+        # Prefer the named legacy/default entry, then the first configured
+        # local provider. This keeps tests compatible with both config shapes.
+        provider_data = providers.get("local")
+        if not provider_data:
+            provider_data = next(iter(providers.values()), {}) if providers else {}
+        provider_data = provider_data or {}
+
+        endpoint["base_url"] = (
+            provider_data.get("url")
+            or provider_data.get("base_url")
+            or endpoint.get("base_url")
+            or "http://localhost:11434/v1"
+        )
+        endpoint["api_key"] = provider_data.get("api_key", endpoint.get("api_key", ""))
+        endpoint["model"] = model_name
+        return endpoint
+
     def on_test_model(self, provider, combobox, status_label=None):
         """Runs a real-world test generation using the currently selected model."""
         model_name = combobox.currentText().strip()
@@ -555,11 +577,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         temp_config["models"][provider] = model_name
 
         if provider == "local":
-            temp_config["local_endpoint"] = {
-                "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
-                "api_key": self.local_api_key_edit.text().strip(),
-                "model": model_name
-            }
+            temp_config["local_endpoint"] = self._local_test_endpoint(model_name)
         
         client = AIClient(temp_config)
         combobox.setEnabled(False)
@@ -688,11 +706,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     temp_config["models"][provider] = model_name
 
                     if provider == "local":
-                        temp_config["local_endpoint"] = {
-                            "base_url": self.local_url_edit.text().strip() or "http://localhost:11434/v1",
-                            "api_key": self.local_api_key_edit.text().strip(),
-                            "model": model_name
-                        }
+                        temp_config["local_endpoint"] = self._local_test_endpoint(model_name)
                     
                     client = AIClient(temp_config)
                     from .tab_providers import DEFAULT_TEST_QUESTION, DEFAULT_TEST_ANSWER

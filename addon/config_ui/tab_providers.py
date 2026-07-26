@@ -51,6 +51,11 @@ class FallbackOrderDialog(QDialog):
         info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
         layout.addWidget(info_label)
         
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Search models...")
+        self.search_edit.textChanged.connect(self.filter_models)
+        layout.addWidget(self.search_edit)
+
         self.list_widget = QListWidget()
         self.list_widget.setDragEnabled(True)
         self.list_widget.setAcceptDrops(True)
@@ -122,9 +127,14 @@ class FallbackOrderDialog(QDialog):
         row1_layout.addWidget(self.remove_btn)
         
         row2_layout = QHBoxLayout()
+        self.list_test_selected_btn = QPushButton("Test Selected")
+        self.list_test_selected_btn.setToolTip("Test only checked models in the list.")
+        self.list_test_selected_btn.clicked.connect(lambda: self.on_test_from_list(True))
         self.list_test_btn = QPushButton("Test All")
         self.list_test_btn.setToolTip("Test all models in the list sequentially.")
-        self.list_test_btn.clicked.connect(self.on_test_from_list)
+        self.list_test_btn.clicked.connect(lambda: self.on_test_from_list(False))
+        self.sort_selected_btn = QPushButton("Rank Selected First")
+        self.sort_selected_btn.clicked.connect(self.rank_selected_first)
         
         self.list_fetch_btn = QPushButton("Fetch All")
         self.list_fetch_btn.setToolTip("Fetch available models from this provider's API.")
@@ -134,7 +144,9 @@ class FallbackOrderDialog(QDialog):
         self.restore_btn.setToolTip("Reset the list back to code defaults.")
         self.restore_btn.clicked.connect(self.restore_defaults)
         
+        row2_layout.addWidget(self.list_test_selected_btn)
         row2_layout.addWidget(self.list_test_btn)
+        row2_layout.addWidget(self.sort_selected_btn)
         row2_layout.addWidget(self.list_fetch_btn)
         row2_layout.addWidget(self.restore_btn)
         
@@ -234,7 +246,20 @@ class FallbackOrderDialog(QDialog):
                 
         threading.Thread(target=_runner, daemon=True).start()
 
-    def on_test_from_list(self):
+    def filter_models(self, text):
+        query = text.strip().casefold()
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            item.setHidden(bool(query and query not in str(item.data(Qt.ItemDataRole.UserRole)).casefold()))
+
+    def rank_selected_first(self):
+        items = [self.list_widget.takeItem(0) for _ in range(self.list_widget.count())]
+        items.sort(key=lambda item: item.checkState() != Qt.CheckState.Checked)
+        for item in items:
+            self.list_widget.addItem(item)
+        self.update_item_labels()
+
+    def on_test_from_list(self, selected_only=False):
         test_key = f"{self.provider}_test"
         if test_key in TEST_CANCELLATIONS:
             TEST_CANCELLATIONS[test_key] = True
@@ -243,14 +268,18 @@ class FallbackOrderDialog(QDialog):
             return
 
         TEST_CANCELLATIONS[test_key] = False
-        self.list_test_btn.setText("Stop Test All")
+        self.list_test_btn.setText("Stop Test")
         self.restore_btn.setEnabled(False)
         self.up_btn.setEnabled(False)
         self.down_btn.setEnabled(False)
         self.remove_btn.setEnabled(False)
         
         # Collect all models from items
-        models = [self.list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.list_widget.count())]
+        models = [
+            self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(self.list_widget.count())
+            if not selected_only or self.list_widget.item(i).checkState() == Qt.CheckState.Checked
+        ]
         
         import threading
         from ..ai_client import AIClient
@@ -536,6 +565,11 @@ class GlobalFallbackOrderDialog(QDialog):
         info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
         layout.addWidget(info_label)
         
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Search providers/models...")
+        self.search_edit.textChanged.connect(self.filter_models)
+        layout.addWidget(self.search_edit)
+
         self.list_widget = QListWidget()
         self.list_widget.setDragEnabled(True)
         self.list_widget.setAcceptDrops(True)
@@ -568,9 +602,14 @@ class GlobalFallbackOrderDialog(QDialog):
         row1_layout.addWidget(self.remove_btn)
         
         row2_layout = QHBoxLayout()
+        self.list_test_selected_btn = QPushButton("Test Selected")
+        self.list_test_selected_btn.setToolTip("Test only checked global models.")
+        self.list_test_selected_btn.clicked.connect(lambda: self.on_test_all(True))
         self.list_test_btn = QPushButton("Test All")
         self.list_test_btn.setToolTip("Test all global models sequentially.")
-        self.list_test_btn.clicked.connect(self.on_test_all)
+        self.list_test_btn.clicked.connect(lambda: self.on_test_all(False))
+        self.sort_selected_btn = QPushButton("Rank Selected First")
+        self.sort_selected_btn.clicked.connect(self.rank_selected_first)
         
         self.list_fetch_btn = QPushButton("Fetch All")
         self.list_fetch_btn.setToolTip("Fetch available models for all providers.")
@@ -580,7 +619,9 @@ class GlobalFallbackOrderDialog(QDialog):
         self.restore_btn.setToolTip("Reset global fallback priority to default provider-based models.")
         self.restore_btn.clicked.connect(self.restore_defaults)
         
+        row2_layout.addWidget(self.list_test_selected_btn)
         row2_layout.addWidget(self.list_test_btn)
+        row2_layout.addWidget(self.sort_selected_btn)
         row2_layout.addWidget(self.list_fetch_btn)
         row2_layout.addWidget(self.restore_btn)
         
@@ -622,6 +663,19 @@ class GlobalFallbackOrderDialog(QDialog):
                 item.setToolTip(tt)
             elif bl:
                 item.setToolTip("This model is currently on cooldown due to recent failures.")
+            self.list_widget.addItem(item)
+
+    def filter_models(self, text):
+        query = text.strip().casefold()
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            provider, model = item.data(Qt.ItemDataRole.UserRole)
+            item.setHidden(bool(query and query not in f"{provider} {model}".casefold()))
+
+    def rank_selected_first(self):
+        items = [self.list_widget.takeItem(0) for _ in range(self.list_widget.count())]
+        items.sort(key=lambda item: item.checkState() != Qt.CheckState.Checked)
+        for item in items:
             self.list_widget.addItem(item)
             
     def refresh_statuses(self):
@@ -784,7 +838,7 @@ class GlobalFallbackOrderDialog(QDialog):
                 
         threading.Thread(target=_runner, daemon=True).start()
         
-    def on_test_all(self):
+    def on_test_all(self, selected_only=False):
         test_key = "global_fallback_test"
         if test_key in TEST_CANCELLATIONS:
             TEST_CANCELLATIONS[test_key] = True
@@ -800,7 +854,11 @@ class GlobalFallbackOrderDialog(QDialog):
         self.remove_btn.setEnabled(False)
         self.add_btn.setEnabled(False)
         
-        items_data = [self.list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.list_widget.count())]
+        items_data = [
+            self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)
+            for i in range(self.list_widget.count())
+            if not selected_only or self.list_widget.item(i).checkState() == Qt.CheckState.Checked
+        ]
         
         import threading
         from ..ai_client import AIClient

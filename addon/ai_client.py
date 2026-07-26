@@ -1393,6 +1393,12 @@ class AIClient:
     def _mark_combo_failed(self, provider: str, model: str, api_key: str, delay_seconds: float = None):
         if not api_key:
             api_key = ""
+        # Settings/model checks are diagnostic requests, not real generation.
+        # Never let a failed test poison the production cooldown/blacklist.
+        from .logger import log_context
+        if getattr(log_context, "source", None) == "model_test":
+            logger.debug(f"AI-Hints: Skipping blacklist for model test {provider}/{model}.")
+            return
         import sys
         # Only blacklist if we are actually online.
         if "unittest" not in sys.modules and not self._is_actually_online():
