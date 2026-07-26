@@ -34,10 +34,17 @@ RATE_LIMIT_STREAK: Dict[Tuple[str, str, str], int] = {}    # (provider, model, a
 _BLACKLIST_LOADED = False
 
 # Global network state for background monitoring
-_NETWORK_STATE = {"online": True, "last_check": 0}
+_NETWORK_STATE = {"online": None, "last_check": 0}
+_NETWORK_STATE_CALLBACKS = []
+
+def register_network_state_callback(callback):
+    """Register a callback invoked only when connectivity changes."""
+    if callback not in _NETWORK_STATE_CALLBACKS:
+        _NETWORK_STATE_CALLBACKS.append(callback)
 
 def _check_network_online() -> bool:
     """Internal helper to perform a quick connectivity check."""
+    previous_state = _NETWORK_STATE["online"]
     try:
         # Check Cloudflare DNS (1.1.1.1) on port 53 (DNS)
         socket.create_connection(("1.1.1.1", 53), timeout=1.5)
@@ -45,6 +52,16 @@ def _check_network_online() -> bool:
     except OSError:
         _NETWORK_STATE["online"] = False
     _NETWORK_STATE["last_check"] = time.time()
+    if previous_state is not None and previous_state != _NETWORK_STATE["online"]:
+        logger.info(
+            "AI-Hints: Network %s; notifying generation controller.",
+            "restored" if _NETWORK_STATE["online"] else "went offline",
+        )
+        for callback in tuple(_NETWORK_STATE_CALLBACKS):
+            try:
+                callback(_NETWORK_STATE["online"])
+            except Exception as e:
+                logger.error(f"AI-Hints: Network state callback failed: {e}")
     return _NETWORK_STATE["online"]
 
 def _start_network_monitor():

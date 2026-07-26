@@ -21,6 +21,10 @@ def initialize_batch_manager(*args, **kwargs):
     from .batch_manager import initialize_batch_manager as actual_init
     return actual_init(*args, **kwargs)
 
+def register_network_state_callback(*args, **kwargs):
+    from .ai_client import register_network_state_callback as actual_register
+    return actual_register(*args, **kwargs)
+
 _hooks_registered = False
 _generating_card_ids = set()
 _just_generated_card_ids = set()
@@ -199,11 +203,7 @@ def _trigger_next_pregeneration(current_card_id=None):
 
     client = AIClient(config, is_pregen=True)
     if "unittest" not in sys.modules and not client.is_network_available():
-        logger.info("AI-Hints pre-gen: Network offline, pausing background generation until connectivity returns.")
-        QTimer.singleShot(
-            30000,
-            lambda: _trigger_next_pregeneration(current_card_id)
-        )
+        logger.debug("AI-Hints pre-gen: Network offline; waiting for the network monitor.")
         return
 
     pregen_limit = int(config.get("pre_generate_count", 3))
@@ -304,6 +304,12 @@ def _trigger_next_pregeneration(current_card_id=None):
 
     # Defer slightly to let UI settle
     QTimer.singleShot(500, _task)
+
+def _on_network_state_changed(is_online):
+    if is_online:
+        # Network callbacks run on the monitor thread; move work to Anki's UI loop.
+        QTimer.singleShot(0, _trigger_next_pregeneration)
+
 def get_web_assets():
     global _js_cache, _css_cache
     if _js_cache is None:
@@ -2621,6 +2627,7 @@ def init_hooks():
     if _hooks_registered:
         return
     _reviewer_is_ending = False
+    register_network_state_callback(_on_network_state_changed)
     gui_hooks.webview_will_set_content.append(on_webview_will_set_content)
     gui_hooks.webview_did_receive_js_message.append(on_webview_did_receive_js_message)
     gui_hooks.browser_will_show_context_menu.append(on_browser_context_menu)
