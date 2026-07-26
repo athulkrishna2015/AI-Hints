@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.5.0 (2026-07-26)
+- **GitHub Models Provider**: Added GitHub Models (`models.github.ai/inference`) as a new AI provider with access to DeepSeek, OpenAI, Meta, Mistral, and Microsoft models through GitHub's inference API.
+- **Custom Provider Models URL**: Added a separate "Models URL (optional)" field in the Custom Provider dialog, allowing users to specify a distinct URL for model discovery independent of the chat completion endpoint.
+- **Custom Provider Routing Priority**: Custom provider endpoint configurations now take priority over built-in provider routing, so mapping a custom URL to a built-in provider name correctly routes through the custom provider path.
+
 ## 5.4.0 (2026-07-26)
 - **Default Front-Side MCQ Selection**: Bare `1–9` keys now select the corresponding option on the question side by default.
 - **Answer-Side Rating Preservation**: Anki’s normal `1–4` rating shortcuts remain unchanged on the answer side.
