@@ -51,8 +51,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             logger.error(f"Could not load default config: {e}")
             self.default_config = {}
 
-        self.custom_providers_data = self.config.get("custom_providers", {}) or {}
-        self.local_providers_data = self.config.get("local_providers", {}) or {}
+        self.custom_providers_data = (self.config.get("custom_providers", {}) or {}).copy()
+        self.local_providers_data = (self.config.get("local_providers", {}) or {}).copy()
         
         self.setup_ui()
         self.load_config_into_ui()
@@ -324,6 +324,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             disabled_models = {}
         self.disabled_fallback_models_data = disabled_models.copy()
         self.global_model_priority_data = list(c.get("global_model_priority", []))
+        self.local_providers_data = (c.get("local_providers", {}) or {}).copy()
+        self.custom_providers_data = (c.get("custom_providers", {}) or {}).copy()
         self.advanced_fallback_cb.setChecked(c.get("use_global_model_priority", False))
         self.update_fallback_ui_states()
         if hasattr(self, "refresh_local_providers_list"):
@@ -641,16 +643,24 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 
             except Exception as e:
                 err_msg = str(e)
+                st_text = "⏳ Timeout" if ("timed out" in err_msg.lower() or "timeout" in err_msg.lower()) else "❌ Failed"
                 def _fail():
                     combobox.setEnabled(True)
                     if status_label:
-                        st, tt, col = "❌ Failed", f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/><b>Error:</b> {err_msg}</div>", "red"
+                        st, tt, col = st_text, (
+                            f"<div style='width: 350px;'>"
+                            f"<b>Question:</b> {test_front}<br/>"
+                            f"<b>Answer:</b> {test_back}<br/><br/>"
+                            f"<b>Error:</b> {err_msg}<br/>"
+                            f"{'<i>Tip: Endpoint timed out. You can increase request timeout in Advanced tab.</i>' if st_text == '⏳ Timeout' else ''}"
+                            f"</div>"
+                        ), "red"
                         PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
                         status_label.setText(st)
                         status_label.setToolTip(tt)
                         status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
                     else:
-                        info(f"❌ Test Error ({provider.capitalize()}):\n\n{err_msg}")
+                        info(f"❌ Test Error ({provider.capitalize()}):\\n\\n{err_msg}")
                 mw.taskman.run_on_main(_fail)
 
         import threading
@@ -732,8 +742,16 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                             f"</div>"
                         )
                 except Exception as e:
-                    status = "❌ Failed"
-                    detail = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/><b>Error:</b> {str(e)}</div>"
+                    err_msg = str(e)
+                    status = "⏳ Timeout" if ("timed out" in err_msg.lower() or "timeout" in err_msg.lower()) else "❌ Failed"
+                    detail = (
+                        f"<div style='width: 350px;'>"
+                        f"<b>Question:</b> {test_front}<br/>"
+                        f"<b>Answer:</b> {test_back}<br/><br/>"
+                        f"<b>Error:</b> {err_msg}<br/>"
+                        f"{'<i>Tip: Endpoint timed out. You can increase the timeout limit in Advanced tab.</i>' if status == '⏳ Timeout' else ''}"
+                        f"</div>"
+                    )
                     
                 # Update UI to result
                 def _end(c=combobox, s=status_label, st=status, d=detail, m=model_name):
@@ -1449,7 +1467,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         for p in PROVIDER_ORDER + custom_names:
             if p not in priority: priority.append(p)
         config["provider_priority"] = priority
-        local = {"enabled": False, "base_url": "http://localhost:11434/v1", "model": DEFAULT_MODELS["local"], "api_key": ""}
+        local = {"enabled": False, "base_url": "http://localhost:11434/v1", "model": DEFAULT_MODELS.get("local", "llama3.3"), "api_key": ""}
         raw_local = config.get("local_endpoint", {}) or {}
         if isinstance(raw_local, dict): local.update(raw_local)
         config["local_endpoint"] = local
@@ -1462,7 +1480,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     "url": local.get("base_url", "http://localhost:11434/v1"),
                     "base_url": local.get("base_url", "http://localhost:11434/v1"),
                     "api_key": local.get("api_key", ""),
-                    "model": local.get("model", DEFAULT_MODELS["local"]),
+                    "model": local.get("model", DEFAULT_MODELS.get("local", "llama3.3")),
                     "headers": {},
                     "enabled": local.get("enabled", False),
                 }

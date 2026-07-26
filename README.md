@@ -11,7 +11,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 ## Features
 
 ### 🔌 Multi-Provider AI Engine
-- **Broad Provider Support**: Generate hints using OpenAI, Anthropic, Gemini, DeepSeek, Grok (xAI), Groq, OpenRouter, and custom local models (Ollama/LM Studio).
+- **Broad Provider Support**: Generate hints using OpenAI, Anthropic, Gemini, DeepSeek, Grok (xAI), Groq, OpenRouter, and custom local endpoints via Custom Providers (Ollama, LM Studio, vLLM).
 - **Automated Fallbacks**: Automatically retries alternative models or providers in case of API rate limits or failures.
 - **API Key Rotation**: Register and rotate multiple API keys per provider to prevent exhaustion.
 
@@ -47,7 +47,7 @@ The add-on features a multi-tiered, intelligence-driven fallback system. If your
 11. **NVIDIA**
 12. **Mistral**
 13. **Cerebras**
-14. **Local AI** (Ollama/LM Studio)
+14. **Custom Providers** (Ollama/LM Studio/Local Endpoints)
 
 ---
 
@@ -99,7 +99,7 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 
 - **General Tab**: Select your default provider, MCQ options count, database storage mode, and auto-generation rules including modified-card, version, and generation-time based regeneration.
 - **AI Providers Tab**: Unified settings where each provider is grouped into a clean card layout containing its API Key (with eye visibility 👁️ toggles), active model selection, Up/Down priority sorting, dynamic fetch and test features, and checkbox toggles to **completely disable fallbacks** to specific providers.
-  - **Custom Providers**: Add any OpenAI-compatible API endpoint (e.g., AIHubMix, LM Studio, vLLM) by clicking **Add** under Custom Providers. Endpoint URLs are automatically normalized (e.g., `https://aihubmix.com/v1` or `https://aihubmix.com/v1/chat/completions`), and API keys automatically sync across the UI.
+  - **Custom Providers**: Add any OpenAI-compatible API endpoint (e.g., Ollama, LM Studio, vLLM, AIHubMix) by clicking **Add** under Custom Providers. Endpoint URLs are automatically normalized (e.g., `http://localhost:11434/v1` or `https://aihubmix.com/v1/chat/completions`), and models can be dynamically fetched directly from the local server.
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
 - **Shortcuts Tab**: Customize AI-Hints action keys and the modifier used on the answer side. The front side also accepts the action keys without the modifier for faster review.
 - **Advanced Tab**: Customize your system prompt, tune active-review and pregeneration API request timeouts, migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist**.

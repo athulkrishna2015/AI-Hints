@@ -1,3 +1,4 @@
+import json
 import os
 from aqt import mw
 from aqt.qt import *
@@ -325,9 +326,15 @@ class FallbackOrderDialog(QDialog):
                     if not (res and (res.get("hints") or res.get("options"))):
                         status = "❌ Empty"
                         error_msg = "Empty response"
-                        tooltip_text = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/>The provider returned an empty response.</div>"
+                        tooltip_text = (
+                            f"<div style='width: 350px;'>"
+                            f"<b>Question:</b> {test_front}<br/>"
+                            f"<b>Answer:</b> {test_back}<br/><br/>"
+                            f"<b>Status:</b> Provider returned empty response or no usable hints/options.<br/>"
+                            f"<i>Tip: Check model name, API key, quota, or response format.</i>"
+                            f"</div>"
+                        )
                     else:
-                        import json
                         formatted_res = json.dumps(res, indent=2, ensure_ascii=False)
                         # Use pre-wrap and fixed width to ensure tooltip stays compact and to the right
                         tooltip_text = (
@@ -339,9 +346,19 @@ class FallbackOrderDialog(QDialog):
                             f"</div>"
                         )
                 except Exception as e:
-                    status = "❌ Error"
                     error_msg = str(e)
-                    tooltip_text = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/><b>Error:</b> {error_msg}</div>"
+                    if "timed out" in error_msg.lower() or "timeout" in error_msg.lower():
+                        status = "⏳ Timeout"
+                    else:
+                        status = "❌ Error"
+                    tooltip_text = (
+                        f"<div style='width: 350px;'>"
+                        f"<b>Question:</b> {test_front}<br/>"
+                        f"<b>Answer:</b> {test_back}<br/><br/>"
+                        f"<b>Error:</b> {error_msg}<br/>"
+                        f"{'<i>Tip: Endpoint took longer to respond than the request timeout limit.</i>' if 'Timeout' in status else ''}"
+                        f"</div>"
+                    )
                 
                 if TEST_CANCELLATIONS.get(test_key):
                     break
@@ -635,6 +652,11 @@ class GlobalFallbackOrderDialog(QDialog):
         dlg_btns.rejected.connect(self.reject)
         layout.addWidget(dlg_btns)
 
+    def _provider_display(self, provider):
+        if hasattr(self.main_dialog, "custom_providers_data") and provider in self.main_dialog.custom_providers_data:
+            return provider
+        return provider.capitalize()
+
     def populate_list(self, model_pairs):
         self.list_widget.clear()
         global_statuses = PERSISTENT_TEST_STATUSES.get("global_fallback_statuses", {})
@@ -649,7 +671,7 @@ class GlobalFallbackOrderDialog(QDialog):
             status = global_statuses.get((provider, model))
             bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model) else ""
             status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
-            item.setText(f"[{provider.capitalize()}] {model}{status_suffix}")
+            item.setText(f"[{self._provider_display(provider)}] {model}{status_suffix}")
             
             # Make item checkable and ensure standard flags are set
             item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsUserCheckable)
@@ -688,7 +710,7 @@ class GlobalFallbackOrderDialog(QDialog):
             status = global_statuses.get((provider, model))
             bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model) else ""
             status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
-            item.setText(f"[{provider.capitalize()}] {model}{status_suffix}")
+            item.setText(f"[{self._provider_display(provider)}] {model}{status_suffix}")
             tt = global_tooltips.get((provider, model))
             if tt:
                 item.setToolTip(tt)
@@ -703,7 +725,7 @@ class GlobalFallbackOrderDialog(QDialog):
             if provider and model:
                 item = QListWidgetItem()
                 item.setData(Qt.ItemDataRole.UserRole, (provider, model))
-                item.setText(f"[{provider.capitalize()}] {model}")
+                item.setText(f"[{self._provider_display(provider)}] {model}")
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(Qt.CheckState.Checked)
                 self.list_widget.addItem(item)
@@ -770,6 +792,14 @@ class GlobalFallbackOrderDialog(QDialog):
         
         if "local" not in providers_to_fetch and hasattr(self.main_dialog, 'local_model_edit'):
             providers_to_fetch.append("local")
+
+        # Also fetch for custom named local providers
+        if hasattr(self.main_dialog, "local_providers_data"):
+            for lp, lp_data in (self.main_dialog.local_providers_data or {}).items():
+                if lp_data and lp_data.get("enabled", True):
+                    if lp not in providers_to_fetch:
+                        providers_to_fetch.append(lp)
+
         if not providers_to_fetch:
             tooltip("No providers configured to fetch.")
             self.list_fetch_btn.setText("Fetch All")
@@ -790,6 +820,7 @@ class GlobalFallbackOrderDialog(QDialog):
                     
                     api_key = self.main_dialog.api_key_edits[provider].text().strip() if provider in self.main_dialog.api_key_edits else ""
                     temp_config = self.main_dialog.config.copy()
+                    temp_config["local_providers"] = self.main_dialog.local_providers_data
                     if "api_keys" not in temp_config: temp_config["api_keys"] = {}
                     temp_config["api_keys"][provider] = api_key
                     if provider == "local":
@@ -814,13 +845,13 @@ class GlobalFallbackOrderDialog(QDialog):
                                 if m and (p, m) not in existing_set:
                                     item = QListWidgetItem()
                                     item.setData(Qt.ItemDataRole.UserRole, (p, m))
-                                    item.setText(f"[{p.capitalize()}] {m}")
+                                    item.setText(f"[{self._provider_display(p)}] {m}")
                                     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                                     item.setCheckState(Qt.CheckState.Unchecked)
                                     self.list_widget.addItem(item)
                                     added_count += 1
                             if added_count > 0:
-                                tooltip(f"Added {added_count} new models for {p.capitalize()}.")
+                                tooltip(f"Added {added_count} new models for {self._provider_display(p)}.")
                         mw.taskman.run_on_main(_update_ui)
             except Exception as e:
                 err_msg = str(e)
@@ -873,13 +904,14 @@ class GlobalFallbackOrderDialog(QDialog):
                 def _update_testing(idx=i, prov=provider, name=model):
                     item = self.list_widget.item(idx)
                     if item:
-                        item.setText(f"[{prov.capitalize()}] {name} (⏳ Testing...)")
+                        item.setText(f"[{self._provider_display(prov)}] {name} (⏳ Testing...)")
                 mw.taskman.run_on_main(_update_testing)
                 
                 status = "✅ Working"
                 tooltip_text = ""
                 try:
                     temp_config = self.main_dialog.config.copy()
+                    temp_config["local_providers"] = self.main_dialog.local_providers_data
                     api_key = self.main_dialog.api_key_edits[provider].text().strip() if provider in self.main_dialog.api_key_edits else ""
                     if "api_keys" not in temp_config: temp_config["api_keys"] = {}
                     temp_config["api_keys"][provider] = api_key
@@ -902,9 +934,15 @@ class GlobalFallbackOrderDialog(QDialog):
                         break
                     if not (res and (res.get("hints") or res.get("options"))):
                         status = "❌ Empty"
-                        tooltip_text = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/>The provider returned an empty response.</div>"
+                        tooltip_text = (
+                            f"<div style='width: 350px;'>"
+                            f"<b>Question:</b> {test_front}<br/>"
+                            f"<b>Answer:</b> {test_back}<br/><br/>"
+                            f"<b>Status:</b> Provider returned empty response or no usable hints/options.<br/>"
+                            f"<i>Tip: Check model name, API key, quota, or response format.</i>"
+                            f"</div>"
+                        )
                     else:
-                        import json
                         formatted_res = json.dumps(res, indent=2, ensure_ascii=False)
                         # Use pre-wrap and fixed width to ensure tooltip stays compact and to the right
                         tooltip_text = (
@@ -916,8 +954,19 @@ class GlobalFallbackOrderDialog(QDialog):
                             f"</div>"
                         )
                 except Exception as e:
-                    status = "❌ Error"
-                    tooltip_text = f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/><b>Error:</b> {str(e)}</div>"
+                    err_str = str(e)
+                    if "timed out" in err_str.lower() or "timeout" in err_str.lower():
+                        status = "⏳ Timeout"
+                    else:
+                        status = "❌ Error"
+                    tooltip_text = (
+                        f"<div style='width: 350px;'>"
+                        f"<b>Question:</b> {test_front}<br/>"
+                        f"<b>Answer:</b> {test_back}<br/><br/>"
+                        f"<b>Error:</b> {err_str}<br/>"
+                        f"{'<i>Tip: Endpoint took longer to respond than the request timeout limit. Increase timeout in Advanced tab.</i>' if 'Timeout' in status else ''}"
+                        f"</div>"
+                    )
                     
                 if TEST_CANCELLATIONS.get(test_key):
                     break
@@ -925,7 +974,7 @@ class GlobalFallbackOrderDialog(QDialog):
                 def _update_result(idx=i, prov=provider, name=model, st=status, tt=tooltip_text):
                     item = self.list_widget.item(idx)
                     if item:
-                        item.setText(f"[{prov.capitalize()}] {name} ({st})")
+                        item.setText(f"[{self._provider_display(prov)}] {name} ({st})")
                         item.setToolTip(tt)
                         global_statuses = PERSISTENT_TEST_STATUSES.setdefault("global_fallback_statuses", {})
                         global_statuses[(prov, name)] = st
@@ -1140,187 +1189,8 @@ class ProvidersTabMixin:
         custom_group.setLayout(custom_layout)
         self.prov_layout.addRow(custom_group)
 
-        # Local Providers Group
-        local_group = QGroupBox("Local Providers")
-        local_layout = QVBoxLayout()
-        self.local_providers_list = QListWidget()
-        self.local_providers_list.setDragEnabled(True)
-        self.local_providers_list.setAcceptDrops(True)
-        self.local_providers_list.setDropIndicatorShown(True)
-        self.local_providers_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.local_providers_list.model().rowsMoved.connect(self._sync_local_provider_order_from_ui)
-        self.local_providers_list.itemChanged.connect(self.on_local_provider_item_changed)
-        local_layout.addWidget(QLabel("Manage multiple local endpoints. Drag to reorder and uncheck to disable."))
-        local_layout.addWidget(self.local_providers_list)
-
-        local_btn_layout = QHBoxLayout()
-        self.add_local_provider_btn = QPushButton("Add")
-        self.add_local_provider_btn.clicked.connect(self.on_add_local_provider)
-        self.edit_local_provider_btn = QPushButton("Edit")
-        self.edit_local_provider_btn.clicked.connect(self.on_edit_local_provider)
-        self.fetch_local_provider_btn = QPushButton("Fetch")
-        self.fetch_local_provider_btn.clicked.connect(self.on_fetch_local_provider)
-        self.test_local_provider_btn = QPushButton("Test")
-        self.test_local_provider_btn.clicked.connect(self.on_test_local_provider)
-        self.remove_local_provider_btn = QPushButton("Remove")
-        self.remove_local_provider_btn.clicked.connect(self.on_remove_local_provider)
-        for btn in [self.add_local_provider_btn, self.edit_local_provider_btn, self.fetch_local_provider_btn, self.test_local_provider_btn, self.remove_local_provider_btn]:
-            local_btn_layout.addWidget(btn)
-        local_layout.addLayout(local_btn_layout)
-        local_group.setLayout(local_layout)
-        self.prov_layout.addRow(local_group)
-
         prov_scroll.setWidget(prov_content)
         prov_main_layout.addWidget(prov_scroll)
         
         self.providers_tab.setLayout(prov_main_layout)
         return self.providers_tab
-
-    def refresh_local_providers_list(self):
-        if not hasattr(self, "local_providers_list"):
-            return
-        self.local_providers_list.blockSignals(True)
-        self.local_providers_list.clear()
-        for name, data in (self.local_providers_data or {}).items():
-            data = data or {}
-            url = data.get("url") or data.get("base_url", "")
-            model = data.get("model", "")
-            item = QListWidgetItem(f"{name} - {url} - {model}" if model else f"{name} - {url}")
-            item.setData(Qt.ItemDataRole.UserRole, name)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsDropEnabled)
-            item.setCheckState(Qt.CheckState.Checked if data.get("enabled", True) else Qt.CheckState.Unchecked)
-            self.local_providers_list.addItem(item)
-        self.local_providers_list.blockSignals(False)
-        self.update_local_provider_labels()
-
-    def update_local_provider_labels(self):
-        if not hasattr(self, "local_providers_list"):
-            return
-        for i in range(self.local_providers_list.count()):
-            item = self.local_providers_list.item(i)
-            name = item.data(Qt.ItemDataRole.UserRole)
-            data = self.local_providers_data.get(name, {}) or {}
-            url = data.get("url") or data.get("base_url", "")
-            model = data.get("model", "")
-            label = f"{name} - {url} - {model}" if model else f"{name} - {url}"
-            if item.checkState() == Qt.CheckState.Unchecked:
-                label += " (disabled)"
-            item.setText(label)
-
-    def on_local_provider_item_changed(self, item):
-        name = item.data(Qt.ItemDataRole.UserRole)
-        if name in self.local_providers_data:
-            self.local_providers_data[name]["enabled"] = item.checkState() == Qt.CheckState.Checked
-        self.update_local_provider_labels()
-
-    def _sync_local_provider_order_from_ui(self):
-        ordered = {}
-        for i in range(self.local_providers_list.count()):
-            item = self.local_providers_list.item(i)
-            name = item.data(Qt.ItemDataRole.UserRole)
-            if name in self.local_providers_data:
-                ordered[name] = self.local_providers_data[name]
-        self.local_providers_data = ordered
-
-    def _selected_local_provider_name(self):
-        item = self.local_providers_list.currentItem()
-        return str(item.data(Qt.ItemDataRole.UserRole) or "").strip() if item else ""
-
-    def _local_provider_temp_config(self, name):
-        temp_config = self.config.copy()
-        local_providers = temp_config.get("local_providers", {}) or {}
-        if not isinstance(local_providers, dict):
-            local_providers = {}
-        temp_config["local_providers"] = local_providers
-        temp_config["local_provider_override"] = name
-        return temp_config
-
-    def on_add_local_provider(self):
-        dlg = CustomProviderDialog(self, config=self.config)
-        if dlg.exec():
-            name = dlg.name_edit.text().strip()
-            self.local_providers_data[name] = {
-                "url": dlg.url_edit.text().strip(),
-                "base_url": dlg.url_edit.text().strip(),
-                "api_key": dlg.key_edit.text().strip(),
-                "model": dlg.model_edit.text().strip(),
-                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}"),
-                "enabled": True,
-            }
-            self.refresh_local_providers_list()
-
-    def on_edit_local_provider(self):
-        name = self._selected_local_provider_name()
-        if not name:
-            return
-        data = self.local_providers_data.get(name, {})
-        dlg = CustomProviderDialog(self, name=name, data=data, config=self.config)
-        if dlg.exec():
-            new_name = dlg.name_edit.text().strip()
-            if new_name != name:
-                del self.local_providers_data[name]
-            self.local_providers_data[new_name] = {
-                "url": dlg.url_edit.text().strip(),
-                "base_url": dlg.url_edit.text().strip(),
-                "api_key": dlg.key_edit.text().strip(),
-                "model": dlg.model_edit.text().strip(),
-                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}"),
-                "enabled": data.get("enabled", True),
-            }
-            self.refresh_local_providers_list()
-
-    def on_remove_local_provider(self):
-        name = self._selected_local_provider_name()
-        if name in self.local_providers_data:
-            del self.local_providers_data[name]
-        self.refresh_local_providers_list()
-
-    def on_fetch_local_provider(self):
-        name = self._selected_local_provider_name()
-        if not name:
-            info("Select a local provider first.")
-            return
-        from ..ai_client import AIClient
-        client = AIClient(self._local_provider_temp_config(name))
-        try:
-            models = client.fetch_models("local")
-            if models:
-                menu = QMenu(self)
-                for m in sorted(set(models)):
-                    action = menu.addAction(m)
-                    action.triggered.connect(lambda chk, val=m: self._set_local_provider_model(name, val))
-                menu.exec(self.fetch_local_provider_btn.mapToGlobal(QPoint(0, self.fetch_local_provider_btn.height())))
-            else:
-                info(f"No models found for {name}.")
-        except Exception as e:
-            info(f"Fetch failed for {name}: {e}")
-
-    def _set_local_provider_model(self, name, model):
-        if name in self.local_providers_data:
-            self.local_providers_data[name]["model"] = model
-            self.refresh_local_providers_list()
-
-    def on_test_local_provider(self):
-        name = self._selected_local_provider_name()
-        if not name:
-            info("Select a local provider first.")
-            return
-        from ..ai_client import AIClient
-        temp_config = self._local_provider_temp_config(name)
-        provider_cfg = self.local_providers_data.get(name, {}) or {}
-        temp_config.setdefault("models", {})
-        temp_config["models"]["local"] = provider_cfg.get("model", DEFAULT_MODELS["local"])
-        client = AIClient(temp_config)
-        try:
-            res = client.generate_options(
-                self.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION,
-                self.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER,
-                override_provider="local",
-                only_this_provider=True,
-            )
-            if res and (res.get("hints") or res.get("options")):
-                tooltip(f"{name} responded successfully.")
-            else:
-                info(f"{name} returned no usable data.")
-        except Exception as e:
-            info(f"Test failed for {name}: {e}")

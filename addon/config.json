@@ -16,12 +16,6 @@
     "cerebras": "",
     "github": ""
   },
-  "local_endpoint": {
-    "enabled": false,
-    "base_url": "http://localhost:11434/v1",
-    "model": "llama3",
-    "api_key": ""
-  },
   "models": {
     "openai": "gpt-4o",
     "anthropic": "claude-3-7-sonnet-latest",
@@ -36,8 +30,7 @@
     "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova": "Meta-Llama-3.3-70B-Instruct",
     "cerebras": "llama-3.1-8b",
-    "github": "deepseek/deepseek-v3-0324",
-    "local": "llama3.3"
+    "github": "deepseek/deepseek-v3-0324"
   },
   "model_fallbacks": {
     "anthropic": [
@@ -102,10 +95,6 @@
     "cerebras": [
       "llama-3.3-70b",
       "llama-3.1-8b"
-    ],
-    "local": [
-      "gemini-2.5-flash-lite",
-      "gpt-oss-120b-medium"
     ]
   },
   "target_fields": [
@@ -149,8 +138,7 @@
     "nvidia",
     "mistral",
     "cerebras",
-    "github",
-    "local"
+    "github"
   ],
   "shortcuts": {
     "modifier": "alt",

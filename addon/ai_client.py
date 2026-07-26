@@ -92,7 +92,6 @@ PROVIDER_ORDER = [
     "mistral",
     "cerebras",
     "github",
-    "local",
 ]
 
 DEFAULT_MODELS = {
@@ -110,7 +109,6 @@ DEFAULT_MODELS = {
     "sambanova":  "Meta-Llama-3.3-70B-Instruct",
     "cerebras":   "llama3.1-8b",
     "github":     "deepseek/deepseek-v3-0324",
-    "local":      "llama3.3",
 }
 
 # Popular model suggestions for the UI dropdowns
@@ -555,6 +553,16 @@ class AIClient:
         return candidates
 
     def _is_provider_ready(self, provider: str, primary: bool = False) -> bool:
+        local_providers = self.config.get("local_providers") or {}
+        if not isinstance(local_providers, dict):
+            local_providers = {}
+        if provider in local_providers:
+            local_cfg = local_providers[provider]
+            if not isinstance(local_cfg, dict):
+                return False
+            url = str(local_cfg.get("url") or local_cfg.get("base_url") or "").strip()
+            return bool(url and local_cfg.get("enabled", True))
+
         if provider == "local":
             if primary:
                 return True
@@ -577,6 +585,11 @@ class AIClient:
                 return False
             url = str(custom_cfg.get("url", "") or "").strip()
             model = str(custom_cfg.get("model", "") or "").strip()
+            from .logger import log_context
+            is_test = getattr(log_context, "source", None) == "model_test"
+            # If in model_test mode, model will be passed as override_model
+            if is_test:
+                return bool(url)
             return bool(url and model)
 
         return bool(self._api_key_for(provider))
@@ -743,7 +756,7 @@ class AIClient:
             if not isinstance(local_cfg, dict):
                 local_cfg = {}
             base_url = local_cfg.get("base_url", local_cfg.get("url", "http://localhost:11434/v1"))
-            models = [override_model] if override_model else self._models_for_provider(provider, local_cfg.get("model", "") or DEFAULT_MODELS["local"])
+            models = [override_model] if override_model else self._models_for_provider(provider, local_cfg.get("model", "") or DEFAULT_MODELS.get("local", "llama3.3"))
         elif provider == "antigravity":
             ag_cfg = self.config.get("antigravity_proxy") or {}
             if not isinstance(ag_cfg, dict):
@@ -767,14 +780,31 @@ class AIClient:
         url = f"{base_url}/chat/completions"
 
         timeouts_count = 0
-        local_configs = self._local_provider_configs() if provider == "local" else []
+        local_providers = self.config.get("local_providers") or {}
+        if not isinstance(local_providers, dict):
+            local_providers = {}
+        is_named_local = provider in local_providers
+
+        if provider == "local" or is_named_local:
+            if is_named_local:
+                cfg = local_providers[provider]
+                merged = dict(cfg)
+                if "base_url" not in merged and merged.get("url"):
+                    merged["base_url"] = merged.get("url")
+                merged.setdefault("name", provider)
+                merged.setdefault("enabled", True)
+                local_configs = [merged]
+            else:
+                local_configs = self._local_provider_configs()
+        else:
+            local_configs = []
 
         for model in models:
             if state.GLOBAL_STOP:
                 break
 
             keys = self._available_api_keys(provider)
-            if provider == "local":
+            if provider == "local" or is_named_local:
                 keys = [""]
             elif not keys and provider in ["antigravity"]:
                 keys = [""]
@@ -792,14 +822,14 @@ class AIClient:
                 if state.GLOBAL_STOP:
                     break
 
-                if provider == "local":
+                if provider == "local" or is_named_local:
                     for local_cfg in (local_configs or [self.config.get("local_endpoint") or {}]):
                         if state.GLOBAL_STOP:
                             break
                         if not isinstance(local_cfg, dict):
                             continue
                         base_url = str(local_cfg.get("base_url", local_cfg.get("url", "http://localhost:11434/v1"))).rstrip("/")
-                        local_model = str(local_cfg.get("model", "") or DEFAULT_MODELS["local"]).strip()
+                        local_model = str(local_cfg.get("model", "") or DEFAULT_MODELS.get("local", "llama3.3")).strip()
                         local_models = [override_model] if override_model else self._models_for_provider(provider, local_model)
                         actual_key = str(local_cfg.get("api_key", "") or api_key).strip()
                         headers = self._json_headers(actual_key)
@@ -1739,10 +1769,18 @@ class AIClient:
 
     def fetch_models(self, provider: str) -> List[str]:
         """Fetch available models from the provider's API."""
-        if provider == "local":
-            local_cfgs = self._local_provider_configs()
-            if not local_cfgs:
-                local_cfgs = [self.config.get("local_endpoint") or {}]
+        local_providers = self.config.get("local_providers") or {}
+        if not isinstance(local_providers, dict):
+            local_providers = {}
+        is_named_local = provider in local_providers
+
+        if provider == "local" or is_named_local:
+            if is_named_local:
+                local_cfgs = [local_providers[provider]]
+            else:
+                local_cfgs = self._local_provider_configs()
+                if not local_cfgs:
+                    local_cfgs = [self.config.get("local_endpoint") or {}]
             last_err = None
             for local_cfg in local_cfgs:
                 if not isinstance(local_cfg, dict):
@@ -1765,8 +1803,12 @@ class AIClient:
         else:
             keys = self._available_api_keys(provider)
             custom_providers = self.config.get("custom_providers", {}) or {}
-            if not keys and provider in custom_providers:
-                keys = self._api_keys_for_custom(provider, custom_providers[provider])
+            if provider in custom_providers:
+                custom_keys = self._api_keys_for_custom(provider, custom_providers[provider])
+                if custom_keys:
+                    keys = custom_keys
+                elif not keys:
+                    keys = [""]
             if not keys:
                 return []
 
