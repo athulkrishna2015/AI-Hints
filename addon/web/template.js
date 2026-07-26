@@ -1382,6 +1382,13 @@
                 if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_pregenerating = true;
             }
         } else {
+            // An offline/failed request can arrive after the click handler has
+            // optimistically started the foreground animation.  Clear the
+            // foreground flag explicitly before handling background work so a
+            // stale UI config cannot restart the spinner.
+            if (isThisCard && window.aiHintsUiConfig) {
+                window.aiHintsUiConfig.is_generating = false;
+            }
             if (isThisCard || !strCardId) {
                 if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_generating = false;
             }

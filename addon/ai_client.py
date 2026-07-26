@@ -395,6 +395,14 @@ class AIClient:
                 if state.GLOBAL_STOP:
                     logger.info(f"AI-Hints: Generation aborted via Emergency Stop signal (global loop).")
                     return {"hints": [], "options": []}
+
+                # Do not walk the remaining fallback models after the network
+                # has gone away.  A request already in flight may finish with
+                # a timeout, but retrying every provider only creates noise and
+                # delays the normal offline pause/resume flow.
+                if _NETWORK_STATE["online"] is False:
+                    logger.info("AI-Hints: Network unavailable; stopping global fallback attempts.")
+                    return {"hints": [], "options": []}
                 
                 # Skip if provider is disabled or has failed with network error
                 if provider in disabled_providers or provider in network_failed_providers:
@@ -421,6 +429,9 @@ class AIClient:
                     logger.error(f"Global fallback model {provider}/{model} failed: {e}")
                     if self._is_network_or_timeout_error(e):
                         network_failed_providers.add(provider)
+                        if not _check_network_online():
+                            logger.info("AI-Hints: Network unavailable; stopping global fallback attempts.")
+                            return {"hints": [], "options": []}
                     continue
             
             if last_exception:
@@ -442,6 +453,9 @@ class AIClient:
             if state.GLOBAL_STOP:
                 logger.info(f"AI-Hints: Generation aborted via Emergency Stop signal (provider loop).")
                 return {"hints": [], "options": []}
+            if _NETWORK_STATE["online"] is False:
+                logger.info("AI-Hints: Network unavailable; stopping provider fallback attempts.")
+                return {"hints": [], "options": []}
             if provider in network_failed_providers:
                 continue
             try:
@@ -456,6 +470,9 @@ class AIClient:
                 logger.error(f"Provider {provider} failed: {e}")
                 if self._is_network_or_timeout_error(e):
                     network_failed_providers.add(provider)
+                    if not _check_network_online():
+                        logger.info("AI-Hints: Network unavailable; stopping provider fallback attempts.")
+                        return {"hints": [], "options": []}
                 continue
                 
         if last_exception:
