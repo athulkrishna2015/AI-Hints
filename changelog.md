@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.3.5 (2026-07-26)
+- **Offline Generation Handling**: Stop fallback provider/model attempts when connectivity is lost, preventing cascaded DNS and timeout errors.
+- **Offline UI Reset**: Clear the foreground generation animation when an offline response is received.
+
 ## 5.3.4 (2026-07-23)
 - **QLineEdit Deleted Crash on Save**: Fixed `RuntimeError: wrapped C/C++ object of type QLineEdit has been deleted` when saving settings after adding/editing a custom provider. `refresh_custom_list()` now resets `api_key_edits` alongside `model_edits` when rebuilding provider rows, and the save routine safely falls back to the last persisted value for any stale deleted widget reference.
 - **Custom Provider Key Sync**: Adding or editing a custom provider immediately syncs the API key into the live config and active provider row, eliminating the need to re-enter the key after creation.
