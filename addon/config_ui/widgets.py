@@ -302,6 +302,14 @@ class ProviderRowWidget(QWidget):
         self.fallbacks_btn.clicked.connect(self.on_fallbacks_clicked)
         bottom_layout.addWidget(self.fallbacks_btn)
 
+        # Timeout spin
+        self.timeout_spin = QSpinBox()
+        self.timeout_spin.setRange(0, 300)
+        self.timeout_spin.setSuffix(" s")
+        self.timeout_spin.setFixedWidth(75)
+        self.timeout_spin.setToolTip("Request timeout in seconds. 0 = use global API request timeout.")
+        bottom_layout.addWidget(self.timeout_spin)
+
         # Status Label
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("font-weight: bold; margin-left: 5px;")
@@ -328,6 +336,7 @@ class ProviderRowWidget(QWidget):
         self.up_btn.setEnabled(checked)
         self.down_btn.setEnabled(checked)
         self.fallbacks_btn.setEnabled(checked)
+        self.timeout_spin.setEnabled(checked)
 
     def on_manage_keys(self):
         dlg = ManageKeysDialog(self.provider, self, self.key_edit.text().strip())

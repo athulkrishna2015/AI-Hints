@@ -345,6 +345,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             
         if hasattr(self, "pregen_timeout_spin"):
             self.pregen_timeout_spin.setValue(c.get("pregen_request_timeout", 20))
+        if hasattr(self, "provider_timeout_spins"):
+            for provider, spin in self.provider_timeout_spins.items():
+                spin.setValue(int((c.get("provider_timeouts", {}) or {}).get(provider, 0) or 0))
             
         if hasattr(self, "font_size_combo"):
             font_size = c.get("hints_font_size", "")
@@ -421,6 +424,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 self.model_edits[p] = w.edit
                 self.provider_widgets[p] = w
                 self.models_layout.addWidget(w)
+            self.provider_timeout_spins = {p: w.timeout_spin for p, w in self.provider_widgets.items()}
             
     def on_fetch_binary(self):
         from aqt.utils import showWarning
@@ -1351,6 +1355,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 
             if hasattr(self, "pregen_timeout_spin"):
                 new_config["pregen_request_timeout"] = self.pregen_timeout_spin.value()
+            if hasattr(self, "provider_timeout_spins"):
+                new_config["provider_timeouts"] = {
+                    provider: spin.value()
+                    for provider, spin in self.provider_timeout_spins.items()
+                    if spin.value() > 0
+                }
                 
             if hasattr(self, "font_size_combo"):
                 font_size = self.font_size_combo.currentText().strip()
@@ -1478,6 +1488,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("debug_logging", False)
         config.setdefault("request_timeout", 10)
         config.setdefault("pregen_request_timeout", 20)
+        config.setdefault("provider_timeouts", {})
         config.setdefault("auto_generate_new", False)
         config.setdefault("auto_regenerate_if_modified", False)
         config.setdefault("auto_regenerate_all", False)

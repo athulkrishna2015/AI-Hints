@@ -1092,7 +1092,7 @@ class ProvidersTabMixin:
         
         self.models_layout = QVBoxLayout()
         model_main_layout.addLayout(self.models_layout)
-        
+
         model_group.setLayout(model_main_layout)
         self.prov_layout.addRow(model_group)
         

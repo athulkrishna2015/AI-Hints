@@ -291,10 +291,16 @@ class AIClient:
         self.config = config or {}
         self._key_names: Dict[Tuple[str, str], str] = {}
         self.is_pregen = is_pregen
+        self._request_provider = None
 
     @property
     def timeout(self) -> int:
         try:
+            provider_timeouts = self.config.get("provider_timeouts", {}) or {}
+            if self._request_provider and isinstance(provider_timeouts, dict):
+                override = int(provider_timeouts.get(self._request_provider, 0) or 0)
+                if override > 0:
+                    return override
             if self.is_pregen:
                 return int(self.config.get("pregen_request_timeout", 20))
             return int(self.config.get("request_timeout", 10))
@@ -583,17 +589,22 @@ class AIClient:
         return [cfg for cfg in configs if cfg.get("enabled", True)]
 
     def _call_provider(self, provider: str, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
+        previous_provider = self._request_provider
+        self._request_provider = provider
         custom_providers = self.config.get("custom_providers") or {}
         if not isinstance(custom_providers, dict):
             custom_providers = {}
-        if provider == "anthropic":
-            return self._call_anthropic(system_prompt, prompt, override_model=override_model)
-        elif provider == "gemini":
-            return self._call_gemini(system_prompt, prompt, override_model=override_model)
-        elif provider in custom_providers:
-            return self._call_custom_provider(provider, system_prompt, prompt, override_model=override_model)
-        else:
-            return self._call_openai_compatible(provider, system_prompt, prompt, override_model=override_model)
+        try:
+            if provider == "anthropic":
+                return self._call_anthropic(system_prompt, prompt, override_model=override_model)
+            elif provider == "gemini":
+                return self._call_gemini(system_prompt, prompt, override_model=override_model)
+            elif provider in custom_providers:
+                return self._call_custom_provider(provider, system_prompt, prompt, override_model=override_model)
+            else:
+                return self._call_openai_compatible(provider, system_prompt, prompt, override_model=override_model)
+        finally:
+            self._request_provider = previous_provider
 
     def _call_custom_provider(self, provider_name: str, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
         custom_providers = self.config.get("custom_providers") or {}

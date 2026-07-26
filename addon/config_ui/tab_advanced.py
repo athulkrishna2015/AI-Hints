@@ -73,7 +73,7 @@ class AdvancedTabMixin:
         
         timeout_row.addStretch()
         blacklist_layout.addLayout(timeout_row)
-        
+
         blacklist_group.setLayout(blacklist_layout)
         adv_layout.addWidget(blacklist_group)
 
