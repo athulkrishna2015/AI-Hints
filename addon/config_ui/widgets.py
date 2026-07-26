@@ -373,17 +373,22 @@ class ProviderRowWidget(QWidget):
         self.fallback_dialog.setWindowModality(Qt.WindowModality.NonModal)
         
         def _save_data():
-            new_active = self.fallback_dialog.get_active_model()
-            if new_active:
-                self.edit.setCurrentText(new_active)
+            try:
+                new_active = self.fallback_dialog.get_active_model()
+                if new_active and hasattr(self, "edit"):
+                    self.edit.setCurrentText(new_active)
+                    
+                new_fallbacks = self.fallback_dialog.get_ordered_list()
+                if hasattr(self, "parent_dialog") and hasattr(self.parent_dialog, "model_fallbacks_data"):
+                    self.parent_dialog.model_fallbacks_data[self.provider] = new_fallbacks
                 
-            new_fallbacks = self.fallback_dialog.get_ordered_list()
-            self.parent_dialog.model_fallbacks_data[self.provider] = new_fallbacks
-            
-            # Save disabled fallback models
-            new_disabled = self.fallback_dialog.get_disabled_list()
-            self.parent_dialog.disabled_fallback_models_data[self.provider] = new_disabled
-            tooltip(f"Updated fallback priority for {self.provider.capitalize()}")
+                # Save disabled fallback models
+                new_disabled = self.fallback_dialog.get_disabled_list()
+                if hasattr(self, "parent_dialog") and hasattr(self.parent_dialog, "disabled_fallback_models_data"):
+                    self.parent_dialog.disabled_fallback_models_data[self.provider] = new_disabled
+                tooltip(f"Updated fallback priority for {self.provider.capitalize()}")
+            except (RuntimeError, AttributeError):
+                pass
             
         self.fallback_dialog.accepted.connect(_save_data)
         self.fallback_dialog.show()
