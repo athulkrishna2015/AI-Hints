@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.4.0 (2026-07-26)
+- **Default Front-Side MCQ Selection**: Bare `1–9` keys now select the corresponding option on the question side by default.
+- **Answer-Side Rating Preservation**: Anki’s normal `1–4` rating shortcuts remain unchanged on the answer side.
+- **Shortcut Collision Fix**: Existing Anki numeric shortcuts are wrapped instead of skipped, allowing front-side selection while preserving answer-side actions.
+
 ## 5.3.5 (2026-07-26)
 - **Offline Generation Handling**: Stop fallback provider/model attempts when connectivity is lost, preventing cascaded DNS and timeout errors.
 - **Offline UI Reset**: Clear the foreground generation animation when an offline response is received.

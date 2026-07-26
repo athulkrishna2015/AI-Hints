@@ -1574,7 +1574,7 @@
             }
 
             // Match configurable numeric keys to select options
-            const optMod = (shortcuts["select-options-modifier"] || "ctrl").toLowerCase();
+            const optMod = (shortcuts["select-options-modifier"] || "none").toLowerCase();
             const optKeys = (shortcuts["select-options-keys"] || "1-9").trim().toLowerCase();
             
             // Check if options modifier matches (supports compound modifiers separated by '+')

@@ -2640,7 +2640,7 @@ def on_state_shortcuts_will_change(state: str, shortcuts: list) -> None:
             add_shortcut(front_sc, front_side_only(lambda: trigger_js_click("JSON", "📝")))
 
     # 7. Intercept MCQ option selection hotkeys globally on Python/Qt side to prevent Anki's defaults (like flag triggers) from capturing them
-    opt_mod = shortcuts_cfg.get("select-options-modifier", "ctrl+alt")
+    opt_mod = shortcuts_cfg.get("select-options-modifier", "none")
     if opt_keys_str:
         for d in option_digits:
             opt_sc_text = get_shortcut_string(opt_mod, str(d))

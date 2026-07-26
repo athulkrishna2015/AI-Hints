@@ -60,12 +60,12 @@ class ShortcutsTabMixin:
         
         # 2. Options Selection Modifiers
         self.opt_modifier_container, (self.opt_ctrl, self.opt_alt, self.opt_shift, self.opt_meta) = create_modifiers_row()
-        short_layout.addRow("Select Options Modifier(s):", self.opt_modifier_container)
+        short_layout.addRow("Select Options Modifier(s) (default: none):", self.opt_modifier_container)
         
         self.select_options_keys_edit = QLineEdit()
         self.select_options_keys_edit.setPlaceholderText("e.g. 1-9")
         self.select_options_keys_edit.setFixedWidth(50)
-        self.select_options_keys_edit.setToolTip("Keys to select corresponding options in order (1 for 1st, 2 for 2nd, etc.). Defaults to 1-9.")
+        self.select_options_keys_edit.setToolTip("Keys to select corresponding options in order (1 for 1st, 2 for 2nd, etc.). Defaults to 1-9. No modifier is required on the question side.")
         short_layout.addRow("Select Options Keys:", self.select_options_keys_edit)
 
         # Collision Info Label

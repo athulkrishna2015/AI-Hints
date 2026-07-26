@@ -293,7 +293,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             edit.setText(shortcuts.get(key, ""))
         
         # Parse options selection modifier
-        opt_mods = [m.strip().lower() for m in shortcuts.get("select-options-modifier", "ctrl").split("+") if m.strip()]
+        opt_mods = [m.strip().lower() for m in shortcuts.get("select-options-modifier", "none").split("+") if m.strip()]
         self.opt_ctrl.setChecked("ctrl" in opt_mods)
         self.opt_alt.setChecked("alt" in opt_mods)
         self.opt_shift.setChecked("shift" in opt_mods)
@@ -1491,7 +1491,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             "clear": "4", 
             "refresh": "5", 
             "show-json": "6",
-            "select-options-modifier": "ctrl+alt",
+            "select-options-modifier": "none",
             "select-options-keys": "1-9"
         }
         shortcuts = dict(default_shortcuts)
