@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.6.0 (2026-07-28)
+- **Inline Editor Keyboard Shortcuts**: Added Anki editor-style keyboard shortcuts (Ctrl+M,M → `\( \)`, Ctrl+M,E → `\[ \]`, Ctrl+M,C → `\(\ce{}\)`, Ctrl+T,T → `\( \)`, Ctrl+T,E → `\[ \]`, Ctrl+T,M → `\[\begin{}...\end{}\]`, Ctrl+B → `<b>`, Ctrl+I → `<i>`, Ctrl+U → `<u>`) to the inline editing textarea during review. Uses a chord-based key system with `e.stopPropagation()` and 1500ms chord timeout.
+
 ## 5.5.0 (2026-07-26)
 - **GitHub Models Provider**: Added GitHub Models (`models.github.ai/inference`) as a new AI provider with access to DeepSeek, OpenAI, Meta, Mistral, and Microsoft models through GitHub's inference API.
 - **Custom Provider Models URL**: Added a separate "Models URL (optional)" field in the Custom Provider dialog, allowing users to specify a distinct URL for model discovery independent of the chat completion endpoint.
