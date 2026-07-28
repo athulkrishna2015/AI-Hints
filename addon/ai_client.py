@@ -696,6 +696,13 @@ class AIClient:
                 }
                 if body_params:
                     data.update(body_params)
+                # Apply per-model thinking level (overrides body_params)
+                thinking_levels = self.config.get("thinking_levels", {}) or {}
+                provider_levels = thinking_levels.get(provider_name, {}) if isinstance(thinking_levels, dict) else {}
+                if isinstance(provider_levels, dict):
+                    think_val = provider_levels.get(model, "")
+                    if think_val and think_val != "off":
+                        data["think"] = think_val
 
                 try:
                     self._log_model_attempt(provider_name, model, models)

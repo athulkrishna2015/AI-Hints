@@ -326,6 +326,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.global_model_priority_data = list(c.get("global_model_priority", []))
         self.local_providers_data = (c.get("local_providers", {}) or {}).copy()
         self.custom_providers_data = (c.get("custom_providers", {}) or {}).copy()
+        self.thinking_levels_data = (c.get("thinking_levels", {}) or {}).copy()
         self.advanced_fallback_cb.setChecked(c.get("use_global_model_priority", False))
         self.update_fallback_ui_states()
         if hasattr(self, "refresh_local_providers_list"):
@@ -1368,6 +1369,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["custom_providers"] = self.custom_providers_data
             new_config["model_fallbacks"] = self.model_fallbacks_data
             new_config["disabled_fallback_models"] = self.disabled_fallback_models_data
+            new_config["thinking_levels"] = self.thinking_levels_data
             new_config["global_model_priority"] = self.global_model_priority_data
             new_config["use_global_model_priority"] = self.advanced_fallback_cb.isChecked()
             new_config["test_question_front"] = self.test_question_edit.text().strip()

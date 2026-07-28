@@ -39,14 +39,14 @@ class FallbackOrderDialog(QDialog):
         self.active_model = active_model
         
         self.setWindowTitle(f"Fallback Priority: {provider.capitalize()}")
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(600)
         self.setMinimumHeight(500)
         
         layout = QVBoxLayout(self)
         
         info_label = QLabel(
             "Configure the list of models to try if the primary model fails.<br/>"
-            "The first model in the list is the Active Model. Drag & Drop to reorder, or uncheck to temporarily disable a fallback model."
+            "The first model in the list is the Active Model. Use the buttons below to reorder."
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
@@ -57,34 +57,25 @@ class FallbackOrderDialog(QDialog):
         self.search_edit.textChanged.connect(self.filter_models)
         layout.addWidget(self.search_edit)
 
-        self.list_widget = QListWidget()
-        self.list_widget.setDragEnabled(True)
-        self.list_widget.setAcceptDrops(True)
-        self.list_widget.setDropIndicatorShown(True)
-        self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        
-        # Add a styled item delegate for better spacing and to prevent tooltip overlap
-        self.list_widget.setStyleSheet("""
-            QListWidget::item {
-                padding: 6px;
-                border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-            }
-            QListWidget::item:selected {
-                background-color: rgba(0, 140, 186, 0.1);
-                color: black;
-            }
+        # Use QTableWidget: [Model Name] [Thinking Level]
+        self.table = QTableWidget()
+        self.table.setColumnCount(2)
+        self.table.setHorizontalHeaderLabels(["Model Name", "Thinking Level"])
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(1, 120)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setStyleSheet("""
+            QTableWidget::item { padding: 4px; }
+            QTableWidget::item:selected { background-color: rgba(0, 140, 186, 0.1); color: black; }
         """)
 
-        self.tooltip_delegate = ToolTipDelegate(self.list_widget)
-        self.list_widget.setItemDelegate(self.tooltip_delegate)
-        
-        # Connect internal drag/drop layout changes and checkState changes to label/active state updaters
-        self.list_widget.model().layoutChanged.connect(self.update_item_labels)
-        self.list_widget.model().rowsMoved.connect(self.update_item_labels)
-        self.list_widget.itemChanged.connect(self.on_item_changed)
-        
         disabled_models = getattr(parent, "disabled_fallback_models_data", {}).get(provider, [])
         fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{provider}_fallback_statuses", {})
+        thinking_levels = getattr(parent, "thinking_levels_data", {}).get(provider, {})
         
         # Build the initial list: active model first, then the remaining fallbacks
         full_list = []
@@ -93,20 +84,12 @@ class FallbackOrderDialog(QDialog):
         for m in current_list:
             if m != active_model:
                 full_list.append(m)
-                
+        
+        self.thinking_combos = {}
         for m in full_list:
-            item = QListWidgetItem()
-            item.setData(Qt.ItemDataRole.UserRole, m)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setCheckState(Qt.CheckState.Unchecked if m in disabled_models else Qt.CheckState.Checked)
-            # Show blacklist badge immediately on open
-            bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, m) else ""
-            status = fallback_statuses.get(m)
-            status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
-            item.setText(m + status_suffix)
-            self.list_widget.addItem(item)
+            self._add_model_row(m, m not in disabled_models, fallback_statuses, thinking_levels)
             
-        layout.addWidget(self.list_widget)
+        layout.addWidget(self.table)
         
         # Action buttons (stacked in 2 rows to prevent overflow)
         btn_layout = QVBoxLayout()
@@ -128,13 +111,16 @@ class FallbackOrderDialog(QDialog):
         row1_layout.addWidget(self.remove_btn)
         
         row2_layout = QHBoxLayout()
-        self.list_test_selected_btn = QPushButton("Test Selected")
-        self.list_test_selected_btn.setToolTip("Test only checked models in the list.")
-        self.list_test_selected_btn.clicked.connect(lambda: self.on_test_from_list(True))
+        self.list_test_checked_btn = QPushButton("Test Checked")
+        self.list_test_checked_btn.setToolTip("Test only checked (enabled) models in the list.")
+        self.list_test_checked_btn.clicked.connect(lambda: self.on_test_from_list("checked"))
+        self.list_test_row_btn = QPushButton("Test Row")
+        self.list_test_row_btn.setToolTip("Test the currently selected row only (regardless of check state).")
+        self.list_test_row_btn.clicked.connect(lambda: self.on_test_from_list("row"))
         self.list_test_btn = QPushButton("Test All")
         self.list_test_btn.setToolTip("Test all models in the list sequentially.")
-        self.list_test_btn.clicked.connect(lambda: self.on_test_from_list(False))
-        self.sort_selected_btn = QPushButton("Rank Selected First")
+        self.list_test_btn.clicked.connect(lambda: self.on_test_from_list("all"))
+        self.sort_selected_btn = QPushButton("Rank Checked First")
         self.sort_selected_btn.clicked.connect(self.rank_selected_first)
         
         self.list_fetch_btn = QPushButton("Fetch All")
@@ -145,7 +131,8 @@ class FallbackOrderDialog(QDialog):
         self.restore_btn.setToolTip("Reset the list back to code defaults.")
         self.restore_btn.clicked.connect(self.restore_defaults)
         
-        row2_layout.addWidget(self.list_test_selected_btn)
+        row2_layout.addWidget(self.list_test_checked_btn)
+        row2_layout.addWidget(self.list_test_row_btn)
         row2_layout.addWidget(self.list_test_btn)
         row2_layout.addWidget(self.sort_selected_btn)
         row2_layout.addWidget(self.list_fetch_btn)
@@ -162,6 +149,25 @@ class FallbackOrderDialog(QDialog):
         layout.addWidget(dlg_btns)
         
         self.update_item_labels()
+
+    def _add_model_row(self, model_name, checked, fallback_statuses=None, thinking_levels=None):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        
+        # Column 0: Model name with checkbox
+        item = QTableWidgetItem(model_name)
+        item.setData(Qt.ItemDataRole.UserRole, model_name)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        self.table.setItem(row, 0, item)
+        
+        # Column 1: Thinking level combo
+        combo = QComboBox()
+        combo.addItems(["off", "low", "medium", "high"])
+        level = (thinking_levels or {}).get(model_name, "off")
+        combo.setCurrentText(level)
+        self.table.setCellWidget(row, 1, combo)
+        self.thinking_combos[model_name] = combo
 
     def on_fetch_from_list(self):
         fetch_key = f"{self.provider}_fallback"
@@ -207,25 +213,15 @@ class FallbackOrderDialog(QDialog):
                 def _update_ui():
                     if models:
                         models_clean = sorted(list(set(models)))
-                        # Get existing model names in the list widget
-                        existing = [self.list_widget.item(j).data(Qt.ItemDataRole.UserRole) for j in range(self.list_widget.count())]
+                        existing = [self.table.item(j, 0).data(Qt.ItemDataRole.UserRole) for j in range(self.table.rowCount()) if self.table.item(j, 0)]
                         existing_set = set(existing)
                         
                         added_count = 0
                         fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_statuses", {})
+                        thinking_levels = {}
                         for m in models_clean:
                             if m and m not in existing_set:
-                                item = QListWidgetItem()
-                                item.setData(Qt.ItemDataRole.UserRole, m)
-                                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                                # Unchecked by default
-                                item.setCheckState(Qt.CheckState.Unchecked)
-                                status = fallback_statuses.get(m)
-                                if status:
-                                    item.setText(f"{m} ({status})")
-                                else:
-                                    item.setText(m)
-                                self.list_widget.addItem(item)
+                                self._add_model_row(m, False, fallback_statuses, thinking_levels)
                                 added_count += 1
                                 
                         tooltip(f"Fetched {len(models_clean)} models ({added_count} new added).")
@@ -250,18 +246,37 @@ class FallbackOrderDialog(QDialog):
 
     def filter_models(self, text):
         query = text.strip().casefold()
-        for i in range(self.list_widget.count()):
-            item = self.list_widget.item(i)
-            item.setHidden(bool(query and query not in str(item.data(Qt.ItemDataRole.UserRole)).casefold()))
+        for i in range(self.table.rowCount()):
+            item = self.table.item(i, 0)
+            if item:
+                model = item.data(Qt.ItemDataRole.UserRole) or ""
+                self.table.setRowHidden(i, bool(query and query not in model.casefold()))
 
     def rank_selected_first(self):
-        items = [self.list_widget.takeItem(0) for _ in range(self.list_widget.count())]
-        items.sort(key=lambda item: item.checkState() != Qt.CheckState.Checked)
-        for item in items:
-            self.list_widget.addItem(item)
+        rows = []
+        for i in range(self.table.rowCount()):
+            item = self.table.item(i, 0)
+            if item:
+                rows.append((i, item.checkState() == Qt.CheckState.Checked))
+        rows.sort(key=lambda x: not x[1])
+        # Rebuild table in sorted order
+        model_data = []
+        for old_row, _ in rows:
+            item = self.table.item(old_row, 0)
+            combo = self.table.cellWidget(old_row, 1)
+            model_data.append({
+                "name": item.data(Qt.ItemDataRole.UserRole),
+                "checked": item.checkState() == Qt.CheckState.Checked,
+                "think": combo.currentText() if combo else "off"
+            })
+        self.table.setRowCount(0)
+        thinking_levels = {}
+        for d in model_data:
+            thinking_levels[d["name"]] = d["think"]
+            self._add_model_row(d["name"], d["checked"], thinking_levels=thinking_levels)
         self.update_item_labels()
 
-    def on_test_from_list(self, selected_only=False):
+    def on_test_from_list(self, mode="all"):
         test_key = f"{self.provider}_test"
         if test_key in TEST_CANCELLATIONS:
             TEST_CANCELLATIONS[test_key] = True
@@ -276,12 +291,28 @@ class FallbackOrderDialog(QDialog):
         self.down_btn.setEnabled(False)
         self.remove_btn.setEnabled(False)
         
-        # Collect all models from items
-        models = [
-            self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)
-            for i in range(self.list_widget.count())
-            if not selected_only or self.list_widget.item(i).checkState() == Qt.CheckState.Checked
-        ]
+        # Collect models based on mode
+        models = []
+        model_indices = []
+        for i in range(self.table.rowCount()):
+            item = self.table.item(i, 0)
+            if not item:
+                continue
+            model_name = item.data(Qt.ItemDataRole.UserRole)
+            if mode == "all":
+                models.append(model_name)
+                model_indices.append(i)
+            elif mode == "checked" and item.checkState() == Qt.CheckState.Checked:
+                models.append(model_name)
+                model_indices.append(i)
+            elif mode == "row" and i == self.table.currentRow():
+                models.append(model_name)
+                model_indices.append(i)
+        
+        if not models:
+            tooltip("No models match the selected test mode.")
+            self._test_done(test_key)
+            return
         
         import threading
         from ..ai_client import AIClient
@@ -289,12 +320,12 @@ class FallbackOrderDialog(QDialog):
         def _runner():
             from ..logger import log_context
             log_context.source = "model_test"
-            for i, model in enumerate(models):
+            for idx, (model, row_idx) in enumerate(zip(models, model_indices)):
                 if TEST_CANCELLATIONS.get(test_key):
                     break
                 # Update item state to Testing
-                def _update_testing(idx=i, name=model):
-                    item = self.list_widget.item(idx)
+                def _update_testing(r=row_idx, name=model):
+                    item = self.table.item(r, 0)
                     if item:
                         item.setText(f"{name} (⏳ Testing...)")
                 mw.taskman.run_on_main(_update_testing)
@@ -337,7 +368,6 @@ class FallbackOrderDialog(QDialog):
                         )
                     else:
                         formatted_res = json.dumps(res, indent=2, ensure_ascii=False)
-                        # Use pre-wrap and fixed width to ensure tooltip stays compact and to the right
                         tooltip_text = (
                             f"<div style='width: 450px;'>"
                             f"<b>Question:</b> {test_front}<br/>"
@@ -365,73 +395,93 @@ class FallbackOrderDialog(QDialog):
                     break
 
                 # Update item state to result
-                def _update_result(idx=i, name=model, st=status, tt=tooltip_text):
-                    item = self.list_widget.item(idx)
+                def _update_result(r=row_idx, name=model, st=status, tt=tooltip_text):
+                    item = self.table.item(r, 0)
                     if item:
                         item.setText(f"{name} ({st})")
                         item.setToolTip(tt)
-                        # Save to persistent statuses
                         fallback_statuses = PERSISTENT_TEST_STATUSES.setdefault(f"{self.provider}_fallback_statuses", {})
                         fallback_statuses[name] = st
                         fallback_tooltips = PERSISTENT_TEST_STATUSES.setdefault(f"{self.provider}_fallback_tooltips", {})
                         fallback_tooltips[name] = tt
                 mw.taskman.run_on_main(_update_result)
                 
-            def _done():
-                self.list_test_btn.setText("Test All")
-                self.restore_btn.setEnabled(True)
-                self.up_btn.setEnabled(True)
-                self.down_btn.setEnabled(True)
-                self.remove_btn.setEnabled(True)
-                if test_key in TEST_CANCELLATIONS:
-                    del TEST_CANCELLATIONS[test_key]
-            mw.taskman.run_on_main(_done)
+            self._test_done(test_key)
             
         threading.Thread(target=_runner, daemon=True).start()
 
+    def _test_done(self, test_key):
+        def _done():
+            self.list_test_btn.setText("Test All")
+            self.restore_btn.setEnabled(True)
+            self.up_btn.setEnabled(True)
+            self.down_btn.setEnabled(True)
+            self.remove_btn.setEnabled(True)
+            if test_key in TEST_CANCELLATIONS:
+                del TEST_CANCELLATIONS[test_key]
+        mw.taskman.run_on_main(_done)
+
     def on_item_changed(self, item):
-        if self.list_widget.row(item) == 0 and item.checkState() == Qt.CheckState.Unchecked:
-            # Find the next checked model in the list
+        if self.table.row(item) == 0 and item.checkState() == Qt.CheckState.Unchecked:
             next_checked_idx = -1
-            for idx in range(1, self.list_widget.count()):
-                if self.list_widget.item(idx).checkState() == Qt.CheckState.Checked:
+            for idx in range(1, self.table.rowCount()):
+                other = self.table.item(idx, 0)
+                if other and other.checkState() == Qt.CheckState.Checked:
                     next_checked_idx = idx
                     break
             
-            self.list_widget.blockSignals(True)
-            self.list_widget.model().blockSignals(True)
+            self.table.blockSignals(True)
             try:
                 if next_checked_idx != -1:
-                    # Take the newly promoted model
-                    promoted_item = self.list_widget.takeItem(next_checked_idx)
-                    # Insert it at index 0 (shifts old active model to index 1)
-                    self.list_widget.insertItem(0, promoted_item)
-                    # Uncheck the old active model (now at index 1)
-                    self.list_widget.item(1).setCheckState(Qt.CheckState.Unchecked)
+                    self._swap_rows(next_checked_idx, 0)
+                    self.table.item(1, 0).setCheckState(Qt.CheckState.Unchecked)
                     tooltip("Promoted next checked model to Active.")
                 else:
-                    # Force it back to checked
                     item.setCheckState(Qt.CheckState.Checked)
                     tooltip("Cannot uncheck the active model when no other checked models are available.")
             finally:
-                self.list_widget.model().blockSignals(False)
-                self.list_widget.blockSignals(False)
+                self.table.blockSignals(False)
             self.update_item_labels()
 
+    def _swap_rows(self, a, b):
+        """Swap two rows in the table, preserving widgets."""
+        data_a = self._row_data(a)
+        data_b = self._row_data(b)
+        self._set_row_data(a, data_b)
+        self._set_row_data(b, data_a)
+
+    def _row_data(self, row):
+        item = self.table.item(row, 0)
+        combo = self.table.cellWidget(row, 1)
+        return {
+            "name": item.data(Qt.ItemDataRole.UserRole) if item else "",
+            "checked": item.checkState() == Qt.CheckState.Checked if item else True,
+            "think": combo.currentText() if combo else "off"
+        }
+
+    def _set_row_data(self, row, data):
+        item = self.table.item(row, 0)
+        if item:
+            item.setText(data["name"])
+            item.setData(Qt.ItemDataRole.UserRole, data["name"])
+            item.setCheckState(Qt.CheckState.Checked if data["checked"] else Qt.CheckState.Unchecked)
+        combo = self.table.cellWidget(row, 1)
+        if combo:
+            combo.setCurrentText(data["think"])
+
     def update_item_labels(self, *args):
-        self.list_widget.blockSignals(True)
-        self.list_widget.model().blockSignals(True)
+        self.table.blockSignals(True)
         try:
             fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_statuses", {})
             fallback_tooltips = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_tooltips", {})
-            for i in range(self.list_widget.count()):
-                item = self.list_widget.item(i)
+            for i in range(self.table.rowCount()):
+                item = self.table.item(i, 0)
+                if not item: continue
                 m = item.data(Qt.ItemDataRole.UserRole)
                 status = fallback_statuses.get(m)
                 bl = " | 🚫 Blacklisted" if is_model_blacklisted(self.provider, m) else ""
                 status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
                 
-                # Update tooltip if we have a saved response
                 tt = fallback_tooltips.get(m) if fallback_tooltips else None
                 if tt:
                     item.setToolTip(tt)
@@ -444,38 +494,39 @@ class FallbackOrderDialog(QDialog):
                 else:
                     item.setText(f"{m}{status_suffix}")
         finally:
-            self.list_widget.model().blockSignals(False)
-            self.list_widget.blockSignals(False)
+            self.table.blockSignals(False)
 
     def set_selected_as_active(self):
-        row = self.list_widget.currentRow()
+        row = self.table.currentRow()
         if row > 0:
-            item = self.list_widget.takeItem(row)
-            self.list_widget.insertItem(0, item)
-            self.list_widget.setCurrentRow(0)
+            self._swap_rows(row, 0)
+            self.table.setCurrentRow(0)
             self.update_item_labels()
 
     def move_item(self, delta):
-        curr_row = self.list_widget.currentRow()
+        curr_row = self.table.currentRow()
         if curr_row == -1: return
         target_row = curr_row + delta
-        if 0 <= target_row < self.list_widget.count():
-            item = self.list_widget.takeItem(curr_row)
-            self.list_widget.insertItem(target_row, item)
-            self.list_widget.setCurrentRow(target_row)
+        if 0 <= target_row < self.table.rowCount():
+            self._swap_rows(curr_row, target_row)
+            self.table.setCurrentRow(target_row)
             self.update_item_labels()
 
     def remove_item(self):
-        curr_row = self.list_widget.currentRow()
+        curr_row = self.table.currentRow()
         if curr_row != -1:
-            if self.list_widget.count() <= 1:
+            if self.table.rowCount() <= 1:
                 tooltip("Cannot remove the only model.")
                 return
-            self.list_widget.takeItem(curr_row)
+            name = self.table.item(curr_row, 0).data(Qt.ItemDataRole.UserRole)
+            self.thinking_combos.pop(name, None)
+            self.table.removeRow(curr_row)
             self.update_item_labels()
 
     def restore_defaults(self):
-        self.list_widget.clear()
+        fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_statuses", {})
+        thinking_levels = {}
+        self.table.setRowCount(0)
         defaults = MODEL_FALLBACKS.get(self.provider, [])
         full_list = []
         if self.active_model:
@@ -483,6 +534,9 @@ class FallbackOrderDialog(QDialog):
         for m in defaults:
             if m != self.active_model:
                 full_list.append(m)
+        for m in full_list:
+            self._add_model_row(m, True, fallback_statuses, thinking_levels)
+        self.update_item_labels()
         for m in full_list:
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, m)
@@ -492,20 +546,38 @@ class FallbackOrderDialog(QDialog):
         self.update_item_labels()
 
     def get_active_model(self):
-        if self.list_widget.count() > 0:
-            return self.list_widget.item(0).data(Qt.ItemDataRole.UserRole)
+        if self.table.rowCount() > 0:
+            item = self.table.item(0, 0)
+            if item:
+                return item.data(Qt.ItemDataRole.UserRole)
         return ""
 
     def get_ordered_list(self):
-        return [self.list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(1, self.list_widget.count())]
+        result = []
+        for i in range(1, self.table.rowCount()):
+            item = self.table.item(i, 0)
+            if item:
+                result.append(item.data(Qt.ItemDataRole.UserRole))
+        return result
 
     def get_disabled_list(self):
         disabled = []
-        for i in range(1, self.list_widget.count()):
-            item = self.list_widget.item(i)
-            if item.checkState() == Qt.CheckState.Unchecked:
+        for i in range(1, self.table.rowCount()):
+            item = self.table.item(i, 0)
+            if item and item.checkState() == Qt.CheckState.Unchecked:
                 disabled.append(item.data(Qt.ItemDataRole.UserRole))
         return disabled
+
+    def get_thinking_levels(self):
+        result = {}
+        for i in range(self.table.rowCount()):
+            item = self.table.item(i, 0)
+            if item:
+                name = item.data(Qt.ItemDataRole.UserRole)
+                combo = self.table.cellWidget(i, 1)
+                if combo:
+                    result[name] = combo.currentText()
+        return result
 
 
 class AddModelDialog(QDialog):
