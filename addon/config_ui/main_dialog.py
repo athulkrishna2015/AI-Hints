@@ -563,7 +563,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             return
 
         api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
-        if not api_key and provider not in ["local"]:
+        local_providers = self.local_providers_data or {}
+        if not api_key and provider not in ["local"] and provider not in self.custom_providers_data and provider not in local_providers:
             if status_label:
                 st, tt, col = "❌ No API Key", "Please enter an API key first.", "red"
                 PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
@@ -696,7 +697,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             for provider, combobox, status_label in targets:
                 # Only test if configured/enabled
                 api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
-                if not api_key and provider not in ["local"]:
+                local_providers = self.local_providers_data or {}
+                if not api_key and provider not in ["local"] and provider not in self.custom_providers_data and provider not in local_providers:
                     continue
                 
                 # Update UI to Testing...
@@ -784,7 +786,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             fetch_btn.setText("Stop Fetch")
             
         api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
-        if not api_key and provider not in ["local"]:
+        local_providers = self.local_providers_data or {}
+        if not api_key and provider not in ["local"] and provider not in self.custom_providers_data and provider not in local_providers:
             if not silent:
                 info(f"Please enter an API key for {provider.capitalize()} first.")
             if fetch_btn:

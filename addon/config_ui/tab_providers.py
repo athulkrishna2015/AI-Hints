@@ -177,7 +177,8 @@ class FallbackOrderDialog(QDialog):
         self.restore_btn.setEnabled(False)
         
         api_key = self.main_dialog.api_key_edits[self.provider].text().strip() if self.provider in self.main_dialog.api_key_edits else ""
-        if not api_key and self.provider not in ["local"]:
+        local_providers = self.main_dialog.local_providers_data or {}
+        if not api_key and self.provider not in ["local"] and self.provider not in self.main_dialog.custom_providers_data and self.provider not in local_providers:
             info(f"Please enter an API key for {self.provider.capitalize()} first.")
             self.list_fetch_btn.setText("Fetch All")
             self.list_test_btn.setEnabled(True)
