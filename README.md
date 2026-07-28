@@ -103,7 +103,9 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
     - **No API Key Required**: Local endpoints without authentication can leave the API Key field blank.
     - **Body Params**: Send extra JSON fields in the request body (e.g., `{"think": "low"}` to control model reasoning traces on thinking-capable models like GPT-OSS or Qwen3).
     - **Editable Name**: Provider names can be changed after creation via the Edit button.
-  - **Per-Model Thinking Levels**: In the **Fallbacks** dialog for any provider, each model has a Thinking Level dropdown (`off`/`low`/`medium`/`high`). Set to `"low"` for minimal reasoning traces on GPT-OSS or Qwen3, or `"off"` to disable thinking (where supported). Default is `off`.
+  - **Per-Model Thinking Levels & Timeouts**: In the **Fallbacks** dialog for any provider, each model has a Thinking Level dropdown (`off`/`low`/`medium`/`high`) and a Timeout spinbox. Set thinking to `"low"` for minimal reasoning traces on GPT-OSS or Qwen3, or `"off"` to disable (where supported). Timeout overrides the provider/global timeout for that specific model.
+  - **Multi-Select Test Row**: Ctrl+click or Shift+click to select multiple rows, then click **Test Row** to test them.
+  - **Debug Logging**: Enable "Debug logging" in the Logs tab to see full request/response payloads in the log file (`addon/ai_hints.log`).
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
 - **Shortcuts Tab**: Customize AI-Hints action keys and the modifier used on the answer side. The front side also accepts the action keys without the modifier for faster review.
 - **Advanced Tab**: Customize your system prompt, tune active-review and pregeneration API request timeouts, migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist**.

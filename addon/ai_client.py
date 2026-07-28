@@ -313,10 +313,21 @@ class AIClient:
         self._key_names: Dict[Tuple[str, str], str] = {}
         self.is_pregen = is_pregen
         self._request_provider = None
+        self._request_model = None
 
     @property
     def timeout(self) -> int:
         try:
+            # Check model-level timeout first
+            if self._request_provider and self._request_model:
+                model_timeouts = self.config.get("model_timeouts", {}) or {}
+                if isinstance(model_timeouts, dict):
+                    provider_mt = model_timeouts.get(self._request_provider, {}) or {}
+                    if isinstance(provider_mt, dict):
+                        override = int(provider_mt.get(self._request_model, 0) or 0)
+                        if override > 0:
+                            return override
+            # Check provider-level timeout
             provider_timeouts = self.config.get("provider_timeouts", {}) or {}
             if self._request_provider and isinstance(provider_timeouts, dict):
                 override = int(provider_timeouts.get(self._request_provider, 0) or 0)
@@ -670,6 +681,7 @@ class AIClient:
 
         timeouts_count = 0
         for model in models:
+            self._request_model = model
             if state.GLOBAL_STOP:
                 break
 
@@ -705,10 +717,12 @@ class AIClient:
                         data["think"] = think_val
 
                 try:
+                    logger.debug(f"AI-Hints Custom {provider_name}/{model} request: {json.dumps(data)}")
                     self._log_model_attempt(provider_name, model, models)
                     result = self._post_json(url, data, headers)
                     content = self._extract_content(result)
                     parsed = self._parse_json_result(content)
+                    logger.debug(f"AI-Hints Custom {provider_name}/{model} response: {content[:2000]}")
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success(provider_name, model, api_key)
                         parsed["_provider"] = provider_name
@@ -812,6 +826,7 @@ class AIClient:
             local_configs = []
 
         for model in models:
+            self._request_model = model
             if state.GLOBAL_STOP:
                 break
 
@@ -859,9 +874,11 @@ class AIClient:
                             if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "together", "sambanova", "cerebras", "nvidia"]:
                                 data["response_format"] = {"type": "json_object"}
                             try:
+                                logger.debug(f"AI-Hints {provider}/{local_model_name} request: {json.dumps(data)}")
                                 self._log_model_attempt(provider, local_model_name, local_models)
                                 result = self._post_json(url, data, headers)
                                 content = self._extract_content(result)
+                                logger.debug(f"AI-Hints {provider}/{local_model_name} response: {content[:2000]}")
                                 parsed = self._parse_json_result(content)
                                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                                     self._on_combo_success(provider, local_model_name, api_key)
@@ -903,9 +920,11 @@ class AIClient:
                     data["response_format"] = {"type": "json_object"}
 
                 try:
+                    logger.debug(f"AI-Hints {provider}/{model} request: {json.dumps(data)}")
                     self._log_model_attempt(provider, model, models)
                     result = self._post_json(url, data, headers)
                     content = self._extract_content(result)
+                    logger.debug(f"AI-Hints {provider}/{model} response: {content[:2000]}")
                     parsed = self._parse_json_result(content)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success(provider, model, api_key)
@@ -953,6 +972,7 @@ class AIClient:
         
         timeouts_count = 0
         for model in models:
+            self._request_model = model
             if state.GLOBAL_STOP:
                 break
                 
@@ -1034,6 +1054,7 @@ class AIClient:
 
         timeouts_count = 0
         for model in models:
+            self._request_model = model
             if state.GLOBAL_STOP:
                 break
 

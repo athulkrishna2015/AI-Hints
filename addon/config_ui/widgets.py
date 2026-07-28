@@ -423,6 +423,11 @@ class ProviderRowWidget(QWidget):
                 new_thinking = self.fallback_dialog.get_thinking_levels()
                 if hasattr(self, "parent_dialog") and hasattr(self.parent_dialog, "thinking_levels_data"):
                     self.parent_dialog.thinking_levels_data[self.provider] = new_thinking
+                
+                # Save model timeouts
+                new_timeouts = self.fallback_dialog.get_model_timeouts()
+                if hasattr(self, "parent_dialog") and hasattr(self.parent_dialog, "model_timeouts_data"):
+                    self.parent_dialog.model_timeouts_data[self.provider] = new_timeouts
                 tooltip(f"Updated fallback priority for {self.provider.capitalize()}")
             except (RuntimeError, AttributeError):
                 pass

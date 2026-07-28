@@ -165,6 +165,7 @@
   "disabled_providers": [],
   "disabled_fallback_models": {},
   "thinking_levels": {},
+  "model_timeouts": {},
   "model_cooldown_minutes": 10,
   "request_timeout": 10,
   "pregen_request_timeout": 20,

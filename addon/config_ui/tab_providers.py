@@ -57,14 +57,16 @@ class FallbackOrderDialog(QDialog):
         self.search_edit.textChanged.connect(self.filter_models)
         layout.addWidget(self.search_edit)
 
-        # Use QTableWidget: [Model Name] [Thinking Level]
+        # Use QTableWidget: [Model Name] [Thinking Level] [Timeout]
         self.table = QTableWidget()
-        self.table.setColumnCount(2)
-        self.table.setHorizontalHeaderLabels(["Model Name", "Thinking Level"])
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Model Name", "Thinking Level", "Timeout (s)"])
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(1, 120)
+        self.table.setColumnWidth(2, 100)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -76,6 +78,7 @@ class FallbackOrderDialog(QDialog):
         disabled_models = getattr(parent, "disabled_fallback_models_data", {}).get(provider, [])
         fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{provider}_fallback_statuses", {})
         thinking_levels = getattr(parent, "thinking_levels_data", {}).get(provider, {})
+        model_timeouts = getattr(parent, "model_timeouts_data", {}).get(provider, {})
         
         # Build the initial list: active model first, then the remaining fallbacks
         full_list = []
@@ -87,7 +90,7 @@ class FallbackOrderDialog(QDialog):
         
         self.thinking_combos = {}
         for m in full_list:
-            self._add_model_row(m, m not in disabled_models, fallback_statuses, thinking_levels)
+            self._add_model_row(m, m not in disabled_models, fallback_statuses, thinking_levels, model_timeouts)
             
         layout.addWidget(self.table)
         
@@ -150,7 +153,7 @@ class FallbackOrderDialog(QDialog):
         
         self.update_item_labels()
 
-    def _add_model_row(self, model_name, checked, fallback_statuses=None, thinking_levels=None):
+    def _add_model_row(self, model_name, checked, fallback_statuses=None, thinking_levels=None, model_timeouts=None):
         row = self.table.rowCount()
         self.table.insertRow(row)
         
@@ -168,6 +171,15 @@ class FallbackOrderDialog(QDialog):
         combo.setCurrentText(level)
         self.table.setCellWidget(row, 1, combo)
         self.thinking_combos[model_name] = combo
+        
+        # Column 2: Timeout spin
+        spin = QSpinBox()
+        spin.setRange(0, 300)
+        spin.setSuffix(" s")
+        spin.setToolTip("Request timeout in seconds. 0 = use provider/global timeout.")
+        timeout = (model_timeouts or {}).get(model_name, 0)
+        spin.setValue(timeout)
+        self.table.setCellWidget(row, 2, spin)
 
     def on_fetch_from_list(self):
         fetch_key = f"{self.provider}_fallback"
@@ -262,18 +274,15 @@ class FallbackOrderDialog(QDialog):
         # Rebuild table in sorted order
         model_data = []
         for old_row, _ in rows:
-            item = self.table.item(old_row, 0)
-            combo = self.table.cellWidget(old_row, 1)
-            model_data.append({
-                "name": item.data(Qt.ItemDataRole.UserRole),
-                "checked": item.checkState() == Qt.CheckState.Checked,
-                "think": combo.currentText() if combo else "off"
-            })
+            d = self._row_data(old_row)
+            model_data.append(d)
         self.table.setRowCount(0)
         thinking_levels = {}
+        model_timeouts = {}
         for d in model_data:
             thinking_levels[d["name"]] = d["think"]
-            self._add_model_row(d["name"], d["checked"], thinking_levels=thinking_levels)
+            model_timeouts[d["name"]] = d["timeout"]
+            self._add_model_row(d["name"], d["checked"], thinking_levels=thinking_levels, model_timeouts=model_timeouts)
         self.update_item_labels()
 
     def on_test_from_list(self, mode="all"):
@@ -453,10 +462,12 @@ class FallbackOrderDialog(QDialog):
     def _row_data(self, row):
         item = self.table.item(row, 0)
         combo = self.table.cellWidget(row, 1)
+        spin = self.table.cellWidget(row, 2)
         return {
             "name": item.data(Qt.ItemDataRole.UserRole) if item else "",
             "checked": item.checkState() == Qt.CheckState.Checked if item else True,
-            "think": combo.currentText() if combo else "off"
+            "think": combo.currentText() if combo else "off",
+            "timeout": spin.value() if spin else 0
         }
 
     def _set_row_data(self, row, data):
@@ -467,7 +478,10 @@ class FallbackOrderDialog(QDialog):
             item.setCheckState(Qt.CheckState.Checked if data["checked"] else Qt.CheckState.Unchecked)
         combo = self.table.cellWidget(row, 1)
         if combo:
-            combo.setCurrentText(data["think"])
+            combo.setCurrentText(data.get("think", "off"))
+        spin = self.table.cellWidget(row, 2)
+        if spin:
+            spin.setValue(data.get("timeout", 0))
 
     def update_item_labels(self, *args):
         self.table.blockSignals(True)
@@ -526,6 +540,7 @@ class FallbackOrderDialog(QDialog):
     def restore_defaults(self):
         fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_statuses", {})
         thinking_levels = {}
+        model_timeouts = {}
         self.table.setRowCount(0)
         defaults = MODEL_FALLBACKS.get(self.provider, [])
         full_list = []
@@ -535,7 +550,7 @@ class FallbackOrderDialog(QDialog):
             if m != self.active_model:
                 full_list.append(m)
         for m in full_list:
-            self._add_model_row(m, True, fallback_statuses, thinking_levels)
+            self._add_model_row(m, True, fallback_statuses, thinking_levels, model_timeouts)
         self.update_item_labels()
         for m in full_list:
             item = QListWidgetItem()
@@ -577,6 +592,17 @@ class FallbackOrderDialog(QDialog):
                 combo = self.table.cellWidget(i, 1)
                 if combo:
                     result[name] = combo.currentText()
+        return result
+
+    def get_model_timeouts(self):
+        result = {}
+        for i in range(self.table.rowCount()):
+            item = self.table.item(i, 0)
+            if item:
+                name = item.data(Qt.ItemDataRole.UserRole)
+                spin = self.table.cellWidget(i, 2)
+                if spin:
+                    result[name] = spin.value()
         return result
 
 
