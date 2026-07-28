@@ -67,7 +67,7 @@ class FallbackOrderDialog(QDialog):
         self.table.setColumnWidth(1, 120)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setStyleSheet("""
             QTableWidget::item { padding: 4px; }
             QTableWidget::item:selected { background-color: rgba(0, 140, 186, 0.1); color: black; }
@@ -115,7 +115,7 @@ class FallbackOrderDialog(QDialog):
         self.list_test_checked_btn.setToolTip("Test only checked (enabled) models in the list.")
         self.list_test_checked_btn.clicked.connect(lambda: self.on_test_from_list("checked"))
         self.list_test_row_btn = QPushButton("Test Row")
-        self.list_test_row_btn.setToolTip("Test the currently selected row only (regardless of check state).")
+        self.list_test_row_btn.setToolTip("Test selected row(s) only (Ctrl/Shift+click to select multiple, regardless of check state).")
         self.list_test_row_btn.clicked.connect(lambda: self.on_test_from_list("row"))
         self.list_test_btn = QPushButton("Test All")
         self.list_test_btn.setToolTip("Test all models in the list sequentially.")
@@ -305,7 +305,7 @@ class FallbackOrderDialog(QDialog):
             elif mode == "checked" and item.checkState() == Qt.CheckState.Checked:
                 models.append(model_name)
                 model_indices.append(i)
-            elif mode == "row" and i == self.table.currentRow():
+            elif mode == "row" and self.table.item(i, 0) and self.table.item(i, 0).isSelected():
                 models.append(model_name)
                 model_indices.append(i)
         
