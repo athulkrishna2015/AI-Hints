@@ -100,6 +100,9 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 - **General Tab**: Select your default provider, MCQ options count, database storage mode, and auto-generation rules including modified-card, version, and generation-time based regeneration.
 - **AI Providers Tab**: Unified settings where each provider is grouped into a clean card layout containing its API Key (with eye visibility 👁️ toggles), active model selection, Up/Down priority sorting, dynamic fetch and test features, and checkbox toggles to **completely disable fallbacks** to specific providers.
   - **Custom Providers**: Add any OpenAI-compatible API endpoint (e.g., Ollama, LM Studio, vLLM, AIHubMix) by clicking **Add** under Custom Providers. Endpoint URLs are automatically normalized (e.g., `http://localhost:11434/v1` or `https://aihubmix.com/v1/chat/completions`), and models can be dynamically fetched directly from the local server.
+    - **No API Key Required**: Local endpoints without authentication can leave the API Key field blank.
+    - **Body Params**: Send extra JSON fields in the request body (e.g., `{"think": "low"}` to control model reasoning traces on thinking-capable models like GPT-OSS or Qwen3).
+    - **Editable Name**: Provider names can be changed after creation via the Edit button.
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
 - **Shortcuts Tab**: Customize AI-Hints action keys and the modifier used on the answer side. The front side also accepts the action keys without the modifier for faster review.
 - **Advanced Tab**: Customize your system prompt, tune active-review and pregeneration API request timeouts, migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist**.
