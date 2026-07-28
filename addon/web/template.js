@@ -1249,6 +1249,52 @@
         });
     }
 
+    let chordKey = '';
+    let chordTimer = null;
+
+    function clearChord() {
+        chordKey = '';
+        if (chordTimer) {
+            clearTimeout(chordTimer);
+            chordTimer = null;
+        }
+    }
+
+    function startChord(key) {
+        clearChord();
+        chordKey = key;
+        chordTimer = setTimeout(clearChord, 1000);
+    }
+
+    function wrapSelectionInTextarea(textarea, before, after) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        const selected = text.substring(start, end);
+        const wrapped = before + selected + after;
+
+        textarea.value = text.substring(0, start) + wrapped + text.substring(end);
+        textarea.selectionStart = start + before.length;
+        textarea.selectionEnd = start + before.length + selected.length;
+        textarea.focus();
+    }
+
+    function processChord(secondKey, event, textarea) {
+        if (!chordKey) return false;
+        const seq = chordKey + secondKey;
+        clearChord();
+
+        switch (seq) {
+            case 'mm': wrapSelectionInTextarea(textarea, '\\(', '\\)'); event.preventDefault(); return true;
+            case 'me': wrapSelectionInTextarea(textarea, '\\[', '\\]'); event.preventDefault(); return true;
+            case 'mc': wrapSelectionInTextarea(textarea, '\\(\\ce{', '}\\)'); event.preventDefault(); return true;
+            case 'tt': wrapSelectionInTextarea(textarea, '\\(', '\\)'); event.preventDefault(); return true;
+            case 'te': wrapSelectionInTextarea(textarea, '\\[', '\\]'); event.preventDefault(); return true;
+            case 'tm': wrapSelectionInTextarea(textarea, '\\[\\begin{', '}\\end{}\\]'); event.preventDefault(); return true;
+        }
+        return false;
+    }
+
     function startInlineEditing(el) {
         if (el.dataset.editing === 'true') return;
         el.dataset.editing = 'true';
@@ -1259,15 +1305,46 @@
         input.className = 'ai-hints-inline-editor';
         input.value = el.dataset.rawText || "";
         
-        // Stop keydown events from bubbling to Anki shortcuts
+        // Emulate Anki editor keyboard shortcuts in the textarea
         input.onkeydown = (e) => {
             e.stopPropagation();
-            if (e.key === 'Enter' && !e.shiftKey) {
+
+            const key = e.key.toLowerCase();
+            const isCtrl = e.ctrlKey || e.metaKey;
+
+            // Save & close on Enter (no Shift) or Escape
+            if (key === 'enter' && !e.shiftKey) {
                 e.preventDefault();
                 saveEdit();
-            } else if (e.key === 'Escape') {
+                return;
+            }
+            if (key === 'escape') {
                 e.preventDefault();
                 saveEdit();
+                return;
+            }
+
+            // If a chord sequence is active, check if this key completes it
+            if (chordKey && (key === 'm' || key === 'e' || key === 'c' || key === 't')) {
+                if (processChord(key, e, input)) return;
+            } else {
+                clearChord();
+            }
+
+            // Start a new chord sequence
+            if (isCtrl && (key === 'm' || key === 't')) {
+                e.preventDefault();
+                startChord(key);
+                return;
+            }
+
+            // Single-key Ctrl shortcuts
+            if (isCtrl) {
+                switch (key) {
+                    case 'b': wrapSelectionInTextarea(input, '<b>', '</b>'); e.preventDefault(); return;
+                    case 'i': wrapSelectionInTextarea(input, '<i>', '</i>'); e.preventDefault(); return;
+                    case 'u': wrapSelectionInTextarea(input, '<u>', '</u>'); e.preventDefault(); return;
+                }
             }
         };
 
