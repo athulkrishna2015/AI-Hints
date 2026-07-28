@@ -662,6 +662,9 @@ class AIClient:
         custom_headers = custom_cfg.get("headers", {})
         if not isinstance(custom_headers, dict):
             custom_headers = {}
+        body_params = custom_cfg.get("body_params", {})
+        if not isinstance(body_params, dict):
+            body_params = {}
 
         models = [override_model] if override_model else self._models_for_provider(provider_name, custom_cfg.get("model", ""), custom_cfg.get("model_fallbacks", []))
 
@@ -691,6 +694,8 @@ class AIClient:
                         {"role": "user", "content": prompt}
                     ]
                 }
+                if body_params:
+                    data.update(body_params)
 
                 try:
                     self._log_model_attempt(provider_name, model, models)

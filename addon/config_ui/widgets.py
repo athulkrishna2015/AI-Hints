@@ -19,8 +19,6 @@ class CustomProviderDialog(QDialog):
         layout = QFormLayout(self)
         
         self.name_edit = QLineEdit(name)
-        if name:
-            self.name_edit.setReadOnly(True)
             
         self.url_edit = QLineEdit(data.get("url", "") if data else "")
         self.key_edit = QLineEdit(data.get("api_key", "") if data else "")
@@ -47,6 +45,16 @@ class CustomProviderDialog(QDialog):
         self.models_url_edit.setPlaceholderText("Optional: URL to fetch models list (defaults to endpoint + /models)")
         self.headers_edit = QTextEdit()
         self.headers_edit.setPlainText(json.dumps(data.get("headers", {}), indent=2) if data else "{}")
+        self.headers_edit.setMaximumHeight(60)
+
+        self.body_params_edit = QTextEdit()
+        self.body_params_edit.setPlainText(json.dumps(data.get("body_params", {}), indent=2) if data else "{}")
+        self.body_params_edit.setMaximumHeight(60)
+        self.body_params_edit.setToolTip(
+            "Extra JSON fields to include in the request body.\n"
+            "E.g., {\"think\": false} to disable model reasoning.\n"
+            "For GPT-OSS, use levels: {\"think\": \"low\"} (minimal) / \"medium\" / \"high\"."
+        )
         
         layout.addRow("Provider Name (ID):", self.name_edit)
         layout.addRow("Endpoint URL:", self.url_edit)
@@ -63,6 +71,7 @@ class CustomProviderDialog(QDialog):
         
         layout.addRow("Models URL (optional):", self.models_url_edit)
         layout.addRow("Headers (JSON):", self.headers_edit)
+        layout.addRow("Body Params (JSON):", self.body_params_edit)
         
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(self.validate_and_accept)
@@ -87,6 +96,10 @@ class CustomProviderDialog(QDialog):
             headers = json.loads(self.headers_edit.toPlainText() or "{}")
         except:
             headers = {}
+        try:
+            body_params = json.loads(self.body_params_edit.toPlainText() or "{}")
+        except:
+            body_params = {}
 
         # Create temp config for fetching
         temp_config = self.config.copy()
@@ -95,7 +108,8 @@ class CustomProviderDialog(QDialog):
                 "url": url,
                 "models_url": models_url or "",
                 "api_key": api_key,
-                "headers": headers
+                "headers": headers,
+                "body_params": body_params
             }
         }
         
@@ -122,11 +136,15 @@ class CustomProviderDialog(QDialog):
         if not self.name_edit.text().strip():
             info("Provider name cannot be empty.")
             return
-        try:
-            json.loads(self.headers_edit.toPlainText() or "{}")
-        except Exception:
-            info("Headers must be valid JSON.")
-            return
+        for field, label in [
+            (self.headers_edit, "Headers"),
+            (self.body_params_edit, "Body Params"),
+        ]:
+            try:
+                json.loads(field.toPlainText() or "{}")
+            except Exception:
+                info(f"{label} must be valid JSON.")
+                return
         self.accept()
 
 PROVIDER_URLS = {

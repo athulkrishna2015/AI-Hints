@@ -881,7 +881,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 "models_url": dlg.models_url_edit.text().strip(),
                 "api_key": api_key,
                 "model": dlg.model_edit.text().strip(),
-                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}")
+                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}"),
+                "body_params": json.loads(dlg.body_params_edit.toPlainText() or "{}")
             }
             if "api_keys" not in self.config or not isinstance(self.config["api_keys"], dict):
                 self.config["api_keys"] = {}
@@ -909,7 +910,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 "models_url": dlg.models_url_edit.text().strip(),
                 "api_key": api_key,
                 "model": dlg.model_edit.text().strip(),
-                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}")
+                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}"),
+                "body_params": json.loads(dlg.body_params_edit.toPlainText() or "{}")
             }
             if "api_keys" not in self.config or not isinstance(self.config["api_keys"], dict):
                 self.config["api_keys"] = {}
