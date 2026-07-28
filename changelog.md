@@ -2,6 +2,16 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.7.0 (2026-07-29)
+- **Per-Model Thinking Level**: Fallback priority dialog now has a Thinking Level dropdown (`off`/`low`/`medium`/`high`) per model. Default is `off`. Controls model reasoning traces on thinking-capable models like GPT-OSS or Qwen3.
+- **Per-Model Timeout**: Each model in the fallback list has a Timeout spinbox (seconds) that overrides the provider/global request timeout.
+- **Multi-Select Test Row**: Ctrl+click or Shift+click to select multiple rows in the fallback table, then click **Test Row** to test them all at once. Renamed old "Test Selected" to "Test Checked" for clarity.
+- **Body Params for Custom Providers**: Added "Body Params (JSON)" field to custom provider configuration, allowing extra fields (e.g. `{"think": "low"}`) to be sent in the API request body.
+- **No API Key Required for Custom/Local Providers**: Custom providers and named local providers no longer force an API key entry — leave blank for unauthenticated endpoints like Ollama.
+- **Editable Custom Provider Name**: Provider names can now be changed after creation via the Edit button (previously read-only).
+- **Debug Prompt Logging**: When "Debug logging" is enabled in the Logs tab, full request and response payloads are logged to `ai_hints.log`.
+- **Fallback Table Redesign**: Replaced QListWidget with QTableWidget in the Fallback priority dialog for proper per-column thinking level and timeout controls.
+
 ## 5.6.0 (2026-07-28)
 - **Inline Editor Keyboard Shortcuts**: Added Anki editor-style keyboard shortcuts (Ctrl+M,M → `\( \)`, Ctrl+M,E → `\[ \]`, Ctrl+M,C → `\(\ce{}\)`, Ctrl+T,T → `\( \)`, Ctrl+T,E → `\[ \]`, Ctrl+T,M → `\[\begin{}...\end{}\]`, Ctrl+B → `<b>`, Ctrl+I → `<i>`, Ctrl+U → `<u>`) to the inline editing textarea during review. Uses a chord-based key system with `e.stopPropagation()` and 1500ms chord timeout.
 
