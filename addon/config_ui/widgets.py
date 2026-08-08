@@ -10,6 +10,12 @@ ADDON_PACKAGE = __name__.split(".")[0]
 
 PERSISTENT_TEST_STATUSES = {}
 FETCH_CANCELLATIONS = {}
+# provider -> set of model names added by the most recent "fetch all" so the
+# UI can highlight them until the config dialog is saved/closed.
+NEWLY_ADDED_MODELS = {}
+# provider -> set of model names that were in the fallback list before the most
+# recent fetch but were NOT returned by the API (i.e. no longer available).
+MISSING_FROM_FETCH = {}
 
 class CustomProviderDialog(QDialog):
     def __init__(self, parent, name="", data=None, config=None):

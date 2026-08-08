@@ -4,13 +4,22 @@ from aqt import mw
 from aqt.qt import *
 from ..logger import info, tooltip
 from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS, MODEL_FALLBACKS, PROVIDER_ORDER
-from ..ai_client import is_model_blacklisted
-from .widgets import CustomProviderDialog, ProviderRowWidget, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS
+from ..ai_client import is_model_blacklisted, is_model_deprecated
+from .widgets import CustomProviderDialog, ProviderRowWidget, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS, NEWLY_ADDED_MODELS, MISSING_FROM_FETCH
 
 DEFAULT_TEST_QUESTION = "Why does a rotating magnet fall slower through a copper tube than a non-magnetic mass of the same size?"
 DEFAULT_TEST_ANSWER = "Due to Faraday's law of induction and Lenz's law, the falling magnet induces eddy currents in the copper tube, creating an opposing magnetic field that exerts an upward electromagnetic braking force."
 
 TEST_CANCELLATIONS = {}
+
+# Highlight colours for newly added vs missing vs deprecated models in fallback lists.
+# Kept as hex strings and resolved lazily so imports stay safe in headless tests.
+COL_NEW_BG = "#d9f2cd"
+COL_NEW_FG = "#1e7e34"
+COL_MISSING_BG = "#fff0c8"
+COL_MISSING_FG = "#8a6d1a"
+COL_DEP_BG = "#ffe1e1"
+COL_DEP_FG = "#b71c1c"
 
 class ToolTipDelegate(QStyledItemDelegate):
     def helpEvent(self, event, view, option, index):
@@ -89,8 +98,17 @@ class FallbackOrderDialog(QDialog):
                 full_list.append(m)
         
         self.thinking_combos = {}
-        for m in full_list:
-            self._add_model_row(m, m not in disabled_models, fallback_statuses, thinking_levels, model_timeouts)
+        # Batch-populate large lists (e.g. 400+ OpenRouter models) without
+        # triggering a layout/repaint per row on the main thread.
+        self.table.setUpdatesEnabled(False)
+        self.table.blockSignals(True)
+        try:
+            self.table.setRowCount(len(full_list))
+            for i, m in enumerate(full_list):
+                self._add_model_row(m, m not in disabled_models, fallback_statuses, thinking_levels, model_timeouts, row=i)
+        finally:
+            self.table.blockSignals(False)
+            self.table.setUpdatesEnabled(True)
             
         layout.addWidget(self.table)
         
@@ -106,7 +124,8 @@ class FallbackOrderDialog(QDialog):
         self.set_active_btn.setToolTip("Set the selected model as the primary active model (moves it to the top).")
         self.set_active_btn.clicked.connect(self.set_selected_as_active)
         self.remove_btn = QPushButton("Remove")
-        self.remove_btn.clicked.connect(self.remove_item)
+        self.remove_btn.setToolTip("Remove models from the list. Choose which type to remove from the dropdown.")
+        self.remove_btn.setMenu(self._build_remove_menu(self.remove_models))
         
         row1_layout.addWidget(self.up_btn)
         row1_layout.addWidget(self.down_btn)
@@ -114,15 +133,9 @@ class FallbackOrderDialog(QDialog):
         row1_layout.addWidget(self.remove_btn)
         
         row2_layout = QHBoxLayout()
-        self.list_test_checked_btn = QPushButton("Test Checked")
-        self.list_test_checked_btn.setToolTip("Test only checked (enabled) models in the list.")
-        self.list_test_checked_btn.clicked.connect(lambda: self.on_test_from_list("checked"))
-        self.list_test_row_btn = QPushButton("Test Row")
-        self.list_test_row_btn.setToolTip("Test selected row(s) only (Ctrl/Shift+click to select multiple, regardless of check state).")
-        self.list_test_row_btn.clicked.connect(lambda: self.on_test_from_list("row"))
-        self.list_test_btn = QPushButton("Test All")
-        self.list_test_btn.setToolTip("Test all models in the list sequentially.")
-        self.list_test_btn.clicked.connect(lambda: self.on_test_from_list("all"))
+        self.list_test_btn = QPushButton("Test")
+        self.list_test_btn.setToolTip("Test models from the list. Choose which mode from the dropdown.")
+        self.list_test_btn.setMenu(self._build_test_menu(self.on_test_from_list))
         self.sort_selected_btn = QPushButton("Rank Checked First")
         self.sort_selected_btn.clicked.connect(self.rank_selected_first)
         
@@ -134,8 +147,6 @@ class FallbackOrderDialog(QDialog):
         self.restore_btn.setToolTip("Reset the list back to code defaults.")
         self.restore_btn.clicked.connect(self.restore_defaults)
         
-        row2_layout.addWidget(self.list_test_checked_btn)
-        row2_layout.addWidget(self.list_test_row_btn)
         row2_layout.addWidget(self.list_test_btn)
         row2_layout.addWidget(self.sort_selected_btn)
         row2_layout.addWidget(self.list_fetch_btn)
@@ -153,15 +164,46 @@ class FallbackOrderDialog(QDialog):
         
         self.update_item_labels()
 
-    def _add_model_row(self, model_name, checked, fallback_statuses=None, thinking_levels=None, model_timeouts=None):
-        row = self.table.rowCount()
-        self.table.insertRow(row)
+    def _model_flags(self, model_name):
+        """Return (is_newly_added, is_deprecated, is_missing_after_fetch) for a model."""
+        is_new = model_name in NEWLY_ADDED_MODELS.get(self.provider, ())
+        is_dep = is_model_deprecated(self.provider, model_name)
+        is_missing = model_name in MISSING_FROM_FETCH.get(self.provider, ())
+        return is_new, is_dep, is_missing
+
+    def _apply_model_highlight(self, item, model_name):
+        """Colour a fallback table row based on new/missing/deprecated status."""
+        is_new, is_dep, is_missing = self._model_flags(model_name)
+        if is_dep:
+            item.setBackground(QBrush(QColor(COL_DEP_BG)))
+            item.setForeground(QBrush(QColor(COL_DEP_FG)))
+        elif is_missing:
+            item.setBackground(QBrush(QColor(COL_MISSING_BG)))
+            item.setForeground(QBrush(QColor(COL_MISSING_FG)))
+        elif is_new:
+            item.setBackground(QBrush(QColor(COL_NEW_BG)))
+            item.setForeground(QBrush(QColor(COL_NEW_FG)))
+
+    def _add_model_row(self, model_name, checked, fallback_statuses=None, thinking_levels=None, model_timeouts=None, row=None):
+        if row is None:
+            row = self.table.rowCount()
+            self.table.insertRow(row)
         
         # Column 0: Model name with checkbox
-        item = QTableWidgetItem(model_name)
+        item = QTableWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, model_name)
         item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
         item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        is_new, is_dep, is_missing = self._model_flags(model_name)
+        new_mark = "🆕 " if is_new else ""
+        dep_mark = " | ⚠️ Deprecated" if is_dep else ""
+        missing_mark = " | ⚠️ No Longer Returned" if (is_missing and not is_dep) else ""
+        item.setText(f"{new_mark}{model_name}{dep_mark}{missing_mark}")
+        self._apply_model_highlight(item, model_name)
+        if is_dep:
+            item.setToolTip("⚠️ This model appears to be deprecated/retired. Consider removing it from the fallback list.")
+        elif is_missing:
+            item.setToolTip("⚠️ The provider no longer returned this model in the latest fetch. It may be retired — consider removing it from the fallback list.")
         self.table.setItem(row, 0, item)
         
         # Column 1: Thinking level combo
@@ -228,15 +270,23 @@ class FallbackOrderDialog(QDialog):
                         existing = [self.table.item(j, 0).data(Qt.ItemDataRole.UserRole) for j in range(self.table.rowCount()) if self.table.item(j, 0)]
                         existing_set = set(existing)
                         
+                        fetched_set = set(models_clean)
+                        missing_set = {m for m in existing_set if m and m not in fetched_set}
+                        if missing_set:
+                            MISSING_FROM_FETCH[self.provider] = missing_set
+                        
                         added_count = 0
                         fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_statuses", {})
                         thinking_levels = {}
+                        newly = NEWLY_ADDED_MODELS.setdefault(self.provider, set())
                         for m in models_clean:
                             if m and m not in existing_set:
+                                newly.add(m)
                                 self._add_model_row(m, False, fallback_statuses, thinking_levels)
                                 added_count += 1
-                                
-                        tooltip(f"Fetched {len(models_clean)} models ({added_count} new added).")
+                        
+                        self.update_item_labels()
+                        tooltip(f"Fetched {len(models_clean)} models ({added_count} new, {len(missing_set)} missing).")
                     else:
                         info(f"Could not fetch models for {self.provider.capitalize()}. Check connection.")
                 mw.taskman.run_on_main(_update_ui)
@@ -289,7 +339,7 @@ class FallbackOrderDialog(QDialog):
         test_key = f"{self.provider}_test"
         if test_key in TEST_CANCELLATIONS:
             TEST_CANCELLATIONS[test_key] = True
-            self.list_test_btn.setText("Test All")
+            self.list_test_btn.setText("Test")
             tooltip("Testing cancelled.")
             return
 
@@ -421,7 +471,7 @@ class FallbackOrderDialog(QDialog):
 
     def _test_done(self, test_key):
         def _done():
-            self.list_test_btn.setText("Test All")
+            self.list_test_btn.setText("Test")
             self.restore_btn.setEnabled(True)
             self.up_btn.setEnabled(True)
             self.down_btn.setEnabled(True)
@@ -485,6 +535,7 @@ class FallbackOrderDialog(QDialog):
 
     def update_item_labels(self, *args):
         self.table.blockSignals(True)
+        self.table.setUpdatesEnabled(False)
         try:
             fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_statuses", {})
             fallback_tooltips = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_tooltips", {})
@@ -497,24 +548,36 @@ class FallbackOrderDialog(QDialog):
                 status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
                 
                 tt = fallback_tooltips.get(m) if fallback_tooltips else None
+                is_new, is_dep, is_missing = self._model_flags(m)
+                dep_note = "⚠️ This model appears to be deprecated/retired. Consider removing it from the fallback list." if is_dep else ""
+                missing_note = "⚠️ The provider no longer returned this model in the latest fetch. It may be retired — consider removing it from the fallback list." if (is_missing and not is_dep) else ""
                 if tt:
                     item.setToolTip(tt)
+                elif dep_note:
+                    item.setToolTip(dep_note)
+                elif missing_note:
+                    item.setToolTip(missing_note)
                 else:
                     item.setToolTip("" if not bl else "This model is currently on cooldown due to recent failures.")
                 
+                new_mark = "🆕 " if is_new else ""
+                dep_mark = " | ⚠️ Deprecated" if is_dep else ""
+                missing_mark = " | ⚠️ No Longer Returned" if (is_missing and not is_dep) else ""
                 if i == 0:
                     item.setCheckState(Qt.CheckState.Checked)
-                    item.setText(f"⭐ {m} (Active){status_suffix}")
+                    item.setText(f"⭐ {new_mark}{m} (Active){status_suffix}{dep_mark}{missing_mark}")
                 else:
-                    item.setText(f"{m}{status_suffix}")
+                    item.setText(f"{new_mark}{m}{status_suffix}{dep_mark}{missing_mark}")
+                self._apply_model_highlight(item, m)
         finally:
+            self.table.setUpdatesEnabled(True)
             self.table.blockSignals(False)
 
     def set_selected_as_active(self):
         row = self.table.currentRow()
         if row > 0:
             self._swap_rows(row, 0)
-            self.table.setCurrentRow(0)
+            self.table.setCurrentCell(0, 0)
             self.update_item_labels()
 
     def move_item(self, delta):
@@ -523,19 +586,75 @@ class FallbackOrderDialog(QDialog):
         target_row = curr_row + delta
         if 0 <= target_row < self.table.rowCount():
             self._swap_rows(curr_row, target_row)
-            self.table.setCurrentRow(target_row)
+            self.table.setCurrentCell(target_row, 0)
             self.update_item_labels()
 
-    def remove_item(self):
-        curr_row = self.table.currentRow()
-        if curr_row != -1:
-            if self.table.rowCount() <= 1:
-                tooltip("Cannot remove the only model.")
-                return
-            name = self.table.item(curr_row, 0).data(Qt.ItemDataRole.UserRole)
+    @staticmethod
+    def _build_remove_menu(callback):
+        menu = QMenu()
+        menu.addAction("Remove Selected", lambda: callback("selected"))
+        menu.addAction("Remove Deprecated", lambda: callback("deprecated"))
+        menu.addAction("Remove No Longer Returned", lambda: callback("missing"))
+        menu.addAction("Remove Deprecated & No Longer Returned", lambda: callback("flagged"))
+        return menu
+
+    @staticmethod
+    def _build_test_menu(callback):
+        menu = QMenu()
+        menu.addAction("Test Checked", lambda: callback("checked"))
+        menu.addAction("Test Row", lambda: callback("row"))
+        menu.addAction("Test All", lambda: callback("all"))
+        return menu
+
+    def _selected_rows(self):
+        selected = {index.row() for index in self.table.selectionModel().selectedRows()}
+        if not selected and self.table.currentRow() != -1:
+            selected = {self.table.currentRow()}
+        return sorted(selected)
+
+    def _rows_matching(self, pred):
+        rows = []
+        for i in range(self.table.rowCount()):
+            item = self.table.item(i, 0)
+            if item and pred(item.data(Qt.ItemDataRole.UserRole)):
+                rows.append(i)
+        return rows
+
+    def remove_models(self, kind):
+        """Remove rows based on the requested removal type.
+
+        kind in {"selected", "deprecated", "missing", "flagged"}.
+        """
+        if kind == "selected":
+            to_remove = self._selected_rows()
+            label = "selected"
+        elif kind == "deprecated":
+            to_remove = self._rows_matching(lambda m: is_model_deprecated(self.provider, m))
+            label = "deprecated"
+        elif kind == "missing":
+            missing = MISSING_FROM_FETCH.get(self.provider, set())
+            to_remove = self._rows_matching(lambda m: m in missing)
+            label = "no-longer-returned"
+        else:
+            missing = MISSING_FROM_FETCH.get(self.provider, set())
+            to_remove = self._rows_matching(
+                lambda m: is_model_deprecated(self.provider, m) or m in missing)
+            label = "deprecated/no-longer-returned"
+
+        if not to_remove:
+            tooltip(f"No {label} models found in the list.")
+            return
+        if len(to_remove) >= self.table.rowCount():
+            tooltip("Cannot remove all models; at least one must remain in the list.")
+            return
+        removed = 0
+        for i in reversed(to_remove):
+            name = self.table.item(i, 0).data(Qt.ItemDataRole.UserRole)
             self.thinking_combos.pop(name, None)
-            self.table.removeRow(curr_row)
-            self.update_item_labels()
+            self.table.removeRow(i)
+            removed += 1
+        self.update_item_labels()
+        tooltip(f"Removed {removed} model(s).")
 
     def restore_defaults(self):
         fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_statuses", {})
@@ -710,7 +829,8 @@ class GlobalFallbackOrderDialog(QDialog):
         self.add_btn = QPushButton("Add Model...")
         self.add_btn.clicked.connect(self.add_model_prompt)
         self.remove_btn = QPushButton("Remove")
-        self.remove_btn.clicked.connect(self.remove_item)
+        self.remove_btn.setToolTip("Remove models from the list. Choose which type to remove from the dropdown.")
+        self.remove_btn.setMenu(self._build_remove_menu(self.remove_models))
         
         row1_layout.addWidget(self.up_btn)
         row1_layout.addWidget(self.down_btn)
@@ -718,12 +838,9 @@ class GlobalFallbackOrderDialog(QDialog):
         row1_layout.addWidget(self.remove_btn)
         
         row2_layout = QHBoxLayout()
-        self.list_test_selected_btn = QPushButton("Test Selected")
-        self.list_test_selected_btn.setToolTip("Test only checked global models.")
-        self.list_test_selected_btn.clicked.connect(lambda: self.on_test_all(True))
-        self.list_test_btn = QPushButton("Test All")
-        self.list_test_btn.setToolTip("Test all global models sequentially.")
-        self.list_test_btn.clicked.connect(lambda: self.on_test_all(False))
+        self.list_test_btn = QPushButton("Test")
+        self.list_test_btn.setToolTip("Test models from the list. Choose which mode from the dropdown.")
+        self.list_test_btn.setMenu(self._build_test_menu(self.on_test_all))
         self.sort_selected_btn = QPushButton("Rank Selected First")
         self.sort_selected_btn.clicked.connect(self.rank_selected_first)
         
@@ -735,7 +852,6 @@ class GlobalFallbackOrderDialog(QDialog):
         self.restore_btn.setToolTip("Reset global fallback priority to default provider-based models.")
         self.restore_btn.clicked.connect(self.restore_defaults)
         
-        row2_layout.addWidget(self.list_test_selected_btn)
         row2_layout.addWidget(self.list_test_btn)
         row2_layout.addWidget(self.sort_selected_btn)
         row2_layout.addWidget(self.list_fetch_btn)
@@ -764,27 +880,59 @@ class GlobalFallbackOrderDialog(QDialog):
         # Get currently disabled models map
         disabled_map = self.main_dialog.disabled_fallback_models_data if hasattr(self.main_dialog, "disabled_fallback_models_data") else {}
 
-        for provider, model in model_pairs:
-            item = QListWidgetItem()
-            item.setData(Qt.ItemDataRole.UserRole, (provider, model))
-            status = global_statuses.get((provider, model))
-            bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model) else ""
-            status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
-            item.setText(f"[{self._provider_display(provider)}] {model}{status_suffix}")
+        self.list_widget.setUpdatesEnabled(False)
+        try:
+            for provider, model in model_pairs:
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, (provider, model))
+                status = global_statuses.get((provider, model))
+                bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model) else ""
+                status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
+                new_mark, dep_mark, missing_mark, is_new, is_dep, is_missing = self._global_marks(provider, model)
+                item.setText(f"[{self._provider_display(provider)}] {new_mark}{model}{status_suffix}{dep_mark}{missing_mark}")
+                self._apply_global_highlight(item, provider, model)
             
-            # Make item checkable and ensure standard flags are set
-            item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsUserCheckable)
+                # Make item checkable and ensure standard flags are set
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsUserCheckable)
             
-            # Set check state based on global disabled map
-            provider_disabled = disabled_map.get(provider, [])
-            item.setCheckState(Qt.CheckState.Unchecked if model in provider_disabled else Qt.CheckState.Checked)
+                # Set check state based on global disabled map
+                provider_disabled = disabled_map.get(provider, [])
+                item.setCheckState(Qt.CheckState.Unchecked if model in provider_disabled else Qt.CheckState.Checked)
 
-            tt = global_tooltips.get((provider, model))
-            if tt:
-                item.setToolTip(tt)
-            elif bl:
-                item.setToolTip("This model is currently on cooldown due to recent failures.")
-            self.list_widget.addItem(item)
+                tt = global_tooltips.get((provider, model))
+                if tt:
+                    item.setToolTip(tt)
+                elif is_dep:
+                    item.setToolTip("⚠️ This model appears to be deprecated/retired. Consider removing it from the global list.")
+                elif is_missing:
+                    item.setToolTip("⚠️ The provider no longer returned this model in the latest fetch. It may be retired — consider removing it from the global list.")
+                elif bl:
+                    item.setToolTip("This model is currently on cooldown due to recent failures.")
+                self.list_widget.addItem(item)
+        finally:
+            self.list_widget.setUpdatesEnabled(True)
+
+    def _global_marks(self, provider, model):
+        """Returns (new_mark, dep_mark, missing_mark, is_new, is_deprecated, is_missing)."""
+        is_new = model in NEWLY_ADDED_MODELS.get(provider, ())
+        is_dep = is_model_deprecated(provider, model)
+        is_missing = model in MISSING_FROM_FETCH.get(provider, ())
+        return ("🆕 " if is_new else "",
+                " | ⚠️ Deprecated" if is_dep else "",
+                " | ⚠️ No Longer Returned" if (is_missing and not is_dep) else "",
+                is_new, is_dep, is_missing)
+
+    def _apply_global_highlight(self, item, provider, model):
+        _n, _d, _m, is_new, is_dep, is_missing = self._global_marks(provider, model)
+        if is_dep:
+            item.setBackground(QBrush(QColor(COL_DEP_BG)))
+            item.setForeground(QBrush(QColor(COL_DEP_FG)))
+        elif is_missing:
+            item.setBackground(QBrush(QColor(COL_MISSING_BG)))
+            item.setForeground(QBrush(QColor(COL_MISSING_FG)))
+        elif is_new:
+            item.setBackground(QBrush(QColor(COL_NEW_BG)))
+            item.setForeground(QBrush(QColor(COL_NEW_FG)))
 
     def filter_models(self, text):
         query = text.strip().casefold()
@@ -809,10 +957,16 @@ class GlobalFallbackOrderDialog(QDialog):
             status = global_statuses.get((provider, model))
             bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model) else ""
             status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
-            item.setText(f"[{self._provider_display(provider)}] {model}{status_suffix}")
+            new_mark, dep_mark, missing_mark, is_new, is_dep, is_missing = self._global_marks(provider, model)
+            item.setText(f"[{self._provider_display(provider)}] {new_mark}{model}{status_suffix}{dep_mark}{missing_mark}")
+            self._apply_global_highlight(item, provider, model)
             tt = global_tooltips.get((provider, model))
             if tt:
                 item.setToolTip(tt)
+            elif is_dep:
+                item.setToolTip("⚠️ This model appears to be deprecated/retired. Consider removing it from the global list.")
+            elif is_missing:
+                item.setToolTip("⚠️ The provider no longer returned this model in the latest fetch. It may be retired — consider removing it from the global list.")
             elif bl:
                 item.setToolTip("This model is currently on cooldown due to recent failures.")
 
@@ -838,10 +992,44 @@ class GlobalFallbackOrderDialog(QDialog):
             self.list_widget.insertItem(target_row, item)
             self.list_widget.setCurrentRow(target_row)
             
-    def remove_item(self):
-        curr_row = self.list_widget.currentRow()
-        if curr_row != -1:
-            self.list_widget.takeItem(curr_row)
+    def remove_models(self, kind):
+        """Remove list rows based on the requested removal type.
+
+        kind in {"selected", "deprecated", "missing", "flagged"}.
+        """
+        if kind == "selected":
+            to_remove = [i for i in range(self.list_widget.count()) if self.list_widget.item(i).isSelected()]
+            label = "selected"
+        elif kind == "deprecated":
+            to_remove = [
+                i for i in range(self.list_widget.count())
+                if is_model_deprecated(*self.list_widget.item(i).data(Qt.ItemDataRole.UserRole))
+            ]
+            label = "deprecated"
+        elif kind == "missing":
+            to_remove = [
+                i for i in range(self.list_widget.count())
+                if self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)[1]
+                in MISSING_FROM_FETCH.get(self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)[0], set())
+            ]
+            label = "no-longer-returned"
+        else:
+            to_remove = []
+            for i in range(self.list_widget.count()):
+                provider, model = self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)
+                if is_model_deprecated(provider, model) or model in MISSING_FROM_FETCH.get(provider, set()):
+                    to_remove.append(i)
+            label = "deprecated/no-longer-returned"
+
+        to_remove = sorted(set(to_remove), reverse=True)
+        if not to_remove:
+            tooltip(f"No {label} models found in the list.")
+            return
+        removed = 0
+        for i in to_remove:
+            self.list_widget.takeItem(i)
+            removed += 1
+        tooltip(f"Removed {removed} model(s).")
             
     def restore_defaults(self):
         defaults = []
@@ -940,8 +1128,10 @@ class GlobalFallbackOrderDialog(QDialog):
                             existing_set = set(existing)
                             
                             added_count = 0
+                            newly = NEWLY_ADDED_MODELS.setdefault(p, set())
                             for m in sorted(list(set(ms))):
                                 if m and (p, m) not in existing_set:
+                                    newly.add(m)
                                     item = QListWidgetItem()
                                     item.setData(Qt.ItemDataRole.UserRole, (p, m))
                                     item.setText(f"[{self._provider_display(p)}] {m}")
@@ -949,6 +1139,13 @@ class GlobalFallbackOrderDialog(QDialog):
                                     item.setCheckState(Qt.CheckState.Unchecked)
                                     self.list_widget.addItem(item)
                                     added_count += 1
+                            
+                            fetched_set = set(ms)
+                            missed = {m for (pr, m) in existing if pr == p and m not in fetched_set}
+                            if missed:
+                                MISSING_FROM_FETCH[p] = missed
+                            
+                            self.refresh_statuses()
                             if added_count > 0:
                                 tooltip(f"Added {added_count} new models for {self._provider_display(p)}.")
                         mw.taskman.run_on_main(_update_ui)
@@ -968,26 +1165,34 @@ class GlobalFallbackOrderDialog(QDialog):
                 
         threading.Thread(target=_runner, daemon=True).start()
         
-    def on_test_all(self, selected_only=False):
+    def on_test_all(self, mode="checked"):
         test_key = "global_fallback_test"
         if test_key in TEST_CANCELLATIONS:
             TEST_CANCELLATIONS[test_key] = True
-            self.list_test_btn.setText("Test All")
+            self.list_test_btn.setText("Test")
             tooltip("Testing cancelled.")
             return
 
         TEST_CANCELLATIONS[test_key] = False
-        self.list_test_btn.setText("Stop Test All")
+        self.list_test_btn.setText("Stop Test")
         self.restore_btn.setEnabled(False)
         self.up_btn.setEnabled(False)
         self.down_btn.setEnabled(False)
         self.remove_btn.setEnabled(False)
         self.add_btn.setEnabled(False)
         
+        def _test_includes(i):
+            item = self.list_widget.item(i)
+            if mode == "row":
+                return item.isSelected()
+            if mode == "checked":
+                return item.checkState() == Qt.CheckState.Checked
+            return True
+
         items_data = [
             self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)
             for i in range(self.list_widget.count())
-            if not selected_only or self.list_widget.item(i).checkState() == Qt.CheckState.Checked
+            if _test_includes(i)
         ]
         
         import threading
@@ -1082,7 +1287,7 @@ class GlobalFallbackOrderDialog(QDialog):
                 mw.taskman.run_on_main(_update_result)
                 
             def _done():
-                self.list_test_btn.setText("Test All")
+                self.list_test_btn.setText("Test")
                 self.restore_btn.setEnabled(True)
                 self.up_btn.setEnabled(True)
                 self.down_btn.setEnabled(True)

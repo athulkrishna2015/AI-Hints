@@ -24,7 +24,7 @@ from .tab_logs import LogTabMixin
 from .tab_mobile import MobileTabMixin
 
 # Import Support Widgets
-from .widgets import CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS
+from .widgets import CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS, NEWLY_ADDED_MODELS, MISSING_FROM_FETCH
 
 LAST_ACTIVE_TAB_INDEX = 7  # Fallback static state
 
@@ -53,6 +53,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         self.custom_providers_data = (self.config.get("custom_providers", {}) or {}).copy()
         self.local_providers_data = (self.config.get("local_providers", {}) or {}).copy()
+        
+        NEWLY_ADDED_MODELS.clear()
+        MISSING_FROM_FETCH.clear()
         
         self.setup_ui()
         self.load_config_into_ui()
@@ -838,10 +841,19 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                                 disabled_models = list(disabled_models)
                                 
                             current_set = set(current_fallbacks)
+                            newly = NEWLY_ADDED_MODELS.setdefault(provider, set())
                             for m in clean_models:
                                 if m and m not in current_set:
                                     current_fallbacks.append(m)
                                     disabled_models.append(m)
+                                    newly.add(m)
+                            
+                            fetched_set = set(clean_models)
+                            missed = {m for m in current_set if m and m not in fetched_set}
+                            if missed:
+                                MISSING_FROM_FETCH[provider] = missed
+                            elif provider in MISSING_FROM_FETCH:
+                                MISSING_FROM_FETCH.pop(provider, None)
                                     
                             self.model_fallbacks_data[provider] = current_fallbacks
                             self.disabled_fallback_models_data[provider] = disabled_models
@@ -1284,6 +1296,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 raw_config = json.loads(self.raw_editor.toPlainText() or "{}")
                 from ..config_io import write_pretty_config
                 write_pretty_config(ADDON_PACKAGE, self._normalize_config(raw_config))
+                NEWLY_ADDED_MODELS.clear()
+                MISSING_FROM_FETCH.clear()
                 if close: self.accept()
                 else: tooltip("Configuration saved.")
                 return
@@ -1427,6 +1441,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["disabled_providers"] = disabled
             from ..config_io import write_pretty_config
             write_pretty_config(ADDON_PACKAGE, self._normalize_config(new_config))
+            NEWLY_ADDED_MODELS.clear()
+            MISSING_FROM_FETCH.clear()
             try:
                 from ..proxy_manager import proxy_manager
                 from ..mobile_sync import auto_update_mobile_setup

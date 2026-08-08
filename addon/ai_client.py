@@ -91,7 +91,6 @@ PROVIDER_ORDER = [
     "nvidia",
     "mistral",
     "cerebras",
-    "github",
 ]
 
 DEFAULT_MODELS = {
@@ -108,7 +107,6 @@ DEFAULT_MODELS = {
     "together":   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.3-70B-Instruct",
     "cerebras":   "llama3.1-8b",
-    "github":     "deepseek/deepseek-v3-0324",
 }
 
 # Popular model suggestions for the UI dropdowns
@@ -183,19 +181,6 @@ MODEL_SUGGESTIONS = {
         "deepseek-ai/DeepSeek-V3",
         "meta-llama/Llama-3.3-70B-Instruct",
         "Qwen/Qwen2.5-72B-Instruct",
-    ],
-    "github": [
-        "deepseek/deepseek-v3-0324",
-        "deepseek/deepseek-r1-0528",
-        "openai/gpt-4.1",
-        "openai/gpt-4o",
-        "openai/gpt-5",
-        "openai/o3",
-        "openai/o4-mini",
-        "meta/llama-3.3-70b-instruct",
-        "meta/llama-4-maverick-17b-128e-instruct-fp8",
-        "mistral-ai/mistral-small-2503",
-        "microsoft/phi-4",
     ],
 }
 
@@ -294,17 +279,36 @@ MODEL_FALLBACKS = {
         "gemini-2-flash",
         "gemini-2.5-pro",
     ],
-    "github": [
-        "deepseek/deepseek-v3-0324",
-        "deepseek/deepseek-r1-0528",
-        "openai/gpt-4.1",
-        "openai/gpt-4o",
-        "meta/llama-3.3-70b-instruct",
-        "mistral-ai/mistral-small-2503",
-    ],
 }
 
+# Cache of models flagged as deprecated by the provider's own API response
+# during the most recent fetch_models() call. Populated online per provider.
+FETCHED_DEPRECATED_MODELS: Dict[str, set] = {}
 
+_DEPRECATION_MARKER_KEYS = (
+    "deprecation", "deprecated", "is_deprecated",
+    "expires_at", "expiresAt", "expiration", "expirationTimestamp",
+)
+
+
+def _collect_deprecated_items(items):
+    """Return the set of model IDs a provider API marked as deprecated.
+
+    Handles the common schemas: openrouter ``deprecation``, azure/github-style
+    ``expiration*``/``expiresAt`` fields, and generic ``deprecated`` flags.
+    """
+    deprecated = set()
+    for m in items or []:
+        if not isinstance(m, dict):
+            continue
+        mid = m.get("id")
+        if not mid:
+            continue
+        for key in _DEPRECATION_MARKER_KEYS:
+            if m.get(key):
+                deprecated.add(mid)
+                break
+    return deprecated
 
 
 class AIClient:
@@ -800,8 +804,6 @@ class AIClient:
             base_url = "https://api.sambanova.ai/v1"
         elif provider == "cerebras":
             base_url = "https://api.cerebras.ai/v1"
-        elif provider == "github":
-            base_url = "https://models.github.ai/inference"
         
         url = f"{base_url}/chat/completions"
 
@@ -1866,6 +1868,7 @@ class AIClient:
                         headers.update(custom_headers)
                     result = self._get_json(models_url, headers)
                     self._on_key_success(provider, api_key)
+                    FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
                     return [m.get("id") for m in result.get("data", []) if m.get("id")]
 
                 if provider == "openrouter":
@@ -1873,19 +1876,26 @@ class AIClient:
                     headers = self._json_headers(api_key)
                     result = self._get_json(url, headers)
                     self._on_key_success(provider, api_key)
+                    FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
                     return [m.get("id") for m in result.get("data", []) if m.get("id")]
                 
                 elif provider == "gemini":
                     url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
                     result = self._get_json(url, {})
                     models = []
+                    deprecated = set()
                     for m in result.get("models", []):
                         name = m.get("name", "")
                         if "generateContent" in m.get("supportedGenerationMethods", []):
                             if name.startswith("models/"):
                                 name = name[7:]
                             models.append(name)
+                        else:
+                            dep_name = name[7:] if name.startswith("models/") else name
+                            if dep_name:
+                                deprecated.add(dep_name)
                     self._on_key_success(provider, api_key)
+                    FETCHED_DEPRECATED_MODELS[provider] = deprecated
                     return models
 
                 elif provider == "groq":
@@ -1933,15 +1943,6 @@ class AIClient:
 
                 elif provider == "huggingface":
                     return MODEL_SUGGESTIONS.get("huggingface", [])
-
-                elif provider == "github":
-                    url = "https://models.github.ai/catalog/models"
-                    headers = self._json_headers(api_key)
-                    result = self._get_json(url, headers)
-                    self._on_key_success(provider, api_key)
-                    if isinstance(result, list):
-                        return [m.get("id") for m in result if m.get("id")]
-                    return [m.get("id") for m in result.get("data", []) if m.get("id")]
 
             except Exception as e:
                 self._mark_key_failed(provider, api_key)
@@ -2095,3 +2096,26 @@ def is_model_blacklisted(provider: str, model: str) -> bool:
         return client._is_model_failed(provider, model)
     except Exception:
         return False
+
+def is_model_deprecated(provider: str, model: str) -> bool:
+    """Best-effort detection of deprecated/retired model IDs.
+
+    Checks, in order:
+      1. Deprecation flags returned by the provider's own model API during the
+         most recent fetch (OpenRouter, GitHub, Gemini, custom endpoints).
+      2. Legacy replacement mappings and obvious name markers.
+    """
+    if not model:
+        return False
+    try:
+        fetched = FETCHED_DEPRECATED_MODELS.get(provider)
+        if fetched and model in fetched:
+            return True
+        if (provider, model) in LEGACY_MODEL_REPLACEMENTS:
+            return True
+        lower = str(model).strip().lower()
+        if "deprecated" in lower or "legacy" in lower:
+            return True
+    except Exception:
+        return False
+    return False

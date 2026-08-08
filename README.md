@@ -51,6 +51,14 @@ The add-on features a multi-tiered, intelligence-driven fallback system. If your
 13. **Cerebras**
 14. **Custom Providers** (Ollama/LM Studio/Local Endpoints)
 
+### Model Status Highlights in Fallback Lists
+Fallback lists colour-code models after a fetch so you can spot stale entries at a glance:
+- 🆕 **Newly Added** (green): models the fetch just added to your list.
+- ⚠️ **Deprecated** (red) — models flagged as deprecated/retired by the provider's own API or legacy mappings.
+- ⚠️ **No Longer Returned** (amber) — models that were in your list before the fetch but the provider no longer returns.
+
+A single **Remove ▾** dropdown removes the models you choose: *Selected*, *Deprecated*, *No Longer Returned*, or both flagged types. Tests are unified under one **Test ▾** dropdown (*Checked* / *Row* / *All*) in both per-provider and global fallback dialogs.
+
 ---
 
 ## Batch Generation & Resumption
@@ -106,7 +114,8 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
     - **Body Params**: Send extra JSON fields in the request body (e.g., `{"think": "low"}` to control model reasoning traces on thinking-capable models like GPT-OSS or Qwen3).
     - **Editable Name**: Provider names can be changed after creation via the Edit button.
   - **Per-Model Thinking Levels & Timeouts**: In the **Fallbacks** dialog for any provider, each model has a Thinking Level dropdown (`off`/`low`/`medium`/`high`) and a Timeout spinbox. Set thinking to `"low"` for minimal reasoning traces on GPT-OSS or Qwen3, or `"off"` to disable (where supported). Timeout overrides the provider/global timeout for that specific model.
-  - **Multi-Select Test Row**: Ctrl+click or Shift+click to select multiple rows, then click **Test Row** to test them.
+  - **Multi-Select Test Row**: Ctrl+click or Shift+click to select multiple rows, then click **Test ▾ → Test Row** to test them.
+  - **Model Status Highlights**: Fallback lists highlight 🆕 newly fetched models (green), ⚠️ deprecated (red), and ⚠️ no-longer-returned (amber) models after a fetch, with a unified **Remove ▾** dropdown to strip Selected / Deprecated / No Longer Returned / both flagged types, and a unified **Test ▾** dropdown (Checked / Row / All).
   - **Debug Logging**: Enable "Debug logging" in the Logs tab to see full request/response payloads in the log file (`addon/ai_hints.log`).
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
 - **Shortcuts Tab**: Customize AI-Hints action keys and the modifier used on the answer side. The front side also accepts the action keys without the modifier for faster review.

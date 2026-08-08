@@ -2,6 +2,14 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.8.0 (2026-08-08)
+- **Deprecated / New / Missing Model Highlighting**: After a model fetch, fallback lists now flag models visually — 🆕 newly fetched models (green), ⚠️ Deprecated models (red), and ⚠️ No Longer Returned models (amber, i.e. present before the fetch but missing from the latest API response). Deprecation is detected live from each provider's own API (OpenRouter `deprecation`, Gemini models that no longer expose `generateContent`, and generic `expires_at`/`deprecated` flags on custom/GitHub-style endpoints) plus legacy replacement mappings and name heuristics. No hardcoded model lists.
+- **Unified Remove Dropdown**: The fallback dialogs now have a single **Remove ▾** button with a choose-type menu: *Remove Selected*, *Remove Deprecated*, *Remove No Longer Returned*, or *Remove Deprecated & No Longer Returned* together.
+- **Unified Test Dropdown**: The per-provider and global fallback dialogs now have a single **Test ▾** dropdown: *Test Checked*, *Test Row*, or *Test All* (replacing the previous separate button cluster).
+- **GitHub Models Provider Removed**: GitHub Models was fully retired by GitHub on 2026-07-30 (`models.github.ai` now returns 410 Gone). The GitHub provider has been removed from the provider list, default models, suggestions, fallbacks, and config.
+- **Faster Large Fallback Lists**: Fallback dialogs with hundreds of models (e.g. OpenRouter's ~400 models) now open much faster — rows are bulk-populated with layout/repaint updates frozen instead of a relayout per row.
+- **Crash Fix**: Fixed a `TypeError`/`AttributeError` in the Fallback dialog (`QTableWidget` has no `setCurrentRow`; moved to `setCurrentCell`), which crashed when setting the active model or reordering rows.
+
 ## 5.7.1 (2026-08-08)
 - **Incremental Per-Deck Batch Fast Scan**: Batch generation now skips notes created before this deck's last FULL batch scan by default. The cursor is tracked independently **per deck** (including all sub-decks) in `deck_last_scan_nid`, so scanning a sub-deck never wrongly skips its older cards based on another deck's timestamp. The cursor only advances after a full, eligible pass (no cards dropped to the safety limit, and not a browser-card selection).
 - **Valid Search Syntax Fix**: Fixed the batch fast-scan filter, which used the unsupported `nid:>` search operator. Anki 26.x rejects `nid:>` / `nid:1-5` with `"expected only digits and commas in nid:"` (causing an error every run and a full-deck fallback scan). New note ids are now resolved in Python and queried via the valid comma-list form (`deck:"..." nid:111,222`).
