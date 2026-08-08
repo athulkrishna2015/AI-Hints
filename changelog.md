@@ -29,6 +29,9 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Custom Provider Models URL**: Added a separate "Models URL (optional)" field in the Custom Provider dialog, allowing users to specify a distinct URL for model discovery independent of the chat completion endpoint.
 - **Custom Provider Routing Priority**: Custom provider endpoint configurations now take priority over built-in provider routing, so mapping a custom URL to a built-in provider name correctly routes through the custom provider path.
 
+## 5.4.1 (2026-07-26)
+- **Per-Provider Timeout Relocation**: The per-provider request timeout setting has been moved to the **AI Providers** tab, shown next to each provider row. Fallback model testing and search were also improved.
+
 ## 5.4.0 (2026-07-26)
 - **Default Front-Side MCQ Selection**: Bare `1–9` keys now select the corresponding option on the question side by default.
 - **Answer-Side Rating Preservation**: Anki’s normal `1–4` rating shortcuts remain unchanged on the answer side.
@@ -48,6 +51,13 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Custom Endpoint URL Auto-Normalization**: Custom provider endpoint URLs automatically append `/chat/completions` if omitted (supporting both `https://domain.com/v1` and `https://domain.com/v1/chat/completions`).
 - **Warning Emoji Variant Support**: Added support for both `⚠️` (U+26A0 with variation selector) and `⚠` (U+26A0) warning symbols in factual error detection and UI button rendering.
 - **QComboBox Qt Object Deletion Fix**: Resolved a `RuntimeError` crash when saving non-modal fallback dialogs after parent widget destruction.
+
+## 5.3.2 (2026-07-16)
+- **Stop Foreground Generation by Clicking Again**: Clicking the active **Generate** button a second time now stops the in-progress foreground generation.
+- **Prompt Updates & Commutator Fix**: Refreshed the default prompt configuration and fixed commutator-related generation handling.
+
+## 5.3.1 (2026-07-16)
+- **Packaged Release**: Re-released the add-on package with an updated `latex_fixer` submodule pointer.
 
 ## 5.3.0 (2026-07-14)
 - **Bulk TTS Hints Preservation**: Fixed a bug where running bulk TTS generation (PiperTTS addon 428593773) caused the `ai-hints-json` data block to be stripped from note fields. A new patch on `bulk_to_notes.add_audio_to_card` re-reads the freshest note from the database before and after each save to guarantee the hints div is always preserved, even under race conditions or stale note-object scenarios.
@@ -132,6 +142,9 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Configurable Request Timeouts**: Added separate active-review and pregeneration API timeout settings. Host/network failures now fail fast, while read timeouts can still try limited model fallbacks.
 - **Inline Editing Escape Save Documentation**: Clarified that `Escape` saves changed inline edits and reverts only unchanged edits.
 
+## 4.2.3 (2026-07-01)
+- **Bug-Fix Re-Release**: Re-packaged the v4.2.2 build with the same fixes (Inline Editing Escape Save, cloze placement alignment, JSON block persistence).
+
 ## 4.2.2 (2026-07-01)
 - **Visual Alignment & Card Layout Fixes**: Ensured that the hints/options container is placed directly between the Front and Back sides (or right after the Cloze text field) on both desktop Anki and AnkiDroid, preventing it from incorrectly shifting to the bottom of the card (after the `Extra` field).
 - **Escape Key Saves Inline Edits**: Pressing the `Escape` key inside the inline editor now saves the edit (using `saveEdit()`) instead of discarding changes, with automatic reversion if the value remains unchanged.
@@ -154,6 +167,9 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Decoupled System Prompt**: Separated the core system prompt from user-specific instructions. The core prompt is now loaded dynamically from `config.json` at runtime, ensuring prompt updates are applied automatically upon addon updates. Custom instructions are now stored in `additional_system_instructions` in `meta.json` and appended to the core prompt.
 - **Persistent Profile-Relative Batch State**: Relocated the batch queue state file (`ai_hints_batch_state.json`) from the addon folder to the user's active Anki profile directory. Added automatic startup migration for existing queue states and deferred loading to prevent conflicts during startup.
 - **Config-Managed Model Blacklist**: Migrated the model lockout/blacklist cache from a volatile local file (`blacklist.json`) to the persistent `meta.json` config under `"model_blacklist_data"`, preserving cooldown states during upgrades.
+
+## June 28, 2026 (v4.0.1)
+- **LaTeX Control-Character Restoration Fix**: Fixed LaTeX formatting issues caused by restoring control characters parsed from unescaped LLM JSON, ensuring math output survives un-escaped JSON responses.
 
 ## June 25, 2026 (v4.0.0)
 - **Inline Editing of Hints and Options**: Introduced interactive inline editing for hints and multiple-choice options directly during review. Holding `Ctrl` (or `Cmd` on macOS) highlights editable items on hover. Ctrl-clicking (or Cmd-clicking) an item turns it into an inline editor (`<textarea>`). Edits are saved on `Enter`, blur, or `Escape` when the value changed, which surgically updates the note's JSON block in the Anki database, synchronizes the `correct_answer` field if the correct option (index 0) was modified, updates the generated hint cache, and pushes the updated data back to the frontend dynamically with zero page flicker.
@@ -185,6 +201,13 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **HTML Image Descriptor Preservation**: Enhanced `_clean_html` to convert `<img>` tags into descriptive textual placeholders (e.g. `[Image: filename - alt]`) rather than stripping them completely. This preserves context for math clozes and allows the LLM to generate higher quality hints.
 - **Stuck/Failed Card ID Visibility**: Added real-time tracking and visual display of failed card IDs in the batch generation status summary. Clickable card links are shown for active, dormant, and completed queue runs.
 - **Startup Connection Stability**: Delayed sequential queue auto-resume until after the local proxy daemon is fully initialized.
+
+## June 14, 2026 (v3.6.3)
+- **Interactive Warning-Removal Action**: Added an interactive warning-removal button inline next to warning hints during card review, letting you dismiss factual-error warnings directly on the card.
+
+## June 11, 2026 (v3.6.2)
+- **Optimized Default Logging Level**: Set the default log verbosity to INFO to reduce noise, and made the debug/verbose logging level configurable.
+- **Batch Scan Progress Dialog**: Added a `QProgressDialog` that shows progress while scanning cards for batch generation.
 
 ## June 11, 2026 (v3.6.1)
 - **Granular API Key Blacklisting**: Refactored the key rotation blacklist to block specific model-key-provider combinations rather than entire keys or models globally.
@@ -246,7 +269,7 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Finalized Log Streamlining**: Demoted low-level operational logs (like raw JSON payloads and internal polling status) to the `DEBUG` level. This keeps the standard `INFO` view focused exclusively on card generation milestones and significant configuration changes.
 - **Improved Batch Status Summary**: Updated the Batch tab to display real-time pass tracking (e.g., `Pass #2`) and overall success statistics across the entire verification cycle.
 
-## June 4, 2026 (v3.0.1)
+## June 6, 2026 (v3.1.3)
 - **Fix Copy-Paste Cloze Contamination**: Implemented a deep answer-matching validation check that compares the stored `correct_answer` inside the hidden JSON payload against the actual text of active cloze deletions on the note, instantly purging mismatched/copied cloze data.
 - **Time-Gated Auto-Regeneration**: Added support for automatically regenerating hints that are older than a specific date/time. Configurable in the General settings tab (`auto_regenerate_if_old_time` and `auto_regenerate_min_time`).
 
@@ -327,10 +350,12 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 ## June 1, 2026 (v2.7.1)
 - **Cloze Custom Hint Detection**: Fixed a bug where cloze deletions with custom hints (like `{{c1::Shankari Prasad::case}}` which renders as `[case]` on the front side) failed to be identified as the card's front side. The template's client-side heuristic now robustly detects all active cloze deletions (both standard `[...]` and custom bracketed hints like `[case]` or `[year]`) on the front side of cards.
 
-## May 31, 2026 (v2.7.0)
-- **Configurable N-Card Pregeneration Buffer**: Implemented an upcoming review queue peeking engine that maintains a configurable buffer of pregenerated hints (up to `N` cards, defaulting to `3`) in the background. Added a visual spinner in the General configuration tab to easily customize your pregeneration buffer size to prevent lagging during rapid reviews.
+## May 31, 2026 (v2.6.3)
 - **Interactive Ko-fi Support Widget**: Restored the beautiful interactive script-based Ko-fi widget in the "Support Authors" tab via an embedded `AnkiWebView`, allowing users to directly support the addon with a native experience.
 - **Cloze Answer-Side Detection Heuristic**: Fixed a bug where correct options failed to highlight and hints remained collapsed on the back/answer side of Cloze deletion cards on mobile (AnkiDroid/AnkiMobile) or when the Python addon is not running. Implemented a robust, client-side HTML heuristic that identifies the answer side when all `.cloze` elements have been revealed (i.e., none of them contain the `[...]` placeholder).
+
+## May 31, 2026 (v2.7.0)
+- **Configurable N-Card Pregeneration Buffer**: Implemented an upcoming review queue peeking engine that maintains a configurable buffer of pregenerated hints (up to `N` cards, defaulting to `3`) in the background. Added a visual spinner in the General configuration tab to easily customize your pregeneration buffer size to prevent lagging during rapid reviews.
 
 ## May 30, 2026 (v2.6.2)
 - **Compact Dynamic Sizing**: Scaled option and hint lists down to 80% (`0.8em`) of the native card font size to ensure compact, perfectly proportioned, and responsive layout across all templates.
@@ -359,7 +384,7 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Strict Field Extraction**: Restructured card content parsing to strictly target standard Front/Back fields for standard/reversed card extraction, ensuring auxiliary/storage fields are not sent to the LLM.
 - **Robust Template Detection**: Refactored front field detection to robustly match field references containing spaces or filters (like `{{type:Back}}` or `{{ Back }}`).
 
-## May 23, 2026
+## May 23, 2026 (v2.5.0)
 - **Flicker-Free UI**: Re-engineered the template rendering engine to be fully idempotent. Eliminated the annoying "flash" and intermittent click failures by preventing redundant DOM reconstructions during card transitions and state updates.
 - **Enhanced Cloze Support**: Added support for `c2`/`c3` keyed hints, allowing independent AI hints for different cloze deletions on the same note.
 - **Improved UI Layout**: Refactored the configuration dialog's "General" tab to prevent layout squishing and improved the visual polish of the reviewer buttons with smoother transitions and animations.
@@ -368,7 +393,7 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Unicode Stability**: Fixed potential `UnicodeDecodeError` when reading addon metadata.
 - **Smart Render Guards**: Added protection against re-rendering while editing fields and implemented more aggressive stale data pruning.
 
-## May 21, 2026
+## May 21, 2026 (v2.3.5)
 - **Log Viewer Decoding Fix**: Added `errors="replace"` to the log file reading logic in the configuration dialog to prevent Anki from raising a `UnicodeDecodeError` when logs contain invalid UTF-8/ANSI characters.
 - **Crash Fix**: Resolved a `TypeError` crash in `CardParser.__init__` caused by obsolete configuration arguments (`target_fields` and `note_type_fields`).
 - **Robust Note Updates**: Updated note saving logic to use `mw.col.update_note(note)` instead of the deprecated `note.flush()` method to ensure database consistency.
@@ -379,14 +404,14 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Reviewer Refresh Races**: Resolved races in reviewer AI hints refresh logic.
 - **Data Ghosting Resolution**: Restored multi-block rendering to completely resolve Web-review card data ghosting.
 
-## May 19, 2026
+## May 19, 2026 (v2.3.3)
 - **Optimized Startup**: Delayed heavy initialization of the Antigravity Proxy and Mobile Sync to prevent resource contention and potential crashes during Anki startup.
 - **Resource Efficiency**: Replaced the heavy `AnkiWebView` used for the Ko-fi widget with a native `QPushButton` to reduce memory overhead and improve UI responsiveness.
 - **Stable Update Notifications**: Added a delay to automatic support dialog popups after updates and fixed the tab index to correctly open the "Support Authors" tab.
 - **Cross-Platform Keyboard Shortcuts**: Implemented review screen keyboard shortcuts for both Desktop (native python hook) and Mobile/Standalone (JavaScript keydown listener).
 - **Customizable Default Mappings**: Swapped default toggle mappings so `Alt+2` toggles hints and `Alt+3` toggles options.
 
-## May 18, 2026
+## May 18, 2026 (v2.3.2)
 - **Offline Template Resolution**: Corrected a major bug where template installers injected prompt fields instead of storage fields, enabling full offline card reviewer button rendering.
 - **Propagation & Tap Delay Prevention**: Restructured `template.js` reviewer buttons to block event propagation (`e.stopPropagation()` / `e.preventDefault()`), eliminating click delays and double-clicking issues.
 - **Python 3.14 exit-crash prevention**: Cleaned timers and shutdown daemon in `profile_will_close` hook to stop PyQt6/sip crash.
@@ -402,9 +427,70 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Improved Navigation**: Added separate "Save", "Save & Close", and "Cancel" buttons to the configuration dialog.
 - **Performance**: Optimized rendering and state management to eliminate "ghost data" and flickering during card transitions.
 
-## May 13, 2026
+## May 13, 2026 (v2.2.0)
 - **Improved Pre-generation Strategy**: Implemented smarter queue-peeking for Anki v3 scheduler.
 - **Robust Network Monitoring**: Added background network status monitor.
 - **Global Emergency Stop**: Added instant-kill signal for all AI generations.
 - **Optimized Provider Failover**: Enhanced 404/Timeout recovery.
 - **Missing Cloze Handling**: Graceful detection and skipping for cards with missing clozes.
+
+## May 12, 2026 (v2.1.0)
+- **Persistent Model Blacklisting**: Model failures, rate limits, and quota exhaustion states now persist across Anki restarts via a local `blacklist.json` file.
+- **Enhanced Fallback UI**: Added a dedicated **[Fallbacks]** button for every AI provider, a new priority-manager dialog to manually reorder fallback models, and [Test] buttons inside the fallback selector.
+- **Improved Failover Logic**: Removed the "Trying anyway" bypass to strictly skip blacklisted models, allowing faster failover to working providers.
+- **Robust Rate-Limit Recovery**: Blacklist entries are now automatically cleared if a model succeeds during a manual test.
+- **Clean Packaging**: Build exclusions ensure local cache files (`blacklist.json`, `batch_state.json`, `antigravity-accounts.json`) are never bundled into the distributed package.
+
+## May 12, 2026 (v2.0.0)
+- **Instant-Open Config UI**: Implemented lazy-loading for note types and fields, cutting configuration window opening time from seconds to milliseconds.
+- **Optimized Anki Startup**: Background tasks (proxy daemon startup, log clearing) are now deferred until after the profile is loaded.
+- **Interactive Model Testing**: Added [Test] buttons next to every AI provider to verify API keys, connectivity, and generation quality before saving.
+- **Live Proxy Status Indicator**: Added a real-time, color-coded status tracker (**● Running** / **○ Stopped**) for the Antigravity Proxy daemon in the configuration tab.
+- **Intelligent Dropdown Synchronization**: The "Active AI Provider" and per-model dropdowns now strictly follow custom priority order and the intelligence-ranked fallback hierarchy.
+- **Python 3.14 Compatibility**: Fixed a startup crash caused by legacy hook names in the latest Python/Anki builds.
+- **Proxy Manager Stability**: Resolved an `UnboundLocalError` that could prevent the Antigravity daemon from starting on certain platforms.
+
+## May 9, 2026 (v1.3.1)
+- **Packaging Optimization**: Optimized the distributed package size and cleaned up vendored `json_repair` files.
+
+## May 9, 2026 (v1.3.0)
+- **json_repair Integration**: Integrated the `json_repair` library for robust AI response parsing, along with a robust AI hallucination sanitizer and front-side detection fixes.
+
+## May 9, 2026 (v1.2.1)
+- **AI Hallucination Sanitizer**: Added robust hallucination sanitization, prefix removal, and front-side detection fixes.
+
+## May 9, 2026 (v1.2.0)
+- **Front-Side Detection Fix**: Corrected front-side detection and improved the UI.
+
+## May 9, 2026 (v1.1.4)
+- **Stability, Custom Undo Labels & FSRS Compatibility**: Improved overall stability, added custom undo labels, and ensured compatibility with FSRS schedulers.
+
+## May 8, 2026 (v1.1.3)
+- **Reviewer Undo Fix**: Added safe Anki checkpoints for the **Generate** and **Clear** actions so background note database modifications register in Anki's undo history (Ctrl+Z no longer kicks you back to the deck overview).
+- **Restored Card-Refreshing Logic**: Restored the original, highly stable card-refreshing logic via standard `getCard` re-assignments.
+
+## May 8, 2026 (v1.1.2)
+- **Multi-Cloze Support**: Hints and options for each cloze deletion are now stored independently using `c1`, `c2` keys in a single unified JSON block, and the reviewer dynamically selects the data for the active cloze.
+- **Math Rendering Improvements**: Fixed dangling/broken LaTeX delimiters (auto-corrected to `\(...\)`), improved math wrapping for `\mathbf`/`\text{}` expressions, and stricter deduplication of mathematically identical options.
+- **Review UX**: Hints and options no longer auto-reveal on return visits; buttons must be pressed to show them each time. Fixed a JS `SyntaxError` that could prevent the add-on from appearing on the review screen.
+
+## May 8, 2026 (v1.1.0)
+- **Standardized LaTeX Generation**: Standardized math output using `$` delimiters and improved MCQ reliability.
+
+## May 8, 2026 (v1.0.6)
+- **Multi-Cloze Support**: Added specialized handling for cards containing multiple cloze deletions with the same ID.
+- **Stability Improvements**: Fixed an issue where hints would "disappear" after pressing "Show Answer" due to stale card rendering.
+- **Enhanced LaTeX Fixer**: Improved the `ai-latex-fixer` library to handle nested delimiters and better standardize multi-part math strings.
+- **Aggressive Hiding**: Ensured hints and options stay strictly hidden on existing cards until manually revealed or just generated.
+
+## May 7, 2026 (v1.0.5)
+- **Expert SRS Mode**: Upgraded the AI to follow Dr. Wozniak's 20 Rules of Formulating Knowledge, specializing in the Minimum Information Principle and concise hint generation.
+
+## May 7, 2026 (v1.0.4)
+- **Enhanced Logging**: Added model names to logs, a log search filter, and structured changelog documentation.
+
+## May 7, 2026 (v1.0.3)
+- **Dynamic Models & Custom Priority**: Added dynamic model fetching from provider APIs, customizable fallback priority, and improved LaTeX output cleaning.
+
+## May 7, 2026 (v1.0.2)
+- **MathJax Rendering**: Updated MathJax delimiter instructions and hardened AI hint rendering.
