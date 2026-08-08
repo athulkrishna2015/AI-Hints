@@ -242,7 +242,8 @@ class GeneralTabMixin:
         self.tag_hinted_notes_cb = QCheckBox("Tag Notes with AI Hints")
         self.tag_hinted_notes_cb.setToolTip(
             "Automatically add a tag (default: 'ai-hints') to notes when hints are generated, "
-            "and remove it when hints are cleared. Useful for filtering in the Browser."
+            "and remove it when hints are cleared or skipped. Useful for filtering in the Browser "
+            "AND enables the fast batch-scan mode (untagged notes are the only ones scanned)."
         )
         tag_hinted_row.addWidget(self.tag_hinted_notes_cb)
 

@@ -155,6 +155,16 @@ class AdvancedTabMixin:
         self.clear_pregen_btn.setToolTip("Removes all pre-generated hints from the disk cache. Useful if you want to start fresh or clear space.")
         self.clear_pregen_btn.clicked.connect(self.on_clear_pregen_cache)
         maint_layout.addWidget(self.clear_pregen_btn)
+
+        self.tag_all_btn = QPushButton("🏷️ Tag All Cards with Hints")
+        self.tag_all_btn.setToolTip(
+            "Adds the AI-Hints tag to every note that already contains saved hint data, so the "
+            "fast batch-scan mode can skip them. Run this once after enabling 'Tag Notes with "
+            "AI Hints' to cover cards created before tagging was on. Skips and cleared cards "
+            "are NOT tagged."
+        )
+        self.tag_all_btn.clicked.connect(self.on_tag_all_hinted)
+        maint_layout.addWidget(self.tag_all_btn)
         
         maint_group.setLayout(maint_layout)
         adv_layout.addWidget(maint_group)

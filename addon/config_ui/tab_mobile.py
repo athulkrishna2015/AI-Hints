@@ -35,8 +35,8 @@ class MobileTabMixin:
         self.mobile_emojis_cb.stateChanged.connect(self.update_mobile_script_view)
         opt_layout.addWidget(self.mobile_emojis_cb)
 
-        self.mobile_extra_cb = QCheckBox("Show extra buttons (Refresh, Show JSON)")
-        self.mobile_extra_cb.setToolTip("Adds 🔄 and 📝 buttons for debugging on mobile.")
+        self.mobile_extra_cb = QCheckBox("Show extra button (Refresh)")
+        self.mobile_extra_cb.setToolTip("Adds the 🔄 Refresh button for debugging on mobile. The 📝 Show JSON button is always available.")
         self.mobile_extra_cb.stateChanged.connect(self.update_mobile_script_view)
         opt_layout.addWidget(self.mobile_extra_cb)
 

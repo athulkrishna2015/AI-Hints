@@ -1,8 +1,19 @@
 import threading
+import time
 from aqt import mw
 from aqt.utils import askUser
 from aqt.qt import *
 from ..logger import logger, info, tooltip
+from .widgets import ADDON_PACKAGE
+
+def _subtree_deck_names(deck_name):
+    """Return deck_name plus every deck directly or indirectly beneath it."""
+    try:
+        names = mw.col.decks.all_names()
+    except Exception:
+        return [deck_name]
+    prefix = deck_name + "::"
+    return [deck_name] + [d for d in names if d.startswith(prefix)]
 
 class BatchTabMixin:
     def _create_batch_tab(self):
@@ -95,6 +106,22 @@ class BatchTabMixin:
         self.batch_skip_existing_cb.setChecked(True)
         s_layout.addRow(self.batch_skip_existing_cb)
 
+        # ⏱ Incremental scan: by default only cards created since this deck's last FULL batch
+        # scan are processed (per-deck cursor, so sub-decks each get a fresh start). The optional
+        # FULL scan checkbox ignores the cursor and re-checks every card in the deck.
+        self.batch_full_scan_cb = QCheckBox("🧹 Force FULL scan (ignore last-scan cursor)")
+        self.batch_full_scan_cb.setToolTip(
+            "Fast mode (default) skips cards that were created before this deck's most recent "
+            "FULL batch scan, making batch scanning nearly instant.\n\n"
+            "The last-scan cursor is tracked PER-DECK, so each sub-deck is scanned independently "
+            "and older notes moved into a sub-deck are never wrongly skipped by another deck's "
+            "scan time.\n\n"
+            "Use this checkbox to force a FULL scan that ignores the cursor and re-checks every "
+            "card in the selected deck."
+        )
+        self.batch_full_scan_cb.setChecked(self.config.get("batch_full_scan", False))
+        s_layout.addRow(self.batch_full_scan_cb)
+
         # Version-gated Batch Regeneration control
         self.batch_regen_version_cb = QCheckBox("└─ Except if Generated Version < ")
         self.batch_regen_version_cb.setStyleSheet("margin-left: 15px;")
@@ -146,28 +173,7 @@ class BatchTabMixin:
         active_group = QGroupBox("Running & Pending Batches")
         a_layout = QVBoxLayout()
         
-        self.batch_list_view = QTextBrowser()
-        self.batch_list_view.setReadOnly(True)
-        self.batch_list_view.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse | 
-            Qt.TextInteractionFlag.LinksAccessibleByMouse
-        )
-        self.batch_list_view.setPlaceholderText("No active native batch tracking handles found.")
-        self.batch_list_view.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
-        self.batch_list_view.setOpenExternalLinks(False)
-        self.batch_list_view.anchorClicked.connect(self._on_log_link_clicked)
-        a_layout.addWidget(self.batch_list_view)
-        refresh_row = QHBoxLayout()
-        
-        # Primary Control Suite cluster
-        self.batch_run_btn = QPushButton("🚀 Initiate Queue")
-        self.batch_run_btn.setAutoDefault(False)
-        self.batch_run_btn.setMinimumHeight(30)
-        self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
-        try: self.batch_run_btn.clicked.disconnect()
-        except Exception: pass
-        self.batch_run_btn.clicked.connect(self.on_batch_control_clicked)
-        
+        # Buttons kept on top of the batch list: Stop/Discard + Refresh Status.
         self.stop_local_btn = QPushButton("🛑 Stop & Discard Queue")
         self.stop_local_btn.setAutoDefault(False)
         self.stop_local_btn.setMinimumHeight(30)
@@ -183,13 +189,32 @@ class BatchTabMixin:
         except Exception: pass
         self.refresh_status_btn.clicked.connect(self.update_batch_status_tab)
         
-        # Grouped Layout
-        refresh_row.addWidget(self.batch_run_btn)
-        refresh_row.addWidget(self.stop_local_btn)
-        refresh_row.addStretch() 
-        refresh_row.addWidget(self.refresh_status_btn)
+        self.batch_run_btn = QPushButton("🚀 Initiate Queue")
+        self.batch_run_btn.setAutoDefault(False)
+        self.batch_run_btn.setMinimumHeight(30)
+        self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+        try: self.batch_run_btn.clicked.disconnect()
+        except Exception: pass
+        self.batch_run_btn.clicked.connect(self.on_batch_control_clicked)
+
+        top_row = QHBoxLayout()
+        top_row.addWidget(self.batch_run_btn)
+        top_row.addWidget(self.stop_local_btn)
+        top_row.addStretch() 
+        top_row.addWidget(self.refresh_status_btn)
+        a_layout.addLayout(top_row)
         
-        a_layout.addLayout(refresh_row)
+        self.batch_list_view = QTextBrowser()
+        self.batch_list_view.setReadOnly(True)
+        self.batch_list_view.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse | 
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        self.batch_list_view.setPlaceholderText("No active native batch tracking handles found.")
+        self.batch_list_view.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        self.batch_list_view.setOpenExternalLinks(False)
+        self.batch_list_view.anchorClicked.connect(self._on_log_link_clicked)
+        a_layout.addWidget(self.batch_list_view)
         active_group.setLayout(a_layout)
         layout.addWidget(active_group)
         
@@ -447,6 +472,30 @@ class BatchTabMixin:
             except:
                 pass
 
+    def _record_batch_scan_cursor(self, deck_name):
+        """Persist a per-deck "last full scan" cursor (max note id) for this deck + all its
+        sub-decks. Called on a full, eligible batch pass so each deck keeps an independent
+        timestamp and a later scan of a sub-deck never skips its older cards wrongly."""
+        if not deck_name or deck_name == "Selected Cards":
+            return
+        try:
+            max_nid = 0
+            try:
+                max_nid = int(mw.col.db.scalar("SELECT COALESCE(MAX(id), 0) FROM notes") or 0)
+            except Exception:
+                max_nid = 0
+            if max_nid <= 0:
+                return
+            cfg = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+            cursors = dict(cfg.get("deck_last_scan_nid", {}) or {})
+            for name in _subtree_deck_names(deck_name):
+                cursors[name] = max_nid
+            cfg["deck_last_scan_nid"] = cursors
+            mw.addonManager.writeConfig(ADDON_PACKAGE, cfg)
+            logger.info(f"AI-Hints Batch: advanced per-deck scan cursor to {max_nid} for {deck_name}")
+        except Exception as e:
+            logger.error(f"Failed to record batch scan cursor: {e}")
+
     def set_selected_deck(self, deck_name):
         """External hook to select a specific deck in the Batch tab."""
         self.selected_deck_name = deck_name
@@ -487,7 +536,9 @@ class BatchTabMixin:
 
     def on_start_config_batch(self):
         from ..batch_manager import batch_manager
-        
+
+        tag_filter_msg = ""
+
         # 1. Handle selection from browser if present
         if hasattr(self, "selected_card_ids") and self.selected_card_ids:
             source_cids = list(self.selected_card_ids)
@@ -526,6 +577,36 @@ class BatchTabMixin:
             except Exception as e:
                 logger.error(f"Deck search failed: {e}")
                 source_cids = []
+
+            # ⏱️ Incremental fast scan: skip notes created before this deck's last FULL batch scan.
+            # The cursor is tracked per-deck (and per-sub-deck), so sub-decks are never wrongly
+            # skipped by other deck's (or a global) scan timestamp.
+            #
+            # NOTE: Anki's search syntax only accepts exact numbers (or a comma-separated list)
+            # for `nid:` / `cid:` — operators like `nid:>` or `nid:1-5` are REJECTED with
+            # "expected only digits and commas in nid:". So we resolve the new note ids in
+            # Python and filter via the valid comma-list form.
+            tag_filter_msg = ""
+            try:
+                cursor_cfg = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+                cursors = cursor_cfg.get("deck_last_scan_nid", {}) or {}
+                cursor = int(cursors.get(deck_name, 0) or 0)
+                want_full = hasattr(self, "batch_full_scan_cb") and self.batch_full_scan_cb.isChecked()
+                if want_full:
+                    tag_filter_msg = ""
+                elif cursor:
+                    new_nids = [n for n in mw.col.find_notes(f'deck:"{deck_name}"') if n > cursor]
+                    if new_nids:
+                        source_cids = mw.col.find_cards(f'deck:"{deck_name}" nid:{",".join(map(str, new_nids))}')
+                        tag_filter_msg = f" (fast scan: {len(source_cids)} candidates - notes created since the last full scan of this deck)"
+                    else:
+                        source_cids = []
+                        tag_filter_msg = " (fast scan: no new notes since the last full scan of this deck)"
+                else:
+                    tag_filter_msg = ""
+            except Exception as e:
+                logger.error(f"Cursor-based batch filtering failed, falling back to full scan: {e}")
+                tag_filter_msg = " (cursor read failed → full scan)"
 
         try:
             if not source_cids:
@@ -586,14 +667,20 @@ class BatchTabMixin:
             limit = self.batch_limit_spin.value()
             chunked_ids = final_ids[:limit]
             excess = len(final_ids) - limit
-            
+
+            # Only a full, eligible pass advances the per-deck scan cursor: the deck is wholly
+            # scanned (no cards dropped to the safety limit) and it is not a selection run.
+            record_cursor = (excess <= 0) and deck_name != "Selected Cards"
+
             is_native = self.rb_native_async.isChecked()
             mode_str = "Native Cloud Batch" if is_native else "Local Background Queue"
-            
+
             confirm_msg = f"Ready to process {len(chunked_ids)} cards using **{mode_str}**."
+            if tag_filter_msg:
+                confirm_msg += f"\n\n{tag_filter_msg}."
             if excess > 0:
                 confirm_msg += f"\n\n(Note: {excess} remaining skipped due to safety limits.)"
-            
+
             if not askUser(confirm_msg + "\n\nProceed with execution?"):
                 return
             
@@ -637,6 +724,8 @@ class BatchTabMixin:
                     provider_override=prov_override
                 )
                 if started:
+                    if record_cursor:
+                        self._record_batch_scan_cursor(deck_name)
                     self.selected_card_ids = None
                     self.batch_deck_chooser.setEnabled(True)
                     self.batch_deck_chooser.setEditable(False)
@@ -689,6 +778,8 @@ class BatchTabMixin:
                         if jname:
                             batch_manager.register_job(jname, actual_cids)
                             def _on_success():
+                                if record_cursor:
+                                    self._record_batch_scan_cursor(deck_name)
                                 self.selected_card_ids = None
                                 self.batch_deck_chooser.setEnabled(True)
                                 self.batch_deck_chooser.setEditable(False)

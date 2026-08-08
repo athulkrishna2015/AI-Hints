@@ -131,6 +131,37 @@ This means every mixin method shares the same `self` (including `self.config`, `
 
 ---
 
+## Batch Scanning & Incremental Cursor
+
+The Batch tab scans a deck for cards that still need hint generation. To avoid re-scanning
+a whole huge deck on every run, it keeps an **incremental cursor** per deck (and per sub-deck)
+in `config["deck_last_scan_nid"]` — a map of `deck_name -> max note id` recorded when a full,
+eligible batch pass completes.
+
+**Rules:**
+- The cursor is only **advanced** after a full, eligible pass: no cards were dropped to the
+  safety limit (`excess <= 0`) and the run was not a "Selected Cards" selection. This guarantees
+  that incomplete older cards are never silently skipped.
+- The cursor is recorded for the selected deck **and all its sub-decks**, so a later scan of a
+  sub-deck can never wrongly skip cards based on another deck's (or a global) timestamp.
+- A full scan is forced when the "Force FULL scan" checkbox is enabled, when a deck has no
+  cursor yet, or anywhere the cursor lookup fails.
+
+**Important Anki search constraint:** Anki's search syntax only accepts exact numbers or a
+comma-separated list for `nid:`/`cid:` — operators like `nid:>` or `nid:1-5` are rejected with
+`"expected only digits and commas in nid:"` (verified against a real 26.x collection). Therefore
+the fast-scan resolves new note ids in Python first (`find_notes` filtered by `> cursor`) and
+then filters with the valid comma-list form:
+
+```python
+mw.col.find_cards(f'deck:"{deck}" nid:{",".join(map(str, new_nids))}')
+```
+
+The UI labels this the "fast scan"; the checkbox to bypass it is wired in `tab_batch.py`
+(`on_start_config_batch`, `_record_batch_scan_cursor`).
+
+---
+
 ## Building and Versioning
 
 ### Build the `.ankiaddon` package
@@ -214,11 +245,28 @@ python3 tests/live_test.py
 python3 tests/test_raw_local.py
 ```
 
-### 5. Full Suite
+### 5. Live AnkiConnect Verification
+Requires the **AnkiConnect** add-on (https://ankiweb.net/shared/info/2055492159) enabled and
+Anki running with the plugin listening on `localhost:8765`. These scripts talk to the *live*
+collection, so run them on a disposable profile / deck:
+
+```shell
+# Read-only DB verification: checks AI hints JSON blocks and serialized metadata keys
+# (_generation_type / _version) in the active collection:
+python3 tests/test_ankiconnect_live.py
+
+# Writes + reads a test JSON block on a card in the "Zhared::test" deck, then restores
+# the original note content (verifies end-to-end persistence via updateNoteFields/notesInfo):
+python3 tests/test_live_ankiconnect.py
+```
+
+### 6. Full Suite
 Run all discovery-compatible tests using Python's standard unittest runner:
 ```shell
 python3 -B -m unittest discover -s tests -p "test_*.py"
 ```
+(The two AnkiConnect scripts above are `__main__`-driven and are not auto-discovered here, so
+the full suite needs no live Anki running.)
 
 ---
 

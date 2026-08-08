@@ -1163,17 +1163,23 @@
                         }
                     };
                     btnBox.appendChild(refBtn);
+                }
 
-                    if (state.showJson && data) {
-                        const view = document.createElement('pre');
-                        view.className = 'ai-hints-json-view';
-                        view.textContent = JSON.stringify(data, null, 2);
-                        container.appendChild(view);
-                    }
+                // Show JSON button: always available whenever there is card data, including on
+                // mobile (AnkiDroid/AnkiMobile) where the Python addon is not active and the
+                // extra-buttons toggle may be off.
+                if (state.showJson && data) {
+                    const view = document.createElement('pre');
+                    view.className = 'ai-hints-json-view';
+                    view.textContent = JSON.stringify(data, null, 2);
+                    container.appendChild(view);
+                }
 
+                if (data) {
                     const jsonBtn = document.createElement('button');
                     jsonBtn.className = 'ai-hints-btn';
                     jsonBtn.textContent = labels.json;
+                    jsonBtn.title = "Show raw JSON data";
                     jsonBtn.onclick = (e) => {
                         if (e) { e.stopPropagation(); e.preventDefault(); }
                         let view = container.querySelector('.ai-hints-json-view');

@@ -2,6 +2,15 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.7.1 (2026-08-08)
+- **Incremental Per-Deck Batch Fast Scan**: Batch generation now skips notes created before this deck's last FULL batch scan by default. The cursor is tracked independently **per deck** (including all sub-decks) in `deck_last_scan_nid`, so scanning a sub-deck never wrongly skips its older cards based on another deck's timestamp. The cursor only advances after a full, eligible pass (no cards dropped to the safety limit, and not a browser-card selection).
+- **Valid Search Syntax Fix**: Fixed the batch fast-scan filter, which used the unsupported `nid:>` search operator. Anki 26.x rejects `nid:>` / `nid:1-5` with `"expected only digits and commas in nid:"` (causing an error every run and a full-deck fallback scan). New note ids are now resolved in Python and queried via the valid comma-list form (`deck:"..." nid:111,222`).
+- **Force FULL Scan Checkbox**: Added a **"🧹 Force FULL scan (ignore last-scan cursor)"** checkbox to the Batch tab to re-check every card in the deck, bypassing the incremental cursor.
+- **Hint Tagging On by Default**: `tag_hinted_notes` now defaults to **ON**. Notes are tagged (`ai-hints`) when hints are generated and the tag is removed when hints are cleared or skipped. Tagging enables the fast batch-scan mode (untagged notes are the only ones scanned).
+- **Tag All Cards with Hints Tool**: New **"🏷️ Tag All Cards with Hints"** button in the Advanced tab. Runs once to tag every note that already contains saved AI-Hints data, covering cards created before tagging was enabled. Skipped and cleared notes are NOT tagged.
+- **Mobile JSON Button Always Available**: The 📝 **Show JSON** button is now always rendered whenever card data exists, including on AnkiDroid/AnkiMobile where the Python addon is inactive and the extra-buttons toggle is off. The "Show extra buttons" option now controls only the 🔄 Refresh button.
+- **Batch Tab Layout**: Moved the **🚀 Initiate Queue**, **🛑 Stop & Discard Queue**, and **🔄 Refresh Status** buttons to the top of the "Running & Pending Batches" panel, above the batch list.
+
 ## 5.7.0 (2026-07-29)
 - **Per-Model Thinking Level**: Fallback priority dialog now has a Thinking Level dropdown (`off`/`low`/`medium`/`high`) per model. Default is `off`. Controls model reasoning traces on thinking-capable models like GPT-OSS or Qwen3.
 - **Per-Model Timeout**: Each model in the fallback list has a Timeout spinbox (seconds) that overrides the provider/global request timeout.

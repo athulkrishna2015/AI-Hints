@@ -269,7 +269,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.rate_again_delay_spin.setValue(c.get("rate_again_delay_ms", 1000) / 1000.0)
             self.rate_again_delay_spin.setEnabled(self.rate_again_on_wrong_cb.isChecked())
         if hasattr(self, "tag_hinted_notes_cb"):
-            self.tag_hinted_notes_cb.setChecked(c.get("tag_hinted_notes", False))
+            self.tag_hinted_notes_cb.setChecked(c.get("tag_hinted_notes", True))
             self.hint_tag_edit.setText(c.get("hint_tag", "ai-hints"))
             self.hint_tag_edit.setEnabled(self.tag_hinted_notes_cb.isChecked())
         if hasattr(self, "tag_skipped_notes_cb"):
@@ -366,6 +366,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.batch_limit_spin.setValue(c.get("batch_limit", 1000))
         if hasattr(self, "batch_multithread_cb"):
             self.batch_multithread_cb.setChecked(c.get("multithread_providers", False))
+        if hasattr(self, "batch_full_scan_cb"):
+            self.batch_full_scan_cb.setChecked(c.get("batch_full_scan", False))
 
     def copy_to_clipboard(self, text):
         QApplication.clipboard().setText(text)
@@ -1402,6 +1404,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 
             if hasattr(self, "batch_multithread_cb"):
                 new_config["multithread_providers"] = self.batch_multithread_cb.isChecked()
+            if hasattr(self, "batch_full_scan_cb"):
+                new_config["batch_full_scan"] = self.batch_full_scan_cb.isChecked()
 
             # Mobile Config
             new_config["mobile_use_emojis"] = self.mobile_emojis_cb.isChecked()
@@ -1531,6 +1535,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("manual_show_hints", True)
         config.setdefault("manual_show_options", False)
         config.setdefault("maint_only_modified", True)
+        config.setdefault("batch_full_scan", False)
+        config.setdefault("deck_last_scan_nid", {})
+        config.setdefault("tag_hinted_notes", True)
+        config.setdefault("tag_skipped_notes", True)
         
         # Mobile Support Defaults
         config.setdefault("mobile_use_emojis", False)
@@ -1850,6 +1858,74 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         dialog.setModal(False)
         dialog.show()
         mw._orphaned_hints_dialog = dialog
+
+    def on_tag_all_hinted(self):
+        """Tags every note that already contains AI-Hints data with the configured hint tag,
+        so the fast batch-scan mode can skip them. Skips and cleared cards aren't tagged."""
+        from aqt.qt import Qt, QProgressDialog, QApplication, QMessageBox
+        from aqt.utils import askUser
+        from ..reviewer_hooks import _note_set_tag
+
+        hint_tag = self.hint_tag_edit.text().strip() or "ai-hints"
+        query = self._get_maint_search_query()
+        scope_str = "your entire collection" if not query else f"the deck '{self.maint_deck_cb.currentText()}'"
+
+        if not askUser(
+            f"This will scan {scope_str} and tag every note that already contains saved AI-Hints "
+            f"data with the tag '{hint_tag}'. Skipped and cleared notes are NOT tagged.\n\n"
+            f"Run this once to enable fast batch scanning on cards created before tagging was on.\n\nContinue?"
+        ):
+            return
+
+        nids = mw.col.find_notes(query)
+        total = len(nids)
+        if total == 0:
+            QMessageBox.information(self, "Tag All", "No notes found in the selected scope!")
+            return
+
+        progress = QProgressDialog(f"Scanning {scope_str} for existing AI-Hints data...", "Cancel", 0, total, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(200)
+
+        tagged_count = 0
+        for i, nid in enumerate(nids):
+            if progress.wasCanceled():
+                break
+            progress.setValue(i)
+            progress.setLabelText(f"Scanning note {i + 1} of {total}...")
+            QApplication.processEvents()
+            try:
+                note = mw.col.get_note(nid)
+                if hint_tag in note.tags:
+                    continue
+                has_hint_data = any(
+                    "ai-hints-json" in value or "ai-hints-container" in value
+                    for value in note.values()
+                )
+                if not has_hint_data:
+                    continue
+                if _note_set_tag(note, hint_tag, True):
+                    mw.col.update_note(note)
+                    tagged_count += 1
+            except Exception as e:
+                logger.error(f"AI-Hints: Error tagging note {nid}: {e}")
+        progress.setValue(total)
+
+        mw.reset()
+        if tagged_count:
+            logger.info(f"AI-Hints: Tagged {tagged_count} notes with '{hint_tag}'.")
+            QMessageBox.information(
+                self,
+                "Tagging Complete",
+                f"🏷️ Tagged {tagged_count} existing notes with '{hint_tag}'."
+                "\n\nFast batch scanning can now skip these cards.",
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Tagging Complete",
+                "No notes with existing AI-Hints data needed tagging.",
+            )
 
     def on_clean_naked_json(self):
         """Scans all notes and safely removes raw, naked JSON blocks not wrapped in AI div containers."""
