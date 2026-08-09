@@ -125,6 +125,9 @@ class CustomProviderDialog(QDialog):
         try:
             models = client.fetch_models("TEMP")
             if models:
+                # If model field is empty, automatically set first fetched model as default
+                if not self.model_edit.text().strip():
+                    self.model_edit.setText(sorted(models)[0])
                 # Use a menu for selection
                 menu = QMenu(self)
                 for m in sorted(models):
@@ -151,6 +154,27 @@ class CustomProviderDialog(QDialog):
             except Exception:
                 info(f"{label} must be valid JSON.")
                 return
+
+        # If model name is not filled, attempt auto-fallback via fetch_models
+        if not self.model_edit.text().strip() and self.url_edit.text().strip():
+            try:
+                temp_config = self.config.copy()
+                temp_config["custom_providers"] = {
+                    "TEMP": {
+                        "url": self.url_edit.text().strip(),
+                        "models_url": self.models_url_edit.text().strip() or "",
+                        "api_key": self.key_edit.text().strip(),
+                        "headers": json.loads(self.headers_edit.toPlainText() or "{}"),
+                        "body_params": json.loads(self.body_params_edit.toPlainText() or "{}")
+                    }
+                }
+                client = AIClient(temp_config)
+                models = client.fetch_models("TEMP")
+                if models:
+                    self.model_edit.setText(sorted(models)[0])
+            except Exception:
+                pass
+
         self.accept()
 
 PROVIDER_URLS = {

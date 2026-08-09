@@ -23,6 +23,45 @@ except ImportError:
 
 ADDON_PATH = os.path.dirname(__file__)
 BLACKLIST_FILE = os.path.join(ADDON_PATH, "blacklist.json")
+
+LOG_SYSTEM_PROMPT_CHARS = 120
+
+
+def _compact_request_data(data: Dict[str, Any], max_len: int = LOG_SYSTEM_PROMPT_CHARS) -> Dict[str, Any]:
+    """Return a compact copy of a request payload for debug logging so the
+    system prompt is omitted and user content truncated."""
+    out = dict(data)
+
+    messages = out.get("messages")
+    if isinstance(messages, list):
+        compact_messages = []
+        for m in messages:
+            if not isinstance(m, dict):
+                compact_messages.append(m)
+                continue
+            role = m.get("role")
+            if role == "system":
+                # Omit system prompt completely from debug log
+                continue
+            cm = dict(m)
+            content = cm.get("content")
+            if isinstance(content, str) and len(content) > max_len:
+                cm["content"] = f"[{len(content)} chars] {content[:max_len]}..."
+            elif isinstance(content, list):
+                cm["content"] = f"[{len(content)} parts]"
+            compact_messages.append(cm)
+        out["messages"] = compact_messages
+
+    if "system" in out:
+        out.pop("system", None)
+    if "system_instruction" in out:
+        out.pop("system_instruction", None)
+    if isinstance(out.get("contents"), list):
+        out["contents"] = "<truncated>"
+    if isinstance(out.get("prompt"), str) and len(out["prompt"]) > max_len:
+        out["prompt"] = f"[{len(out['prompt'])} chars]"
+
+    return out
 REQUEST_TIMEOUT_SECONDS = 10
 USER_AGENT = "Anki-AI-Hints/1.0"
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
@@ -585,13 +624,34 @@ class AIClient:
             if not isinstance(custom_cfg, dict):
                 return False
             url = str(custom_cfg.get("url", "") or "").strip()
-            model = str(custom_cfg.get("model", "") or "").strip()
+            if not url:
+                return False
             from .logger import log_context
             is_test = getattr(log_context, "source", None) == "model_test"
             # If in model_test mode, model will be passed as override_model
             if is_test:
-                return bool(url)
-            return bool(url and model)
+                return True
+            # A model may live in the custom entry itself, the top-level
+            # "models" map, or "model_fallbacks" — any of these counts as ready.
+            if str(custom_cfg.get("model", "") or "").strip():
+                return True
+            models_cfg = self.config.get("models") or {}
+            if isinstance(models_cfg, dict) and str(models_cfg.get(provider, "") or "").strip():
+                return True
+            fallbacks_cfg = self.config.get("model_fallbacks") or {}
+            fb = fallbacks_cfg.get(provider) if isinstance(fallbacks_cfg, dict) else None
+            if isinstance(fb, list) and any(str(x).strip() for x in fb):
+                return True
+            if isinstance(fb, str) and fb.strip():
+                return True
+            # Fallback: attempt to fetch models from models_url / /models endpoint
+            try:
+                fetched = self.fetch_models(provider)
+                if fetched:
+                    return True
+            except Exception:
+                pass
+            return False
 
         return bool(self._api_key_for(provider))
 
@@ -707,7 +767,7 @@ class AIClient:
                         data["think"] = think_val
 
                 try:
-                    logger.debug(f"AI-Hints Custom {provider_name}/{model} request: {json.dumps(data)}")
+                    logger.debug(f"AI-Hints Custom {provider_name}/{model} request: {json.dumps(_compact_request_data(data))}")
                     self._log_model_attempt(provider_name, model, models)
                     result = self._post_json(url, data, headers)
                     content = self._extract_content(result)
@@ -860,7 +920,7 @@ class AIClient:
                             if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "sambanova", "cerebras", "nvidia"]:
                                 data["response_format"] = {"type": "json_object"}
                             try:
-                                logger.debug(f"AI-Hints {provider}/{local_model_name} request: {json.dumps(data)}")
+                                logger.debug(f"AI-Hints {provider}/{local_model_name} request: {json.dumps(_compact_request_data(data))}")
                                 self._log_model_attempt(provider, local_model_name, local_models)
                                 result = self._post_json(url, data, headers)
                                 content = self._extract_content(result)
@@ -906,7 +966,7 @@ class AIClient:
                     data["response_format"] = {"type": "json_object"}
 
                 try:
-                    logger.debug(f"AI-Hints {provider}/{model} request: {json.dumps(data)}")
+                    logger.debug(f"AI-Hints {provider}/{model} request: {json.dumps(_compact_request_data(data))}")
                     self._log_model_attempt(provider, model, models)
                     result = self._post_json(url, data, headers)
                     content = self._extract_content(result)
