@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.8.1 (2026-08-09)
+- **Together AI Provider Removed**: The Together provider has been fully removed from the provider list, default models, suggestions, fallbacks, legacy replacements, chat routing, and config. Together's API key authentication was often misconfigured (returning `HTTP 401 Unauthorized`), and the endpoint is better served through a Custom Provider for users who need it.
+- **Token Usage Logging**: Every successful provider completion now logs its token usage (`prompt_tokens`/`completion_tokens`/`total_tokens`, or Anthropic-style `input_tokens`/`output_tokens`) to `ai_hints.log` (visible in the Logs tab), so you can monitor per-call API usage without querying the provider dashboard.
+
 ## 5.8.0 (2026-08-08)
 - **Deprecated / New / Missing Model Highlighting**: After a model fetch, fallback lists now flag models visually — 🆕 newly fetched models (green), ⚠️ Deprecated models (red), and ⚠️ No Longer Returned models (amber, i.e. present before the fetch but missing from the latest API response). Deprecation is detected live from each provider's own API (OpenRouter `deprecation`, Gemini models that no longer expose `generateContent`, and generic `expires_at`/`deprecated` flags on custom/GitHub-style endpoints) plus legacy replacement mappings and name heuristics. No hardcoded model lists.
 - **Unified Remove Dropdown**: The fallback dialogs now have a single **Remove** button with a choose-type menu: *Remove Selected*, *Remove Deprecated*, *Remove No Longer Returned*, or *Remove Deprecated & No Longer Returned* together.

@@ -11,7 +11,6 @@
     "nvidia": "",
     "mistral": "",
     "huggingface": "",
-    "together": "",
     "sambanova": "",
     "cerebras": ""
   },
@@ -26,7 +25,6 @@
     "openrouter": "deepseek/deepseek-chat",
     "nvidia": "meta/llama-3.3-70b-instruct",
     "huggingface": "deepseek-ai/DeepSeek-V3",
-    "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova": "Meta-Llama-3.3-70B-Instruct",
     "cerebras": "llama-3.1-8b"
   },
@@ -82,11 +80,6 @@
       "meta-llama/llama-3.3-70b-instruct",
       "openrouter/auto"
     ],
-    "together": [
-      "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-      "deepseek-ai/DeepSeek-V3",
-      "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
-    ],
     "sambanova": [
       "Meta-Llama-3.3-70B-Instruct"
     ],
@@ -130,7 +123,6 @@
     "gemini",
     "openrouter",
     "huggingface",
-    "together",
     "groq",
     "sambanova",
     "nvidia",

@@ -161,7 +161,6 @@ PROVIDER_URLS = {
     "deepseek": "https://platform.deepseek.com/api_keys",
     "openrouter": "https://openrouter.ai/keys",
     "mistral": "https://console.mistral.ai/api-keys/",
-    "together": "https://api.together.xyz/settings/api-keys",
     "huggingface": "https://huggingface.co/settings/tokens",
     "sambanova": "https://cloud.sambanova.ai/apis",
     "cerebras": "https://cloud.cerebras.ai/",

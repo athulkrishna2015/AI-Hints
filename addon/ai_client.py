@@ -85,7 +85,6 @@ PROVIDER_ORDER = [
     "gemini",
     "openrouter",
     "huggingface",
-    "together",
     "groq",
     "sambanova",
     "nvidia",
@@ -104,7 +103,6 @@ DEFAULT_MODELS = {
     "openrouter": "deepseek/deepseek-chat",
     "nvidia":     "meta/llama-3.3-70b-instruct",
     "huggingface": "deepseek-ai/DeepSeek-V3",
-    "together":   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "sambanova":  "Meta-Llama-3.3-70B-Instruct",
     "cerebras":   "llama3.1-8b",
 }
@@ -164,12 +162,6 @@ MODEL_SUGGESTIONS = {
         "mistral-large-latest",
         "pixtral-12b-2409",
     ],
-    "together": [
-        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-        "deepseek-ai/DeepSeek-V3",
-        "mistralai/Mixtral-8x7B-Instruct-v0.1",
-    ],
     "sambanova": [
         "Meta-Llama-3.3-70B-Instruct",
     ],
@@ -200,7 +192,6 @@ LEGACY_MODEL_REPLACEMENTS = {
     ("openrouter", "meta-llama/llama-3-8b-instruct"): "meta-llama/llama-3.1-8b-instruct",
     ("openrouter", "google/gemini-3.1-flash"): "google/gemini-2.0-flash-001",
     ("openrouter", "google/gemini-2.0-flash-exp:free"): "google/gemini-2.0-flash-001",
-    ("together", "mistralai/Mixtral-8x7B-Instruct-v0.1"): "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
     ("sambanova", "Meta-Llama-3.1-8B-Instruct"): "Meta-Llama-3.3-70B-Instruct",
     ("cerebras", "llama3.1-8b"): "llama-3.1-8b",
     ("cerebras", "llama3.1-70b"): "llama-3.3-70b",
@@ -258,11 +249,6 @@ MODEL_FALLBACKS = {
         "deepseek/deepseek-chat",
         "meta-llama/llama-3.3-70b-instruct",
         "openrouter/auto",
-    ],
-    "together": [
-        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "deepseek-ai/DeepSeek-V3",
-        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
     ],
     "sambanova": [
         "Meta-Llama-3.3-70B-Instruct",
@@ -798,8 +784,6 @@ class AIClient:
             base_url = "https://api.mistral.ai/v1"
         elif provider == "huggingface":
             base_url = "https://router.huggingface.co/v1"
-        elif provider == "together":
-            base_url = "https://api.together.xyz/v1"
         elif provider == "sambanova":
             base_url = "https://api.sambanova.ai/v1"
         elif provider == "cerebras":
@@ -873,7 +857,7 @@ class AIClient:
                                     {"role": "user", "content": prompt}
                                 ],
                             }
-                            if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "together", "sambanova", "cerebras", "nvidia"]:
+                            if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "sambanova", "cerebras", "nvidia"]:
                                 data["response_format"] = {"type": "json_object"}
                             try:
                                 logger.debug(f"AI-Hints {provider}/{local_model_name} request: {json.dumps(data)}")
@@ -918,7 +902,7 @@ class AIClient:
                         {"role": "user", "content": prompt}
                     ],
                 }
-                if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "together", "sambanova", "cerebras", "nvidia"]:
+                if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "sambanova", "cerebras", "nvidia"]:
                     data["response_format"] = {"type": "json_object"}
 
                 try:
@@ -1922,13 +1906,12 @@ class AIClient:
                     return [m.get("id") for m in result.get("data", []) if m.get("id")]
 
                 # Generic OpenAI-compatible providers
-                openai_style = ["openai", "deepseek", "mistral", "together", "nvidia", "sambanova", "cerebras", "grok"]
+                openai_style = ["openai", "deepseek", "mistral", "nvidia", "sambanova", "cerebras", "grok"]
                 if provider in openai_style:
                     urls = {
                         "openai": "https://api.openai.com/v1/models",
                         "deepseek": "https://api.deepseek.com/models",
                         "mistral": "https://api.mistral.ai/v1/models",
-                        "together": "https://api.together.xyz/v1/models",
                         "nvidia": "https://integrate.api.nvidia.com/v1/models",
                         "sambanova": "https://api.sambanova.ai/v1/models",
                         "cerebras": "https://api.cerebras.ai/v1/models",
@@ -1970,7 +1953,27 @@ class AIClient:
             return [self._drop_none(v) for v in value]
         return value
 
+    def _log_usage(self, result: Any) -> None:
+        if not isinstance(result, dict):
+            return
+        usage = result.get("usage")
+        if not isinstance(usage, dict) or not usage:
+            return
+        try:
+            parts = []
+            for k in ("input_tokens", "prompt_tokens", "output_tokens", "completion_tokens", "total_tokens"):
+                v = usage.get(k)
+                if v not in (None, 0):
+                    parts.append(f"{k}:{v}")
+            if not parts:
+                return
+            model = result.get("model", "")
+            logger.info(f"AI-Hints usage{( ' ' + str(model)) if model else ''}: " + ", ".join(parts))
+        except Exception:
+            pass
+
     def _extract_content(self, result: Any) -> str:
+        self._log_usage(result)
         if not isinstance(result, dict):
             return str(result)
 
