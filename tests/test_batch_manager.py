@@ -400,5 +400,105 @@ class TestBatchManager(unittest.TestCase):
         self.assertEqual(len(manager.local_queue_jobs), 0)
         self.assertFalse(manager.local_queue_active)
 
+    @patch('time.sleep')
+    @patch.object(BatchManager, '_run_local_queue_thread')
+    @patch('addon.batch_manager.CardParser')
+    @patch('addon.batch_manager.AIClient')
+    @patch('addon.reviewer_hooks._get_card_from_collection')
+    @patch('addon.reviewer_hooks.card_has_hints')
+    def test_all_active_providers_join_multithread_bulk_gen(self, mock_card_has_hints, mock_get_card, mock_aiclient_class, mock_card_parser_class, mock_run_thread, mock_sleep):
+        """All candidate/active providers must join the bulk local-queue generation when multithreading is enabled."""
+        manager = BatchManager()
+        manager.local_queue_jobs = []
+        manager.local_queue_active = False
+
+        candidates = ["openai", "gemini", "anthropic", "openrouter"]
+        mock_client = MagicMock()
+        mock_client._candidate_providers.return_value = candidates
+        mock_aiclient_class.return_value = mock_client
+        mock_card_parser_class.return_value = MagicMock()
+        mock_get_card.return_value = MagicMock()
+        mock_card_has_hints.return_value = True
+
+        config = {
+            "multithread_providers": True,
+            "ai_provider": "openai",
+            "provider_priority": candidates,
+            "api_keys": {p: f"key-{p}" for p in candidates},
+        }
+        manager.local_queue_jobs = [{
+            "id": "multithread_job",
+            "queue": [100, 101, 102],
+            "total": 3,
+            "failed_cards": [],
+            "config": config,
+            "provider": None,
+            "pass": 1,
+            "errors": 0,
+        }]
+        manager.local_queue_active = True
+        manager.saved_config = config
+
+        manager._run_local_queue(config, None)
+
+        # The full set of READY providers is adopted as the active provider pool
+        self.assertEqual(set(manager.active_providers), set(candidates))
+        # A dedicated worker thread was spawned for EVERY active provider
+        spawned_providers = [c.args[0] for c in mock_run_thread.call_args_list]
+        self.assertEqual(len(spawned_providers), len(candidates))
+        self.assertEqual(set(spawned_providers), set(candidates))
+        # No cards were counted as failures: every provider participated so the combined pool succeeded
+        self.assertEqual(manager.local_queue_errors, 0)
+        self.assertEqual(manager.local_queue_failed_cards, [])
+        mock_client._candidate_providers.assert_called_once_with("openai")
+
+    @patch('time.sleep')
+    @patch.object(BatchManager, '_run_local_queue_thread')
+    @patch('addon.batch_manager.CardParser')
+    @patch('addon.batch_manager.AIClient')
+    @patch('addon.reviewer_hooks._get_card_from_collection')
+    @patch('addon.reviewer_hooks.card_has_hints')
+    def test_only_ready_providers_join_multithread_bulk_gen(self, mock_card_has_hints, mock_get_card, mock_aiclient_class, mock_card_parser_class, mock_run_thread, mock_sleep):
+        """Providers that are NOT ready must be excluded from the bulk generation worker pool."""
+        manager = BatchManager()
+        manager.local_queue_jobs = []
+        manager.local_queue_active = False
+
+        candidates = ["openai", "gemini"]
+        mock_client = MagicMock()
+        mock_client._candidate_providers.return_value = candidates  # 'anthropic' is unconfigured => omitted
+        mock_aiclient_class.return_value = mock_client
+        mock_card_parser_class.return_value = MagicMock()
+        mock_get_card.return_value = MagicMock()
+        mock_card_has_hints.return_value = True
+
+        config = {
+            "multithread_providers": True,
+            "ai_provider": "openai",
+            "provider_priority": ["openai", "gemini", "anthropic"],
+            "api_keys": {"openai": "k1", "gemini": "k2"},
+        }
+        manager.local_queue_jobs = [{
+            "id": "filtered_job",
+            "queue": [50],
+            "total": 1,
+            "failed_cards": [],
+            "config": config,
+            "provider": None,
+            "pass": 1,
+            "errors": 0,
+        }]
+        manager.local_queue_active = True
+        manager.saved_config = config
+
+        manager._run_local_queue(config, None)
+
+        # Unready provider ('anthropic') must not join the bulk generation
+        self.assertEqual(set(manager.active_providers), set(candidates))
+        self.assertNotIn("anthropic", manager.active_providers)
+        spawned_providers = [c.args[0] for c in mock_run_thread.call_args_list]
+        self.assertEqual(set(spawned_providers), set(candidates))
+        self.assertNotIn("anthropic", spawned_providers)
+
 if __name__ == "__main__":
     unittest.main()

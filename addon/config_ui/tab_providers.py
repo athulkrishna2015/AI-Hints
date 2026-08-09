@@ -747,7 +747,22 @@ class AddModelDialog(QDialog):
                 models_set.add(m)
             for m in fallbacks.get(p, []):
                 models_set.add(m)
-                
+
+            # For custom providers, read model + model_fallbacks from custom_providers_data
+            # (same priority chain as _models_for_provider uses)
+            if hasattr(self.main_dialog, "custom_providers_data") and p in self.main_dialog.custom_providers_data:
+                cp_cfg = self.main_dialog.custom_providers_data.get(p) or {}
+                if isinstance(cp_cfg, dict):
+                    primary = str(cp_cfg.get("model", "") or "").strip()
+                    if primary:
+                        models_set.add(primary)
+                    fb = cp_cfg.get("model_fallbacks", []) or []
+                    if isinstance(fb, str):
+                        fb = [fb]
+                    for m in fb:
+                        if m and str(m).strip():
+                            models_set.add(str(m).strip())
+
             # Read from main dialog's comboboxes if they exist
             if p == "local" and hasattr(self.main_dialog, "local_model_edit"):
                 cb = self.main_dialog.local_model_edit
@@ -757,7 +772,7 @@ class AddModelDialog(QDialog):
                 cb = self.main_dialog.model_edits[p]
                 for i in range(cb.count()):
                     models_set.add(cb.itemText(i))
-            
+
             self.providers_data[p] = sorted(list(models_set))
         
         def update_models():
@@ -1087,6 +1102,13 @@ class GlobalFallbackOrderDialog(QDialog):
                     if lp not in providers_to_fetch:
                         providers_to_fetch.append(lp)
 
+        # Also fetch for custom API providers (OpenAI-compatible custom providers)
+        if hasattr(self.main_dialog, "custom_providers_data"):
+            for cp, cp_data in (self.main_dialog.custom_providers_data or {}).items():
+                if cp_data and isinstance(cp_data, dict) and str(cp_data.get("url", "") or "").strip():
+                    if cp not in providers_to_fetch:
+                        providers_to_fetch.append(cp)
+
         if not providers_to_fetch:
             tooltip("No providers configured to fetch.")
             self.list_fetch_btn.setText("Fetch All")
@@ -1108,6 +1130,9 @@ class GlobalFallbackOrderDialog(QDialog):
                     api_key = self.main_dialog.api_key_edits[provider].text().strip() if provider in self.main_dialog.api_key_edits else ""
                     temp_config = self.main_dialog.config.copy()
                     temp_config["local_providers"] = self.main_dialog.local_providers_data
+                    # Always include current custom_providers so fetch_models has URLs/keys
+                    if hasattr(self.main_dialog, "custom_providers_data"):
+                        temp_config["custom_providers"] = self.main_dialog.custom_providers_data
                     if "api_keys" not in temp_config: temp_config["api_keys"] = {}
                     temp_config["api_keys"][provider] = api_key
                     if provider == "local":
@@ -1115,7 +1140,7 @@ class GlobalFallbackOrderDialog(QDialog):
                             "base_url": self.main_dialog.local_url_edit.text().strip() or "http://localhost:11434/v1",
                             "api_key": self.main_dialog.local_api_key_edit.text().strip()
                         }
-                    
+
                     client = AIClient(temp_config)
                     models = client.fetch_models(provider)
                     
