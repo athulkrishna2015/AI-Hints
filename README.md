@@ -97,7 +97,7 @@ On **AnkiMobile (iOS)**, tapping an answer option used to blank the card and sho
 
 **Cause:** AnkiMobile has **no JavaScript API for showing the answer**. Older builds of the add-on called `pycmd('ans')` / `showAnswer()` when an option was tapped (the same API used on Desktop). On iOS that call makes the WebView navigate to a blank page whose content is the string `undefined`.
 
-**Fix (built into v5.8.2+):** On iOS, the add-on now detects the AnkiMobile WebView bridge and skips the JS reveal call entirely — tapping an option only saves your selection and lets AnkiMobile's own **tap-to-reveal** flip the card, exactly as it does for blank areas, so no `undefined` screen appears. Desktop and AnkiDroid are unchanged and continue to use their platform JS reveal APIs (`pycmd('ans')` / `showAnswer()`).
+**Fix (built into v5.8.2+):** On iOS, the add-on now detects the AnkiMobile WebView bridge and skips the JS reveal call entirely — tapping an option only saves your selection and lets AnkiMobile's own **tap-to-reveal** flip the card, exactly as it does for blank areas, so no `undefined` screen appears. Desktop and AnkiDroid are unchanged and continue to use their platform JS reveal APIs (`pycmd('ans')` / `showAnswer()`). On **AnkiWeb** (ankiuser.net/study) — which exposes no JS reveal API either — the option tap now simulates a click on the reviewer's own **Show Answer** button instead.
 
 To update your phone:
 1. **Sync Anki on PC** so the fresh `_ai_hints_template.js` reaches AnkiWeb.

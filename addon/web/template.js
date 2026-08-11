@@ -492,6 +492,15 @@
                                 window.anki.showAnswer();
                             } else if (typeof showAnswer === 'function') {
                                 showAnswer();
+                            } else {
+                                // AnkiWeb exposes no JS reveal API, so simulate the user
+                                // pressing the review screen's own "Show Answer" button
+                                // (rendered inside #ansarea by the AnkiWeb web app).
+                                const ansBtn = document.querySelector('#ansarea .btn.btn-primary.btn-lg') ||
+                                    document.querySelector('.btn.btn-primary.btn-lg');
+                                if (ansBtn && /show answer/i.test(ansBtn.textContent || '')) {
+                                    ansBtn.click();
+                                }
                             }
                         }
                     });

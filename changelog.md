@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.8.3 (2026-08-11)
+- **AnkiWeb (ankiuser.net/study) Option Reveal Fix**: Tapping a generated MCQ option on the AnkiWeb reviewer used to only save your selection — the card never flipped because AnkiWeb exposes no JavaScript reveal API (`pycmd` / `showAnswer()` do not exist there). The reveal now falls back to simulating a click on the reviewer's own **Show Answer** button (`#ansarea .btn.btn-primary.btn-lg`), so options flip the card and the correct/incorrect highlight renders on the back side exactly like on Desktop and the mobile apps.
+
 ## 5.8.2 (2026-08-11)
 - **AnkiMobile "undefined" Tap Fix**: On AnkiMobile (iOS), tapping a generated MCQ option used to blank the card and show the literal text `undefined` at the top instead of flipping to the answer side. AnkiMobile has no JavaScript API for showing the answer, so the old `pycmd('ans')`/`showAnswer()` reveal call made the WebView navigate to a blank `undefined` page. The add-on now detects the AnkiMobile WebView bridge (`webkit.messageHandlers.cb`) and skips the JS reveal there — the option tap only saves your selection and the platform's native tap-to-reveal flips the card, so the correct/incorrect highlight still renders on the back side. Desktop and AnkiDroid are unaffected and keep their `pycmd('ans')`/`showAnswer()` reveal. Documented in the README's **Mobile Setup & Troubleshooting** section, including the requirement to keep a review tap zone set to "Show Answer".
 
