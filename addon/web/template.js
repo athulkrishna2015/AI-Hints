@@ -476,14 +476,16 @@
                         persistence.save(stateKey, state);
 
                         // Reveal back side of the card immediately.
-                        // Only do this when the Python addon is running (Desktop). On mobile
-                        // (AnkiDroid/AnkiMobile/AnkiWeb, isAddonActive === false) there is no
-                        // reliable JS reveal API: pycmd('ans')/showAnswer() are ignored on
-                        // AnkiDroid, and on AnkiMobile they navigate the WebView to a blank
-                        // page showing "undefined". Instead we let the platform's native
-                        // tap-to-reveal flip the card, so the saved selection renders on the
-                        // answer side without any JS navigation.
-                        if (isAddonActive) {
+                        // AnkiMobile (iOS) has NO JavaScript API for showing the answer:
+                        // calling pycmd('ans') or showAnswer() there navigates the WebView
+                        // to a blank page showing the literal string "undefined". So on iOS
+                        // we skip the JS reveal and let the native tap-to-reveal flip the
+                        // card (the saved selection still renders on the answer side).
+                        // Desktop and AnkiDroid use the platform JS APIs below as before.
+                        const isAnkiMobile = typeof window.anki !== 'undefined' &&
+                            typeof window.webkit !== 'undefined' &&
+                            !!(window.webkit.messageHandlers && window.webkit.messageHandlers.cb);
+                        if (!isAnkiMobile) {
                             if (typeof pycmd === 'function') {
                                 pycmd('ans');
                             } else if (typeof window.anki !== 'undefined' && typeof window.anki.showAnswer === 'function') {
