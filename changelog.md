@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.8.4 (2026-08-11)
+- **AnkiWeb Multi-Cloze Detection Fix**: On AnkiWeb (ankiuser.net/study) every cloze card showed only the `c1` hints/options. AnkiWeb places the cloze number on the card container (`<div id="qa_box" class="card card2">`) instead of on `<body>`, so the mobile cloze detection never found it and always fell back to `c1`. `getCardOrd()` now also reads the `cardN` class from `#qa_box`, so c2/c3 cards render their own hints and options correctly on AnkiWeb.
+
 ## 5.8.3 (2026-08-11)
 - **AnkiWeb (ankiuser.net/study) Option Reveal Fix**: Tapping a generated MCQ option on the AnkiWeb reviewer used to only save your selection — the card never flipped because AnkiWeb exposes no JavaScript reveal API (`pycmd` / `showAnswer()` do not exist there). The reveal now falls back to simulating a click on the reviewer's own **Show Answer** button (`#ansarea .btn.btn-primary.btn-lg`), so options flip the card and the correct/incorrect highlight renders on the back side exactly like on Desktop and the mobile apps.
 

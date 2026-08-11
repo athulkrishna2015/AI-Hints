@@ -216,7 +216,18 @@
             return parseInt(bodyMatch[1]) - 1;
         }
 
-        // 2. Fallback to active cloze class: Some custom templates might tag clozes with classes like 'c1', 'c2'.
+        // 2. AnkiWeb (ankiuser.net/study) does NOT put the card class on <body>; it puts
+        //    it on the card container instead (e.g. <div id="qa_box" class="card card1">).
+        //    Without this check every cloze card would resolve to ord 0 (c1 data only).
+        const qaBox = document.getElementById('qa_box');
+        if (qaBox) {
+            const qaBoxMatch = (qaBox.className || '').match(/\bcard(\d+)\b/);
+            if (qaBoxMatch) {
+                return parseInt(qaBoxMatch[1]) - 1;
+            }
+        }
+
+        // 3. Fallback to active cloze class: Some custom templates might tag clozes with classes like 'c1', 'c2'.
         //    Note: Standard Anki/AnkiDroid only uses class='cloze' without numbering, so this is just a backup.
         const cloze = document.querySelector('.cloze');
         if (cloze) {
