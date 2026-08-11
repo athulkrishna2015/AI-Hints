@@ -92,6 +92,21 @@ To force AnkiDroid to load the new script:
 2. **Force-Close the App**: Swipe AnkiDroid away from your phone's **Recent Apps** list. This terminates the persistent WebView session and clears the cache.
 3. **Reopen AnkiDroid**: Open the app and review a card. The clean desktop-style UI will render perfectly.
 
+### ⚠️ Troubleshooting AnkiMobile "undefined" on Tap (MCQ Reveal)
+On **AnkiMobile (iOS)**, tapping an answer option used to blank the card and show the literal text `undefined` at the top instead of flipping to the answer side.
+
+**Cause:** AnkiMobile has **no JavaScript API for showing the answer**. Older builds of the add-on called `pycmd('ans')` / `showAnswer()` when an option was tapped (the same API used on Desktop). On iOS that call makes the WebView navigate to a blank page whose content is the string `undefined`.
+
+**Fix (built into v5.8.2+):** On mobile — where the Python addon does not run — tapping an option now only saves your selection and lets AnkiMobile's own **tap-to-reveal** flip the card, exactly as it does for blank areas. No JavaScript navigation is attempted, so no `undefined` screen appears.
+
+To update your phone:
+1. **Sync Anki on PC** so the fresh `_ai_hints_template.js` reaches AnkiWeb.
+2. **Sync AnkiMobile** to download it.
+3. **Force-Close the app** in the app switcher and reopen it.
+
+> [!IMPORTANT]
+> Because the reveal uses the native tap zones, keep **Review → Tap Zones → When Question Shown → "tap anywhere" (or a zone covering the options) → Show Answer** enabled in AnkiMobile preferences. If you pick a more restrictive zone (e.g. only left/right), tap an option in the middle won't flip the card.
+
 > [!TIP]
 > **Quick Script Force-Refresh:** Sometimes after an update, in order to guarantee loading the absolute latest Javascript template, go to **Tools -> Add-ons -> AI-Hints -> Config -> Mobile Support**, first click **Remove from All Note Types** to clean the old assets, and then click **One-Click Install: Setup All Note Types** again to install the fresh script. Then sync your devices.
 
