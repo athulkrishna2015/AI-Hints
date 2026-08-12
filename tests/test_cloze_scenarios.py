@@ -1,6 +1,8 @@
 import unittest
 import os
 import sys
+import json
+import re
 
 sys.dont_write_bytecode = True
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -138,8 +140,10 @@ class TestClozeScenarios(unittest.TestCase):
         # Should be None because c2 is not an active cloze in note text
         self.assertIsNone(block)
 
-    def test_stale_cloze_c2_answer_mismatch_returns_no_data(self):
-        # Note text has new c2 ("City of Lakes"), but JSON payload has old c2 ("Grammy Award")
+    def test_legacy_payload_without_snapshot_is_trusted(self):
+        # A payload WITHOUT a _src snapshot (legacy/manual) is never invalidated on
+        # content matching, since we can't distinguish an intentional edit from
+        # stale copy-pasted data. Block is reported as present.
         text = (
             "{{c1::Bhopal}} "
             "<br>{{c2::City of Lakes}} "
@@ -150,8 +154,64 @@ class TestClozeScenarios(unittest.TestCase):
         note = MockNote({"Text": text}, model_name="Cloze")
         card_c2 = MockCard(1) # card ord 1 -> c2
         block = self.parser.find_hints_block(note, card_c2)
-        # Should be None because "Grammy" does not match "City of Lakes"
+        self.assertIsNotNone(block)
+
+    def test_cloze_with_matching_src_snapshot_is_valid(self):
+        text = (
+            "{{c1::Bhopal}} "
+            "<br>{{c2::City of Lakes}} "
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"capital\"]}, \"c2\": {\"hints\": [\"music award\"], \"options\": [\"City of Lakes\", \"River\"], \"correct_answer\": \"City of Lakes\", \"_src\": \"City of Lakes\"}}"
+            "</div>"
+        )
+        note = MockNote({"Text": text}, model_name="Cloze")
+        card_c2 = MockCard(1)
+        block = self.parser.find_hints_block(note, card_c2)
+        self.assertIsNotNone(block)
+
+    def test_cloze_with_manual_edited_options_keeps_snapshot_valid(self):
+        # User manually edited options and correct_answer, but the original _src
+        # snapshot still matches the (unchanged) cloze text -> data is NOT stale.
+        text = (
+            "{{c1::Bhopal}} "
+            "<br>{{c2::City of Lakes}} "
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"capital\"]}, \"c2\": {\"hints\": [\"edited hint\"], \"options\": [\"My custom option\"], \"correct_answer\": \"My custom option\", \"_src\": \"City of Lakes\"}}"
+            "</div>"
+        )
+        note = MockNote({"Text": text}, model_name="Cloze")
+        card_c2 = MockCard(1)
+        block = self.parser.find_hints_block(note, card_c2)
+        self.assertIsNotNone(block)
+
+    def test_cloze_with_changed_note_text_and_snapshot_is_invalid(self):
+        # The cloze text itself changed (e.g. card repurposed/copy-pasted): stored
+        # _src no longer matches the current answer -> data flagged stale.
+        text = (
+            "{{c1::Bhopal}} "
+            "<br>{{c2::Fictional City}} "
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"capital\"]}, \"c2\": {\"hints\": [\"music award\"], \"options\": [\"Grammy\", \"Oscar\"], \"correct_answer\": \"Grammy\", \"_src\": \"City of Lakes\"}}"
+            "</div>"
+        )
+        note = MockNote({"Text": text}, model_name="Cloze")
+        card_c2 = MockCard(1)
+        block = self.parser.find_hints_block(note, card_c2)
         self.assertIsNone(block)
+
+    def test_update_note_with_hints_stores_src_snapshot(self):
+        text = (
+            "{{c1::Bhopal}} is a city. "
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"old hint\"]}}"
+            "</div>"
+        )
+        note = MockNote({"Text": text}, model_name="Cloze")
+        card_c1 = MockCard(0)
+        new_data = {"hints": ["new hint"], "options": ["Bhopal", "Indore"], "correct_answer": "Bhopal"}
+        self.assertTrue(self.parser.update_note_with_hints(note, new_data, card=card_c1))
+        payload = json.loads(re.search(r'class="ai-hints-json"[^>]*>(.*?)</div>', note["Text"], re.DOTALL).group(1))
+        self.assertEqual(payload["c1"]["_src"], "Bhopal")
 
     def test_update_note_with_hints_purges_orphaned_cloze(self):
         # Note text has only c1, JSON has c1 and c2

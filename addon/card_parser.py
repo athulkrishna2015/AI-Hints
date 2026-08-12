@@ -449,6 +449,7 @@ class CardParser:
                 return False
 
         data = self.normalize_hint_data(data)
+        self._attach_source_answer(note, data, card)
 
         # Determine the key for this card (e.g., 'c1' for cloze ord 0)
         card_key = None
@@ -1235,36 +1236,68 @@ class CardParser:
             del parsed[k]
         return parsed
 
+    def _attach_source_answer(self, note, data: Dict[str, Any], card=None) -> None:
+        """Stores the cloze answer the hints were generated from as `_src`.
+
+        Stale-detection (`_answers_match`) compares the *current* cloze text
+        against this immutable snapshot instead of the (possibly user-edited)
+        `correct_answer`/`options`, so manually edited hints/options are never
+        mistaken for stale data.
+        """
+        if card is None or not isinstance(data, dict):
+            return
+        card_ord = self._card_ord(card)
+        if card_ord is None:
+            return
+        try:
+            model = note.model() if hasattr(note, "model") and callable(note.model) else None
+            model_name = model["name"].lower() if model and isinstance(model, dict) and "name" in model else ""
+            if not (model and ("cloze" in model_name or model.get("type") == 1)):
+                return
+            field_text = None
+            if hasattr(note, "values") and callable(note.values):
+                for f in list(note.values()):
+                    if isinstance(f, str) and "{{c" in f:
+                        field_text = f
+                        break
+            if field_text is None:
+                target = self._find_target_field(note)
+                if target:
+                    v = note.get(target, "")
+                    if isinstance(v, str):
+                        field_text = v
+            if not field_text:
+                return
+            _, ans, found = self._focus_current_cloze(field_text, card)
+            if found and ans:
+                data["_src"] = ans
+        except Exception:
+            pass
+
     def _answers_match(self, cloze_answer: str, card_data: dict) -> bool:
-        """Checks whether the stored hint data (correct_answer / options) matches the actual cloze deletion text."""
+        """Checks whether the current cloze text matches the answer snapshot (`_src`).
+
+        Older `_src`-less payloads (legacy data or manually edited data) are never
+        invalidated on content matching, since we cannot reliably distinguish an
+        intentional edit from stale copy-pasted data without a snapshot.
+        """
         if not cloze_answer or not isinstance(card_data, dict):
             return True
-        
-        clean_cloze = "".join(c for c in re.sub(r"<[^>]+>", "", str(cloze_answer)).lower().strip() if c.isalnum())
-        if not clean_cloze:
+
+        src = card_data.get("_src")
+        if not src:
+            return True  # No snapshot: trust the stored data.
+
+        clean_current = self._cloze_sig(cloze_answer)
+        if not clean_current:
             return True
+        return clean_current == self._cloze_sig(src)
 
-        ca = card_data.get("correct_answer")
-        opts = card_data.get("options") or []
-        
-        if not ca and not opts:
-            return True
-
-        candidates = []
-        if ca:
-            c_ca = "".join(c for c in re.sub(r"<[^>]+>", "", str(ca)).lower().strip() if c.isalnum())
-            if c_ca:
-                candidates.append(c_ca)
-        for opt in opts:
-            c_opt = "".join(c for c in re.sub(r"<[^>]+>", "", str(opt)).lower().strip() if c.isalnum())
-            if c_opt:
-                candidates.append(c_opt)
-
-        for cand in candidates:
-            if cand in clean_cloze or clean_cloze in cand:
-                return True
-
-        return False
+    @staticmethod
+    def _cloze_sig(text: str) -> str:
+        if not text:
+            return ""
+        return "".join(c for c in re.sub(r"<[^>]+>", "", str(text)).lower().strip() if c.isalnum())
 
     def _is_keyed_payload(self, payload: Dict[str, Any]) -> bool:
         if not isinstance(payload, dict):

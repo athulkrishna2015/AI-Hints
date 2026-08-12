@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.8.6 (2026-08-12)
+- **Snapshot-Based Stale Cloze Detection Fix**: v5.8.5's stale-hint check compared the stored `correct_answer`/`options` against the cloze text, so **manually edited** hints/options were often mistaken for stale data and wiped. Stale detection now snapshots the actual cloze answer (`_src`) inside the hidden JSON block at generation/save time, then compares the *current* cloze text against that immutable snapshot — never against your (possibly edited) `correct_answer`/`options`. Manually edited hints and options are therefore preserved, while a genuinely changed/repurposed cloze is still caught and regenerated. Existing cards saved before `_src` existed are treated as valid (never content-invalidated), so legacy manual edits are safe.
+
 ## 5.8.5 (2026-08-12)
 - **Orphaned Cloze Key Purge**: Stale hint/option data for cloze deletions that no longer exist on a note is now automatically purged. When saving or updating hints, any keyed `cN` entry whose corresponding `{{cN::...}}` tag is missing from the note's text is removed from the hidden JSON block, preventing ghost data and stale cards.
 - **Stale/Mismatched Hint Invalidation**: Cloze data whose saved `correct_answer`/`options` no longer match the actual text of the active cloze deletion is now rejected as stale on both the Python side (`find_hints_block`) and in the reviewer pre-generation cache (`_cached_hints_for_card`). If a cloze's answer was edited (e.g. copy-pasted or changed), the old hints/options are treated as invalid and regenerated instead of showing inaccurate data.
