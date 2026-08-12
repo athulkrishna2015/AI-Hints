@@ -1050,8 +1050,8 @@
                     if (oSection) oSection.style.display = state.options ? 'block' : 'none';
                 };
 
-                // Desktop: Generate Button
-                if (isAddonActive) {
+                // Desktop: Generate Button (hidden for skipped cards)
+                if (isAddonActive && !data?._skipped) {
                     const genBtn = document.createElement('button');
                     genBtn.className = 'ai-hints-btn';
                     genBtn.textContent = hasContent ? "Regenerate" : "Generate AI Hints";
@@ -1163,7 +1163,7 @@
                     }
 
                     // Clear button (Only available when Python addon is active)
-                    if (isAddonActive) {
+                    if (isAddonActive && !data?._skipped) {
                         const clrBtn = document.createElement('button');
                         clrBtn.className = 'ai-hints-btn';
                         clrBtn.textContent = labels.clear;
@@ -1181,7 +1181,7 @@
                     if (hasOverrideData) saveState();
                 }
 
-                if (showExtra) {
+                if (showExtra && !data?._skipped) {
                     const refBtn = document.createElement('button');
                     refBtn.className = 'ai-hints-btn';
                     refBtn.textContent = labels.refresh;
