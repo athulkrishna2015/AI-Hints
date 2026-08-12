@@ -259,6 +259,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.pre_generate_next_cb.setEnabled(auto_gen_on)
         self.pre_generate_count_spin.setValue(c.get("pre_generate_count", 3))
         self.pre_generate_count_spin.setEnabled(auto_gen_on and self.pre_generate_next_cb.isChecked())
+
+        self.generate_hints_enabled_cb.setChecked(c.get("generate_hints_enabled", True))
+        self.generate_options_enabled_cb.setChecked(c.get("generate_options_enabled", True))
         
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", True))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
@@ -1331,6 +1334,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["auto_regenerate_min_time"] = self.auto_regenerate_min_time_edit.text().strip()
             new_config["pre_generate_next"] = self.pre_generate_next_cb.isChecked()
             new_config["pre_generate_count"] = self.pre_generate_count_spin.value()
+            new_config["generate_hints_enabled"] = self.generate_hints_enabled_cb.isChecked()
+            new_config["generate_options_enabled"] = self.generate_options_enabled_cb.isChecked()
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
             new_config["do_not_auto_collapse"] = self.do_not_auto_collapse_cb.isChecked()
@@ -1547,6 +1552,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("auto_regenerate_min_time", "")
         config.setdefault("auto_show_hints", True)
         config.setdefault("auto_show_options", False)
+        config.setdefault("generate_hints_enabled", True)
+        config.setdefault("generate_options_enabled", True)
         config.setdefault("do_not_auto_collapse", False)
         config.setdefault("manual_show_hints", True)
         config.setdefault("manual_show_options", False)

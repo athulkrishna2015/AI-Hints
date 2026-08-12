@@ -431,15 +431,42 @@ class AIClient:
         if additional_instr:
             system_prompt = f"{system_prompt}\n\n**USER CUSTOM INSTRUCTIONS**\n{additional_instr}"
         count = self._options_count()
+
+        # Master generation switch: which kinds of content the LLM should produce.
+        # Applies to every generation path (manual, auto, pregen, batch).
+        hints_enabled = bool(self.config.get("generate_hints_enabled", True))
+        options_enabled = bool(self.config.get("generate_options_enabled", True))
+
+        from .logger import log_context
+        is_test = getattr(log_context, "source", None) == "model_test"
+        if not (hints_enabled or options_enabled) and not is_test:
+            logger.info("AI-Hints: Generation disabled (both hints and options are off). No API call made.")
+            return {"hints": [], "options": []}
+
+        if hints_enabled and options_enabled:
+            mode_instructions = (
+                f"- Generate exactly {count} total options (1 correct, {count-1} distractors) and exactly 3 conceptual hints.\n"
+                "- If using 'distractors' key, provide only incorrect options. If 'options', include the correct answer.\n"
+            )
+        elif hints_enabled:
+            mode_instructions = (
+                "- Generate 3 conceptual hints ONLY. Do NOT generate any multiple-choice options, correct_answer, or distractors.\n"
+                "- Return a JSON object containing ONLY the 'hints' key.\n"
+            )
+        else:
+            mode_instructions = (
+                f"- Generate exactly {count} total options (1 correct, {count-1} distractors) and NO hints.\n"
+                "- Do NOT generate any hints. Return a JSON object WITHOUT a 'hints' key.\n"
+                "- If using 'distractors' key, provide only incorrect options. If 'options', include the correct answer.\n"
+            )
         
         # Add strict formatting every time; user-provided prompts often omit the exact count.
         system_prompt = (
             f"{system_prompt}\n\n" if system_prompt else ""
         ) + (
             "CRITICAL:\n"
-            f"- Generate exactly {count} total options (1 correct, {count-1} distractors) and exactly 3 conceptual hints.\n"
+            f"{mode_instructions}"
             "- Return ONLY strictly valid raw JSON. No markdown, no preambles.\n"
-            "- If using 'distractors' key, provide only incorrect options. If 'options', include the correct answer.\n"
             "- Ensure all options match the correct answer's format, length, and style perfectly.\n"
             "- For multiple clozes with same ID, use semicolon-separated values (e.g., 'val1 ; val2').\n"
             "- For legal/case flashcards, do NOT invent synthetic facts or modify names/dates in the correct answer's text to make distractors; use outcomes of other actual, real-world cases/judgments.\n"
@@ -449,8 +476,6 @@ class AIClient:
         # Check if we should use the advanced global priority list
         global_priority = self.config.get("global_model_priority", [])
         use_global = self.config.get("use_global_model_priority", False)
-        from .logger import log_context
-        is_test = getattr(log_context, "source", None) == "model_test"
         network_failed_providers = set()
         
         if use_global and global_priority and not override_provider and not is_test:
@@ -488,7 +513,7 @@ class AIClient:
                     logger.info(f"AI-Hints: Calling {provider} with model: {model} (via global priority)")
                     result = self._call_provider(provider, system_prompt, prompt, override_model=model)
                     if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
-                        result = self._ensure_correct_answer_option(result, back)
+                        result = self._finalize_result(result, back, hints_enabled, options_enabled, is_test)
                         logger.debug(f"AI-Hints: Successful generation using: {provider}/{model}")
                         return result
                 except Exception as e:
@@ -528,7 +553,7 @@ class AIClient:
             try:
                 result = self._call_provider(provider, system_prompt, prompt)
                 if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
-                    result = self._ensure_correct_answer_option(result, back)
+                    result = self._finalize_result(result, back, hints_enabled, options_enabled, is_test)
                     if provider != primary_provider:
                         logger.debug(f"AI-Hints: Fallback successful using provider: {provider}")
                     return result
@@ -1372,6 +1397,25 @@ class AIClient:
         if "distractors" in parsed:
             result["distractors"] = self._normalize_string_list(parsed["distractors"])
         return result
+    def _finalize_result(self, result: Dict[str, Any], back: str, hints_enabled: bool, options_enabled: bool, is_test: bool = False) -> Dict[str, Any]:
+        """Normalizes the LLM response and strips content per the master switch.
+
+        Test calls (settings provider/model checks) ignore the master switch so
+        users can still verify connectivity while generation is disabled.
+        """
+        if not isinstance(result, dict):
+            return result
+        if options_enabled or is_test:
+            result = self._ensure_correct_answer_option(result, back)
+        if is_test:
+            return result
+        if not hints_enabled:
+            result.pop("hints", None)
+        if not options_enabled:
+            for k in ("options", "correct_answer", "distractors"):
+                result.pop(k, None)
+        return result
+
     def _ensure_correct_answer_option(self, result: Dict[str, List[str]], answer: str) -> Dict[str, List[str]]:
         count = self._options_count()
         options = self._normalize_string_list(result.get("options", []))

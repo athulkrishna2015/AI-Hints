@@ -2,6 +2,13 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.9.0 (2026-08-12)
+- **Generation Master Switch (Hints / Options)**: Added two independent master toggles in the **General** settings — **Generate Hints** and **Generate Options (MCQ)**, both **enabled by default**. They control *every* generation path (manual, auto, pre-generation, and batch):
+  - Unchecking **Generate Hints** stops hint generation only (options still produced).
+  - Unchecking **Generate Options** stops MCQ/option generation only (hints still produced). The prompt is adjusted so the LLM only returns what is enabled.
+  - Turning **both** off effectively disables the addon — no API calls are made anywhere (manual/auto/pregen/batch) until you re-enable a toggle.
+  - Provider **Test** buttons in Settings still work while generation is disabled, so you can verify connectivity before re-enabling.
+
 ## 5.8.6 (2026-08-12)
 - **Snapshot-Based Stale Cloze Detection Fix**: v5.8.5's stale-hint check compared the stored `correct_answer`/`options` against the cloze text, so **manually edited** hints/options were often mistaken for stale data and wiped. Stale detection now snapshots the actual cloze answer (`_src`) inside the hidden JSON block at generation/save time, then compares the *current* cloze text against that immutable snapshot — never against your (possibly edited) `correct_answer`/`options`. Manually edited hints and options are therefore preserved, while a genuinely changed/repurposed cloze is still caught and regenerated. Existing cards saved before `_src` existed are treated as valid (never content-invalidated), so legacy manual edits are safe.
 

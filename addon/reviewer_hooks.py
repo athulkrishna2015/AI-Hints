@@ -2138,6 +2138,18 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
     if web is None:
         web = getattr(mw.reviewer, "web", None)
 
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    # Master switch: if both hints and options generation are disabled, the addon
+    # does nothing (manual, auto, pregen, and batch all funnel through here).
+    if not config.get("generate_hints_enabled", True) and not config.get("generate_options_enabled", True):
+        if not is_pregen:
+            logger.info("AI-Hints: Generation is disabled (hints and options both off). Skipping.")
+            try:
+                tooltip("AI-Hints: Generation disabled — enable hints/options in Settings.")
+            except Exception:
+                pass
+        return
+
     card_id = getattr(card, "id", None)
     
     # Check cache first for manual generation (to avoid redundant API calls)

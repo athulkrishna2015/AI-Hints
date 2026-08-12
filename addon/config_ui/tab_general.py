@@ -38,6 +38,24 @@ class GeneralTabMixin:
         self.fix_latex_cb.setToolTip("Automatically fix common AI math errors like missing backslashes or missing delimiters.")
         gen_layout.addRow(self.fix_latex_cb)
 
+        # --- Generation Master Switch Group ---
+        gen_switch_group = QGroupBox("Generation (Master Switch)")
+        gen_switch_layout = QFormLayout()
+        self.generate_hints_enabled_cb = QCheckBox("Generate Hints")
+        self.generate_hints_enabled_cb.setToolTip(
+            "Master control for hint generation. Uncheck to stop generating hints "
+            "everywhere (manual, auto, pre-generation, and batch)."
+        )
+        gen_switch_layout.addRow(self.generate_hints_enabled_cb)
+        self.generate_options_enabled_cb = QCheckBox("Generate Options (MCQ)")
+        self.generate_options_enabled_cb.setToolTip(
+            "Master control for multiple-choice option generation. Uncheck to stop "
+            "generating options everywhere (manual, auto, pre-generation, and batch). "
+            "Turning BOTH off effectively disables the addon and stops making any API calls."
+        )
+        gen_switch_layout.addRow(self.generate_options_enabled_cb)
+        gen_switch_group.setLayout(gen_switch_layout)
+
         # --- Button Visibility Group ---
         button_group = QGroupBox("Button Visibility")
         button_layout = QFormLayout()
@@ -293,6 +311,7 @@ class GeneralTabMixin:
         # Main layout wrapper to prevent vertical stretching
         main_layout = QVBoxLayout()
         main_layout.addLayout(gen_layout)
+        main_layout.addWidget(gen_switch_group)
         main_layout.addWidget(button_group)
         main_layout.addWidget(show_group)
         main_layout.addStretch()
