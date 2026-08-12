@@ -144,7 +144,8 @@ class CardParserTests(unittest.TestCase):
         })
 
         self.assertIsNone(parser.find_hints_block(note, FakeCard(1, 0)))
-        self.assertIsNotNone(parser.find_hints_block(note, FakeCard(2, 1)))
+        # Mismatched answer ("nose ring" vs "financial") should be rejected as stale data
+        self.assertIsNone(parser.find_hints_block(note, FakeCard(2, 1)))
 
     def test_html_mode_escapes_non_math_tags(self):
         parser = CardParser(storage_mode="html")

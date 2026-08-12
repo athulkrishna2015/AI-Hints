@@ -505,6 +505,14 @@ class CardParser:
                              parsed[card_key] = new_data
                         else:
                              parsed.update(new_data)
+
+                        if note is None and card is not None and hasattr(card, "note"):
+                            try:
+                                note = card.note()
+                            except Exception:
+                                pass
+                        if note:
+                            parsed = self.purge_orphaned_cloze_keys(parsed, note)
                              
                         new_payload = self.serialize_json_payload(parsed)
                         new_attrs = self._build_attrs(toggles, card if not card_key else None)
@@ -535,10 +543,16 @@ class CardParser:
                                 else:
                                     parsed = {}
                                 
-                                # (obsolete/polluted cloze keys purge removed)
+                            if note is None and card is not None and hasattr(card, "note"):
+                                try:
+                                    note = card.note()
+                                except Exception:
+                                    pass
                             
                             # Merge data
                             parsed[card_key] = new_data
+                            if note:
+                                parsed = self.purge_orphaned_cloze_keys(parsed, note)
                             new_payload = self.serialize_json_payload(parsed)
                             new_attrs = self._build_attrs(toggles, None) # keep universal
                             new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
@@ -1178,6 +1192,80 @@ class CardParser:
 
         return repair_val(parsed)
 
+    def get_active_cloze_numbers(self, note) -> Set[int]:
+        """Returns a set of active cloze numbers present in the note text fields."""
+        if not note:
+            return set()
+        fields_to_scan = []
+        if hasattr(note, "values") and callable(note.values):
+            try:
+                fields_to_scan = list(note.values())
+            except Exception:
+                pass
+        elif hasattr(note, "fields"):
+            fields_to_scan = getattr(note, "fields", [])
+        
+        active_cloze_nums = set()
+        for field_val in fields_to_scan:
+            if isinstance(field_val, str):
+                for m in re.finditer(r'(?i)\{\{\s*c(\d+)\s*::', field_val):
+                    active_cloze_nums.add(int(m.group(1)))
+        return active_cloze_nums
+
+    def purge_orphaned_cloze_keys(self, parsed: dict, note) -> dict:
+        """Purges any cN keys from a keyed payload if the corresponding {{cN::}} tag is missing from the note."""
+        if not isinstance(parsed, dict) or not note:
+            return parsed
+        model = note.model() if hasattr(note, "model") and callable(note.model) else None
+        model_name = model["name"].lower() if model and isinstance(model, dict) and "name" in model else ""
+        is_cloze = model and ("cloze" in model_name or model.get("type") == 1)
+        if not is_cloze:
+            return parsed
+        active_nums = self.get_active_cloze_numbers(note)
+        if not active_nums:
+            return parsed
+        keys_to_remove = []
+        for key in parsed.keys():
+            m = re.fullmatch(r"c(\d+)", str(key))
+            if m:
+                num = int(m.group(1))
+                if num not in active_nums:
+                    keys_to_remove.append(key)
+        for k in keys_to_remove:
+            del parsed[k]
+        return parsed
+
+    def _answers_match(self, cloze_answer: str, card_data: dict) -> bool:
+        """Checks whether the stored hint data (correct_answer / options) matches the actual cloze deletion text."""
+        if not cloze_answer or not isinstance(card_data, dict):
+            return True
+        
+        clean_cloze = "".join(c for c in re.sub(r"<[^>]+>", "", str(cloze_answer)).lower().strip() if c.isalnum())
+        if not clean_cloze:
+            return True
+
+        ca = card_data.get("correct_answer")
+        opts = card_data.get("options") or []
+        
+        if not ca and not opts:
+            return True
+
+        candidates = []
+        if ca:
+            c_ca = "".join(c for c in re.sub(r"<[^>]+>", "", str(ca)).lower().strip() if c.isalnum())
+            if c_ca:
+                candidates.append(c_ca)
+        for opt in opts:
+            c_opt = "".join(c for c in re.sub(r"<[^>]+>", "", str(opt)).lower().strip() if c.isalnum())
+            if c_opt:
+                candidates.append(c_opt)
+
+        for cand in candidates:
+            if cand in clean_cloze or clean_cloze in cand:
+                return True
+
+        return False
+
     def _is_keyed_payload(self, payload: Dict[str, Any]) -> bool:
         if not isinstance(payload, dict):
             return False
@@ -1191,6 +1279,11 @@ class CardParser:
             return True
 
         card_ord = self._card_ord(card)
+        if note is None and card is not None and hasattr(card, "note"):
+            try:
+                note = card.note()
+            except Exception:
+                note = None
         
         try:
             parsed = self._parse_json_payload(raw_payload)
@@ -1213,7 +1306,30 @@ class CardParser:
             card_data = parsed[card_key]
             if not isinstance(card_data, dict):
                 return False
-            return bool(card_data.get("hints")) or bool(card_data.get("options")) or bool(card_data.get("_skipped"))
+            
+            has_valid_data = bool(card_data.get("hints")) or bool(card_data.get("options")) or bool(card_data.get("_skipped"))
+            if not has_valid_data:
+                return False
+
+            # Cloze validation: check if active cloze tag exists and answer matches
+            if note:
+                model = note.model() if hasattr(note, "model") and callable(note.model) else None
+                model_name = model["name"].lower() if model and isinstance(model, dict) and "name" in model else ""
+                is_cloze = model and ("cloze" in model_name or model.get("type") == 1)
+                if is_cloze:
+                    active_nums = self.get_active_cloze_numbers(note)
+                    if active_nums:
+                        if (card_ord + 1) not in active_nums:
+                            return False
+                        
+                        if card:
+                            fields_to_scan = list(note.values()) if hasattr(note, "values") else getattr(note, "fields", [])
+                            if fields_to_scan and isinstance(fields_to_scan[0], str):
+                                _, cloze_ans, found = self._focus_current_cloze(fields_to_scan[0], card)
+                                if found and not self._answers_match(cloze_ans, card_data):
+                                    return False
+
+            return True
             
         # Legacy/Universal block: check for hints/options
         has_hints = bool(parsed.get("hints")) or bool(parsed.get("options")) or bool(parsed.get("_skipped"))

@@ -124,5 +124,53 @@ class TestClozeScenarios(unittest.TestCase):
         self.assertEqual(orphans[0][1], "c2")
 
 
+    def test_deleted_cloze_c2_returns_no_data_for_card(self):
+        # Note text only has c1, but JSON payload contains stale c2 data
+        text = (
+            "{{c1::Bhopal}} is a city. "
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"capital\"]}, \"c2\": {\"hints\": [\"music award\"], \"correct_answer\": \"Grammy\"}}"
+            "</div>"
+        )
+        note = MockNote({"Text": text}, model_name="Cloze")
+        card_c2 = MockCard(1) # card ord 1 -> c2
+        block = self.parser.find_hints_block(note, card_c2)
+        # Should be None because c2 is not an active cloze in note text
+        self.assertIsNone(block)
+
+    def test_stale_cloze_c2_answer_mismatch_returns_no_data(self):
+        # Note text has new c2 ("City of Lakes"), but JSON payload has old c2 ("Grammy Award")
+        text = (
+            "{{c1::Bhopal}} "
+            "<br>{{c2::City of Lakes}} "
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"capital\"]}, \"c2\": {\"hints\": [\"music award\"], \"options\": [\"Grammy\", \"Oscar\"], \"correct_answer\": \"Grammy\"}}"
+            "</div>"
+        )
+        note = MockNote({"Text": text}, model_name="Cloze")
+        card_c2 = MockCard(1) # card ord 1 -> c2
+        block = self.parser.find_hints_block(note, card_c2)
+        # Should be None because "Grammy" does not match "City of Lakes"
+        self.assertIsNone(block)
+
+    def test_update_note_with_hints_purges_orphaned_cloze(self):
+        # Note text has only c1, JSON has c1 and c2
+        text = (
+            "{{c1::Bhopal}} "
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"old hint\"]}, \"c2\": {\"hints\": [\"stale hint\"]}}"
+            "</div>"
+        )
+        note = MockNote({"Text": text}, model_name="Cloze")
+        card_c1 = MockCard(0)
+        new_data = {"hints": ["new hint"], "options": ["Bhopal", "Indore"], "correct_answer": "Bhopal"}
+        
+        updated = self.parser.update_note_with_hints(note, new_data, card=card_c1)
+        self.assertTrue(updated)
+        field_val = note["Text"]
+        self.assertIn("Bhopal", field_val)
+        self.assertNotIn("c2", field_val) # c2 should have been purged as an orphan!
+
+
 if __name__ == "__main__":
     unittest.main()

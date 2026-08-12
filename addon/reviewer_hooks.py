@@ -426,7 +426,34 @@ def _cached_hints_for_card(card):
     key = _card_cache_key(card)
     if key is None:
         return None
-    return _generated_hint_cache.get(key)
+    cached = _generated_hint_cache.get(key)
+    if cached and card and hasattr(card, "note"):
+        try:
+            note = card.note()
+            config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+            parser = CardParser(
+                mathjax_format=config.get("mathjax_format", "delimiters"),
+                fix_latex=config.get("fix_latex", False)
+            )
+            model = note.model() if hasattr(note, "model") and callable(note.model) else None
+            model_name = model["name"].lower() if model and isinstance(model, dict) and "name" in model else ""
+            is_cloze = bool(model and ("cloze" in model_name or model.get("type") == 1))
+            if is_cloze:
+                card_ord = getattr(card, "ord", None)
+                if card_ord is not None:
+                    active_nums = parser.get_active_cloze_numbers(note)
+                    if (card_ord + 1) not in active_nums:
+                        _generated_hint_cache.pop(key, None)
+                        return None
+                    field_val = list(note.values())[0] if hasattr(note, "values") else (getattr(note, "fields", [""])[0])
+                    if isinstance(field_val, str) and field_val:
+                        _, cloze_ans, found = parser._focus_current_cloze(field_val, card)
+                        if not found or not parser._answers_match(cloze_ans, cached.get("data") or {}):
+                            _generated_hint_cache.pop(key, None)
+                            return None
+        except Exception:
+            pass
+    return cached
 
 def _qt_object_is_deleted(obj) -> bool:
     if obj is None:
