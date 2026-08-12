@@ -2,7 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
-## 5.9.0 (2026-08-12)
+## 6.0.0 (2026-08-12)
+- **Skipped-Card Reviewer Rendering**: Skipped cards now render their `AI generation skipped.` message reliably. Desktop shows all buttons (Generate/Regenerate, Clear, Refresh, JSON) alongside the message, while mobile (AnkiDroid/AnkiMobile) shows only the skipped message with no buttons. Previously the message could sit inside a hidden box (blank card) and new cards could drop their buttons after a null-data guard regression — both fixed.
 - **Generation Master Switch (Hints / Options)**: Added two independent master toggles in the **General** settings — **Generate Hints** and **Generate Options (MCQ)**, both **enabled by default**. They control *every* generation path (manual, auto, pre-generation, and batch):
   - Unchecking **Generate Hints** stops hint generation only (options still produced).
   - Unchecking **Generate Options** stops MCQ/option generation only (hints still produced). The prompt is adjusted so the LLM only returns what is enabled.

@@ -20,6 +20,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Auto-Rating**: Instantly rate cards (e.g. `Good` or `Again`) automatically upon selecting an option.
 - **Inline Editor**: Edit generated hints or options directly on the card during review (via `Ctrl+Click` / `Cmd+Click`).
 - **Factual Error Alerts**: Automatically detects and flags factual errors in your notes with custom warning highlights during study.
+- **Skip AI Generation**: Permanently skip AI generation for individual cards. Skipped cards render an **"AI generation skipped"** message (with all desktop buttons, or message-only on mobile) until you generate or clear them.
 - **LaTeX Math Support**: Seamlessly parses and formats LaTeX math formulas on your cards.
 
 ### ⚡ Batch & Maintenance Tools
