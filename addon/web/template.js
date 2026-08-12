@@ -1040,7 +1040,11 @@
                 );
 
                 const updateVisibility = () => {
-                    const anyVisible = state.hints || state.options;
+                    // Only show the box/background when at least one section actually
+                    // exists AND is expanded. This prevents an empty highlighted box
+                    // when, e.g., only hints were generated but state.options is true
+                    // on the answer side (options section is null).
+                    const anyVisible = (hSection && state.hints) || (oSection && state.options);
                     contentBox.className = anyVisible ? 'ai-hints-content-box ai-hints-content-active' : 'ai-hints-content-box';
                     if (hSection) hSection.style.display = state.hints ? 'block' : 'none';
                     if (oSection) oSection.style.display = state.options ? 'block' : 'none';
@@ -1206,7 +1210,9 @@
                     container.appendChild(view);
                 }
 
-                if (data) {
+                // Hide the JSON button for skipped cards, matching the other action
+                // buttons (Generate/Skip/Clear) which are all suppressed for skipped data.
+                if (data && !data._skipped) {
                     const jsonBtn = document.createElement('button');
                     jsonBtn.className = 'ai-hints-btn';
                     jsonBtn.textContent = labels.json;
