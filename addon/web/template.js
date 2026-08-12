@@ -1182,7 +1182,7 @@
                     if (hasOverrideData) saveState();
                 }
 
-                if (showExtra && !(data._skipped && !isAddonActive)) {
+                if (showExtra && !(data?._skipped && !isAddonActive)) {
                     const refBtn = document.createElement('button');
                     refBtn.className = 'ai-hints-btn';
                     refBtn.textContent = labels.refresh;
@@ -1214,7 +1214,7 @@
                 // Show JSON button: always available whenever there is card data, including on
                 // mobile (AnkiDroid/AnkiMobile) where the Python addon is not active and the
                 // extra-buttons toggle may be off. On mobile, skipped cards show no buttons.
-                if (data && !(data._skipped && !isAddonActive)) {
+                if (data && !(data?._skipped && !isAddonActive)) {
                     const jsonBtn = document.createElement('button');
                     jsonBtn.className = 'ai-hints-btn';
                     jsonBtn.textContent = labels.json;
