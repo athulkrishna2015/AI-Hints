@@ -1051,8 +1051,8 @@
                     if (oSection) oSection.style.display = state.options ? 'block' : 'none';
                 };
 
-                // Desktop: Generate Button (hidden for skipped cards)
-                if (isAddonActive && !data?._skipped) {
+                // Desktop: Generate Button
+                if (isAddonActive) {
                     const genBtn = document.createElement('button');
                     genBtn.className = 'ai-hints-btn';
                     genBtn.textContent = hasContent ? "Regenerate" : "Generate AI Hints";
@@ -1164,7 +1164,7 @@
                     }
 
                     // Clear button (Only available when Python addon is active)
-                    if (isAddonActive && !data?._skipped) {
+                    if (isAddonActive) {
                         const clrBtn = document.createElement('button');
                         clrBtn.className = 'ai-hints-btn';
                         clrBtn.textContent = labels.clear;
@@ -1182,7 +1182,7 @@
                     if (hasOverrideData) saveState();
                 }
 
-                if (showExtra && !data?._skipped) {
+                if (showExtra) {
                     const refBtn = document.createElement('button');
                     refBtn.className = 'ai-hints-btn';
                     refBtn.textContent = labels.refresh;
@@ -1211,9 +1211,10 @@
                     container.appendChild(view);
                 }
 
-                // Hide the JSON button for skipped cards, matching the other action
-                // buttons (Generate/Skip/Clear) which are all suppressed for skipped data.
-                if (data && !data._skipped) {
+                // Show JSON button: always available whenever there is card data, including on
+                // mobile (AnkiDroid/AnkiMobile) where the Python addon is not active and the
+                // extra-buttons toggle may be off.
+                if (data) {
                     const jsonBtn = document.createElement('button');
                     jsonBtn.className = 'ai-hints-btn';
                     jsonBtn.textContent = labels.json;
