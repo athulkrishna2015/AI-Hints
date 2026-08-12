@@ -1044,7 +1044,8 @@
                     // exists AND is expanded. This prevents an empty highlighted box
                     // when, e.g., only hints were generated but state.options is true
                     // on the answer side (options section is null).
-                    const anyVisible = (hSection && state.hints) || (oSection && state.options);
+                    // Skipped cards always render their message, so keep the box open.
+                    const anyVisible = !!data?._skipped || (hSection && state.hints) || (oSection && state.options);
                     contentBox.className = anyVisible ? 'ai-hints-content-box ai-hints-content-active' : 'ai-hints-content-box';
                     if (hSection) hSection.style.display = state.hints ? 'block' : 'none';
                     if (oSection) oSection.style.display = state.options ? 'block' : 'none';
