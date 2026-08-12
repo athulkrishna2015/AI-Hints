@@ -26,3 +26,4 @@ antigravity-accounts.json
 **/.antigravitycli/
 **/__pycache__/
 addon/pregen_cache.json
+bugs/

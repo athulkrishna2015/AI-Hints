@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 5.8.5 (2026-08-12)
+- **Orphaned Cloze Key Purge**: Stale hint/option data for cloze deletions that no longer exist on a note is now automatically purged. When saving or updating hints, any keyed `cN` entry whose corresponding `{{cN::...}}` tag is missing from the note's text is removed from the hidden JSON block, preventing ghost data and stale cards.
+- **Stale/Mismatched Hint Invalidation**: Cloze data whose saved `correct_answer`/`options` no longer match the actual text of the active cloze deletion is now rejected as stale on both the Python side (`find_hints_block`) and in the reviewer pre-generation cache (`_cached_hints_for_card`). If a cloze's answer was edited (e.g. copy-pasted or changed), the old hints/options are treated as invalid and regenerated instead of showing inaccurate data.
+
 ## 5.8.4 (2026-08-11)
 - **AnkiWeb Multi-Cloze Detection Fix**: On AnkiWeb (ankiuser.net/study) every cloze card showed only the `c1` hints/options. AnkiWeb places the cloze number on the card container (`<div id="qa_box" class="card card2">`) instead of on `<body>`, so the mobile cloze detection never found it and always fell back to `c1`. `getCardOrd()` now also reads the `cardN` class from `#qa_box`, so c2/c3 cards render their own hints and options correctly on AnkiWeb.
 
