@@ -2,6 +2,16 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.1.0 (2026-08-13)
+- **Back-Side Auto-Show Control**: New dedicated **answer-side** auto-show settings in the **General** tab — **Auto-show hints on answer side** (`auto_show_hints_answer`) and **Auto-show options on answer side** (`auto_show_options_answer`), both **enabled by default**. They control whether generated hints/options are expanded automatically when the answer side of a card is shown, independently of the front-side auto-show toggles.
+- **Config Migration to v3**: Config upgraded to `config_version` 3. Existing installations are migrated automatically on load; hints and options default to auto-show on both card load and the back side.
+- **Relearn / Fresh-Show Reset Fix**: Previously, collapsing a hint or option box during review would leave it collapsed on the *next* card or after a relearn/retry. A fresh-show token (`review_token`) now resets every card to the configured auto-show defaults on question display, so collapsed state never bleeds between cards.
+- **Mobile Auto-Show Defaults**: AnkiDroid and AnkiMobile now respect the same front- and back-side auto-show defaults (emitted via the mobile config), keeping desktop and mobile behavior consistent.
+- **Generation Disabled UI**: When both **Generate Hints** and **Generate Options** are turned off, the Generate/Regenerate button and its generation animation are now disabled, clearly signalling that AI generation is off.
+- **Removed "Do Not Auto-Collapse" Option**: The redundant *"Do Not Auto-Collapse on Next Card"* option (`do_not_auto_collapse`) has been removed from the General settings and template. Its behaviour is superseded by the new auto-show defaults that reset per card.
+- **Config Dialog Qt Compatibility**: The Settings window is now compatible with the latest Qt/PyQt (6.11): the "Unsaved Changes" prompt uses version-agnostic button roles and `exec()`/`exec_()`, fixing an `AttributeError` crash when closing with unsaved changes on newer Anki builds.
+- **Save & Close Restored**: The config dialog bottom bar now shows **Save** (stays open), **Save & Close** (saves, syncs mobile, and closes), and **Cancel** (with unsaved-changes warning). The intermediate "Save & Sync" button was removed.
+
 ## 6.0.0 (2026-08-12)
 - **Skipped-Card Reviewer Rendering**: Skipped cards now render their `AI generation skipped.` message reliably. Desktop shows all buttons (Generate/Regenerate, Clear, Refresh, JSON) alongside the message, while mobile (AnkiDroid/AnkiMobile) shows only the skipped message with no buttons. Previously the message could sit inside a hidden box (blank card) and new cards could drop their buttons after a null-data guard regression — both fixed.
 - **Generation Master Switch (Hints / Options)**: Added two independent master toggles in the **General** settings — **Generate Hints** and **Generate Options (MCQ)**, both **enabled by default**. They control *every* generation path (manual, auto, pre-generation, and batch):

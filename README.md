@@ -122,7 +122,7 @@ If you want to remove AI-Hints from mobile:
 
 Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configuration window.
 
-- **General Tab**: Select your default provider, MCQ options count, database storage mode, and auto-generation rules including modified-card, version, and generation-time based regeneration.
+- **General Tab**: Select your default provider, MCQ options count, database storage mode, and auto-generation rules including modified-card, version, and generation-time based regeneration. Configure **auto-show defaults** for hints and MCQ options independently on the **question** and **answer** sides (each reset automatically per card, including during relearn/retries).
 - **AI Providers Tab**: Unified settings where each provider is grouped into a clean card layout containing its API Key (with eye visibility 👁️ toggles), active model selection, Up/Down priority sorting, dynamic fetch and test features, and checkbox toggles to **completely disable fallbacks** to specific providers.
   - **Custom Providers**: Add any OpenAI-compatible API endpoint (e.g., Ollama, LM Studio, vLLM, AIHubMix) by clicking **Add** under Custom Providers. Endpoint URLs are automatically normalized (e.g., `http://localhost:11434/v1` or `https://aihubmix.com/v1/chat/completions`), and models can be dynamically fetched directly from the local server.
     - **No API Key Required**: Local endpoints without authentication can leave the API Key field blank.

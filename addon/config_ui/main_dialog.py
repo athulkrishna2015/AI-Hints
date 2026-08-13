@@ -120,11 +120,14 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         box = QMessageBox(self)
         box.setWindowTitle("Unsaved Changes")
         box.setText("You have unsaved changes in the AI-Hints settings.")
-        save_btn = box.addButton("Save & Sync", QMessageBox.AcceptRole)
-        discard_btn = box.addButton("Discard Changes", QMessageBox.DestructiveRole)
-        cancel_btn = box.addButton("Cancel", QMessageBox.RejectRole)
+        accept_role = getattr(QMessageBox, "AcceptRole", None) or QMessageBox.ButtonRole.AcceptRole
+        destructive_role = getattr(QMessageBox, "DestructiveRole", None) or QMessageBox.ButtonRole.DestructiveRole
+        reject_role = getattr(QMessageBox, "RejectRole", None) or QMessageBox.ButtonRole.RejectRole
+        save_btn = box.addButton("Save && Sync", accept_role)
+        discard_btn = box.addButton("Discard Changes", destructive_role)
+        cancel_btn = box.addButton("Cancel", reject_role)
         box.setDefaultButton(cancel_btn)
-        box.exec_()
+        box.exec_() if hasattr(box, "exec_") else box.exec()
         clicked = box.clickedButton()
         if clicked is save_btn:
             return bool(self.save_config(close=True))
@@ -234,13 +237,13 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         save_only_btn = QPushButton("Save")
         save_only_btn.setToolTip("Saves configuration and syncs mobile without closing the window.")
         save_only_btn.clicked.connect(lambda: self.save_config(close=False))
+        save_only_btn.setDefault(True)
         btn_layout.addWidget(save_only_btn)
 
-        save_sync_btn = QPushButton("Save & Sync")
-        save_sync_btn.setToolTip("Saves configuration, syncs mobile, and closes the window.")
-        save_sync_btn.clicked.connect(lambda: self.save_config(close=True))
-        save_sync_btn.setDefault(True)
-        btn_layout.addWidget(save_sync_btn)
+        save_close_btn = QPushButton("Save && Close")
+        save_close_btn.setToolTip("Saves configuration and syncs mobile, then closes the window.")
+        save_close_btn.clicked.connect(lambda: self.save_config(close=True))
+        btn_layout.addWidget(save_close_btn)
         
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setToolTip("Close without saving.")
