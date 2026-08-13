@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.1.2 (2026-08-13)
+- **Startup Crash Fix for Upgrading Users**: Fixed a startup crash where the configuration migration logic attempted to log info/error statements before the `logger` module was imported, which raised a `NameError` and caused the add-on to fail to load when upgrading from older settings versions.
+- **Prevent Unsaved-Changes Prompt on Read-Only Widgets**: Fixed an issue where programmatic changes to read-only widgets in the Settings dialog (such as the batch status list view on the Batch tab, and the manual installation script edit box on the Mobile tab) triggered text-changed signals, incorrectly marking the dialog as dirty and prompting an "unsaved changes" warning when closing.
+- **Fresh-Show JSON Panel Collapse**: Standardized review persistence to collapse the JSON panel whenever a card is shown freshly (matching hints/options auto-show defaults), preventing it from bleeding expanded state across different card reviews in the same session.
+
 ## 6.1.1 (2026-08-13)
 - **Stale-Cloze Edit Notification**: If the content of a cloze deletion was changed after its AI hints/options were generated, the stored data no longer matches the immutable `_src` snapshot and is considered stale. Previously, editing such a card failed silently with an internal out-of-range error — you could enter edit mode but the save did nothing. The edit path now detects this stale state and shows a clear notification explaining that editing is disabled because the cloze content changed, and to regenerate the AI hints to update it. Generic out-of-range edit failures (e.g. a stale on-screen block) now also show a "could not save — data may be stale" tooltip instead of failing silently.
 
