@@ -104,6 +104,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     if isinstance(w, QCheckBox):
                         w.toggled.connect(self._mark_dirty)
                     elif isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QKeySequenceEdit)):
+                        if hasattr(w, "isReadOnly") and w.isReadOnly():
+                            continue
                         w.textChanged.connect(self._mark_dirty)
                     elif isinstance(w, QComboBox):
                         w.currentIndexChanged.connect(self._mark_dirty)
@@ -123,7 +125,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         accept_role = getattr(QMessageBox, "AcceptRole", None) or QMessageBox.ButtonRole.AcceptRole
         destructive_role = getattr(QMessageBox, "DestructiveRole", None) or QMessageBox.ButtonRole.DestructiveRole
         reject_role = getattr(QMessageBox, "RejectRole", None) or QMessageBox.ButtonRole.RejectRole
-        save_btn = box.addButton("Save && Sync", accept_role)
+        save_btn = box.addButton("Save && Close", accept_role)
         discard_btn = box.addButton("Discard Changes", destructive_role)
         cancel_btn = box.addButton("Cancel", reject_role)
         box.setDefaultButton(cancel_btn)
