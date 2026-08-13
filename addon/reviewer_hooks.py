@@ -887,6 +887,69 @@ def _get_card_and_web_from_context(context):
         
     return card, web
 
+def _stale_block_reason(card, note, parser):
+    """If the card carries stale cloze data (answer no longer matches _src), return
+    a short human-readable reason; otherwise return None."""
+    import re, html as _html, json as _json
+    card_ord = getattr(card, "ord", None)
+    if card_ord is None:
+        return None
+
+    model = note.model() if hasattr(note, "model") and callable(note.model) else None
+    model_name = model["name"].lower() if model and isinstance(model, dict) and "name" in model else ""
+    is_cloze = bool(model and ("cloze" in model_name or model.get("type") == 1))
+    if not is_cloze:
+        return None
+
+    field_text = None
+    if hasattr(note, "values") and callable(note.values):
+        for f in list(note.values()):
+            if isinstance(f, str) and "{{c" in f:
+                field_text = f
+                break
+    if not field_text:
+        return None
+
+    # Scan the note for a JSON block that matches this card, regardless of the
+    # data-validity gate that find_hints_block applies.
+    try:
+        note_fields = list(note.values()) if hasattr(note, "values") and callable(note.values) else list(getattr(note, "fields", []))
+    except Exception:
+        note_fields = []
+    pattern = re.compile(
+        r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    for f_val in note_fields:
+        if not isinstance(f_val, str):
+            continue
+        for m in pattern.finditer(f_val):
+            block = m.group(0)
+            if not parser._block_matches_card(block, card):
+                continue
+            try:
+                raw = _html.unescape(m.group(1) or "")
+                parsed = parser._parse_json_payload(raw)
+                card_key = f"c{card_ord + 1}"
+                if isinstance(parsed, dict) and card_key in parsed and "hints" not in parsed:
+                    card_data = parsed[card_key]
+                else:
+                    card_data = parsed
+                if not isinstance(card_data, dict):
+                    continue
+                src = card_data.get("_src")
+                if not src:
+                    continue
+                _, cloze_ans, found = parser._focus_current_cloze(field_text, card)
+                if found and not parser._answers_match(cloze_ans, card_data):
+                    return (
+                        "the cloze content was changed since this data was generated. "
+                        "Regenerate AI hints to update it."
+                    )
+            except Exception:
+                continue
+    return None
+
 def edit_item(card, web, item_type: str, index: int, new_value: str):
     if not card:
         logger.error("AI-Hints: No card provided for edit_item")
@@ -940,6 +1003,17 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
     # 3. Fallbacks
     if not data:
         data = {"hints": [], "options": []}
+        # Editing failed to find any data for this card. Before reporting an
+        # out-of-range error, check whether the card actually holds stale cloze
+        # data (a block whose cloze answer no longer matches its _src snapshot).
+        # If so, explain why editing is blocked instead of failing silently.
+        try:
+            stale_reason = _stale_block_reason(card, note, parser)
+            if stale_reason:
+                tooltip(f"AI-Hints: Editing is disabled on this card — {stale_reason}")
+                return
+        except Exception as e:
+            logger.debug(f"AI-Hints: stale-block check failed: {e}")
     if not toggles:
         toggles = {
             "show_hints_button": config.get("show_hints_button", True),
@@ -967,6 +1041,7 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
             data["hints"] = items
         else:
             logger.error(f"AI-Hints: Edit index {index} out of range for hints ({len(items)})")
+            tooltip("AI-Hints: Could not save — this card's data may be stale. Try regenerating the hint.")
             return
     elif item_type == "options":
         items = list(data["options"])
@@ -985,6 +1060,7 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
                     data["correct_answer"] = new_value
         else:
             logger.error(f"AI-Hints: Edit index {index} out of range for options ({len(items)})")
+            tooltip("AI-Hints: Could not save — this card's data may be stale. Try regenerating the options.")
             return
     else:
         logger.error(f"AI-Hints: Unknown edit type {item_type}")
