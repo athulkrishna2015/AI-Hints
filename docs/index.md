@@ -14,6 +14,7 @@ AI-Hints uses Artificial Intelligence to generate helpful hints and multiple-cho
 6. [Mobile Support](mobile-setup.md) — run AI-Hints on AnkiDroid, AnkiMobile, and AnkiWeb.
 7. [Troubleshooting](troubleshooting.md) — solve common problems.
 8. [Data & Storage Format](data-format.md) — what's stored in your notes and how it's used.
+9. [Storage, Files & State](storage.md) — all data files, JSON stores, and runtime variables.
 
 ## Links
 
@@ -24,4 +25,5 @@ AI-Hints uses Artificial Intelligence to generate helpful hints and multiple-cho
 - **Changelog**: https://github.com/athulkrishna2015/AI-Hints/blob/master/changelog.md
 - **Configuration Reference**: https://github.com/athulkrishna2015/AI-Hints/blob/master/docs/config-reference.md
 - **Data & Storage Format**: https://github.com/athulkrishna2015/AI-Hints/blob/master/docs/data-format.md
+- **Storage, Files & State**: https://github.com/athulkrishna2015/AI-Hints/blob/master/docs/storage.md
 - **Developer Documentation**: https://github.com/athulkrishna2015/AI-Hints/blob/master/DEVELOPMENT.md
