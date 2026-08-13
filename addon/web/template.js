@@ -912,10 +912,13 @@
 
         // Apply auto-show defaults on the first load AND whenever the card is
         // shown freshly again (e.g. relearn in the same review session), so it
-        // does not follow the previous back-side expanded state.
+        // does not follow the previous back-side expanded state. The JSON panel
+        // is also collapsed on a fresh show so it cannot stay open from a prior
+        // review of the same card in this session.
         if (isFirstLoad || isFreshCardShow) {
             state.hints = autoShow.hints;
             state.options = autoShow.options;
+            state.showJson = false;
         }
 
         if (!onAnswer) {

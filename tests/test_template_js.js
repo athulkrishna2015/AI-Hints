@@ -721,14 +721,17 @@ global.window.aiHintsCurrentCard = { id: 'relearn_card', ord: 0 };
 global.window.aiHintsLastReviewToken = 1;
 global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: false, review_token: 2, auto_show_hints: false, auto_show_options: false };
 const relearnTest = createMockDOM({ isAddonActive: true, hasData: true, isAnswerSide: false });
-// Seed a stale expanded state left over from the previous back-side view.
-global.sessionStorage.setItem('state_relearn_card_0', JSON.stringify({ hints: true, options: true, seed: 123, cleared: false, showJson: false }));
+// Seed a stale expanded state left over from the previous back-side view,
+// including an expanded JSON panel that must be collapsed on the fresh show.
+global.sessionStorage.setItem('state_relearn_card_0', JSON.stringify({ hints: true, options: true, seed: 123, cleared: false, showJson: true }));
 eval(scriptContent);
 const relearnContainer = relearnTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
 const relearnHints = relearnContainer.querySelector('.ai-hints-hint-list').parentNode;
 const relearnOpts = relearnContainer.querySelector('.ai-hints-list').parentNode;
+const relearnJsonView = relearnContainer.querySelector('.ai-hints-json-view');
 if (relearnHints.style.display !== 'none') throw new Error("Relearned card front side should respect auto-show defaults (hints collapsed) despite prior expanded back-side state");
 if (relearnOpts.style.display !== 'none') throw new Error("Relearned card front side should respect auto-show defaults (options collapsed) despite prior expanded back-side state");
+if (relearnJsonView) throw new Error("Relearned card front side should collapse the JSON panel despite it being expanded in a prior review");
 
 console.log("\n--- TEST 28: MOBILE RESPECTS AUTO-SHOW DEFAULTS ---");
 global.window.aiHintsCurrentCard = { id: 'mobile_card', ord: 0 };
