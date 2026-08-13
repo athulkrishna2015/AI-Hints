@@ -6,7 +6,7 @@ const path = require('path');
  * Mock DOM Environment Factory
  */
 function createMockDOM(env) {
-    const { isAddonActive, hasData, isAnswerSide, clozes, clozeLayout } = env;
+    const { isAddonActive, hasData, isAnswerSide, clozes, clozeLayout, data } = env;
     
     let renderedBlocks = [];
     let jsonBlocks = [];
@@ -186,7 +186,7 @@ function createMockDOM(env) {
         staticContainers.push(container);
         return container;
     }
-    if (hasData) addJsonBlock();
+    if (hasData) addJsonBlock(data);
     const persistence = {};
 
     global.sessionStorage = {
@@ -299,7 +299,7 @@ console.log("\n--- TEST 2: MOBILE MODE (Standalone) ---");
 const mobile = createMockDOM({ isAddonActive: false, hasData: true });
 eval(scriptContent);
 const mobileContainer = mobile.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
-const mobileBtns = mobileContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button');
+const mobileBtns = mobileContainer.querySelector('.ai-hints-btn-box').querySelectorAll('.ai-hints-btn');
 const mobileLabels = mobileBtns.map(b => b.textContent);
 console.log("Buttons found:", mobileLabels.join(', '));
 if (mobileLabels.includes("Regenerate") || mobileLabels.includes("Generate AI Hints")) 
@@ -307,6 +307,10 @@ if (mobileLabels.includes("Regenerate") || mobileLabels.includes("Generate AI Hi
 if (mobileLabels.includes("🗑️") || mobileLabels.includes("Clear"))
     throw new Error("Clear button should NOT appear on Mobile");
 if (mobileLabels.includes("💡 Hints")) console.log("Emoji support verified");
+if (mobileBtns.some(btn => btn.tagName === 'BUTTON' || typeof btn.onclick === 'function'))
+    throw new Error("Mobile controls must not be native buttons or onclick targets, otherwise AnkiDroid blocks swipes");
+if (mobileContainer.getAttribute('contenteditable') !== null)
+    throw new Error("Mobile AI-Hints container must not expose contenteditable to AnkiDroid gesture detection");
 
 console.log("\n--- TEST 3: NO DATA (Desktop) ---");
 const noData = createMockDOM({ isAddonActive: true, hasData: false });
@@ -744,5 +748,18 @@ const mobileHintsSec = mobileShowContainer.querySelector('.ai-hints-hint-list').
 const mobileOptsSec = mobileShowContainer.querySelector('.ai-hints-list').parentNode;
 if (mobileHintsSec.style.display !== 'none') throw new Error("Mobile: hints should collapse on front side when autoShowHints is off");
 if (mobileOptsSec.style.display !== 'none') throw new Error("Mobile: options should collapse on front side when autoShowOptions is off");
+
+console.log("\n--- TEST 29: MOBILE CLOZE WITHOUT CURRENT CARD DATA SHOWS NO CONTROLS ---");
+global.window.aiHintsCurrentCard = { id: 'mobile_c2_card', ord: 1 };
+global.window.aiHintsMobileConfig = { useEmojis: false, showExtraButtons: true, autoShowHints: true, autoShowOptions: true };
+const mobileMissingC2 = createMockDOM({
+    isAddonActive: false,
+    hasData: true,
+    isAnswerSide: false,
+    data: { c1: { hints: ["c1 hint"], options: ["c1 option"] } }
+});
+eval(scriptContent);
+const missingC2Controls = mobileMissingC2.getRendered().filter(el => el.className && el.className.includes('ai-hints-container'));
+if (missingC2Controls.length !== 0) throw new Error("Mobile c2 card without c2 data should render no AI-Hints container or controls");
 
 console.log("\nALL JS TESTS PASSED."); process.exit(0);

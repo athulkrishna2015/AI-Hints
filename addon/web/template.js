@@ -606,7 +606,16 @@
     }
 
     function blockBelongsToCurrentCard(block, data, cardKey, cardId, ord) {
-        if (!block || !isAddonActive) return true;
+        if (!block) return true;
+        if (!isAddonActive) {
+            if (data) {
+                const isKeyed = typeof data === 'object' && !Array.isArray(data) &&
+                    !data.hints && !data.options && Object.keys(data).some(key => /^c\d+$/.test(key));
+                if (isKeyed && !data[cardKey]) return false;
+                if (!isKeyed && String(ord) !== '0') return false;
+            }
+            return true;
+        }
         if (!window.aiHintsCurrentCard || cardId === 'temp') return true;
 
         const blockCardId = block.getAttribute ? block.getAttribute('data-ai-hints-card-id') : null;
@@ -1001,7 +1010,11 @@
                 if (!data && block) {
                     if (block.classList.contains('ai-hints-json')) {
                         data = JSON.parse(block.textContent);
-                        if (data[cardKey]) data = data[cardKey];
+                        const isKeyed = data && typeof data === 'object' && !Array.isArray(data) &&
+                            !data.hints && !data.options && Object.keys(data).some(key => /^c\d+$/.test(key));
+                        if (isKeyed) {
+                            data = data[cardKey] || null;
+                        }
                     } else if (block.classList.contains('ai-hints-container')) {
                         // Scraping fallback for HTML-only containers
                         data = { hints: [], options: [] };
@@ -1022,13 +1035,34 @@
                 const hasContent = data && (data.hints || data.options);
                 const container = document.createElement('div');
                 container.className = 'ai-hints-container ai-hints-container-rendered';
-                container.setAttribute('contenteditable', 'false');
+                // AnkiDroid treats any contentEditable attribute, including
+                // "false", as an interactive gesture target. Keep this
+                // protection on desktop, but omit it on mobile so swipes can
+                // reach AnkiDroid's document-level gesture handler.
+                if (isAddonActive) container.setAttribute('contenteditable', 'false');
                 container.setAttribute('data-ai-hints-card-id', String(cardId));
                 if (ord !== undefined && ord !== null) container.setAttribute('data-ai-hints-card-ord', String(ord));
                 
                 const btnBox = document.createElement('div');
                 btnBox.className = 'ai-hints-btn-box';
                 container.appendChild(btnBox);
+
+                // AnkiDroid ignores gestures that start on BUTTON elements or on
+                // elements with an onclick property. Use gesture-transparent
+                // controls on mobile while retaining native buttons on desktop.
+                const createControl = () => {
+                    const control = document.createElement(isAddonActive ? 'button' : 'div');
+                    control.className = 'ai-hints-btn';
+                    if (!isAddonActive) {
+                        control.setAttribute('role', 'button');
+                        control.setAttribute('tabindex', '0');
+                    }
+                    return control;
+                };
+                const setControlHandler = (control, handler) => {
+                    if (isAddonActive) control.onclick = handler;
+                    else control.addEventListener('click', handler);
+                };
 
                 const contentBox = document.createElement('div');
                 contentBox.className = 'ai-hints-content-box';
@@ -1140,8 +1174,7 @@
 
                 if (hasContent) {
                     if (hSection) {
-                        const btn = document.createElement('button');
-                        btn.className = 'ai-hints-btn';
+                        const btn = createControl();
                         if (hasWarning) {
                             btn.classList.add('ai-hints-btn-warning');
                         }
@@ -1153,42 +1186,40 @@
                             return txt;
                         };
                         btn.textContent = getHintsBtnText(state.hints);
-                        btn.onclick = (e) => {
+                        setControlHandler(btn, (e) => {
                             if (e) { e.stopPropagation(); e.preventDefault(); }
                             state.hints = !state.hints;
                             btn.textContent = getHintsBtnText(state.hints);
                             updateVisibility();
                             if (state.hints) renderMath(hSection);
                             saveState();
-                        };
+                        });
                         btnBox.appendChild(btn);
                     }
 
                     if (oSection) {
-                        const btn = document.createElement('button');
-                        btn.className = 'ai-hints-btn';
+                        const btn = createControl();
                         btn.textContent = state.options ? labels.hideOptions : labels.options;
-                        btn.onclick = (e) => {
+                        setControlHandler(btn, (e) => {
                             if (e) { e.stopPropagation(); e.preventDefault(); }
                             state.options = !state.options;
                             btn.textContent = state.options ? labels.hideOptions : labels.options;
                             updateVisibility();
                             if (state.options) renderMath(oSection);
                             saveState();
-                        };
+                        });
                         btnBox.appendChild(btn);
                     }
 
                     // Clear button (Only available when Python addon is active)
                     if (isAddonActive) {
-                        const clrBtn = document.createElement('button');
-                        clrBtn.className = 'ai-hints-btn';
+                        const clrBtn = createControl();
                         clrBtn.textContent = labels.clear;
                         clrBtn.title = "Permanently clear hints from this card";
-                        clrBtn.onclick = (e) => {
+                        setControlHandler(clrBtn, (e) => {
                             if (e) { e.stopPropagation(); e.preventDefault(); }
                             if (confirm("Permanently delete hints from this card?")) pycmd('ai_hints_clear');
-                        };
+                        });
                         btnBox.appendChild(clrBtn);
                     }
                     
@@ -1199,10 +1230,9 @@
                 }
 
                 if (showExtra && !(data?._skipped && !isAddonActive)) {
-                    const refBtn = document.createElement('button');
-                    refBtn.className = 'ai-hints-btn';
+                    const refBtn = createControl();
                     refBtn.textContent = labels.refresh;
-                    refBtn.onclick = (e) => {
+                    setControlHandler(refBtn, (e) => {
                         if (e) { e.stopPropagation(); e.preventDefault(); }
                         if (isAddonActive) {
                             if (typeof pycmd === 'function') pycmd('ai_hints_refresh');
@@ -1213,7 +1243,7 @@
                             persistence.save(stateKey, state);
                             init();
                         }
-                    };
+                    });
                     btnBox.appendChild(refBtn);
                 }
 
@@ -1231,11 +1261,10 @@
                 // mobile (AnkiDroid/AnkiMobile) where the Python addon is not active and the
                 // extra-buttons toggle may be off. On mobile, skipped cards show no buttons.
                 if (data && !(data?._skipped && !isAddonActive)) {
-                    const jsonBtn = document.createElement('button');
-                    jsonBtn.className = 'ai-hints-btn';
+                    const jsonBtn = createControl();
                     jsonBtn.textContent = labels.json;
                     jsonBtn.title = "Show raw JSON data";
-                    jsonBtn.onclick = (e) => {
+                    setControlHandler(jsonBtn, (e) => {
                         if (e) { e.stopPropagation(); e.preventDefault(); }
                         let view = container.querySelector('.ai-hints-json-view');
                         if (view) {
@@ -1250,7 +1279,7 @@
                             state.showJson = true;
                         }
                         saveState();
-                    };
+                    });
                     btnBox.appendChild(jsonBtn);
                 }
 
