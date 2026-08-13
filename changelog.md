@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.1.1 (2026-08-13)
+- **Stale-Cloze Edit Notification**: If the content of a cloze deletion was changed after its AI hints/options were generated, the stored data no longer matches the immutable `_src` snapshot and is considered stale. Previously, editing such a card failed silently with an internal out-of-range error — you could enter edit mode but the save did nothing. The edit path now detects this stale state and shows a clear notification explaining that editing is disabled because the cloze content changed, and to regenerate the AI hints to update it. Generic out-of-range edit failures (e.g. a stale on-screen block) now also show a "could not save — data may be stale" tooltip instead of failing silently.
+
 ## 6.1.0 (2026-08-13)
 - **Back-Side Auto-Show Control**: New dedicated **answer-side** auto-show settings in the **General** tab — **Auto-show hints on answer side** (`auto_show_hints_answer`) and **Auto-show options on answer side** (`auto_show_options_answer`), both **enabled by default**. They control whether generated hints/options are expanded automatically when the answer side of a card is shown, independently of the front-side auto-show toggles.
 - **Config Migration to v3**: Config upgraded to `config_version` 3. Existing installations are migrated automatically on load; hints and options default to auto-show on both card load and the back side.
