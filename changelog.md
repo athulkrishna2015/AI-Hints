@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.1.4 (2026-08-13)
+- **AnkiDroid Swipe Gesture Fix**: Mobile AI-Hints controls no longer use native button or `onclick` targets that AnkiDroid classifies as interactive and excludes from its swipe handler. Horizontal swipe gestures now work when started over hints, options, and Show Hints, Show Options, Refresh, and JSON controls.
+- **Mobile Cloze Data Isolation**: A cloze card now ignores keyed JSON data belonging to another cloze ordinal. For example, a c2 card with only c1 data is treated as having no AI data and does not show stale hints, options, JSON, or other controls.
+
 ## 6.1.3 (2026-08-13)
 - **NameError Fix for Python 3.13 and Older**: Fixed a `NameError: name 'Set' is not defined` crash in `card_parser.py` that occurred when importing the addon on Python 3.13.14 and older. The uppercase type annotation `Set[int]` was replaced with standard lowercase `set[int]`. (Python 3.14 did not trigger this crash due to PEP 649/749 deferred annotation evaluation).
 
