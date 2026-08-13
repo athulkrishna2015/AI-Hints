@@ -9,9 +9,11 @@ AI-Hints uses Artificial Intelligence to generate helpful hints and multiple-cho
 1. [Installation & API Keys](setup.md) — install the add-on and get your API keys.
 2. [Features](features.md) — an overview of everything AI-Hints can do.
 3. [Configuration](configuration.md) — a complete reference to every setting, tab by tab.
-4. [Batch Generation](batch-generation.md) — bulk-generate hints for entire decks.
-5. [Mobile Support](mobile-setup.md) — run AI-Hints on AnkiDroid, AnkiMobile, and AnkiWeb.
-6. [Troubleshooting](troubleshooting.md) — solve common problems.
+4. [Configuration Reference (all keys)](config-reference.md) — every raw config key, default, and purpose.
+5. [Batch Generation](batch-generation.md) — bulk-generate hints for entire decks.
+6. [Mobile Support](mobile-setup.md) — run AI-Hints on AnkiDroid, AnkiMobile, and AnkiWeb.
+7. [Troubleshooting](troubleshooting.md) — solve common problems.
+8. [Data & Storage Format](data-format.md) — what's stored in your notes and how it's used.
 
 ## Links
 
@@ -20,4 +22,6 @@ AI-Hints uses Artificial Intelligence to generate helpful hints and multiple-cho
 - **Report an Issue**: https://github.com/athulkrishna2015/AI-Hints/issues
 - **Releases**: https://github.com/athulkrishna2015/AI-Hints/releases
 - **Changelog**: https://github.com/athulkrishna2015/AI-Hints/blob/master/changelog.md
+- **Configuration Reference**: https://github.com/athulkrishna2015/AI-Hints/blob/master/docs/config-reference.md
+- **Data & Storage Format**: https://github.com/athulkrishna2015/AI-Hints/blob/master/docs/data-format.md
 - **Developer Documentation**: https://github.com/athulkrishna2015/AI-Hints/blob/master/DEVELOPMENT.md

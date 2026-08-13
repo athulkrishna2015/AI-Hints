@@ -95,7 +95,7 @@ Automatically keep hints fresh:
 
 ### Cloze Deletion Support
 
-Fully compatible with cards containing multiple Cloze deletions on a single note, with robust stale-hint detection that preserves your manual edits.
+Fully compatible with cards containing multiple Cloze deletions on a single note, with robust stale-hint detection that preserves your manual edits. See [Data & Storage Format](data-format.md) for how the generated data is stored on your cards.
 
 ## 📱 Mobile Support
 

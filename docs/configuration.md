@@ -13,6 +13,8 @@ Open the configuration window via **Tools → Add-ons → AI-Hints → Config**.
 
 The dialog opens non-modally, remembers your last tab, and warns you if you close with unsaved changes.
 
+> For a raw reference of every config key, default, and purpose, see [Configuration Reference (all keys)](config-reference.md).
+
 ## Bottom Action Bar (shared across all tabs)
 
 | Button | What it does |
