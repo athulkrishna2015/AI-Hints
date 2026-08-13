@@ -1193,7 +1193,7 @@ class CardParser:
 
         return repair_val(parsed)
 
-    def get_active_cloze_numbers(self, note) -> Set[int]:
+    def get_active_cloze_numbers(self, note) -> set[int]:
         """Returns a set of active cloze numbers present in the note text fields."""
         if not note:
             return set()
