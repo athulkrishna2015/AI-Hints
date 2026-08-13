@@ -170,3 +170,16 @@ Mobile support (AnkiDroid and AnkiMobile) is achieved through a “Zero-Addon”
 ## Changelog
 
 See [changelog.md](changelog.md) for the full history of changes and releases.
+
+## Documentation
+
+Full user documentation is available in the [docs](docs/index.md) folder:
+
+- [Installation & API Keys](docs/setup.md)
+- [Features](docs/features.md)
+- [Configuration (all settings)](docs/configuration.md)
+- [Batch Generation](docs/batch-generation.md)
+- [Mobile Support](docs/mobile-setup.md)
+- [Troubleshooting](docs/troubleshooting.md)
+
+Developer documentation: [DEVELOPMENT.md](DEVELOPMENT.md).
