@@ -11,16 +11,16 @@
 
     // 1. Configuration & Styling
     const STYLES = `
-        .ai-hints-container { margin-top: 10px; text-align: left; font-family: inherit; clear: both; font-size: inherit; }
+        .ai-hints-container { margin-top: 10px; text-align: left; font-family: inherit; clear: both; font-size: inherit; touch-action: pan-y; }
         .ai-hints-content-box { margin-top: 8px; padding: 8px; border-radius: 8px; display: none; }
         .ai-hints-content-active { display: block; border: 1px dashed #aaa; background-color: rgba(128,128,128,0.06); }
         .ai-hints-btn-box { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-        .ai-hints-btn { padding: 4px 10px; cursor: pointer; border-radius: 6px; border: 1px solid #999; background-color: #f0f0f0; color: #222; font-size: 12px; font-weight: 500; transition: background-color 0.15s ease, box-shadow 0.15s ease; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+        .ai-hints-btn { padding: 4px 10px; cursor: pointer; border-radius: 6px; border: 1px solid #999; background-color: #f0f0f0; color: #222; font-size: 12px; font-weight: 500; transition: background-color 0.15s ease, box-shadow 0.15s ease; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; touch-action: pan-y; }
         .ai-hints-btn:hover { background-color: #e0e0e0; }
         .ai-hints-btn:active { background-color: #d0d0d0; transform: translateY(1px); }
         .ai-hints-btn:disabled { opacity: 0.5; cursor: default; }
         .ai-hints-list, .ai-hints-hint-list { margin-top: 6px; padding-left: 0; margin-bottom: 0; list-style-type: none; }
-        .ai-hints-list li, .ai-hints-hint-list li { margin-bottom: 4px; line-height: 1.3; white-space: pre-wrap; font-style: normal !important; }
+        .ai-hints-list li, .ai-hints-hint-list li { margin-bottom: 4px; line-height: 1.3; white-space: pre-wrap; font-style: normal !important; touch-action: pan-y; }
         .ai-hints-list li { 
             cursor: pointer; 
             padding: 6px 12px; 
