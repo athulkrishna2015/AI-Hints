@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.1.3 (2026-08-13)
+- **NameError Fix for Python 3.13 and Older**: Fixed a `NameError: name 'Set' is not defined` crash in `card_parser.py` that occurred when importing the addon on Python 3.13.14 and older. The uppercase type annotation `Set[int]` was replaced with standard lowercase `set[int]`. (Python 3.14 did not trigger this crash due to PEP 649/749 deferred annotation evaluation).
+
 ## 6.1.2 (2026-08-13)
 - **Startup Crash Fix for Upgrading Users**: Fixed a startup crash where the configuration migration logic attempted to log info/error statements before the `logger` module was imported, which raised a `NameError` and caused the add-on to fail to load when upgrading from older settings versions.
 - **Prevent Unsaved-Changes Prompt on Read-Only Widgets**: Fixed an issue where programmatic changes to read-only widgets in the Settings dialog (such as the batch status list view on the Batch tab, and the manual installation script edit box on the Mobile tab) triggered text-changed signals, incorrectly marking the dialog as dirty and prompting an "unsaved changes" warning when closing.
