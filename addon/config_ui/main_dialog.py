@@ -77,10 +77,70 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.ui_initializing = False
+
+        # Unsaved-changes tracking for the close warning.
+        self._dirty = False
+        self._connect_dirty_tracking()
+
         # Defer initial tab handler so it runs AFTER the dialog is displayed.
         # Running it synchronously here would call load_log() (file I/O) on the
         # main thread during construction, causing Anki to freeze.
         QTimer.singleShot(0, lambda: self.on_tab_changed(self.tabs.currentIndex()))
+
+    def _mark_dirty(self, *args):
+        self._dirty = True
+
+    def _connect_dirty_tracking(self):
+        """Mark the dialog as dirty when the user edits any config control."""
+        for i in range(self.tabs.count()):
+            tab = self.tabs.widget(i)
+            if tab is None:
+                continue
+            # The live Logs tab updates its text constantly; ignore it.
+            if self.tabs.tabText(i) == "Logs":
+                continue
+            for w in tab.findChildren(QWidget):
+                try:
+                    if isinstance(w, QCheckBox):
+                        w.toggled.connect(self._mark_dirty)
+                    elif isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QKeySequenceEdit)):
+                        w.textChanged.connect(self._mark_dirty)
+                    elif isinstance(w, QComboBox):
+                        w.currentIndexChanged.connect(self._mark_dirty)
+                        w.currentTextChanged.connect(self._mark_dirty)
+                    elif isinstance(w, (QSpinBox, QDoubleSpinBox, QDateTimeEdit)):
+                        w.valueChanged.connect(self._mark_dirty)
+                except Exception:
+                    pass
+
+    def _confirm_close_without_save(self):
+        """Warn the user before closing the dialog with unsaved changes."""
+        if not self._dirty:
+            return True
+        box = QMessageBox(self)
+        box.setWindowTitle("Unsaved Changes")
+        box.setText("You have unsaved changes in the AI-Hints settings.")
+        save_btn = box.addButton("Save & Sync", QMessageBox.AcceptRole)
+        discard_btn = box.addButton("Discard Changes", QMessageBox.DestructiveRole)
+        cancel_btn = box.addButton("Cancel", QMessageBox.RejectRole)
+        box.setDefaultButton(cancel_btn)
+        box.exec_()
+        clicked = box.clickedButton()
+        if clicked is save_btn:
+            return bool(self.save_config(close=True))
+        if clicked is discard_btn:
+            return True
+        return False
+
+    def reject(self):
+        if self._confirm_close_without_save():
+            super().reject()
+
+    def closeEvent(self, event):
+        if self._confirm_close_without_save():
+            event.accept()
+        else:
+            event.ignore()
 
     def set_selected_cards(self, card_ids):
         """External hook to pass cards from browser into the Batch tab."""
@@ -172,16 +232,18 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         btn_layout.addStretch()
         
         save_only_btn = QPushButton("Save")
-        save_only_btn.setToolTip("Saves configuration without closing the window.")
+        save_only_btn.setToolTip("Saves configuration and syncs mobile without closing the window.")
         save_only_btn.clicked.connect(lambda: self.save_config(close=False))
         btn_layout.addWidget(save_only_btn)
 
-        save_close_btn = QPushButton("Save && Close")
-        save_close_btn.clicked.connect(lambda: self.save_config(close=True))
-        save_close_btn.setDefault(True)
-        btn_layout.addWidget(save_close_btn)
+        save_sync_btn = QPushButton("Save & Sync")
+        save_sync_btn.setToolTip("Saves configuration, syncs mobile, and closes the window.")
+        save_sync_btn.clicked.connect(lambda: self.save_config(close=True))
+        save_sync_btn.setDefault(True)
+        btn_layout.addWidget(save_sync_btn)
         
         cancel_btn = QPushButton("Cancel")
+        cancel_btn.setToolTip("Close without saving.")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
         
@@ -264,8 +326,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.generate_options_enabled_cb.setChecked(c.get("generate_options_enabled", True))
         
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", True))
-        self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
-        self.do_not_auto_collapse_cb.setChecked(c.get("do_not_auto_collapse", False))
+        self.auto_show_options_cb.setChecked(c.get("auto_show_options", True))
+        self.auto_show_hints_answer_cb.setChecked(c.get("auto_show_hints_answer", True))
+        self.auto_show_options_answer_cb.setChecked(c.get("auto_show_options_answer", True))
         if hasattr(self, "rate_good_on_correct_cb"):
             self.rate_good_on_correct_cb.setChecked(c.get("rate_good_on_correct", False))
             self.rate_good_delay_spin.setValue(c.get("rate_good_delay_ms", 0) / 1000.0)
@@ -1008,8 +1071,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.auto_regenerate_min_time_edit.setText(c.get("auto_regenerate_min_time", ""))
         self.auto_regenerate_min_time_edit.setEnabled(auto_gen_on and self.auto_regenerate_old_time_cb.isChecked())
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", True))
-        self.auto_show_options_cb.setChecked(c.get("auto_show_options", False))
-        self.do_not_auto_collapse_cb.setChecked(c.get("do_not_auto_collapse", False))
+        self.auto_show_options_cb.setChecked(c.get("auto_show_options", True))
+        self.auto_show_hints_answer_cb.setChecked(c.get("auto_show_hints_answer", True))
+        self.auto_show_options_answer_cb.setChecked(c.get("auto_show_options_answer", True))
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
         self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
         tooltip("General defaults restored.")
@@ -1301,9 +1365,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 write_pretty_config(ADDON_PACKAGE, self._normalize_config(raw_config))
                 NEWLY_ADDED_MODELS.clear()
                 MISSING_FROM_FETCH.clear()
+                self._dirty = False
                 if close: self.accept()
                 else: tooltip("Configuration saved.")
-                return
+                return True
             new_config = self.config.copy()
             new_config["ai_provider"] = self.ai_provider_cb.currentText()
             new_config["options_count"] = self.options_count_sb.value()
@@ -1338,7 +1403,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["generate_options_enabled"] = self.generate_options_enabled_cb.isChecked()
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
-            new_config["do_not_auto_collapse"] = self.do_not_auto_collapse_cb.isChecked()
+            new_config["auto_show_hints_answer"] = self.auto_show_hints_answer_cb.isChecked()
+            new_config["auto_show_options_answer"] = self.auto_show_options_answer_cb.isChecked()
             if hasattr(self, "rate_good_on_correct_cb"):
                 new_config["rate_good_on_correct"] = self.rate_good_on_correct_cb.isChecked()
                 new_config["rate_good_delay_ms"] = int(self.rate_good_delay_spin.value() * 1000)
@@ -1461,10 +1527,13 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 _aih_logger.setLevel(logging.DEBUG if new_config.get("debug_logging", False) else logging.INFO)
             except Exception: pass
             self.config = new_config
+            self._dirty = False
             if close: self.accept()
             else: tooltip("Configuration saved.")
+            return True
         except Exception as e:
             info(f"Error saving configuration: {e}")
+            return False
 
     def refresh_local_providers_list(self):
         if hasattr(ProvidersTabMixin, "refresh_local_providers_list"):
@@ -1550,11 +1619,13 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("auto_regenerate_min_version", "")
         config.setdefault("auto_regenerate_if_old_time", False)
         config.setdefault("auto_regenerate_min_time", "")
+        config.setdefault("config_version", 3)
         config.setdefault("auto_show_hints", True)
-        config.setdefault("auto_show_options", False)
+        config.setdefault("auto_show_options", True)
+        config.setdefault("auto_show_hints_answer", True)
+        config.setdefault("auto_show_options_answer", True)
         config.setdefault("generate_hints_enabled", True)
         config.setdefault("generate_options_enabled", True)
-        config.setdefault("do_not_auto_collapse", False)
         config.setdefault("manual_show_hints", True)
         config.setdefault("manual_show_options", False)
         config.setdefault("maint_only_modified", True)

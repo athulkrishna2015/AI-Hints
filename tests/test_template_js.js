@@ -128,12 +128,26 @@ function createMockDOM(env) {
                     el.parentNode.children = el.parentNode.children.filter(item => item !== el);
                     relinkChildren(el.parentNode);
                 }
+            },
+            contains: (node) => {
+                if (node === el) return true;
+                let found = false;
+                const walk = (child) => {
+                    if (found) return;
+                    if (child === node) { found = true; return; }
+                    if (child.children) child.children.forEach(walk);
+                };
+                if (el.children) el.children.forEach(walk);
+                return found;
             }
         };
         return el;
     }
 
     const bodyEl = makeElement('body');
+    const qaEl = makeElement('div');
+    qaEl.setAttribute('id', 'qa');
+    bodyEl.appendChild(qaEl);
 
     function addJsonBlock(data = { hints: ["H1"], options: ["O1"] }, attrs = {}) {
         const jsonBlock = makeElement('div');
@@ -150,19 +164,19 @@ function createMockDOM(env) {
             }
         };
         jsonBlocks.push(jsonBlock);
-        bodyEl.appendChild(jsonBlock);
+        qaEl.appendChild(jsonBlock);
         return jsonBlock;
     }
 
     if (clozeLayout) {
-        bodyEl.appendChild(makeText("Prompt before "));
+        qaEl.appendChild(makeText("Prompt before "));
         const cloze = makeElement('span');
         cloze.className = 'cloze';
         cloze.textContent = (clozes && clozes[0]) || "Revealed answer";
-        bodyEl.appendChild(cloze);
-        bodyEl.appendChild(makeText(" prompt after"));
-        bodyEl.appendChild(makeElement('br'));
-        bodyEl.appendChild(makeText("Extra field"));
+        qaEl.appendChild(cloze);
+        qaEl.appendChild(makeText(" prompt after"));
+        qaEl.appendChild(makeElement('br'));
+        qaEl.appendChild(makeText("Extra field"));
     }
 
     function addStaticContainer(attrs = {}) {
@@ -185,7 +199,7 @@ function createMockDOM(env) {
         head: { appendChild: () => {} },
         body: bodyEl,
         getElementById: (id) => {
-            if (id === 'qa') return bodyEl;
+            if (id === 'qa') return qaEl;
             return null;
         },
         querySelectorAll: (selector) => {
@@ -247,7 +261,7 @@ function createMockDOM(env) {
 
     return {
         getRendered: () => renderedBlocks,
-        getBodyChildren: () => bodyEl.children,
+        getBodyChildren: () => qaEl.children,
         getJsonBlocks: () => jsonBlocks,
         addJsonBlock,
         addStaticContainer,
@@ -303,16 +317,16 @@ if (!noDataContainer) throw new Error("Container not found in Desktop mode with 
 const noDataBtns = noDataContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button');
 console.log("Buttons found:", noDataBtns.map(b => b.textContent).join(', '));
 if (noDataBtns[0].textContent !== "Generate AI Hints") throw new Error("Should show 'Generate' when no data");
+global.window.aiHintsUiConfig = { is_generating: false };
 window.aiHintsSetGenerating(true);
 const generatingBtns = noData.getRendered().find(el => el.className && el.className.includes('ai-hints-container')).querySelector('.ai-hints-btn-box').querySelectorAll('button');
-if (generatingBtns[0].textContent !== "✨ Generating...") throw new Error("Auto-generation should animate the Generate button");
-if (!generatingBtns[0].disabled) throw new Error("Generating button should be disabled during auto-generation");
+if (!generatingBtns[0].textContent.includes("✨ Generating")) throw new Error("Auto-generation should animate the Generate button");
+if (generatingBtns[0].disabled) throw new Error("Generating button should stay enabled during auto-generation so it can be clicked to stop");
 window.aiHintsUpdateData({ hints: ["Done"], options: ["Option"] });
 const doneContainer = noData.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
 const doneBtns = doneContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button');
-console.log("TEST 3 Buttons found after update:", doneBtns.map(b => b.textContent).join(', '));
 const doneBtn = doneBtns[0];
-if (doneBtn.textContent === "✨ Generating...") throw new Error("Generating animation should stop after successful update");
+if (doneBtn.textContent.includes("✨ Generating")) throw new Error("Generating animation should stop after successful update");
 if (doneBtn.disabled) throw new Error("Generate button should be enabled after successful update");
 
 console.log("\n--- TEST 4: AUTO-REVEAL CONFIG (Desktop) ---");
@@ -631,7 +645,7 @@ if (frontHintsSection.style.display !== 'block') throw new Error("Front-side bar
 
 console.log("\n--- TEST 22: ANSWER SIDE SHORTCUTS STILL REQUIRE MODIFIER ---");
 global.window.aiHintsCurrentCard = { id: 'answer_shortcuts', ord: 0 };
-global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true, shortcuts: { modifier: "alt", "toggle-hints": "2" } };
+global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true, auto_show_hints_answer: true, auto_show_options_answer: true, shortcuts: { modifier: "alt", "toggle-hints": "2" } };
 const answerShortcutTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: true });
 answerShortcutTest.addJsonBlock(
     { hints: ["Shortcut hint"], options: ["Shortcut option"] },
@@ -659,5 +673,73 @@ console.log("Hints display style (expect none):", ignoreHintsSec.style.display);
 console.log("Options display style (expect none):", ignoreOptsSec.style.display);
 if (ignoreHintsSec.style.display !== 'none') throw new Error("Hints should NOT auto-reveal on front side even if .answer class exists");
 if (ignoreOptsSec.style.display !== 'none') throw new Error("Options should NOT auto-reveal on front side even if .answer class exists");
+
+console.log("\n--- TEST 24: ANSWER SIDE RESPECTS DEDICATED BACK-SIDE CONFIG (BOTH OFF) ---");
+global.window.aiHintsCurrentCard = { id: 'answer_both_off', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true, auto_show_hints: true, auto_show_options: true, auto_show_hints_answer: false, auto_show_options_answer: false };
+const ansBothOff = createMockDOM({ isAddonActive: true, hasData: true, isAnswerSide: true });
+ansBothOff.addJsonBlock(
+    { hints: ["H"], options: ["O"] },
+    { 'data-ai-hints-card-id': 'answer_both_off', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const ansBothOffCont = ansBothOff.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const ansBothOffHints = ansBothOffCont.querySelector('.ai-hints-hint-list').parentNode;
+const ansBothOffOpts = ansBothOffCont.querySelector('.ai-hints-list').parentNode;
+if (ansBothOffHints.style.display !== 'none') throw new Error("Answer side: hints should be hidden when back-side auto_show_hints is off (even if card-load is on)");
+if (ansBothOffOpts.style.display !== 'none') throw new Error("Answer side: options should be hidden when back-side auto_show_options is off (even if card-load is on)");
+
+console.log("\n--- TEST 25: ANSWER SIDE RESPECTS DEDICATED BACK-SIDE CONFIG (HINTS ONLY) ---");
+global.window.aiHintsCurrentCard = { id: 'answer_hints_only', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: true, auto_show_hints: false, auto_show_options: false, auto_show_hints_answer: true, auto_show_options_answer: false };
+const ansHintsOnly = createMockDOM({ isAddonActive: true, hasData: true, isAnswerSide: true });
+ansHintsOnly.addJsonBlock(
+    { hints: ["H"], options: ["O"] },
+    { 'data-ai-hints-card-id': 'answer_hints_only', 'data-ai-hints-card-ord': '0' }
+);
+eval(scriptContent);
+const ansHintsOnlyCont = ansHintsOnly.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const ansHintsOnlyHints = ansHintsOnlyCont.querySelector('.ai-hints-hint-list').parentNode;
+const ansHintsOnlyOpts = ansHintsOnlyCont.querySelector('.ai-hints-list').parentNode;
+if (ansHintsOnlyHints.style.display !== 'block') throw new Error("Answer side: hints should be visible when back-side auto_show_hints is on");
+if (ansHintsOnlyOpts.style.display !== 'none') throw new Error("Answer side: options should be hidden when back-side auto_show_options is off");
+
+console.log("\n--- TEST 26: GENERATE BUTTON DISABLED WHEN GENERATION TURNED OFF ---");
+global.window.aiHintsCurrentCard = { id: 'gen_disabled', ord: 0 };
+global.window.aiHintsUiConfig = { is_generating: false, generation_enabled: false, is_answer_side: false };
+const genDisabledTest = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: false });
+eval(scriptContent);
+const genDisabledContainer = genDisabledTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const genDisabledBtn = genDisabledContainer.querySelector('.ai-hints-btn-box').querySelectorAll('button').find(btn => (btn.textContent || '').includes('Generate'));
+if (!genDisabledBtn) throw new Error("Generate button should exist");
+if (!genDisabledBtn.disabled) throw new Error("Generate button should be disabled when generation is off");
+if (genDisabledBtn.classList.contains('ai-hints-btn-generating')) throw new Error("Generate button should not show generating animation when generation is off");
+
+console.log("\n--- TEST 27: RELEARN RESET RESPECTS AUTO-SHOW DEFAULTS ---");
+global.window.aiHintsCurrentCard = { id: 'relearn_card', ord: 0 };
+// Previous show used review_token 1; now the same card is shown freshly again (relearn).
+global.window.aiHintsLastReviewToken = 1;
+global.window.aiHintsUiConfig = { is_generating: false, is_answer_side: false, review_token: 2, auto_show_hints: false, auto_show_options: false };
+const relearnTest = createMockDOM({ isAddonActive: true, hasData: true, isAnswerSide: false });
+// Seed a stale expanded state left over from the previous back-side view.
+global.sessionStorage.setItem('state_relearn_card_0', JSON.stringify({ hints: true, options: true, seed: 123, cleared: false, showJson: false }));
+eval(scriptContent);
+const relearnContainer = relearnTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const relearnHints = relearnContainer.querySelector('.ai-hints-hint-list').parentNode;
+const relearnOpts = relearnContainer.querySelector('.ai-hints-list').parentNode;
+if (relearnHints.style.display !== 'none') throw new Error("Relearned card front side should respect auto-show defaults (hints collapsed) despite prior expanded back-side state");
+if (relearnOpts.style.display !== 'none') throw new Error("Relearned card front side should respect auto-show defaults (options collapsed) despite prior expanded back-side state");
+
+console.log("\n--- TEST 28: MOBILE RESPECTS AUTO-SHOW DEFAULTS ---");
+global.window.aiHintsCurrentCard = { id: 'mobile_card', ord: 0 };
+global.window.aiHintsUiConfig = undefined; // no Python on mobile
+global.window.aiHintsMobileConfig = { useEmojis: false, showExtraButtons: true, autoShowHints: false, autoShowOptions: false };
+const mobileShowTest = createMockDOM({ isAddonActive: false, hasData: true, isAnswerSide: false });
+eval(scriptContent);
+const mobileShowContainer = mobileShowTest.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const mobileHintsSec = mobileShowContainer.querySelector('.ai-hints-hint-list').parentNode;
+const mobileOptsSec = mobileShowContainer.querySelector('.ai-hints-list').parentNode;
+if (mobileHintsSec.style.display !== 'none') throw new Error("Mobile: hints should collapse on front side when autoShowHints is off");
+if (mobileOptsSec.style.display !== 'none') throw new Error("Mobile: options should collapse on front side when autoShowOptions is off");
 
 console.log("\nALL JS TESTS PASSED."); process.exit(0);

@@ -825,6 +825,17 @@
         const uiCfg = window.aiHintsUiConfig || {};
         const mobileCfg = window.aiHintsMobileConfig || {};
 
+        // Effective auto-show defaults. On desktop they come from the Python
+        // uiConfig; on mobile (no Python) they come from aiHintsMobileConfig so
+        // that AnkiDroid/AnkiMobile respect the same card-load and back-side
+        // auto-show defaults.
+        const autoShow = {
+            hints: isAddonActive ? !!uiCfg.auto_show_hints : !!mobileCfg.autoShowHints,
+            options: isAddonActive ? !!uiCfg.auto_show_options : !!mobileCfg.autoShowOptions,
+            hintsAnswer: isAddonActive ? !!uiCfg.auto_show_hints_answer : !!mobileCfg.autoShowHintsAnswer,
+            optionsAnswer: isAddonActive ? !!uiCfg.auto_show_options_answer : !!mobileCfg.autoShowOptionsAnswer
+        };
+
         // If no data blocks and no containers, and not in active addon mode, we still need to potentially 
         // show the "Generate" button if that's enabled, or check for HTML containers.
         if (jsonBlocks.length === 0 && containers.length === 0 && !hasOverrideData && !isAddonActive && !mobileCfg.showExtraButtons) {
@@ -870,16 +881,26 @@
         const persistence = getPersistence();
         const savedState = persistence.get(stateKey);
         
+        // Detect a genuinely fresh card show. review_token increments on every
+        // new question display (including the same card reappearing via relearn
+        // within the current review session), so a token change means we must
+        // reset to the auto-show defaults instead of blindly reusing the previous
+        // expanded/collapsed state from the last time this card was shown.
+        const tokenChanged = (uiCfg.review_token !== undefined &&
+                              window.aiHintsLastReviewToken !== undefined &&
+                              window.aiHintsLastReviewToken !== uiCfg.review_token);
+        window.aiHintsLastReviewToken = uiCfg.review_token;
+
         // Track if this is a 'Fresh' card show by checking if the ID/Ord changed 
         // since the last time init() was called in this WebView session.
         // This is transient and NOT in persistence, so it resets when card changes.
-        const isFreshCardShow = (window.aiHintsLastInitCardId !== String(cardId) || 
+        const isFreshCardShow = tokenChanged ||
+                                (window.aiHintsLastInitCardId !== String(cardId) || 
                                  window.aiHintsLastInitOrd !== String(ord));
         window.aiHintsLastInitCardId = String(cardId);
         window.aiHintsLastInitOrd = String(ord);
 
         const isFirstLoad = !savedState;
-        const doNotCollapse = !!uiCfg.do_not_auto_collapse || (mobileCfg && !!mobileCfg.doNotAutoCollapse);
 
         let state = savedState || { 
             hints: false, 
@@ -889,19 +910,12 @@
             showJson: false 
         };
 
-        // Handle auto-show defaults for first load
-        if (isFirstLoad) {
-            if (doNotCollapse) {
-                const globalState = persistence.get('global_state') || { 
-                    hints: !!uiCfg.auto_show_hints, 
-                    options: !!uiCfg.auto_show_options 
-                };
-                state.hints = globalState.hints;
-                state.options = globalState.options;
-            } else {
-                state.hints = !!uiCfg.auto_show_hints;
-                state.options = !!uiCfg.auto_show_options;
-            }
+        // Apply auto-show defaults on the first load AND whenever the card is
+        // shown freshly again (e.g. relearn in the same review session), so it
+        // does not follow the previous back-side expanded state.
+        if (isFirstLoad || isFreshCardShow) {
+            state.hints = autoShow.hints;
+            state.options = autoShow.options;
         }
 
         if (!onAnswer) {
@@ -929,28 +943,22 @@
             if (uiCfg.manual_show_hints) state.hints = true;
             if (uiCfg.manual_show_options) state.options = true;
             persistence.save(stateKey, state);
-            if (doNotCollapse && !onAnswer) {
-                persistence.save('global_state', { hints: state.hints, options: state.options });
-            }
         } else if (isManualAction === false) {
-            if (uiCfg.auto_show_hints) state.hints = true;
-            if (uiCfg.auto_show_options) state.options = true;
+            if (autoShow.hints) state.hints = true;
+            if (autoShow.options) state.options = true;
             persistence.save(stateKey, state);
-            if (doNotCollapse && !onAnswer) {
-                persistence.save('global_state', { hints: state.hints, options: state.options });
-            }
         } else if (isFirstLoad) {
-            if (!doNotCollapse) {
-                if (uiCfg.auto_show_hints) state.hints = true;
-                if (uiCfg.auto_show_options) state.options = true;
-                persistence.save(stateKey, state);
-            }
+            if (autoShow.hints) state.hints = true;
+            if (autoShow.options) state.options = true;
+            persistence.save(stateKey, state);
         }
 
-        // Unconditional display on the back/answer side regardless of other settings
+        // Back/answer side: controlled by the dedicated back-side auto-show
+        // config. Each of hints/options is shown only if its back-side setting
+        // is enabled; both can be turned off independently of card load.
         if (onAnswer) {
-            state.hints = true;
-            state.options = true;
+            state.hints = autoShow.hintsAnswer;
+            state.options = autoShow.optionsAnswer;
         }
 
         // Process existing blocks or containers
@@ -1056,8 +1064,16 @@
                     const genBtn = document.createElement('button');
                     genBtn.className = 'ai-hints-btn';
                     genBtn.textContent = hasContent ? "Regenerate" : "Generate AI Hints";
-                    
-                    if (uiCfg.is_generating) {
+
+                    // If both hints and options generation are disabled, generation
+                    // is fully off: disable the button and never show its animation.
+                    const generationEnabled = uiCfg.generation_enabled !== false;
+                    if (!generationEnabled) {
+                        genBtn.disabled = true;
+                        genBtn.title = "AI generation is disabled — enable hints or options in Settings.";
+                    }
+
+                    if (generationEnabled && uiCfg.is_generating) {
                         genBtn.textContent = "✨ Generating... (Stop)";
                         genBtn.disabled = false;
                         genBtn.title = "Click to stop generation";
@@ -1104,9 +1120,6 @@
 
                 const saveState = () => {
                     persistence.save(stateKey, state);
-                    if (doNotCollapse && !onAnswer) {
-                        persistence.save('global_state', { hints: state.hints, options: state.options });
-                    }
                 };
 
                 if (data?._skipped) {
@@ -1522,6 +1535,15 @@
         }
 
         const uiCfg = window.aiHintsUiConfig || {};
+
+        // If generation is fully disabled, keep generate/regenerate buttons
+        // disabled and strip any generating/pre-generating animation classes.
+        const generationEnabled = uiCfg.generation_enabled !== false;
+        if (!generationEnabled) {
+            uiCfg.is_generating = false;
+            uiCfg.is_pregenerating = false;
+        }
+
         let genBtns = document.querySelectorAll('.ai-hints-btn');
         if (active && genBtns.length === 0) {
             init();
@@ -1529,6 +1551,13 @@
         }
         
         genBtns.forEach(btn => {
+            if (!generationEnabled) {
+                btn.disabled = true;
+                btn.classList.remove('ai-hints-btn-generating');
+                btn.classList.remove('ai-hints-btn-pregenerating');
+                btn.title = "AI generation is disabled — enable hints or options in Settings.";
+                return;
+            }
             if (btn.textContent.includes("AI Hints") || btn.textContent.includes("Regenerate") || 
                 btn.classList.contains('ai-hints-btn-generating') || btn.classList.contains('ai-hints-btn-pregenerating')) {
                 

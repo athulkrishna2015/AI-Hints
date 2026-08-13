@@ -21,6 +21,26 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         if config.get("auto_clear_logs", True):
             clear_log_file()
 
+        # Config migration: bump the stored version whenever we change defaults
+        # that existing users should pick up.
+        #  v2: auto-show on for options on card load and for hints/options on the back side.
+        #  v3: removed the redundant "Do Not Auto-Collapse on Next Card" option.
+        try:
+            stored_version = int(config.get("config_version", 1) or 1)
+            if stored_version < 2:
+                config["auto_show_hints"] = True
+                config["auto_show_options"] = True
+                config["auto_show_hints_answer"] = True
+                config["auto_show_options_answer"] = True
+            if stored_version < 3:
+                config.pop("do_not_auto_collapse", None)
+            if stored_version < 3:
+                config["config_version"] = 3
+                mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+                logger.info("AI-Hints: Migrated config (auto-show defaults + removed do-not-auto-collapse).")
+        except Exception as mig_err:
+            logger.error(f"AI-Hints: Failed to migrate config: {mig_err}")
+
         # Dynamically set log level based on user config
         from .logger import logger
         import logging

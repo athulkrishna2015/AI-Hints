@@ -200,9 +200,14 @@ class GeneralTabMixin:
         self.auto_show_options_cb.setToolTip("Automatically expand and show options when a card is loaded.")
         show_layout.addRow(self.auto_show_options_cb)
 
-        self.do_not_auto_collapse_cb = QCheckBox("Do Not Auto-Collapse on Next Card")
-        self.do_not_auto_collapse_cb.setToolTip("Remember the expanded/collapsed state of hints and options when moving to the next card.")
-        show_layout.addRow(self.do_not_auto_collapse_cb)
+        show_layout.addRow(QLabel("<b>On Back Side (Answer):</b>"))
+        self.auto_show_hints_answer_cb = QCheckBox("Auto Show Hints")
+        self.auto_show_hints_answer_cb.setToolTip("Automatically expand and show hints on the back/answer side of the card during review.")
+        show_layout.addRow(self.auto_show_hints_answer_cb)
+
+        self.auto_show_options_answer_cb = QCheckBox("Auto Show Options")
+        self.auto_show_options_answer_cb.setToolTip("Automatically expand and show options on the back/answer side of the card during review.")
+        show_layout.addRow(self.auto_show_options_answer_cb)
 
         # Correct Answer rating settings layout
         rate_good_container = QWidget()
