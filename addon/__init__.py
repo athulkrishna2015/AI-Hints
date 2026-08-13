@@ -11,7 +11,7 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
     from aqt import gui_hooks
 
     def on_profile_loaded():
-        from .logger import clear_log_file
+        from .logger import logger, clear_log_file
         from .mobile_sync import auto_update_mobile_setup, sync_mobile_script
         from aqt.qt import QTimer
         import os
@@ -42,7 +42,6 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
             logger.error(f"AI-Hints: Failed to migrate config: {mig_err}")
 
         # Dynamically set log level based on user config
-        from .logger import logger
         import logging
         if config.get("debug_logging", False):
             logger.setLevel(logging.DEBUG)
