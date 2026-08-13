@@ -27,3 +27,4 @@ antigravity-accounts.json
 **/__pycache__/
 addon/pregen_cache.json
 bugs/
+.agents/
