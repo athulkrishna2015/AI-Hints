@@ -24,11 +24,6 @@ class GeneralTabMixin:
         self.options_count_sb.setToolTip("Set how many multiple-choice options (answers) the AI should generate per card.")
         gen_layout.addRow("Number of Options:", self.options_count_sb)
         
-        self.mathjax_format_cb = QComboBox()
-        self.mathjax_format_cb.addItems(["delimiters", "inline"])
-        self.mathjax_format_cb.setToolTip(r"delimiters: \( ... \), \[ ... \]. inline: $ ... $, $$ ... $")
-        gen_layout.addRow("MathJax Format:", self.mathjax_format_cb)
-
         self.answer_display_position_cb = QComboBox()
         self.answer_display_position_cb.addItems(["between", "bottom"])
         self.answer_display_position_cb.setToolTip("Select where AI hints/options are shown on the answer side:\nbetween: Front, AI Data, Back (default)\nbottom: Front, Back, AI Data")

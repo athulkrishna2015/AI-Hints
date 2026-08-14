@@ -469,7 +469,7 @@ class AIClient:
             "- Return ONLY strictly valid raw JSON. No markdown, no preambles.\n"
             "- Ensure all options match the correct answer's format, length, and style perfectly.\n"
             "- For multiple clozes with same ID, use semicolon-separated values (e.g., 'val1 ; val2').\n"
-            "- Multiple formulae in ONE option or correct_answer MUST be separated with ' ; ' (e.g. a general formula and its special case). NEVER merge them together with no separator or glue one formula onto the end of another. Use the same ' ; ' separator in the correct_answer and every option.\n"
+            f"{self._multi_formula_rule()}"
             "- For legal/case flashcards, do NOT invent synthetic facts or modify names/dates in the correct answer's text to make distractors; use outcomes of other actual, real-world cases/judgments.\n"
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
@@ -1490,6 +1490,13 @@ class AIClient:
         except (TypeError, ValueError):
             count = 4
         return max(1, min(count, 10))
+
+    def _multi_formula_rule(self) -> str:
+        """Prompt rule: multiple distinct formulas in ONE option / correct_answer
+        must be separated with a semicolon so they are never mashed together."""
+        return ("- Multiple formulae in ONE option or correct_answer MUST be separated with ' ; ' (e.g. a general formula and its special case). "
+                "NEVER merge them together with no separator or glue one formula onto the end of another. Use the same ' ; ' separator in the correct_answer and every option. "
+                "GOOD: \"\\eta = 1 - \\frac{Q_C}{Q_H} ; \\eta_{\\text{Carnot}} = 1 - \\frac{T_C}{T_H}\"  BAD (forbidden): \"...Q_H}\\eta_{\\text{Carnot}} = 1 - ...\".\n")
 
     def _api_keys(self) -> Dict[str, Any]:
         api_keys = self.config.get("api_keys") or {}

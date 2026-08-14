@@ -42,7 +42,6 @@ This is the complete reference for every configuration key AI-Hints reads. Keys 
 | `options_count` | `4` | Number of MCQ options generated per card. |
 | `system_prompt` | (see config) | The core system prompt (not editable from dialog). |
 | `additional_system_instructions` | `""` | User text appended to the core prompt. |
-| `mathjax_format` | `delimiters` | `delimiters` (`\( \)`, `\[ \]`) or `inline` (`$ $`, `$$ $$`). |
 | `fix_latex` | `false` | Auto-repair common AI LaTeX errors. |
 | `answer_display_position` | `between` | `between` or `bottom` — where AI data renders on the answer side. |
 

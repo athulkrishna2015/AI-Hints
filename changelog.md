@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.1.6 (2026-08-15)
+- **Config Simplification**: Removed the **Multiple-Formula Separator** and **MathJax Format** selections from the General settings. Multiple distinct formulas in a single option/correct answer are now always separated with a ` ; ` separator (enforced in the generation prompt), and generated math always uses Anki delimiters (`\( ... \)` / `\[ ... \]`). Reduces config surface; existing saved values are still honored at runtime.
+
 ## 6.1.5 (2026-08-15)
 - **Multiple-Formula Option Separator**: When an option (or the correct answer) contains two or more distinct but related formulas (e.g. a general efficiency formula plus its Carnot special case), the add-on now requires them to be separated with a ` ; ` separator instead of being mashed together inline. The rule is enforced in the default system prompt (with a GOOD/BAD example) and hard-coded into the generation prompt, so the model no longer produces output like `\eta = 1 - \frac{Q_C}{Q_H}\eta = 1 - \frac{T_C}{T_H}`.
 

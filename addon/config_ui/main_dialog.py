@@ -288,7 +288,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.refresh_custom_list()
         self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
         self.options_count_sb.setValue(c.get("options_count", 4))
-        self.mathjax_format_cb.setCurrentText(c.get("mathjax_format", "delimiters"))
         self.fix_latex_cb.setChecked(c.get("fix_latex", False))
         self.answer_display_position_cb.setCurrentText(c.get("answer_display_position", "between"))
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
@@ -1049,7 +1048,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         c = self.default_config
         self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
         self.options_count_sb.setValue(c.get("options_count", 4))
-        self.mathjax_format_cb.setCurrentText(c.get("mathjax_format", "delimiters"))
         self.fix_latex_cb.setChecked(c.get("fix_latex", False))
         self.answer_display_position_cb.setCurrentText(c.get("answer_display_position", "between"))
         self.show_hints_cb.setChecked(c.get("show_hints_button", True))
@@ -1377,7 +1375,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config = self.config.copy()
             new_config["ai_provider"] = self.ai_provider_cb.currentText()
             new_config["options_count"] = self.options_count_sb.value()
-            new_config["mathjax_format"] = self.mathjax_format_cb.currentText()
             new_config["fix_latex"] = self.fix_latex_cb.isChecked()
             new_config["answer_display_position"] = self.answer_display_position_cb.currentText()
             new_config["show_hints_button"] = self.show_hints_cb.isChecked()

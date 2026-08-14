@@ -36,7 +36,6 @@ The dialog opens non-modally, remembers your last tab, and warns you if you clos
 ### MCQ & Math
 
 - **Number of Options:** — how many MCQ options the AI generates per card (range 1–10, default 4).
-- **MathJax Format:** — `delimiters` (`\( ... \)`, `\[ ... \]`) or `inline` (`$ ... $`, `$$ ... $$`).
 - **Answer Display Position:** — `between` (Front, AI Data, Back) or `bottom` (Front, Back, AI Data).
 - **Repair AI LaTeX Errors** — auto-fixes common AI math errors (missing backslashes/delimiters). Default off.
 
