@@ -276,6 +276,182 @@
             .replace(/&lt;\/anki-mathjax&gt;/gi, "</anki-mathjax>");
     }
 
+    // Detect Anki dark (night) mode so the popup matches the current theme.
+    function isDarkTheme() {
+        try {
+            const bg = getComputedStyle(document.body).backgroundColor;
+            if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+                const m = bg.match(/(\d+),\s*(\d+),\s*(\d+)/);
+                if (m) {
+                    const lum = (Number(m[1]) * 299 + Number(m[2]) * 587 + Number(m[3]) * 114) / 1000;
+                    return lum < 128;
+                }
+            }
+        } catch (e) {}
+        return document.body.classList.contains('nightMode');
+    }
+
+    // Alt+click model picker: lets the user generate with a specific provider + model.
+    function openModelPicker(onSelect) {
+        const uiCfg = window.aiHintsUiConfig || {};
+        const choices = Array.isArray(uiCfg.model_choices) ? uiCfg.model_choices : [];
+        if (!choices.length) return;
+
+        const existing = document.querySelector('.ai-hints-model-picker');
+        if (existing) existing.remove();
+
+        const dark = isDarkTheme();
+        const C = dark ? {
+            overlay: 'rgba(0,0,0,0.6)',
+            win: '#202020',
+            text: '#e8e8e8',
+            headerBg: '#2b2b2b',
+            footerBg: '#2b2b2b',
+            border: '#3c3c3c',
+            label: '#aaa',
+            inputBg: '#333',
+            inputBorder: '#555',
+            close: '#9a9a9a',
+            cancelBg: '#494949',
+            cancelText: '#e8e8e8',
+            genBg: '#4a6db5',
+            genText: '#fff',
+            selFg: '#e8e8e8'
+        } : {
+            overlay: 'rgba(0,0,0,0.45)',
+            win: '#fff',
+            text: '#222',
+            headerBg: '#f7f7f7',
+            footerBg: '#f7f7f7',
+            border: '#e3e3e3',
+            label: '#666',
+            inputBg: '#fff',
+            inputBorder: '#ccc',
+            close: '#888',
+            cancelBg: '#e0e0e0',
+            cancelText: '#222',
+            genBg: '#4a90d9',
+            genText: '#fff',
+            selFg: '#222'
+        };
+
+        // --- Overlay / dimmed backdrop ---
+        const overlay = document.createElement('div');
+        overlay.className = 'ai-hints-model-picker';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;background:' + C.overlay + ';';
+
+        // --- Window ---
+        const win = document.createElement('div');
+        win.style.cssText = 'background:' + C.win + ';color:' + C.text + ';border:1px solid ' + C.border + ';border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.35);width:100%;max-width:400px;overflow:hidden;font-family:inherit;';
+
+        // --- Header ---
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid ' + C.border + ';background:' + C.headerBg + ';';
+        const title = document.createElement('span');
+        title.textContent = "Generate with a specific model";
+        title.style.cssText = 'font-weight:600;font-size:14px;color:' + C.text + ';';
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '✕';
+        closeBtn.title = "Close";
+        closeBtn.style.cssText = 'border:none;background:transparent;color:' + C.close + ';font-size:16px;cursor:pointer;line-height:1;padding:2px 6px;';
+        closeBtn.onclick = () => overlay.remove();
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        win.appendChild(header);
+
+        // --- Body ---
+        const body = document.createElement('div');
+        body.style.cssText = 'padding:16px;color:' + C.text + ';';
+
+        const fieldLabel = (t) => {
+            const lbl = document.createElement('label');
+            lbl.textContent = t;
+            lbl.style.cssText = 'display:block;font-size:12px;font-weight:600;color:' + C.label + ';margin:0 0 4px;';
+            return lbl;
+        };
+        const selectStyle = 'width:100%;padding:8px 10px;border:1px solid ' + C.inputBorder + ';border-radius:6px;background:' + C.inputBg + ';color:' + C.selFg + ';font-size:13px;box-sizing:border-box;';
+
+        // Provider select
+        body.appendChild(fieldLabel("Provider"));
+        const providerSel = document.createElement('select');
+        providerSel.style.cssText = selectStyle;
+        choices.forEach((c) => {
+            const opt = document.createElement('option');
+            opt.value = c.provider;
+            opt.textContent = c.provider;
+            providerSel.appendChild(opt);
+        });
+        const last = getPersistence().get('lastModelOverride') || {};
+        let initProviderIdx = choices.findIndex((c) => c.provider === last.provider);
+        providerSel.selectedIndex = initProviderIdx >= 0 ? initProviderIdx : 0;
+        body.appendChild(providerSel);
+
+        // Model select
+        body.appendChild(fieldLabel("Model"));
+        const modelSel = document.createElement('select');
+        modelSel.style.cssText = selectStyle + 'margin-top:12px;';
+        if (dark) modelSel.style.colorScheme = 'dark';
+        body.appendChild(modelSel);
+
+        const fillModels = (preferredModel) => {
+            const c = choices[providerSel.selectedIndex];
+            modelSel.innerHTML = '';
+            (c.models || []).forEach((m) => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                modelSel.appendChild(opt);
+            });
+            let idx = (c.models || []).indexOf(preferredModel);
+            modelSel.selectedIndex = idx >= 0 ? idx : 0;
+            modelSel.disabled = !(c.models && c.models.length);
+        };
+        providerSel.addEventListener('change', () => fillModels(''));
+        // Remember the last used provider/model and preselect it on open.
+        fillModels(providerSel.selectedIndex === initProviderIdx ? last.model : '');
+
+        win.appendChild(body);
+
+        // --- Footer ---
+        const footer = document.createElement('div');
+        footer.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid ' + C.border + ';background:' + C.footerBg + ';';
+
+        const btnStyle = (bg, color) => 'padding:8px 14px;border:none;border-radius:6px;background:' + bg + ';color:' + color + ';font-size:13px;font-weight:600;cursor:pointer;';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = "Cancel";
+        cancelBtn.style.cssText = btnStyle(C.cancelBg, C.cancelText);
+        cancelBtn.onclick = () => overlay.remove();
+
+        const genBtn2 = document.createElement('button');
+        genBtn2.textContent = "Generate";
+        genBtn2.style.cssText = btnStyle(C.genBg, C.genText);
+        genBtn2.onclick = () => {
+            const provider = choices[providerSel.selectedIndex].provider;
+            const model = modelSel.selectedIndex >= 0 ? modelSel.value : '';
+            getPersistence().save('lastModelOverride', { provider: provider, model: model });
+            overlay.remove();
+            onSelect(provider, model);
+        };
+
+        footer.appendChild(cancelBtn);
+        footer.appendChild(genBtn2);
+        win.appendChild(footer);
+
+        overlay.appendChild(win);
+
+        // Block scroll pass-through to the reviewer while the popup is open.
+        overlay.addEventListener('wheel', (ev) => { ev.preventDefault(); ev.stopPropagation(); }, { passive: false });
+        overlay.addEventListener('touchmove', (ev) => { ev.preventDefault(); ev.stopPropagation(); }, { passive: false });
+        overlay.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Escape') { overlay.remove(); return; }
+            ev.stopPropagation();
+        }, true);
+
+        overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    }
+
     function renderMath(el) {
         if (typeof MathJax !== 'undefined') {
             try {
@@ -1127,6 +1303,17 @@
                             genBtn.disabled = true;
                             genBtn.textContent = "Stopping...";
                             if (typeof pycmd === 'function') pycmd('ai_hints_cancel');
+                        } else if (e.altKey) {
+                            openModelPicker((provider, model) => {
+                                genBtn.disabled = false;
+                                genBtn.textContent = "✨ Generating... (Stop)";
+                                genBtn.title = "Click to stop generation";
+                                genBtn.classList.remove('ai-hints-btn-pregenerating');
+                                genBtn.classList.add('ai-hints-btn-generating');
+                                if (typeof pycmd === 'function') {
+                                    pycmd(JSON.stringify({action: 'ai_hints_generate_override', provider: provider, model: model}));
+                                }
+                            });
                         } else {
                             genBtn.disabled = false;
                             genBtn.textContent = "✨ Generating... (Stop)";

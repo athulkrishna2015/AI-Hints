@@ -57,6 +57,14 @@ Customizable in the **Shortcuts** tab. Defaults (with the modifier, e.g. `Alt`):
 
 On the **front** side, action keys also work **without** the modifier for faster review. MCQ option selection uses bare `1–9` by default.
 
+### Per-Card Model Override (Alt+Click)
+
+**Alt+click** the **Generate/Regenerate** button during review to open a *"Generate with a specific model"* dialog. This forces an exact provider + model for the current card's regeneration, bypassing the automatic fallback order for that one generation:
+
+- A **Provider** dropdown cascades into that provider's **Model** dropdown, listing **all its active models** — including models currently on cooldown/blacklist, so you can retry them explicitly.
+- The dialog **remembers your last selection** and re-opens on it whenever it is still available.
+- It is **theme-aware** (matches Anki's dark/light mode) and **blocks scroll pass-through** — wheel/touch input over the dialog never scrolls the reviewer or triggers wheel-based actions underneath. `Esc` or the ✕ button closes it.
+
 ### Factual Error Alerts
 
 AI-Hints automatically detects factual errors in your notes and flags them with a warning (`⚠️`) and custom highlighting. Warnings can be dismissed inline during review.

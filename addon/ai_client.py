@@ -407,7 +407,7 @@ class AIClient:
     def _is_network_or_timeout_error(self, e: Exception) -> bool:
         return self._is_host_unreachable_error(e) or self._is_read_timeout_error(e)
 
-    def generate_options(self, front: str, back: str, override_provider: str = None, only_this_provider: bool = False) -> Dict[str, List[str]]:
+    def generate_options(self, front: str, back: str, override_provider: str = None, only_this_provider: bool = False, override_model: str = None) -> Dict[str, List[str]]:
         primary_provider = override_provider or self.config.get("ai_provider", "openai")
         # Always dynamically read the core prompt from the default config.json
         # so it gets updated automatically when the addon is upgraded.
@@ -552,7 +552,7 @@ class AIClient:
             if provider in network_failed_providers:
                 continue
             try:
-                result = self._call_provider(provider, system_prompt, prompt)
+                result = self._call_provider(provider, system_prompt, prompt, override_model=override_model or "")
                 if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
                     result = self._finalize_result(result, back, hints_enabled, options_enabled, is_test)
                     if provider != primary_provider:

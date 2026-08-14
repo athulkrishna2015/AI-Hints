@@ -574,6 +574,57 @@ def _set_frontend_generating(web, active, card_id=None, is_pregen=False, status=
         }})();
     """)
 
+def _get_model_choices(config):
+    """Returns a list of {provider, models} giving each ready provider's active+fallback models.
+
+    Includes blacklisted/on-cooldown models so the user can still retry a specific
+    model explicitly via Alt+click. Only user-disabled fallback models are excluded.
+    """
+    try:
+        client = AIClient(config)
+        primary = config.get("ai_provider", "openai")
+        candidates = client._candidate_providers(primary)
+        custom = config.get("custom_providers") or {}
+        if not isinstance(custom, dict):
+            custom = {}
+        configured_fallbacks = config.get("model_fallbacks") or {}
+        if not isinstance(configured_fallbacks, dict):
+            configured_fallbacks = {}
+        disabled_models = config.get("disabled_fallback_models") or {}
+        if not isinstance(disabled_models, dict):
+            disabled_models = {}
+        choices = []
+        for p in candidates:
+            cp = custom.get(p)
+            primary_model = ""
+            extra_fallbacks = None
+            if isinstance(cp, dict):
+                primary_model = str(cp.get("model") or "")
+                extra_fallbacks = cp.get("model_fallbacks") or []
+            # Replicate _models_for_provider's candidate order but keep failed models.
+            candidates_list = [
+                primary_model or client._get_model(p),
+                *client._model_list(extra_fallbacks),
+                *client._model_list(configured_fallbacks.get(p, [])),
+            ]
+            disabled = disabled_models.get(p, [])
+            if not isinstance(disabled, list):
+                disabled = []
+            models = []
+            seen = set()
+            for candidate in candidates_list:
+                model = client._normalize_model(p, candidate)
+                if not model or model in seen or model in disabled:
+                    continue
+                seen.add(model)
+                models.append(model)
+            if models:
+                choices.append({"provider": p, "models": models})
+        return choices
+    except Exception as e:
+        logger.debug(f"AI-Hints: Failed to build model choices: {e}")
+        return []
+
 def _get_ui_config(card, auto_reveal=False, is_answer=False, has_data=False):
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     return {
@@ -599,7 +650,8 @@ def _get_ui_config(card, auto_reveal=False, is_answer=False, has_data=False):
         "is_answer_side": is_answer,
         "hints_font_size": config.get("hints_font_size", ""),
         "answer_display_position": config.get("answer_display_position", "between"),
-        "has_data": has_data
+        "has_data": has_data,
+        "model_choices": _get_model_choices(config)
     }
 
 def on_webview_will_set_content(web_content, context):
@@ -1097,6 +1149,15 @@ def on_webview_did_receive_js_message(handled, message, context):
                     item_type=data.get("type"),
                     index=data.get("index"),
                     new_value=data.get("value")
+                )
+                return (True, None)
+            if isinstance(data, dict) and data.get("action") == "ai_hints_generate_override":
+                generate_hints(
+                    card=card,
+                    web=web,
+                    is_manual=True,
+                    override_provider=data.get("provider"),
+                    override_model=data.get("model")
                 )
                 return (True, None)
         except Exception as e:
@@ -2207,7 +2268,7 @@ def close_popup_if_open():
         _popup_dialog_instance.close()
         _popup_dialog_instance = None
 
-def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
+def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, override_provider=None, override_model=None):
     if card is None:
         card = mw.reviewer.card
     if not card:
@@ -2255,7 +2316,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
 
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
     
-    provider = config.get("ai_provider", "openai")
+    provider = override_provider or config.get("ai_provider", "openai")
 
     parser = CardParser(
         mathjax_format=config.get("mathjax_format", "delimiters"),
@@ -2271,6 +2332,15 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         if web:
             _set_frontend_generating(web, False, card_id, is_pregen, "Offline", "Network offline")
         _generating_card_ids.discard(card_id)
+        return
+
+    if override_provider and not client.has_ready_provider(override_provider):
+        _generating_card_ids.discard(card_id)
+        if not is_pregen:
+            is_custom = override_provider in (config.get("custom_providers") or {})
+            show_api_error_dialog(override_provider, is_custom=is_custom)
+            # Stop animation in frontend
+            _set_frontend_generating(web, False)
         return
 
     if not client.has_any_ready_provider():
@@ -2406,7 +2476,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None):
         import socket
         import urllib.error
         try:
-            res = client.generate_options(front, back)
+            res = client.generate_options(front, back, override_provider=override_provider, only_this_provider=bool(override_provider), override_model=override_model)
             mw.taskman.run_on_main(lambda: on_done(res))
         except Exception as e:
             logger.error(f"AI-Hints generation error: {e}")

@@ -286,7 +286,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
     def load_config_into_ui(self):
         c = self.config
         self.refresh_custom_list()
-        self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
         self.options_count_sb.setValue(c.get("options_count", 4))
         self.fix_latex_cb.setChecked(c.get("fix_latex", False))
         self.answer_display_position_cb.setCurrentText(c.get("answer_display_position", "between"))
@@ -475,14 +474,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             if p not in new_priority:
                 new_priority.append(p)
 
-        # 2. Populate Active Provider Dropdown using the calculated priority
-        current_selection = self.ai_provider_cb.currentText()
-        self.ai_provider_cb.clear()
-        self.ai_provider_cb.addItems(new_priority)
-        if current_selection:
-            try: self.ai_provider_cb.setCurrentText(current_selection)
-            except: pass
-
+        # 2. (removed Active Provider dropdown; primary is auto-derived)
         # 3. Rebuild Providers Tab layout
         if hasattr(self, 'models_layout') and self.models_layout is not None:
             while self.models_layout.count():
@@ -1046,7 +1038,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
     def on_restore_general(self):
         if not self.default_config: return
         c = self.default_config
-        self.ai_provider_cb.setCurrentText(c.get("ai_provider", "openai"))
         self.options_count_sb.setValue(c.get("options_count", 4))
         self.fix_latex_cb.setChecked(c.get("fix_latex", False))
         self.answer_display_position_cb.setCurrentText(c.get("answer_display_position", "between"))
@@ -1373,7 +1364,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 else: tooltip("Configuration saved.")
                 return True
             new_config = self.config.copy()
-            new_config["ai_provider"] = self.ai_provider_cb.currentText()
             new_config["options_count"] = self.options_count_sb.value()
             new_config["fix_latex"] = self.fix_latex_cb.isChecked()
             new_config["answer_display_position"] = self.answer_display_position_cb.currentText()
@@ -1572,6 +1562,21 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         for p in PROVIDER_ORDER + custom_names:
             if p not in priority: priority.append(p)
         config["provider_priority"] = priority
+        config.setdefault("disabled_providers", [])
+        disabled = set(config["disabled_providers"] or [])
+        api_keys = config.get("api_keys") or {}
+        derived = None
+        for p in config["provider_priority"]:
+            if p in disabled:
+                continue
+            if p not in PROVIDER_ORDER:
+                derived = p
+                break
+            if api_keys.get(p):
+                derived = p
+                break
+        if derived is not None:
+            config["ai_provider"] = derived
         local = {"enabled": False, "base_url": "http://localhost:11434/v1", "model": DEFAULT_MODELS.get("local", "llama3.3"), "api_key": ""}
         raw_local = config.get("local_endpoint", {}) or {}
         if isinstance(raw_local, dict): local.update(raw_local)

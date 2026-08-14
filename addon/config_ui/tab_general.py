@@ -15,10 +15,6 @@ class GeneralTabMixin:
         scroll_content = QWidget()
         gen_layout = QFormLayout()
         
-        self.ai_provider_cb = QComboBox()
-        self.ai_provider_cb.setToolTip("Select the main AI model provider for generating hints.")
-        gen_layout.addRow("Active AI Provider:", self.ai_provider_cb)
-        
         self.options_count_sb = QSpinBox()
         self.options_count_sb.setRange(1, 10)
         self.options_count_sb.setToolTip("Set how many multiple-choice options (answers) the AI should generate per card.")

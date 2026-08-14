@@ -29,10 +29,6 @@ The dialog opens non-modally, remembers your last tab, and warns you if you clos
 
 ## General Tab
 
-### Active AI Provider
-
-- **Active AI Provider:** — the main provider used for generating hints. Populated from your provider priority list plus custom providers.
-
 ### MCQ & Math
 
 - **Number of Options:** — how many MCQ options the AI generates per card (range 1–10, default 4).

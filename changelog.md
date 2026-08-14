@@ -2,6 +2,14 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.2.0 (2026-08-15)
+- **Per-Card Model Override (Alt+Click)**: **Alt+click** the **Generate/Regenerate** button during review to open a "Generate with a specific model" dialog. Pick any provider and any of its models to force that exact model for the current card's regeneration — bypassing the automatic fallback order for that single generation.
+  - **Per-provider model lists**: A Provider dropdown cascades into that provider's Model dropdown, showing **all active models** (including models currently on cooldown/blacklist, so they can be retried explicitly).
+  - **Remembers your last choice**: The dialog re-opens on your previously used provider + model whenever they are still available.
+  - **Theme-aware UI**: The dialog matches Anki's dark (night) and light themes automatically.
+  - **No scroll pass-through**: Wheel/touch input over the dialog is blocked so it never scrolls the reviewer or triggers Hotmouse-style wheel actions underneath, and `Esc` closes it.
+- **Active Provider Auto-Derivation**: Removed the **Active AI Provider** dropdown from the General tab. The primary provider is now derived automatically from the first usable entry in the fallback priority list — the first enabled provider (non-disabled) that has an API key configured, or the first custom provider. One less setting to maintain; the priority order you already configure is what decides the active provider.
+
 ## 6.1.6 (2026-08-15)
 - **Config Simplification**: Removed the **Multiple-Formula Separator** and **MathJax Format** selections from the General settings. Multiple distinct formulas in a single option/correct answer are now always separated with a ` ; ` separator (enforced in the generation prompt), and generated math always uses Anki delimiters (`\( ... \)` / `\[ ... \]`). Reduces config surface; existing saved values are still honored at runtime.
 

@@ -14,6 +14,8 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Broad Provider Support**: Generate hints using OpenAI, Anthropic, Gemini, DeepSeek, Grok (xAI), Groq, OpenRouter, and custom local endpoints via Custom Providers (Ollama, LM Studio, vLLM).
 - **Automated Fallbacks**: Automatically retries alternative models or providers in case of API rate limits or failures.
 - **API Key Rotation**: Register and rotate multiple API keys per provider to prevent exhaustion.
+- **Active Provider Auto-Derivation**: The primary provider is derived automatically from the first usable entry in your fallback priority list (first enabled provider with an API key, or the first custom provider) — no separate dropdown to maintain.
+- **Per-Card Model Override**: **Alt+click** Generate/Regenerate to open a theme-aware dialog and force a specific provider + model for that card's regeneration (all active models are listed, including ones on cooldown; it remembers your last choice).
 
 ### 🎮 Interactive MCQ & Review UI
 - **Multiple-Choice Options**: Select MCQ options on the front side (via click, touch, or hotkeys `1-9`) with color-coded results (green for correct, red for incorrect).
