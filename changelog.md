@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.1.5 (2026-08-15)
+- **Multiple-Formula Option Separator**: When an option (or the correct answer) contains two or more distinct but related formulas (e.g. a general efficiency formula plus its Carnot special case), the add-on now requires them to be separated with a ` ; ` separator instead of being mashed together inline. The rule is enforced in the default system prompt (with a GOOD/BAD example) and hard-coded into the generation prompt, so the model no longer produces output like `\eta = 1 - \frac{Q_C}{Q_H}\eta = 1 - \frac{T_C}{T_H}`.
+
 ## 6.1.4 (2026-08-13)
 - **AnkiDroid Swipe Gesture Fix**: Mobile AI-Hints controls no longer use native button or `onclick` targets that AnkiDroid classifies as interactive and excludes from its swipe handler. Horizontal swipe gestures now work when started over hints, options, and Show Hints, Show Options, Refresh, and JSON controls.
 - **Mobile Cloze Data Isolation**: A cloze card now ignores keyed JSON data belonging to another cloze ordinal. For example, a c2 card with only c1 data is treated as having no AI data and does not show stale hints, options, JSON, or other controls.

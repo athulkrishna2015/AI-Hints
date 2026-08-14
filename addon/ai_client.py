@@ -469,6 +469,7 @@ class AIClient:
             "- Return ONLY strictly valid raw JSON. No markdown, no preambles.\n"
             "- Ensure all options match the correct answer's format, length, and style perfectly.\n"
             "- For multiple clozes with same ID, use semicolon-separated values (e.g., 'val1 ; val2').\n"
+            "- Multiple formulae in ONE option or correct_answer MUST be separated with ' ; ' (e.g. a general formula and its special case). NEVER merge them together with no separator or glue one formula onto the end of another. Use the same ' ; ' separator in the correct_answer and every option.\n"
             "- For legal/case flashcards, do NOT invent synthetic facts or modify names/dates in the correct answer's text to make distractors; use outcomes of other actual, real-world cases/judgments.\n"
         )
         prompt = f"Front: {front}\nBack / correct answer: {back}" if back else f"Content: {front}"
