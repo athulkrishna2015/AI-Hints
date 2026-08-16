@@ -161,7 +161,7 @@
   "model_timeouts": {},
   "model_cooldown_minutes": 10,
   "request_timeout": 60,
-  "pregen_request_timeout": 60,
+  "pregen_request_timeout": 120,
   "hints_font_size": "",
   "batch_limit": 1000,
   "multithread_providers": false,

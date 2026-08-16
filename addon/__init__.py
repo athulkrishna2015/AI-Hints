@@ -34,10 +34,15 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
                 config["auto_show_options_answer"] = True
             if stored_version < 3:
                 config.pop("do_not_auto_collapse", None)
+            if stored_version < 4:
+                config["request_timeout"] = 60
+                config["pregen_request_timeout"] = 120
             if stored_version < 3:
                 config["config_version"] = 3
+            if stored_version < 4:
+                config["config_version"] = 4
                 mw.addonManager.writeConfig(ADDON_PACKAGE, config)
-                logger.info("AI-Hints: Migrated config (auto-show defaults + removed do-not-auto-collapse).")
+                logger.info("AI-Hints: Migrated config (timeouts bumped to 60s).")
         except Exception as mig_err:
             logger.error(f"AI-Hints: Failed to migrate config: {mig_err}")
 
