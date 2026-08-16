@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.2.3 (2026-08-16)
+- **Custom Provider Batch Failure Fix**: Fixed a `NameError: name 'parsed' is not defined` bug in the custom-provider request path (`_call_custom_provider`) that caused **every** custom-provider call (OpenCode Free, CLIProxyAPI, etc.) to fail immediately. This was a major source of batch-generation failures — cards routed to a custom provider errored out and, combined with blacklisting and read-timeouts, could exhaust all retry passes. Custom-provider responses are now correctly parsed and validated before being returned.
+- **Pregen Timeout Default Alignment**: The background pre-generation timeout default in the request client is aligned with the shipped config (120s), matching the active-review 60s default.
+
 ## 6.2.2 (2026-08-16)
 - **Removed the "Unsaved Changes" Warning**: Closing the AI-Hints settings dialog (via Cancel, `Esc`, or the window's X) no longer pops up a "You have unsaved changes" confirmation box. The dialog now closes immediately.
 
