@@ -437,10 +437,10 @@ class AIClient:
                 if override > 0:
                     return override
             if self.is_pregen:
-                return int(self.config.get("pregen_request_timeout", 20))
-            return int(self.config.get("request_timeout", 10))
+                return int(self.config.get("pregen_request_timeout", 60))
+            return int(self.config.get("request_timeout", 60))
         except Exception:
-            return 20 if self.is_pregen else 10
+            return 60 if self.is_pregen else 60
 
     def _is_host_unreachable_error(self, e: Exception) -> bool:
         import socket

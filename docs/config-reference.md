@@ -59,8 +59,8 @@ Example:
 | `thinking_levels` | `{}` | Per-model thinking level (`off`/`low`/`medium`/`high`). |
 | `model_timeouts` | `{}` | Per-model request timeout overrides (seconds). |
 | `provider_timeouts` | `{}` | Per-provider request timeout (0 = use global). |
-| `request_timeout` | `10` | Global active-review request timeout (seconds). |
-| `pregen_request_timeout` | `20` | Pre-generation request timeout (seconds). |
+| `request_timeout` | `60` | Global active-review request timeout (seconds). |
+| `pregen_request_timeout` | `60` | Pre-generation request timeout (seconds). |
 | `model_cooldown_minutes` | `10` | Failure lockout duration (minutes). |
 | `model_blacklist_data` | `{}` | Internal blacklist/cooldown state (provider-model-key combos). |
 

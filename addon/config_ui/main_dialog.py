@@ -418,10 +418,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.cooldown_spin.setValue(c.get("model_cooldown_minutes", 10))
             
         if hasattr(self, "timeout_spin"):
-            self.timeout_spin.setValue(c.get("request_timeout", 10))
+            self.timeout_spin.setValue(c.get("request_timeout", 60))
             
         if hasattr(self, "pregen_timeout_spin"):
-            self.pregen_timeout_spin.setValue(c.get("pregen_request_timeout", 20))
+            self.pregen_timeout_spin.setValue(c.get("pregen_request_timeout", 60))
         if hasattr(self, "provider_timeout_spins"):
             for provider, spin in self.provider_timeout_spins.items():
                 spin.setValue(int((c.get("provider_timeouts", {}) or {}).get(provider, 0) or 0))
@@ -1625,8 +1625,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("show_in_popup", False)
         config.setdefault("auto_clear_logs", True)
         config.setdefault("debug_logging", False)
-        config.setdefault("request_timeout", 10)
-        config.setdefault("pregen_request_timeout", 20)
+        config.setdefault("request_timeout", 60)
+        config.setdefault("pregen_request_timeout", 60)
         config.setdefault("provider_timeouts", {})
         config.setdefault("auto_generate_new", False)
         config.setdefault("auto_regenerate_if_modified", False)

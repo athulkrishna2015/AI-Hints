@@ -159,8 +159,8 @@ Each provider in your priority order has a row with:
 - **Blacklist list** — shows each blacklisted provider-model-key combo and its failure streak.
 - **Remove Selected** / **Clear All Cooldowns** — manage the blacklist.
 - **Default Failure Lockout (mins)** — cooldown duration after repeated failures (default 10, range 1–1440).
-- **API Request Timeout (seconds)** — active-review timeout (default 10).
-- **Pregen Timeout (seconds)** — pre-generation timeout (default 20).
+- **API Request Timeout (seconds)** — active-review timeout (default 60).
+- **Pregen Timeout (seconds)** — pre-generation timeout (default 60).
 
 ### Visual Styling
 
