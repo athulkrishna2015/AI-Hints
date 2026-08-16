@@ -17,13 +17,17 @@ This repository contains the source code for the **AI-Hints** Anki add-on.
 ```
 AI-Hints/
 ├── addon/                        # Core add-on package (this is what Anki loads)
-│   ├── __init__.py               # Entry point: registers hooks, starts proxy
+│   ├── __init__.py               # Entry point: registers hooks, config migration, proxy start
 │   ├── ai_client.py              # Multi-provider AI client + fallback engine
 │   ├── reviewer_hooks.py         # Review-time hint generation and UI injection
 │   ├── proxy_manager.py          # Antigravity Proxy lifecycle (start/stop/download)
 │   ├── batch_manager.py          # Batch generation queue and async job tracking
 │   ├── card_parser.py            # Card content extraction and cloze parsing
 │   ├── logger.py                 # Shared logging setup (file + Anki log)
+│   ├── config_io.py              # Config read/write helpers
+│   ├── mobile_sync.py            # Mobile script (AnkiDroid/AnkiWeb) sync helpers
+│   ├── anki_terminator_patch.py  # Third-party add-on compatibility patch
+│   ├── tts_addon_patch.py        # PiperTTS bulk-generation compatibility patch
 │   ├── config_ui/                # Configuration GUI (multi-file Mixin architecture)
 │   │   ├── __init__.py           # Exports ConfigDialog, on_config_dialog, ADDON_PACKAGE
 │   │   ├── main_dialog.py        # Core dialog shell: save, load, timers, tab routing
@@ -34,18 +38,31 @@ AI-Hints/
 │   │   ├── tab_shortcuts.py      # Tab 4: Keyboard shortcuts
 │   │   ├── tab_batch.py          # Tab 5: Batch generation controls
 │   │   ├── tab_support.py        # Tab 6: Support / about
-│   │   └── tab_logs.py           # Tab 7: Live log viewer
+│   │   ├── tab_mobile.py         # Tab 7: Mobile setup (AnkiDroid/AnkiWeb)
+│   │   └── tab_logs.py           # Tab 8: Live log viewer
+│   ├── web/                      # Frontend reviewer assets
+│   │   └── template.js           # Reviewer UI/injection script (synced to media)
+│   ├── Support/                  # Support assets (donation images, accounts)
 │   ├── bin/                      # Runtime-only assets (not full source)
 │   │   ├── config.json           # ✅ Proxy daemon static configuration (tracked in git)
 │   │   └── runtime assets        # ❌ OS-specific binaries / tokens are not tracked
 │   ├── latex_fixer/              # Git submodule: ai-latex-fixer library
 │   ├── json_repair/              # Vendored: json_repair library
+│   ├── manifest.json             # Add-on manifest (version, min version, name)
+│   ├── VERSION                   # Current semantic version (major.minor.patch)
 │   └── config.json               # Default configuration (factory reset source)
+├── docs/                         # User-facing documentation
+│   ├── index.md, setup.md, configuration.md, config-reference.md
+│   ├── features.md, batch-generation.md, data-format.md, storage.md
+│   ├── mobile-setup.md, troubleshooting.md
 ├── tests/
 │   ├── local_verify.py           # Logic verification (mocks Anki/Qt, no keys needed)
 │   ├── live_test.py              # Live AI generation test (requires meta.json with keys)
-│   ├── test_latex_fixer.py       # LaTeX normalization regression suite (9 tests)
-│   └── test_json_repair_integration.py
+│   ├── test_latex_fixer.py       # LaTeX normalization regression suite
+│   ├── test_json_repair_integration.py
+│   ├── test_card_parser.py       # Card content extraction and cloze parsing
+│   ├── (30 discovery-compatible test_*.py files total; see "Running Tests")
+│   └── ...
 ├── scratch/                      # Temporary scripts and diagnostic outputs
 │   ├── fetch_all_models.py       # Pulls all available models from active providers
 │   └── all_available_models.json # Diagnostic output from fetch_all_models.py
@@ -121,7 +138,8 @@ class ConfigDialog(QDialog,
                    ShortcutsTabMixin,
                    BatchTabMixin,
                    SupportTabMixin,
-                   LogTabMixin):
+                   LogTabMixin,
+                   MobileTabMixin):
 ```
 
 This means every mixin method shares the same `self` (including `self.config`, `self.tabs`, all widget refs) with no awkward cross-references or parameter passing. Adding a new tab means:
