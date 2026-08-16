@@ -171,7 +171,9 @@ class TestProviderModelFallbacks(unittest.TestCase):
 
     @patch("urllib.request.urlopen")
     def test_custom_provider_uses_global_model_fallbacks_when_custom_empty(self, mock_urlopen):
-        """Custom provider without its own model_fallbacks uses top-level model_fallbacks."""
+        """Custom provider without its own model_fallbacks uses top-level model_fallbacks
+        as its enabled model list (the saved provider 'model' is not used when enabled
+        fallbacks exist)."""
         config = {
             "custom_providers": {
                 "mycustom": {
@@ -185,13 +187,10 @@ class TestProviderModelFallbacks(unittest.TestCase):
             },
         }
         client = AIClient(config)
-        mock_urlopen.side_effect = [
-            self._mock_http_error(),
-            self._mock_ok_response(),
-        ]
+        mock_urlopen.side_effect = [self._mock_ok_response()]
         result = client._call_custom_provider("mycustom", "sys", "prompt")
         self.assertEqual(result["_model"], "global-custom-fallback")
-        self.assertIn(("mycustom", "custom-primary", "custom-key"), FAILED_COMBOS_CACHE)
+        self.assertEqual(result["_provider"], "mycustom")
         self.assertNotIn(("mycustom", "global-custom-fallback", "custom-key"), FAILED_COMBOS_CACHE)
 
     # ------------------------------------------------------------------

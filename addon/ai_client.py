@@ -437,10 +437,10 @@ class AIClient:
                 if override > 0:
                     return override
             if self.is_pregen:
-                return int(self.config.get("pregen_request_timeout", 60))
+                return int(self.config.get("pregen_request_timeout", 120))
             return int(self.config.get("request_timeout", 60))
         except Exception:
-            return 60 if self.is_pregen else 60
+            return 120 if self.is_pregen else 60
 
     def _is_host_unreachable_error(self, e: Exception) -> bool:
         import socket
@@ -874,6 +874,7 @@ class AIClient:
                     content = self._extract_content(result)
                     logger.debug(f"AI-Hints Custom {provider_name}/{model} response: {content[:2000]}")
                     _log_full_response(provider_name, model, content)
+                    parsed = self._parse_json_result(content)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success(provider_name, model, api_key)
                         parsed["_provider"] = provider_name

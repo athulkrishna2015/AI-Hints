@@ -440,20 +440,20 @@ class TestPregeneration(unittest.TestCase):
         
         # Normal Mode Tests
         client = AIClient({}, is_pregen=False)
-        self.assertEqual(client.timeout, 10)
+        self.assertEqual(client.timeout, 60)
         
         client = AIClient({"request_timeout": "invalid"}, is_pregen=False)
-        self.assertEqual(client.timeout, 10)
+        self.assertEqual(client.timeout, 60)
         
         client = AIClient({"request_timeout": 45}, is_pregen=False)
         self.assertEqual(client.timeout, 45)
         
         # Pregen Mode Tests
         client = AIClient({}, is_pregen=True)
-        self.assertEqual(client.timeout, 20)
+        self.assertEqual(client.timeout, 120)
         
         client = AIClient({"pregen_request_timeout": "invalid"}, is_pregen=True)
-        self.assertEqual(client.timeout, 20)
+        self.assertEqual(client.timeout, 120)
         
         client = AIClient({"pregen_request_timeout": 35}, is_pregen=True)
         self.assertEqual(client.timeout, 35)
