@@ -116,37 +116,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 except Exception:
                     pass
 
-    def _confirm_close_without_save(self):
-        """Warn the user before closing the dialog with unsaved changes."""
-        if not self._dirty:
-            return True
-        box = QMessageBox(self)
-        box.setWindowTitle("Unsaved Changes")
-        box.setText("You have unsaved changes in the AI-Hints settings.")
-        accept_role = getattr(QMessageBox, "AcceptRole", None) or QMessageBox.ButtonRole.AcceptRole
-        destructive_role = getattr(QMessageBox, "DestructiveRole", None) or QMessageBox.ButtonRole.DestructiveRole
-        reject_role = getattr(QMessageBox, "RejectRole", None) or QMessageBox.ButtonRole.RejectRole
-        save_btn = box.addButton("Save && Close", accept_role)
-        discard_btn = box.addButton("Discard Changes", destructive_role)
-        cancel_btn = box.addButton("Cancel", reject_role)
-        box.setDefaultButton(cancel_btn)
-        box.exec_() if hasattr(box, "exec_") else box.exec()
-        clicked = box.clickedButton()
-        if clicked is save_btn:
-            return bool(self.save_config(close=True))
-        if clicked is discard_btn:
-            return True
-        return False
-
     def reject(self):
-        if self._confirm_close_without_save():
-            super().reject()
+        super().reject()
 
     def closeEvent(self, event):
-        if self._confirm_close_without_save():
-            event.accept()
-        else:
-            event.ignore()
+        event.accept()
 
     def set_selected_cards(self, card_ids):
         """External hook to pass cards from browser into the Batch tab."""
