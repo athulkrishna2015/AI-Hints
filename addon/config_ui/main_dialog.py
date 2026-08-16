@@ -646,8 +646,17 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         # Prepare temporary config for the test
         temp_config = self.config.copy()
-        if "api_keys" not in temp_config: temp_config["api_keys"] = {}
-        temp_config["api_keys"][provider] = api_key
+        # Only override the key when the edit field actually has a value; otherwise
+        # keep the saved (correct) key from the config copy.
+        if api_key:
+            if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+            temp_config["api_keys"][provider] = api_key
+        # Include in-memory (unsaved) custom/local providers so a freshly added
+        # provider tests with the current URL/key before Save.
+        if hasattr(self, "local_providers_data"):
+            temp_config["local_providers"] = self.local_providers_data
+        if hasattr(self, "custom_providers_data"):
+            temp_config["custom_providers"] = self.custom_providers_data
         
         if "models" not in temp_config: temp_config["models"] = {}
         temp_config["models"][provider] = model_name
@@ -785,8 +794,13 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 
                 try:
                     temp_config = self.config.copy()
-                    if "api_keys" not in temp_config: temp_config["api_keys"] = {}
-                    temp_config["api_keys"][provider] = api_key
+                    if api_key:
+                        if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+                        temp_config["api_keys"][provider] = api_key
+                    if hasattr(self, "local_providers_data"):
+                        temp_config["local_providers"] = self.local_providers_data
+                    if hasattr(self, "custom_providers_data"):
+                        temp_config["custom_providers"] = self.custom_providers_data
                     if "models" not in temp_config: temp_config["models"] = {}
                     temp_config["models"][provider] = model_name
 
@@ -867,8 +881,13 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             return
             
         temp_config = self.config.copy()
-        if "api_keys" not in temp_config: temp_config["api_keys"] = {}
-        temp_config["api_keys"][provider] = api_key
+        if api_key:
+            if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+            temp_config["api_keys"][provider] = api_key
+        if hasattr(self, "local_providers_data"):
+            temp_config["local_providers"] = self.local_providers_data
+        if hasattr(self, "custom_providers_data"):
+            temp_config["custom_providers"] = self.custom_providers_data
             
         client = AIClient(temp_config)
         combobox.setEnabled(False)
