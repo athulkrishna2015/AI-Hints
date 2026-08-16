@@ -27,6 +27,17 @@ BLACKLIST_FILE = os.path.join(ADDON_PATH, "blacklist.json")
 LOG_SYSTEM_PROMPT_CHARS = 120
 
 
+def _log_full_request(provider: str, model: str, data: Any) -> None:
+    """Log the complete outbound request payload (prompt included) for debugging."""
+    try:
+        logger.debug(f"AI-Hints {provider}/{model} FULL REQUEST: {json.dumps(data, ensure_ascii=False, default=str)}")
+    except Exception as e:
+        logger.debug(f"AI-Hints {provider}/{model} FULL REQUEST (serialize error: {e}): {data!r}")
+
+def _log_full_response(provider: str, model: str, content: str) -> None:
+    """Log the complete inbound response content for debugging."""
+    logger.debug(f"AI-Hints {provider}/{model} FULL RESPONSE: {content}")
+
 def _compact_request_data(data: Dict[str, Any], max_len: int = LOG_SYSTEM_PROMPT_CHARS) -> Dict[str, Any]:
     """Return a compact copy of a request payload for debug logging so the
     system prompt is omitted and user content truncated."""
@@ -794,11 +805,12 @@ class AIClient:
 
                 try:
                     logger.debug(f"AI-Hints Custom {provider_name}/{model} request: {json.dumps(_compact_request_data(data))}")
+                    _log_full_request(provider_name, model, data)
                     self._log_model_attempt(provider_name, model, models)
                     result = self._post_json(url, data, headers)
                     content = self._extract_content(result)
-                    parsed = self._parse_json_result(content)
                     logger.debug(f"AI-Hints Custom {provider_name}/{model} response: {content[:2000]}")
+                    _log_full_response(provider_name, model, content)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success(provider_name, model, api_key)
                         parsed["_provider"] = provider_name
@@ -947,10 +959,12 @@ class AIClient:
                                 data["response_format"] = {"type": "json_object"}
                             try:
                                 logger.debug(f"AI-Hints {provider}/{local_model_name} request: {json.dumps(_compact_request_data(data))}")
+                                _log_full_request(provider, local_model_name, data)
                                 self._log_model_attempt(provider, local_model_name, local_models)
                                 result = self._post_json(url, data, headers)
                                 content = self._extract_content(result)
                                 logger.debug(f"AI-Hints {provider}/{local_model_name} response: {content[:2000]}")
+                                _log_full_response(provider, local_model_name, content)
                                 parsed = self._parse_json_result(content)
                                 if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                                     self._on_combo_success(provider, local_model_name, api_key)
@@ -993,10 +1007,12 @@ class AIClient:
 
                 try:
                     logger.debug(f"AI-Hints {provider}/{model} request: {json.dumps(_compact_request_data(data))}")
+                    _log_full_request(provider, model, data)
                     self._log_model_attempt(provider, model, models)
                     result = self._post_json(url, data, headers)
                     content = self._extract_content(result)
                     logger.debug(f"AI-Hints {provider}/{model} response: {content[:2000]}")
+                    _log_full_response(provider, model, content)
                     parsed = self._parse_json_result(content)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success(provider, model, api_key)
@@ -1078,8 +1094,10 @@ class AIClient:
 
                 try:
                     self._log_model_attempt("anthropic", model, models)
+                    _log_full_request("anthropic", model, data)
                     result = self._post_json(url, data, headers)
                     content = self._extract_content(result)
+                    _log_full_response("anthropic", model, content)
                     parsed = self._parse_json_result(content)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success("anthropic", model, api_key)
@@ -1177,8 +1195,10 @@ class AIClient:
 
                 try:
                     self._log_model_attempt("gemini", model, models)
+                    _log_full_request("gemini", model, data)
                     result = self._post_json(url, data, headers)
                     content = self._extract_content(result)
+                    _log_full_response("gemini", model, content)
                     parsed = self._parse_json_result(content)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success("gemini", model, api_key)
@@ -1295,7 +1315,9 @@ class AIClient:
             headers = self._json_headers()
             headers["x-goog-api-key"] = api_key
             try:
+                _log_full_request("gemini", f"batch-{model}", payload)
                 response = self._post_json(url, payload, headers)
+                _log_full_response("gemini", f"batch-{model}", json.dumps(response, ensure_ascii=False, default=str))
                 self._on_combo_success("gemini", model, api_key)
                 return response
             except urllib.error.HTTPError as e:
