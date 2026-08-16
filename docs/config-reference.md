@@ -18,6 +18,37 @@ This is the complete reference for every configuration key AI-Hints reads. Keys 
 | `disabled_providers` | `[]` | Providers disabled from fallback. |
 | `disabled_fallback_models` | `{}` | Per-provider models excluded from fallback. |
 | `custom_providers` | `{}` | Map of custom OpenAI-compatible endpoint configs. |
+
+Each custom provider entry is an object with the following keys:
+
+| Key | Purpose |
+|-----|---------|
+| `url` | Endpoint base URL (auto-appended `/chat/completions`). Required for the provider to be usable. |
+| `models_url` | Optional separate URL for model discovery (defaults to `url` + `/models`). |
+| `api_key` | Optional API key (not required — some providers are keyless). |
+| `model` | Default model name. Used only as a last resort; the first **enabled** fallback model is authoritative. |
+| `model_fallbacks` | Ordered list of fallback models. |
+| `headers` | `{}` | Extra request headers merged over the defaults (`Content-Type`, `Accept`, `Authorization: Bearer <api_key>`). |
+| `body_params` | `{}` | Extra JSON fields merged into the request body alongside `model` and `messages` (e.g. `{"stream": false}`, `{"web_search_options": {}}`, `{"think": "low"}`). |
+
+Example:
+
+```json
+{
+  "custom_providers": {
+    "orca": {
+      "url": "https://api.example.com/v1",
+      "models_url": "https://api.example.com/v1/models",
+      "api_key": "sk-...",
+      "model": "orcarouter/free",
+      "headers": {"X-Custom-Host": "prod"},
+      "body_params": {"stream": false, "web_search_options": {}}
+    }
+  }
+}
+```
+
+> The `headers` map must contain JSON-compatible string values (nested objects are not supported); `body_params` may contain nested objects/arrays.
 | `use_global_model_priority` | `false` | Use the global flat priority list instead of per-provider fallbacks. |
 | `global_model_priority` | `[]` | The global cross-provider model priority list. |
 

@@ -133,8 +133,17 @@ Each provider in your priority order has a row with:
 - **API Key** — optional for local endpoints; supports multiple keys.
 - **Model Name** + **Fetch** — the model to use.
 - **Models URL (optional)** — separate URL for model discovery.
-- **Headers (JSON)** — extra request headers.
-- **Body Params (JSON)** — extra request body fields (e.g. `{"think": "low"}`).
+- **Headers (JSON)** — extra request headers to include on every call to this provider. These are merged over the default `Content-Type: application/json` / `Accept: application/json` / `Authorization: Bearer <key>` headers. Common uses:
+  - `{"HTTP-Referer": "https://example.com"}` and `{"X-Title": "My App"}` — required by OpenRouter-style proxies.
+  - `{"X-API-Key": "..."}` — for APIs that expect a custom auth header instead of `Authorization`.
+  - Provider-specific headers (e.g. vendor/account IDs, custom auth tokens).
+  - Example: `{"X-Custom-Host": "prod", "X-Api-Version": "2026-01-01"}`
+- **Body Params (JSON)** — extra JSON fields merged into the request body, alongside `model` and `messages`. Useful for provider-specific options not exposed in the UI:
+  - Disable streaming: `{"stream": false}`.
+  - Web search / grounding: `{"web_search_options": {}}`.
+  - Reasoning/thinking level: `{"think": "low"}` (or `"medium"` / `"high"`; `"off"` disables). Note: per-model thinking levels configured in the Fallback dialog override this field.
+  - Other vendor options, e.g. `{"temperature": 0.7, "max_tokens": 1024}`.
+  - Example: `{"stream": false, "web_search_options": {}, "temperature": 0.7}`
 
 ---
 
