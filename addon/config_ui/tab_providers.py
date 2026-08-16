@@ -247,8 +247,11 @@ class FallbackOrderDialog(QDialog):
             return
             
         temp_config = self.main_dialog.config.copy()
-        if "api_keys" not in temp_config: temp_config["api_keys"] = {}
-        temp_config["api_keys"][self.provider] = api_key
+        # Only override the key when the edit field actually has a value; otherwise
+        # keep the saved (correct) key from the config copy.
+        if api_key:
+            if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+            temp_config["api_keys"][self.provider] = api_key
         # Include in-memory (unsaved) local & custom providers so a freshly added
         # provider's fallback models can be fetched before the user clicks Save.
         if hasattr(self.main_dialog, "local_providers_data"):
@@ -400,8 +403,17 @@ class FallbackOrderDialog(QDialog):
                     # Prepare temporary config for this model
                     temp_config = self.main_dialog.config.copy()
                     api_key = self.main_dialog.api_key_edits[self.provider].text().strip() if self.provider in self.main_dialog.api_key_edits else ""
-                    if "api_keys" not in temp_config: temp_config["api_keys"] = {}
-                    temp_config["api_keys"][self.provider] = api_key
+                    # Only override the key when the edit field actually has a value;
+                    # otherwise keep the saved (correct) key from the config copy.
+                    if api_key:
+                        if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+                        temp_config["api_keys"][self.provider] = api_key
+                    # Include in-memory (unsaved) custom/local providers so a freshly
+                    # added provider tests with the current URL/key before Save.
+                    if hasattr(self.main_dialog, "local_providers_data"):
+                        temp_config["local_providers"] = self.main_dialog.local_providers_data
+                    if hasattr(self.main_dialog, "custom_providers_data"):
+                        temp_config["custom_providers"] = self.main_dialog.custom_providers_data
                     if "models" not in temp_config: temp_config["models"] = {}
                     temp_config["models"][self.provider] = model
                     
@@ -1248,8 +1260,15 @@ class GlobalFallbackOrderDialog(QDialog):
                     temp_config = self.main_dialog.config.copy()
                     temp_config["local_providers"] = self.main_dialog.local_providers_data
                     api_key = self.main_dialog.api_key_edits[provider].text().strip() if provider in self.main_dialog.api_key_edits else ""
-                    if "api_keys" not in temp_config: temp_config["api_keys"] = {}
-                    temp_config["api_keys"][provider] = api_key
+                    # Only override the key when the edit field actually has a value;
+                    # otherwise keep the saved (correct) key from the config copy.
+                    if api_key:
+                        if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+                        temp_config["api_keys"][provider] = api_key
+                    # Include in-memory (unsaved) custom providers so a freshly added
+                    # provider tests with the current URL/key before Save.
+                    if hasattr(self.main_dialog, "custom_providers_data"):
+                        temp_config["custom_providers"] = self.main_dialog.custom_providers_data
                     if "models" not in temp_config: temp_config["models"] = {}
                     temp_config["models"][provider] = model
                     
