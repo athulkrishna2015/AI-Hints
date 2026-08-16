@@ -3,9 +3,12 @@
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
 ## 6.2.1 (2026-08-16)
-- **Longer API Request Timeouts for Existing Users**: The default active-review (`request_timeout`) and pre-generation (`pregen_request_timeout`) timeouts are raised to **60s** and **120s** respectively. Slow free endpoints (e.g. teamorouter/orcarouter) can take ~26s for a real generation, so the old 10s/20s defaults caused read timeouts and forced fallback switches.
-- **Config Migration to v4**: Existing installations are migrated automatically on load — `config_version` is bumped to `4` and the timeouts are forced to the new defaults (60s / 120s), overriding older saved values.
-- **New Install Defaults**: Fresh installs ship with `request_timeout: 60` and `pregen_request_timeout: 120`.
+- **Longer API Request Timeouts**: The default active-review (`request_timeout`) and pre-generation (`pregen_request_timeout`) timeouts are raised to **60s** and **120s** respectively. Slow free endpoints (e.g. teamorouter/orcarouter) can take ~26s for a real generation, so the old 10s/20s defaults caused read timeouts and forced fallback switches.
+- **Config Migration to v4**: Existing installations are migrated automatically on load — `config_version` is bumped to `4` and the timeouts are forced to the new defaults (60s / 120s), overriding older saved values. New installs ship with the new defaults.
+- **Custom Provider Fallback Models Fix**: Custom providers now use the models you actually **checked/enabled** in the Fallback dialog instead of the provider's saved `model` field (which was auto-set to the first fetched model). Batched generation and the model picker follow the same enabled-fallback resolution, with the saved model used only as a last resort.
+- **Custom Provider Test/Fetch Fixes (Before Save)**: Testing or fetching fallback models for a newly added/edited custom provider now works correctly even before the config is saved — it routes to the provider's *actual* endpoint, uses the *saved* API key (not stale UI state), and allows fetching fallback models for brand-new custom providers.
+- **Keyless Provider Auto-Derivation**: The active-provider auto-derivation previously required an API key for every provider, so keyless providers (local endpoints, URL-only custom providers) could never become primary. These are now treated as ready without a key; only built-in providers require a key.
+- **Cleaner Debug Logging**: Debug logging now logs the (constant) system prompt once and the full variable request/response payloads per call, so it is easy to inspect each request's actual content without drowning in repeated boilerplate.
 
 ## 6.2.0 (2026-08-15)
 - **Per-Card Model Override (Alt+Click)**: **Alt+click** the **Generate/Regenerate** button during review to open a "Generate with a specific model" dialog. Pick any provider and any of its models to force that exact model for the current card's regeneration — bypassing the automatic fallback order for that single generation.
