@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.2.1 (2026-08-16)
+- **Longer API Request Timeouts for Existing Users**: The default active-review (`request_timeout`) and pre-generation (`pregen_request_timeout`) timeouts are raised to **60s** and **120s** respectively. Slow free endpoints (e.g. teamorouter/orcarouter) can take ~26s for a real generation, so the old 10s/20s defaults caused read timeouts and forced fallback switches.
+- **Config Migration to v4**: Existing installations are migrated automatically on load — `config_version` is bumped to `4` and the timeouts are forced to the new defaults (60s / 120s), overriding older saved values.
+- **New Install Defaults**: Fresh installs ship with `request_timeout: 60` and `pregen_request_timeout: 120`.
+
 ## 6.2.0 (2026-08-15)
 - **Per-Card Model Override (Alt+Click)**: **Alt+click** the **Generate/Regenerate** button during review to open a "Generate with a specific model" dialog. Pick any provider and any of its models to force that exact model for the current card's regeneration — bypassing the automatic fallback order for that single generation.
   - **Per-provider model lists**: A Provider dropdown cascades into that provider's Model dropdown, showing **all active models** (including models currently on cooldown/blacklist, so they can be retried explicitly).
