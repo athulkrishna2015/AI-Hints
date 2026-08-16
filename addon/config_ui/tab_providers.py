@@ -249,6 +249,12 @@ class FallbackOrderDialog(QDialog):
         temp_config = self.main_dialog.config.copy()
         if "api_keys" not in temp_config: temp_config["api_keys"] = {}
         temp_config["api_keys"][self.provider] = api_key
+        # Include in-memory (unsaved) local & custom providers so a freshly added
+        # provider's fallback models can be fetched before the user clicks Save.
+        if hasattr(self.main_dialog, "local_providers_data"):
+            temp_config["local_providers"] = self.main_dialog.local_providers_data
+        if hasattr(self.main_dialog, "custom_providers_data"):
+            temp_config["custom_providers"] = self.main_dialog.custom_providers_data
             
         import threading
         from ..ai_client import AIClient
