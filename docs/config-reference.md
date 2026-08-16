@@ -10,7 +10,7 @@ This is the complete reference for every configuration key AI-Hints reads. Keys 
 
 | Key | Default | Purpose |
 |-----|---------|---------|
-| `ai_provider` | (auto) | The primary provider for hint generation, auto-derived from the first usable entry in the fallback priority list (enabled and with an API key configured).
+| `ai_provider` | (auto) | The primary provider for hint generation, auto-derived from the first usable entry in the fallback priority list: local endpoints and custom providers (URL-based) need no API key, built-in providers need one configured. |
 | `api_keys` | `{}` | Map of `provider -> key(s)`. Supports multiple named keys per provider. |
 | `models` | (see config) | Map of `provider -> active model name`. |
 | `model_fallbacks` | (see config) | Map of `provider -> ordered list of fallback models`. |
