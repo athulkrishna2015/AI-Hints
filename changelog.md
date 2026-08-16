@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.2.2 (2026-08-16)
+- **Removed the "Unsaved Changes" Warning**: Closing the AI-Hints settings dialog (via Cancel, `Esc`, or the window's X) no longer pops up a "You have unsaved changes" confirmation box. The dialog now closes immediately.
+
 ## 6.2.1 (2026-08-16)
 - **Longer API Request Timeouts**: The default active-review (`request_timeout`) and pre-generation (`pregen_request_timeout`) timeouts are raised to **60s** and **120s** respectively. Slow free endpoints (e.g. teamorouter/orcarouter) can take ~26s for a real generation, so the old 10s/20s defaults caused read timeouts and forced fallback switches.
 - **Config Migration to v4**: Existing installations are migrated automatically on load — `config_version` is bumped to `4` and the timeouts are forced to the new defaults (60s / 120s), overriding older saved values. New installs ship with the new defaults.
