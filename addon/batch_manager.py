@@ -991,7 +991,7 @@ class BatchManager:
         from .reviewer_hooks import _get_card_from_collection
         
         try:
-             models = client._models_for_provider(provider)
+             models = client._provider_models(provider)
              current_model = models[0] if models else "Unknown"
         except:
              current_model = "Unknown"
@@ -1015,7 +1015,7 @@ class BatchManager:
 
             # Check if this provider has any available models (not blacklisted)
             try:
-                available_models = client._models_for_provider(provider)
+                available_models = client._provider_models(provider)
             except Exception:
                 available_models = []
 

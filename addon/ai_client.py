@@ -827,7 +827,7 @@ class AIClient:
         if not isinstance(body_params, dict):
             body_params = {}
 
-        models = [override_model] if override_model else self._models_for_provider(provider_name, custom_cfg.get("model", ""), custom_cfg.get("model_fallbacks", []))
+        models = [override_model] if override_model else self._custom_provider_models(provider_name, custom_cfg)
 
         timeouts_count = 0
         for model in models:
@@ -1915,6 +1915,45 @@ class AIClient:
         delay = cooldown_sec * streak
         logger.info(f"AI-Hints: Rate limit (429) hit for {provider}/{model} (Key: ...{api_key[-6:] if len(api_key)>6 else api_key}). Streak: {streak}. New delay: {delay/60:.1f} minutes.")
         return delay
+
+    def _enabled_fallback_models(self, provider: str) -> List[str]:
+        """Ordered list of ENABLED (checked) fallback models for a provider, honoring
+        the disable/disabled_fallback_models list. Used as the source of truth for
+        custom providers so an auto-set/first-fetched model is never used over the
+        models the user explicitly enabled."""
+        fallbacks = self._model_list((self.config.get("model_fallbacks") or {}).get(provider, []))
+        disabled = set(self._model_list((self.config.get("disabled_fallback_models") or {}).get(provider, [])))
+        from .logger import log_context
+        is_test = getattr(log_context, "source", None) == "model_test"
+        seen = set()
+        out = []
+        for m in fallbacks:
+            m = self._normalize_model(provider, m)
+            if not m or m in seen or m in disabled:
+                continue
+            if not is_test and self._is_model_failed(provider, m):
+                continue
+            seen.add(m)
+            out.append(m)
+        return out
+
+    def _custom_provider_models(self, provider: str, custom_cfg: Dict[str, Any]) -> List[str]:
+        """Determine the model candidates for a custom provider. The first ENABLED
+        (checked) fallback model is authoritative; the provider's saved model field is
+        only used as a last resort when nothing is enabled."""
+        enabled = self._enabled_fallback_models(provider)
+        if enabled:
+            return enabled
+        return self._models_for_provider(provider, custom_cfg.get("model", ""), custom_cfg.get("model_fallbacks", []))
+
+    def _provider_models(self, provider: str) -> List[str]:
+        """Returns the ordered model candidates for a provider, using the correct
+        resolution for custom providers (first enabled fallback) vs built-in ones."""
+        custom_providers = self.config.get("custom_providers") or {}
+        cp = custom_providers.get(provider)
+        if provider in custom_providers:
+            return self._custom_provider_models(provider, cp if isinstance(cp, dict) else {})
+        return self._models_for_provider(provider)
 
     def _models_for_provider(self, provider: str, primary_model: str = "", extra_fallbacks: List[str] = None) -> List[str]:
         configured = self.config.get("model_fallbacks") or {}

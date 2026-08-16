@@ -601,8 +601,12 @@ def _get_model_choices(config):
             if isinstance(cp, dict):
                 primary_model = str(cp.get("model") or "")
                 extra_fallbacks = cp.get("model_fallbacks") or []
+            # Custom providers should prioritize the ENABLED (checked) fallback
+            # models over an auto-set/saved model, matching generation behavior.
+            enabled = client._enabled_fallback_models(p) if p in custom else []
             # Replicate _models_for_provider's candidate order but keep failed models.
             candidates_list = [
+                *enabled,
                 primary_model or client._get_model(p),
                 *client._model_list(extra_fallbacks),
                 *client._model_list(configured_fallbacks.get(p, [])),
