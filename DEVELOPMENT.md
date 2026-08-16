@@ -54,7 +54,7 @@ AI-Hints/
 ├── docs/                         # User-facing documentation
 │   ├── index.md, setup.md, configuration.md, config-reference.md
 │   ├── features.md, batch-generation.md, data-format.md, storage.md
-│   ├── mobile-setup.md, troubleshooting.md
+│   ├── mobile-setup.md, troubleshooting.md, frontend.md
 ├── tests/
 │   ├── local_verify.py           # Logic verification (mocks Anki/Qt, no keys needed)
 │   ├── live_test.py              # Live AI generation test (requires meta.json with keys)
@@ -104,6 +104,8 @@ New-Item -ItemType SymbolicLink -Path "$env:APPDATA\Anki2\addons21\ai_hints_dev"
 ### 3. Reviewer & Mobile Script Sync
 
 If you modify the frontend logic in `addon/web/template.js`, you must sync it to your Anki profile's media folder as `_ai_hints_template.js` for the changes to take effect in the reviewer. While the add-on syncs this automatically on startup (delayed), manual sync is faster during development.
+
+For an in-depth look at the runtime globals, the data contract, and the `pycmd` protocol the script uses, see [Frontend (JavaScript) Reference](docs/frontend.md).
 
 **Linux Example:**
 ```shell

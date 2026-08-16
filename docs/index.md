@@ -15,6 +15,7 @@ AI-Hints uses Artificial Intelligence to generate helpful hints and multiple-cho
 7. [Troubleshooting](troubleshooting.md) — solve common problems.
 8. [Data & Storage Format](data-format.md) — what's stored in your notes and how it's used.
 9. [Storage, Files & State](storage.md) — all data files, JSON stores, and runtime variables.
+10. [Frontend (JavaScript) Reference](frontend.md) — the unified JS renderer, runtime globals, data contract, and `pycmd` protocol.
 
 ## Links
 
@@ -26,4 +27,5 @@ AI-Hints uses Artificial Intelligence to generate helpful hints and multiple-cho
 - **Configuration Reference**: https://github.com/athulkrishna2015/AI-Hints/blob/master/docs/config-reference.md
 - **Data & Storage Format**: https://github.com/athulkrishna2015/AI-Hints/blob/master/docs/data-format.md
 - **Storage, Files & State**: https://github.com/athulkrishna2015/AI-Hints/blob/master/docs/storage.md
+- **Frontend (JavaScript) Reference**: https://github.com/athulkrishna2015/AI-Hints/blob/master/docs/frontend.md
 - **Developer Documentation**: https://github.com/athulkrishna2015/AI-Hints/blob/master/DEVELOPMENT.md
