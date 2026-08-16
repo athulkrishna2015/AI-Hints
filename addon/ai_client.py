@@ -3,6 +3,7 @@ import time
 import os
 import re
 import html
+import hashlib
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -27,10 +28,72 @@ BLACKLIST_FILE = os.path.join(ADDON_PATH, "blacklist.json")
 LOG_SYSTEM_PROMPT_CHARS = 120
 
 
-def _log_full_request(provider: str, model: str, data: Any) -> None:
-    """Log the complete outbound request payload (prompt included) for debugging."""
+def _extract_system_text(data: Any) -> str:
+    """Pull the (constant) system prompt out of any of the provider payload shapes."""
     try:
-        logger.debug(f"AI-Hints {provider}/{model} FULL REQUEST: {json.dumps(data, ensure_ascii=False, default=str)}")
+        if not isinstance(data, dict):
+            return ""
+        msgs = data.get("messages")
+        if isinstance(msgs, list):
+            for m in msgs:
+                if isinstance(m, dict) and m.get("role") == "system":
+                    c = m.get("content")
+                    return c if isinstance(c, str) else ""
+        sys = data.get("system")
+        if isinstance(sys, str):
+            return sys
+        si = data.get("system_instruction")
+        if isinstance(si, dict):
+            parts = si.get("parts")
+            if isinstance(parts, list) and parts:
+                p = parts[0]
+                if isinstance(p, dict):
+                    t = p.get("text")
+                    return t if isinstance(t, str) else ""
+        return ""
+    except Exception:
+        return ""
+
+def _elide_system(data: Any, sys_hash: str) -> Any:
+    """Return a copy of the request with the constant system prompt replaced by a marker,
+    keeping the variable parts (user prompt, model, etc.) fully intact."""
+    if not isinstance(data, dict):
+        return data
+    out = dict(data)
+    marker = f"[SYSTEM LOGGED ONCE {sys_hash}]" if sys_hash else "[SYSTEM NONE]"
+    msgs = out.get("messages")
+    if isinstance(msgs, list):
+        out["messages"] = []
+        for m in msgs:
+            if isinstance(m, dict) and m.get("role") == "system" and isinstance(m.get("content"), str):
+                cm = dict(m)
+                cm["content"] = marker
+                out["messages"].append(cm)
+            else:
+                out["messages"].append(m)
+    if isinstance(out.get("system"), str):
+        out["system"] = marker
+    if isinstance(out.get("system_instruction"), dict):
+        out["system_instruction"] = {"parts": [{"text": marker}]}
+    return out
+
+# Set of system-prompt hashes already logged in full, so the constant prompt is
+# only written to the log once per distinct value.
+_LOGGED_SYSTEM_PROMPTS: set = set()
+
+def _log_full_request(provider: str, model: str, data: Any) -> None:
+    """Log the outbound request for debugging. The constant system prompt is logged in
+    full only once (keyed by hash); subsequent requests log only the varying parts."""
+    try:
+        system_text = _extract_system_text(data)
+        sys_hash = ""
+        if system_text:
+            sys_hash = hashlib.md5(system_text.encode("utf-8", errors="ignore")).hexdigest()[:12]
+            if sys_hash not in _LOGGED_SYSTEM_PROMPTS:
+                _LOGGED_SYSTEM_PROMPTS.add(sys_hash)
+                logger.debug(f"AI-Hints {provider}/{model} SYSTEM PROMPT (logged once, hash {sys_hash}): {system_text}")
+        elided = _elide_system(data, sys_hash)
+        logger.debug(f"AI-Hints {provider}/{model} FULL REQUEST (system hash {sys_hash or 'none'}): {json.dumps(elided, ensure_ascii=False, default=str)}")
     except Exception as e:
         logger.debug(f"AI-Hints {provider}/{model} FULL REQUEST (serialize error: {e}): {data!r}")
 
