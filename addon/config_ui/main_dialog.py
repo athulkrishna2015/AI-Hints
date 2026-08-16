@@ -10,7 +10,8 @@ from ..ai_client import (
     LEGACY_MODEL_REPLACEMENTS, 
     MODEL_FALLBACKS, 
     PROVIDER_ORDER, 
-    AIClient
+    AIClient,
+    derive_active_provider,
 )
 
 # Import Tab Mixins
@@ -1582,19 +1583,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             if p not in priority: priority.append(p)
         config["provider_priority"] = priority
         config.setdefault("disabled_providers", [])
-        disabled = set(config["disabled_providers"] or [])
-        api_keys = config.get("api_keys") or {}
-        derived = None
-        for p in config["provider_priority"]:
-            if p in disabled:
-                continue
-            if p not in PROVIDER_ORDER:
-                derived = p
-                break
-            if api_keys.get(p):
-                derived = p
-                break
-        if derived is not None:
+        derived = derive_active_provider(config)
+        if derived:
             config["ai_provider"] = derived
         local = {"enabled": False, "base_url": "http://localhost:11434/v1", "model": DEFAULT_MODELS.get("local", "llama3.3"), "api_key": ""}
         raw_local = config.get("local_endpoint", {}) or {}

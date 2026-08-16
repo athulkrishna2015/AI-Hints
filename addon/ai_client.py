@@ -2336,6 +2336,41 @@ def is_model_blacklisted(provider: str, model: str) -> bool:
     except Exception:
         return False
 
+def derive_active_provider(config: Any) -> str:
+    """Derive the primary provider from config, honoring keyless providers.
+
+    Some providers do not require an API key (e.g. 'local' endpoints and custom
+    providers that only need a URL), so selection cannot rely on api_keys alone.
+    Returns the first non-disabled provider in priority order that is usable:
+    local, a custom provider with a URL, or a built-in with an API key.
+    """
+    if not isinstance(config, dict):
+        config = {}
+    disabled = set(config.get("disabled_providers") or [])
+    api_keys = config.get("api_keys") or {}
+    if not isinstance(api_keys, dict):
+        api_keys = {}
+    custom_providers = config.get("custom_providers") or {}
+    if not isinstance(custom_providers, dict):
+        custom_providers = {}
+    priority = config.get("provider_priority")
+    if not isinstance(priority, list):
+        priority = PROVIDER_ORDER + list(custom_providers.keys())
+    for p in priority:
+        if p in disabled:
+            continue
+        if p == "local":
+            # Local endpoints need no API key.
+            return p
+        if p in custom_providers:
+            cp = custom_providers[p]
+            if isinstance(cp, dict) and str(cp.get("url", "") or "").strip():
+                return p
+            continue
+        if api_keys.get(p):
+            return p
+    return ""
+
 def is_model_deprecated(provider: str, model: str) -> bool:
     """Best-effort detection of deprecated/retired model IDs.
 
