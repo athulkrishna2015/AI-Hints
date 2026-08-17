@@ -2,6 +2,15 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.2.4 (2026-08-18)
+- **API Key Wipe Fix (Critical)**: Fixed two config save paths that could silently write empty API keys over your saved keys, wiping them from `meta.json`:
+  - The settings dialog **tab-switch** handler was dumping the whole in-memory config straight to disk with no key protection.
+  - `save_config` was rebuilding `api_keys` from **only the visible UI key fields**, dropping keys for any provider not currently rendered as a row (e.g. GitHub, Together and custom providers like CLIProxy/OpenCode Free).
+  - A new `write_pretty_config_preserve_keys()` writer now merges your on-disk keys back in before saving, so an empty/missing key field can never blank an existing key. If you already lost keys during a batch or settings save, the recovery steps (and how to restore from a previous backup) are documented in the README.
+- **Multithreaded Batch On by Default**: "Concurrent Multi-Provider Generation (Multithreaded)" (`multithread_providers`) now defaults to **ON** for new installs.
+- **Fallback "Restore Defaults" Crash Fix**: Fixed an `AttributeError: 'FallbackOrderDialog' object has no attribute 'list_widget'` crash when clicking **Restore Defaults** in a provider's Fallback Priority dialog (a leftover reference from the older list-based UI). Restore Defaults now correctly repopulates the model table.
+- **Gitignore Coverage**: `meta.json` backup variations (`.bkp`, `meta.bkp.json`, `*.before_*`, etc.) are now ignored by git.
+
 ## 6.2.3 (2026-08-16)
 - **Custom Provider Batch Failure Fix**: Fixed a `NameError: name 'parsed' is not defined` bug in the custom-provider request path (`_call_custom_provider`) that caused **every** custom-provider call (OpenCode Free, CLIProxyAPI, etc.) to fail immediately. This was a major source of batch-generation failures — cards routed to a custom provider errored out and, combined with blacklisting and read-timeouts, could exhaust all retry passes. Custom-provider responses are now correctly parsed and validated before being returned.
 - **Pregen Timeout Default Alignment**: The background pre-generation timeout default in the request client is aligned with the shipped config (120s), matching the active-review 60s default.

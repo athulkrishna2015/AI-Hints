@@ -164,7 +164,7 @@
   "pregen_request_timeout": 120,
   "hints_font_size": "",
   "batch_limit": 1000,
-  "multithread_providers": false,
+  "multithread_providers": true,
   "additional_system_instructions": "",
   "model_blacklist_data": {},
   "maint_only_modified": true,

@@ -689,13 +689,6 @@ class FallbackOrderDialog(QDialog):
         for m in full_list:
             self._add_model_row(m, True, fallback_statuses, thinking_levels, model_timeouts)
         self.update_item_labels()
-        for m in full_list:
-            item = QListWidgetItem()
-            item.setData(Qt.ItemDataRole.UserRole, m)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setCheckState(Qt.CheckState.Checked)
-            self.list_widget.addItem(item)
-        self.update_item_labels()
 
     def get_active_model(self):
         if self.table.rowCount() > 0:

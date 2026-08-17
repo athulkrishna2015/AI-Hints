@@ -484,8 +484,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if hasattr(self, 'config'):
              self.config["last_active_tab"] = index
              try:
-                 from ..config_io import write_pretty_config
-                 write_pretty_config(ADDON_PACKAGE, self.config)
+                 from ..config_io import write_pretty_config_preserve_keys
+                 write_pretty_config_preserve_keys(ADDON_PACKAGE, self.config)
              except Exception: pass
 
     def on_delete_binary(self):
@@ -1435,7 +1435,17 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     return edit.currentText().strip() or DEFAULT_MODELS.get(p, "")
                 except RuntimeError:
                     return self.config.get("models", {}).get(p, DEFAULT_MODELS.get(p, ""))
-            new_config["api_keys"] = {p: _safe_key(p, edit) for p, edit in self.api_key_edits.items()}
+            _existing_keys = self.config.get("api_keys", {}) or {}
+            if not isinstance(_existing_keys, dict):
+                _existing_keys = {}
+            _edited_keys = {p: _safe_key(p, edit) for p, edit in self.api_key_edits.items()}
+            for _p, _e in _edited_keys.items():
+                if not _e and _existing_keys.get(_p):
+                    _edited_keys[_p] = _existing_keys.get(_p)
+            # Preserve any stored keys whose provider is not shown as an edit row.
+            for _p, _e in _existing_keys.items():
+                _edited_keys.setdefault(_p, _e)
+            new_config["api_keys"] = _edited_keys
             new_config["models"] = {p: _safe_model(p, edit) for p, edit in self.model_edits.items()}
             new_config["local_providers"] = self.local_providers_data
             new_config["system_prompt"] = self.default_config.get("system_prompt", "")
@@ -1496,8 +1506,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         disabled.append(w.provider)
             new_config["provider_priority"] = priority
             new_config["disabled_providers"] = disabled
-            from ..config_io import write_pretty_config
-            write_pretty_config(ADDON_PACKAGE, self._normalize_config(new_config))
+            from ..config_io import write_pretty_config_preserve_keys
+            write_pretty_config_preserve_keys(ADDON_PACKAGE, self._normalize_config(new_config))
             NEWLY_ADDED_MODELS.clear()
             MISSING_FROM_FETCH.clear()
             try:
