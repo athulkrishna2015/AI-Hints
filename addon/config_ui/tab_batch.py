@@ -225,7 +225,6 @@ class BatchTabMixin:
         
         # -- 2. ACTIVE GROUP --
         active_group = QGroupBox("Running & Pending Batches")
-        active_group.setStyleSheet("QGroupBox { margin-top: 0px; padding-top: 0px; }")
         a_layout = QVBoxLayout()
         a_layout.setContentsMargins(4, 0, 4, 4)
         a_layout.setSpacing(2)
@@ -276,15 +275,16 @@ class BatchTabMixin:
         
         self._on_batch_method_changed()
         
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
+        self._batch_scroll = QScrollArea()
+        self._batch_scroll.setWidgetResizable(True)
+        self._batch_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_content = QWidget()
         scroll_content.setLayout(layout)
-        scroll.setWidget(scroll_content)
+        self._batch_scroll.setWidget(scroll_content)
         
         main_layout = QVBoxLayout(tab)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll)
+        main_layout.addWidget(self._batch_scroll)
         
         return tab
 
@@ -759,6 +759,15 @@ class BatchTabMixin:
         try:
             sb = self.batch_list_view.verticalScrollBar()
             sb.setValue(sb.maximum())
+        except Exception:
+            pass
+        # Scroll the outer tab scroll area so the "Running & Pending Batches"
+        # panel (with the live logs) is actually on screen after starting a queue.
+        try:
+            outer = getattr(self, "_batch_scroll", None)
+            if outer is not None:
+                osb = outer.verticalScrollBar()
+                osb.setValue(osb.maximum())
         except Exception:
             pass
 
