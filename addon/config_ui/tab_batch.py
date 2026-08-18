@@ -20,7 +20,9 @@ class BatchTabMixin:
         """Constructs the Tab 5: Batch Generation UI"""
         tab = QWidget()
         layout = QVBoxLayout()
-        
+        layout.setSpacing(4)
+        layout.setContentsMargins(6, 6, 6, 6)
+
         # -- 1. START GROUP --
         start_group = QGroupBox("Start New Batch Generation")
         s_layout = QFormLayout()
@@ -169,40 +171,62 @@ class BatchTabMixin:
         start_group.setLayout(s_layout)
         layout.addWidget(start_group)
         
+        # -- 1.5 REGENERATE BY MODEL GROUP --
+        regen_group = QGroupBox("🎯 Regenerate Cards by Stored Model")
+        rg_layout = QFormLayout()
+
+        self.regen_model_edit = QLineEdit()
+        self.regen_model_edit.setPlaceholderText("e.g. gpt-oss-120b")
+        self.regen_model_edit.setToolTip(
+            "Model name that was used to generate hints on the cards you want to regenerate. "
+            "The collection is only scanned when you click 'Scan & Queue Regeneration', so "
+            "there is no up-front full-collection scan when opening this window."
+        )
+        rg_layout.addRow("Stored Model:", self.regen_model_edit)
+
+        self.regen_force_model_edit = QLineEdit()
+        self.regen_force_model_edit.setPlaceholderText("(blank = use Force Model above)")
+        self.regen_force_model_edit.setToolTip(
+            "Optional. If set, regenerated cards force this exact model (it is fused into the "
+            "Force Model / provider override above). Leave blank to use the batch Force Model settings."
+        )
+        rg_layout.addRow("Regenerate with:", self.regen_force_model_edit)
+
+        self.regen_scan_btn = QPushButton("🔁 Scan & Queue Regeneration")
+        self.regen_scan_btn.setAutoDefault(False)
+        self.regen_scan_btn.setStyleSheet("font-weight: bold;")
+        self.regen_scan_btn.clicked.connect(self.on_regen_by_model_clicked)
+        rg_layout.addRow(self.regen_scan_btn)
+
+        self.regen_progress_bar = QProgressBar()
+        self.regen_progress_bar.setRange(0, 0)  # indeterminate busy animation
+        self.regen_progress_bar.setFormat("Scanning… (%v of %m)")
+        self.regen_progress_bar.setVisible(False)
+        rg_layout.addRow("", self.regen_progress_bar)
+
+        self.regen_status_label = QLabel("")
+        self.regen_status_label.setStyleSheet("color: #6c757d; font-size: 11px;")
+        self.regen_status_label.setWordWrap(True)
+        rg_layout.addRow("", self.regen_status_label)
+
+        regen_group.setLayout(rg_layout)
+        layout.addWidget(regen_group)
+        
+        # NOTE: no auto-scan of the collection at dialog open — a synchronous
+        # full-collection scan on the GUI thread freezes the config window.
+        # The collection is only scanned on demand when the user clicks the
+        # "Scan & Queue Regeneration" button.
+        
         # -- 2. ACTIVE GROUP --
         active_group = QGroupBox("Running & Pending Batches")
+        active_group.setStyleSheet("QGroupBox { margin-top: 2px; }")
         a_layout = QVBoxLayout()
+        a_layout.setContentsMargins(4, 4, 4, 4)
+        a_layout.setSpacing(2)
         
-        # Buttons kept on top of the batch list: Stop/Discard + Refresh Status.
-        self.stop_local_btn = QPushButton("🛑 Stop & Discard Queue")
-        self.stop_local_btn.setAutoDefault(False)
-        self.stop_local_btn.setMinimumHeight(30)
-        self.stop_local_btn.setStyleSheet("color: #dc3545; font-weight: bold;")
-        try: self.stop_local_btn.clicked.disconnect()
-        except Exception: pass
-        self.stop_local_btn.clicked.connect(self.on_stop_local_queue)
- 
-        self.refresh_status_btn = QPushButton("🔄 Refresh Status")
-        self.refresh_status_btn.setAutoDefault(False)
-        self.refresh_status_btn.setMinimumHeight(30)
-        try: self.refresh_status_btn.clicked.disconnect()
-        except Exception: pass
-        self.refresh_status_btn.clicked.connect(self.update_batch_status_tab)
-        
-        self.batch_run_btn = QPushButton("🚀 Initiate Queue")
-        self.batch_run_btn.setAutoDefault(False)
-        self.batch_run_btn.setMinimumHeight(30)
-        self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
-        try: self.batch_run_btn.clicked.disconnect()
-        except Exception: pass
-        self.batch_run_btn.clicked.connect(self.on_batch_control_clicked)
-
-        top_row = QHBoxLayout()
-        top_row.addWidget(self.batch_run_btn)
-        top_row.addWidget(self.stop_local_btn)
-        top_row.addStretch() 
-        top_row.addWidget(self.refresh_status_btn)
-        a_layout.addLayout(top_row)
+        # Note: the batch control buttons (Initiate/Stop/Refresh) live in the
+        # always-visible footer (see main_dialog.setup_ui), so they are not
+        # re-created here. Only the status list is shown in this tab.
         
         self.batch_list_view = QTextBrowser()
         self.batch_list_view.setReadOnly(True)
@@ -534,6 +558,178 @@ class BatchTabMixin:
 
         self.update_batch_status_tab()
 
+    def on_regen_by_model_clicked(self):
+        from ..batch_manager import batch_manager
+        from ..reviewer_hooks import find_cards_by_stored_model, clear_ai_hints_for_cards
+
+        model = self.regen_model_edit.text().strip()
+        if not model:
+            info("Type the model name used to generate the hints you want to regenerate.")
+            return
+
+        self.regen_status_label.setText(f"Scanning collection for model '{model}'…")
+        self.regen_scan_btn.setEnabled(False)
+        self.regen_progress_bar.setVisible(True)
+        self.regen_progress_bar.setValue(0)
+
+        def _update_progress(scanned, total, matched):
+            # Keep the indeterminate bar animating and show live counts by
+            # pumping the event loop from within the synchronous scan.
+            self.regen_progress_bar.setMaximum(total)
+            self.regen_progress_bar.setValue(scanned)
+            self.regen_status_label.setText(f"Scanning for '{model}'… {scanned}/{total} (matched {matched})")
+            QApplication.processEvents()
+
+        # Scope the scan to the chosen source: the browser selection, or the
+        # deck selected in the Batch Generation deck chooser.
+        scope_note_ids = None
+        scope_card_ids = None
+        scope_label = "collection"
+        if hasattr(self, "selected_card_ids") and self.selected_card_ids:
+            scope_card_ids = set(self.selected_card_ids)
+            try:
+                nids = set()
+                for cid in self.selected_card_ids:
+                    c = mw.col.get_card(cid)
+                    if c:
+                        nids.add(c.nid)
+                scope_note_ids = list(nids)
+            except Exception as e:
+                logger.error(f"AI-Hints: Failed to resolve selected card notes: {e}")
+                scope_card_ids = None
+            scope_label = f"selection ({len(self.selected_card_ids)} cards)"
+        else:
+            deck_name = self.batch_deck_chooser.currentText().strip()
+            valid_decks = mw.col.decks.all_names()
+            if deck_name and deck_name in valid_decks:
+                try:
+                    scope_note_ids = mw.col.find_notes(f'deck:"{deck_name}"')
+                except Exception as e:
+                    logger.error(f"AI-Hints: Deck lookup failed for scan scope: {e}")
+                    scope_note_ids = None
+                scope_label = f'deck "{deck_name}"'
+
+        try:
+            card_ids = find_cards_by_stored_model(
+                model,
+                progress_cb=_update_progress,
+                update_every=10,
+                note_ids=scope_note_ids,
+                card_ids=scope_card_ids,
+            )
+        except Exception as e:
+            logger.error(f"AI-Hints: Regenerate-by-model scan failed: {e}")
+            card_ids = []
+        finally:
+            self.regen_progress_bar.setVisible(False)
+
+        self.regen_scan_btn.setEnabled(True)
+
+        if not card_ids:
+            self.regen_status_label.setText(f"No cards found generated with '{model}'.")
+            info(f"No cards found generated with model '{model}'.")
+            return
+
+        force_model = self.regen_force_model_edit.text().strip()
+
+        limit = self.batch_limit_spin.value()
+        chunked = card_ids[:limit]
+        excess = len(card_ids) - limit
+
+        confirm = (
+            f"Found <b>{len(card_ids)}</b> card(s) generated with model "
+            f"<b>{model}</b> (in {scope_label}).\n\n"
+            f"This will CLEAR their current AI hints and queue them for regeneration "
+            f"via the local background queue."
+        )
+        if force_model:
+            confirm += f"\n\nForce model: <b>{force_model}</b>"
+        else:
+            confirm += f"\n\nModel: leave the batch **Force Model** selection to decide."
+        if excess > 0:
+            confirm += f"\n\n(Note: only the first {limit} will be queued; {excess} skipped by the limit.)"
+        confirm += "\n\nProceed with scanning & queuing?"
+
+        if not askUser(confirm):
+            self.regen_status_label.setText("Cancelled.")
+            return
+
+        if hasattr(self, "save_config"):
+            try:
+                self.save_config(close=False)
+            except Exception:
+                pass
+
+        # 1. Clear the stored hints so the batch queue can write fresh data.
+        try:
+            cleared_res = clear_ai_hints_for_cards(chunked)
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to clear hints for regenerate-by-model: {e}")
+            info(f"Failed to clear AI hints: {e}")
+            return
+
+        # 2. Build config with an optional model override (mirrors the main batch path).
+        config = self.config.copy()
+        config["multithread_providers"] = self.batch_multithread_cb.isChecked()
+
+        combo_idx = self.batch_provider_cb.currentIndex()
+        prov_override = None
+        if combo_idx > 0:
+            prov_override = self.batch_provider_cb.itemData(combo_idx)
+        target_prov = prov_override or config.get("ai_provider", "openai")
+
+        chosen_force = force_model or (
+            self.batch_model_cb.currentText().strip()
+            if self.batch_model_cb.currentText().strip() and "⚡" not in self.batch_model_cb.currentText()
+            else ""
+        )
+        if chosen_force:
+            current_models = config.get("models", {})
+            if not isinstance(current_models, dict):
+                current_models = {}
+            else:
+                current_models = current_models.copy()
+            current_models[target_prov] = chosen_force
+            config["models"] = current_models
+            logger.info(f"AI-Hints Regenerate-by-model: forcing {target_prov} -> {chosen_force}")
+
+        from ..ai_client import AIClient
+        client = AIClient(config)
+        if not client.has_any_ready_provider():
+            info("No configured API Keys found! Visit Provider settings first.")
+            return
+
+        started = batch_manager.start_local_sequential_queue(
+            chunked, config, provider_override=prov_override
+        )
+        if started:
+            self.regen_status_label.setText(
+                f"Queued <b>{len(chunked)}</b> card(s) matching '{model}' for regeneration."
+            )
+            QTimer.singleShot(500, self._focus_batch_log)
+        else:
+            self.regen_status_label.setText("Failed to start the regeneration queue.")
+
+    def _focus_batch_log(self):
+        """Switch to the Batch tab and scroll its live log to the bottom so the
+        running activity is immediately visible (used right after starting a queue)."""
+        try:
+            for i in range(self.tabs.count()):
+                if self.tabs.tabText(i) == "Batch Generation":
+                    self.tabs.setCurrentIndex(i)
+                    break
+        except Exception:
+            pass
+        self.update_batch_status_tab()
+        QTimer.singleShot(200, self._scroll_batch_log_to_bottom)
+
+    def _scroll_batch_log_to_bottom(self):
+        try:
+            sb = self.batch_list_view.verticalScrollBar()
+            sb.setValue(sb.maximum())
+        except Exception:
+            pass
+
     def on_start_config_batch(self):
         from ..batch_manager import batch_manager
 
@@ -556,7 +752,7 @@ class BatchTabMixin:
                  if res:
                       started = batch_manager.start_local_sequential_queue(card_ids=None) 
                       if started:
-                           self.update_batch_status_tab()
+                           QTimer.singleShot(500, self._focus_batch_log)
                            self._on_batch_method_changed() 
                       return
                  else:
@@ -730,7 +926,7 @@ class BatchTabMixin:
                     self.batch_deck_chooser.setEnabled(True)
                     self.batch_deck_chooser.setEditable(False)
                     self._refresh_deck_list()
-                    QTimer.singleShot(1500, self.update_batch_status_tab)
+                    QTimer.singleShot(500, self._focus_batch_log)
                 return
 
             else:

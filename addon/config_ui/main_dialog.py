@@ -165,6 +165,28 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         layout = QVBoxLayout()
         self.tabs = QTabWidget()
         
+        # Batch queue control buttons live in the always-visible footer, so the
+        # user never has to scroll to the bottom of the Batch tab to reach them.
+        # Create them here (before the tabs are built) because the Batch tab's
+        # state logic (_refresh_batch_controls) references these widgets during
+        # construction; they are added to the footer below.
+        self.batch_run_btn = QPushButton("🚀 Initiate Queue")
+        self.batch_run_btn.setAutoDefault(False)
+        self.batch_run_btn.setMinimumHeight(30)
+        self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+        self.batch_run_btn.clicked.connect(self.on_batch_control_clicked)
+
+        self.stop_local_btn = QPushButton("🛑 Stop & Discard Queue")
+        self.stop_local_btn.setAutoDefault(False)
+        self.stop_local_btn.setMinimumHeight(30)
+        self.stop_local_btn.setStyleSheet("color: #dc3545; font-weight: bold;")
+        self.stop_local_btn.clicked.connect(self.on_stop_local_queue)
+
+        self.refresh_status_btn = QPushButton("🔄 Refresh Status")
+        self.refresh_status_btn.setAutoDefault(False)
+        self.refresh_status_btn.setMinimumHeight(30)
+        self.refresh_status_btn.clicked.connect(self.update_batch_status_tab)
+        
         # Build Tabs using inherited Mixin methods
         general = self._create_general_tab()
         providers = self._create_providers_tab()
@@ -208,6 +230,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         stop_all_btn.setStyleSheet("color: white; background-color: #d9534f; font-weight: bold; padding: 3px 10px;")
         stop_all_btn.clicked.connect(self.emergency_stop)
         btn_layout.addWidget(stop_all_btn)
+
+        # Batch queue controls — kept in the footer so they are always visible
+        # without scrolling to the bottom of the Batch tab.
+        btn_layout.addWidget(self.batch_run_btn)
+        btn_layout.addWidget(self.stop_local_btn)
+        btn_layout.addWidget(self.refresh_status_btn)
 
         btn_layout.addStretch()
         

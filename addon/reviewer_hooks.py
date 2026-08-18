@@ -2528,6 +2528,110 @@ def card_has_hints(card):
     except Exception:
         return False
 
+def _stored_hint_models_for_note(note):
+    """Yield (model, card_key) pairs stored in a note's AI-Hints JSON blocks."""
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
+    )
+    try:
+        for entry in parser._extract_all_hints_from_fields(note):
+            data = entry.get("data") or {}
+            model = data.get("_model")
+            if model and str(model).strip():
+                yield str(model).strip(), entry.get("card_key")
+    except Exception:
+        return
+
+def collect_stored_models() -> list:
+    """Return a sorted, de-duplicated list of every model recorded on any card."""
+    models = {}
+    try:
+        for nid in mw.col.find_notes(""):
+            try:
+                note = mw.col.get_note(nid)
+            except Exception:
+                continue
+            for model, _ in _stored_hint_models_for_note(note):
+                models[model] = True
+    except Exception as e:
+        logger.error(f"AI-Hints: Failed to scan stored models: {e}")
+        return []
+    return sorted(models.keys(), key=str.lower)
+
+def find_cards_by_stored_model(model_filter, progress_cb=None, update_every=50, note_ids=None, card_ids=None) -> list:
+    """Return card ids whose stored AI _model matches model_filter (case-insensitive).
+
+    By default the whole collection is scanned. Pass `note_ids` to limit the
+    scan to a set of note ids (e.g. a deck), and/or `card_ids` to further
+    restrict matches to a set of card ids (e.g. a browser selection).
+
+    progress_cb(scanned, total, matched) is invoked roughly every `update_every`
+    notes so the caller can keep the UI responsive / animate a progress indicator.
+    """
+    target = (model_filter or "").strip().lower()
+    if not target:
+        return []
+    if card_ids is not None:
+        card_ids = set(card_ids)
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    parser = CardParser(
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
+    )
+    matches = []
+    seen = set()
+    try:
+        if note_ids is not None:
+            all_nids = list(note_ids)
+        else:
+            all_nids = mw.col.find_notes("")
+        total = len(all_nids)
+        for idx, nid in enumerate(all_nids):
+            try:
+                note = mw.col.get_note(nid)
+                cards = note.cards()
+            except Exception:
+                continue
+            if not cards:
+                continue
+            multi = len(cards) > 1
+            for entry in parser._extract_all_hints_from_fields(note):
+                data = entry.get("data") or {}
+                model = data.get("_model")
+                if not model or str(model).strip().lower() != target:
+                    continue
+                card_key = entry.get("card_key")
+                if multi:
+                    ord_for_key = None
+                    if card_key and str(card_key)[0].lower() == "c":
+                        try:
+                            ord_for_key = int(str(card_key)[1:]) - 1
+                        except Exception:
+                            ord_for_key = None
+                    for c in cards:
+                        if card_ids is not None and c.id not in card_ids:
+                            continue
+                        if ord_for_key is None or c.ord == ord_for_key:
+                            marker = (c.id, card_key)
+                            if marker not in seen:
+                                seen.add(marker)
+                                matches.append(c.id)
+                    break
+                else:
+                    c = cards[0]
+                    marker = (c.id, card_key)
+                    if marker not in seen:
+                        seen.add(marker)
+                        matches.append(c.id)
+                    break
+            if progress_cb and (idx % update_every == 0 or idx == total - 1):
+                progress_cb(idx + 1, total, len(matches))
+    except Exception as e:
+        logger.error(f"AI-Hints: Failed to scan cards by stored model: {e}")
+    return matches
+
 def _card_saved_version(card) -> str:
     """Return the addon version string stored inside the card's JSON block.
     Returns an empty string if no version was recorded (i.e. generated before
