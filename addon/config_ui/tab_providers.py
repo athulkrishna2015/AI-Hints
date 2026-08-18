@@ -173,6 +173,10 @@ class FallbackOrderDialog(QDialog):
 
     def _apply_model_highlight(self, item, model_name):
         """Colour a fallback table row based on new/missing/deprecated status."""
+        # Rows are swapped in place, so clear the previous model's brushes
+        # before applying the current model's status.
+        item.setBackground(QBrush())
+        item.setForeground(QBrush())
         is_new, is_dep, is_missing = self._model_flags(model_name)
         if is_dep:
             item.setBackground(QBrush(QColor(COL_DEP_BG)))

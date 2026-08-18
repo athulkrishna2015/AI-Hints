@@ -11,6 +11,7 @@ This page documents **where** AI-Hints stores data, **what** files it creates, a
 | `addon/pregen_cache.json` | Pre-generated hint cache (disk-backed). |
 | Anki profile `ai_hints_bin/ai_hints_batch_state.json` | Persistent batch queue state (fallback: `addon/batch_state.json`). |
 | `addon/ai_hints.log`, `.1`, `.2` | Rotating log files (3 levels, 5 MB each). |
+| `addon/meta.json.bak` | Startup copy of the previous addon metadata file, made when an Anki profile opens before config migration or writes. |
 | In-note hidden JSON block | Per-card generated data (see [Data & Storage Format](data-format.md)). |
 | `addon/manifest.json`, `addon/VERSION` | Package metadata and version string. |
 | `_ai_hints_template.js` (media folder) | Mobile/synced frontend template script. |

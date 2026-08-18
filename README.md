@@ -12,7 +12,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 
 ### 🔌 Multi-Provider AI Engine
 - **Broad Provider Support**: Generate hints using OpenAI, Anthropic, Gemini, DeepSeek, Grok (xAI), Groq, OpenRouter, and custom local endpoints via Custom Providers (Ollama, LM Studio, vLLM).
-- **Automated Fallbacks**: Automatically retries alternative models or providers in case of API rate limits or failures.
+- **Automated Fallbacks**: Automatically retries alternative models or providers in case of API rate limits or failures, with editable provider and model priority lists.
 - **API Key Rotation**: Register and rotate multiple API keys per provider to prevent exhaustion.
 - **Active Provider Auto-Derivation**: The primary provider is derived automatically from the first usable entry in your fallback priority list (first enabled provider with an API key, or the first custom provider) — no separate dropdown to maintain.
 - **Per-Card Model Override**: **Alt+click** Generate/Regenerate to open a theme-aware dialog and force a specific provider + model for that card's regeneration (all active models are listed, including ones on cooldown; it remembers your last choice).
@@ -124,7 +124,7 @@ If you want to remove AI-Hints from mobile:
 
 Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configuration window.
 
-- **General Tab**: Select your default provider, MCQ options count, database storage mode, and auto-generation rules including modified-card, version, and generation-time based regeneration. Configure **auto-show defaults** for hints and MCQ options independently on the **question** and **answer** sides (each reset automatically per card, including during relearn/retries).
+- **General Tab**: Configure MCQ options, storage, and auto-generation rules including modified-card, version, and generation-time based regeneration. The primary provider is derived from fallback priority; there is no separate provider dropdown. Configure **auto-show defaults** for hints and MCQ options independently on the **question** and **answer** sides (each reset automatically per card, including during relearn/retries).
 - **AI Providers Tab**: Unified settings where each provider is grouped into a clean card layout containing its API Key (with eye visibility 👁️ toggles), active model selection, Up/Down priority sorting, dynamic fetch and test features, and checkbox toggles to **completely disable fallbacks** to specific providers.
   - **Custom Providers**: Add any OpenAI-compatible API endpoint (e.g., Ollama, LM Studio, vLLM, AIHubMix) by clicking **Add** under Custom Providers. Endpoint URLs are automatically normalized (e.g., `http://localhost:11434/v1` or `https://aihubmix.com/v1/chat/completions`), and models can be dynamically fetched directly from the local server.
     - **No API Key Required**: Local endpoints without authentication can leave the API Key field blank.

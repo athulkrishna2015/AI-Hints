@@ -2,6 +2,16 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.3.0 (2026-08-18)
+- **Reliable Batch Queue Recovery**: Added a watchdog that releases a batch pass when a provider thread hangs after all queued cards have been dispatched, allowing verification to requeue unfinished cards instead of stalling indefinitely.
+- **Entire Collection Batch Source**: Batch generation and regenerate-by-model now support processing the entire collection in one run, in addition to decks and browser selections.
+- **Improved Batch Controls and Status Scrolling**: Queue controls are grouped above the batch logs, the batch tab uses tighter spacing, and log/status views keep the newest activity visible without losing the user's scroll position during updates.
+- **Scoped Regenerate-by-Model**: Regeneration can be limited to the selected deck or browser selection instead of always scanning the whole collection.
+- **API Key Preservation During Background Saves**: Model blacklist updates now preserve all saved API keys even when the background operation uses a stale or sanitized configuration snapshot.
+- **Contentless Card Safety**: Empty or clozeless cards are skipped before generation state, provider checks, network calls, or card refreshes, preventing recursive auto-generation crashes.
+- **Fallback Highlight Fix**: Green, amber, and red model-status highlighting now follows the model when fallback rows are moved up or down instead of remaining attached to the old row.
+- **Startup Metadata Backup**: The previous `addon/meta.json` is copied to `addon/meta.json.bak` when a profile opens, before configuration migration or writes occur.
+
 ## 6.2.5 (2026-08-18)
 - **Reviewer Unlimited-Recursion Crash Fix (Critical)**: Fixed a `RecursionError: maximum recursion depth exceeded` crash when auto-generating hints on a **contentless card** (e.g. a cloze card whose required deletion, like `{{c2::…}}`, is missing). The skip/refresh path re-fired `on_show_question`, which re-triggered auto-generation for the still hint-less card, looping until the interpreter gave up.
 - **Empty/Clozeless Cards Are Skipped Up Front**: Contentless cards are now detected at the very start of the generation path — **before** the card enters the generating set, **before** any network/provider checks, and **before** any card refresh. As a result, an empty card no longer shows the "generating" spinner, no longer makes a pointless API/network call, and no longer triggers a redundant card redraw. The card is still tagged `ai-hints::skipped` in the database so it is not retried.

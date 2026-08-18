@@ -1848,8 +1848,10 @@ class AIClient:
             self.config["model_blacklist_data"] = data
             
             # Save to meta.json via writeConfig. Background batch queues can run
-            # with sanitized or stale config snapshots, so only persist the
-            # blacklist payload here.
+            # with sanitized or stale config snapshots (e.g. api_keys stripped),
+            # so always merge the on-disk keys back in before writing — otherwise
+            # a stale snapshot would silently wipe the user's API keys. Only the
+            # blacklist payload is updated here.
             try:
                 from aqt import mw
                 if mw is not None and mw.addonManager is not None:
@@ -1860,8 +1862,8 @@ class AIClient:
                         merged_config["model_blacklist_data"] = data
                     else:
                         merged_config = dict(self.config)
-                    from .config_io import write_pretty_config
-                    write_pretty_config(addon_package, merged_config)
+                    from .config_io import write_pretty_config_preserve_keys
+                    write_pretty_config_preserve_keys(addon_package, merged_config)
             except Exception:
                 pass
         except Exception as e:

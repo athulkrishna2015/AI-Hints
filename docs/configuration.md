@@ -11,7 +11,7 @@ Open the configuration window via **Tools → Add-ons → AI-Hints → Config**.
 7. [Support Authors](#support-authors-tab)
 8. [Logs](#logs-tab)
 
-The dialog opens non-modally, remembers your last tab, and warns you if you close with unsaved changes.
+The dialog opens non-modally and remembers your last tab. Closing it does not show an unsaved-changes confirmation.
 
 > For a raw reference of every config key, default, and purpose, see [Configuration Reference (all keys)](config-reference.md).
 

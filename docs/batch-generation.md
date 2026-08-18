@@ -5,7 +5,7 @@ Batch generation lets you generate hints and MCQ options for **entire decks** in
 ## Getting Started
 
 1. Go to **Tools → Add-ons → AI-Hints → Config → Batch Generation**.
-2. Choose a **Source Deck** (autocomplete supported; or select cards in the browser first).
+2. Choose a **Source Deck** (autocomplete supported), choose **Entire Collection**, or select cards in the browser first.
 3. Optionally set a **Force Provider** / **Force Model**.
 4. Set the **Batch Limit** (max cards, default 1000).
 5. Click **🚀 Initiate Queue**.
@@ -31,6 +31,7 @@ Bundles requests and submits them to a cloud provider's native async API. **Gemi
 - **Except if Generated Version <** — cards with a version older than this value are still queued.
 - **Batch Limit** — max cards to process (1–1,000,000).
 - **Concurrent Multi-Provider Generation (Multithreaded)** — generate in parallel using all ready/enabled providers (bypasses the Force Provider/Model overrides).
+- **Entire Collection** — process cards across all decks in the collection. This mode does not update a per-deck incremental scan cursor.
 
 ## Incremental Fast Scan
 
@@ -52,10 +53,15 @@ You can add another deck, browser selection, or sidebar group while a batch is a
 - **Accidental quit protection**: close Anki or crash mid-batch and your progress is preserved; queues resume on restart.
 - **Concurrent multi-provider**: use multiple providers in parallel with independent fallback queues.
 - **Automatic verification passes**: the system automatically retries cards that failed to generate (up to 10 sequential passes).
+- **Hung-provider watchdog**: If all cards have been dispatched but one provider thread remains stuck, the pass is released after a grace period and verification requeues unfinished cards.
 
 ## Starting from the Deck Browser
 
 You can also start batch generation directly from the **deck browser's cogwheel options menu**.
+
+## Regenerate by Stored Model
+
+The **Regenerate Cards by Stored Model** tool can target the selected deck, **Entire Collection**, or a browser selection. It queues only cards whose stored provider/model matches the requested model and uses the same background queue and verification behavior as normal batch generation.
 
 ## Note Tagging & Fast Scan
 
