@@ -2314,6 +2314,32 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
     if is_pregen and _generating_card_ids:
         return
 
+    parser = CardParser(
+        mathjax_format=config.get("mathjax_format", "delimiters"),
+        fix_latex=config.get("fix_latex", False)
+    )
+
+    # Early bail-out for contentless cards (e.g. a missing cloze deletion for
+    # this ordinal). Detect BEFORE adding the card to _generating_card_ids and
+    # before any network/provider checks, so an empty card never shows the
+    # generating animation, never makes an API/network call, and never triggers
+    # a costly card refresh.
+    front, back = parser.get_note_content(card.note(), card)
+    if not front and not back:
+        logger.info("AI-Hints: Skipping generation for card %s as no content was found (likely a missing cloze).", card_id)
+
+        gtype = "pregen" if is_pregen else ("regenerate" if card_has_hints(card) else ("manual" if is_manual else "auto"))
+        data = {"hints": [], "options": [], "_skipped": True, "_generation_type": gtype}
+
+        # DB-only update (skip tags etc.). skip_redraw avoids a full card reload,
+        # which would re-fire on_show_question and retry generation.
+        _apply_results_to_card(card, data, is_manual=is_manual, web=web, skip_redraw=True)
+
+        # If this was a pre-generation, trigger the next one so the chain doesn't break
+        if is_pregen:
+            _trigger_next_pregeneration(card_id)
+        return
+
     _generating_card_ids.add(card_id)
 
     restart_speed_focus_timer()
@@ -2322,10 +2348,6 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
     
     provider = override_provider or config.get("ai_provider", "openai")
 
-    parser = CardParser(
-        mathjax_format=config.get("mathjax_format", "delimiters"),
-        fix_latex=config.get("fix_latex", False)
-    )
     client = AIClient(config, is_pregen=is_pregen)
     if "unittest" not in sys.modules and not client.is_network_available():
         if not is_pregen:
@@ -2354,20 +2376,6 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
             show_api_error_dialog(provider if provider else None, is_custom=is_custom)
             # Stop animation in frontend
             _set_frontend_generating(web, False)
-        return
-
-    front, back = parser.get_note_content(card.note(), card)
-    if not front and not back:
-        _generating_card_ids.discard(card_id)
-        logger.info("AI-Hints: Skipping generation for card %s as no content was found (likely a missing cloze).", card_id)
-        
-        gtype = "pregen" if is_pregen else ("regenerate" if card_has_hints(card) else ("manual" if is_manual else "auto"))
-        data = {"hints": [], "options": [], "_skipped": True, "_generation_type": gtype}
-        _apply_results_to_card(card, data, is_manual=is_manual, web=web, skip_redraw=is_pregen)
-
-        # If this was a pre-generation, trigger the next one so the chain doesn't break
-        if is_pregen:
-            _trigger_next_pregeneration(card_id)
         return
 
     logger.info(f"AI-Hints generating for card {card_id} (ord={card.ord}, manual={is_manual}, pregen={is_pregen}) using {provider}")

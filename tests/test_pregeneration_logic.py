@@ -257,6 +257,9 @@ class TestPregeneration(unittest.TestCase):
         self.assertEqual(args[1]["options"], [])
         self.assertEqual(args[1]["_skipped"], True)
         self.assertEqual(kwargs.get("is_manual"), True)
+        # A skipped card must not trigger a full reviewer redraw (which would
+        # re-fire on_show_question and re-trigger auto-generation).
+        self.assertEqual(kwargs.get("skip_redraw"), True)
 
     @patch('addon.reviewer_hooks._get_card_from_collection')
     @patch('addon.reviewer_hooks.CardParser')
