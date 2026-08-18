@@ -15,6 +15,17 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         from .mobile_sync import auto_update_mobile_setup, sync_mobile_script
         from aqt.qt import QTimer
         import os
+        import shutil
+
+        # Preserve the previous metadata before Anki or the addon can update it.
+        try:
+            addon_dir = os.path.dirname(os.path.abspath(__file__))
+            meta_path = os.path.join(addon_dir, "meta.json")
+            meta_backup_path = os.path.join(addon_dir, "meta.json.bak")
+            if os.path.exists(meta_path):
+                shutil.copyfile(meta_path, meta_backup_path)
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to back up meta.json on startup: {e}")
         
         # Clear logs on startup if enabled
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
