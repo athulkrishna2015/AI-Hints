@@ -378,12 +378,34 @@ class BatchTabMixin:
                     summary = selection_html
 
             if not summary:
-                  self.batch_list_view.setHtml("<i>(Ready to initialize)</i>")
-            else:
-                  self.batch_list_view.setHtml(summary)
+                  summary = "<i>(Ready to initialize)</i>"
+                  
+            self._set_batch_log_preserving_scroll(summary)
                   
         except Exception:
             pass
+
+    def _set_batch_log_preserving_scroll(self, summary):
+        """Render the batch log without snapping the view to the top.
+
+        If the user had already scrolled to the bottom we keep them pinned to the
+        bottom (so newly appended lines stay visible); otherwise we keep their
+        current scrolled position untouched.
+        """
+        try:
+            sb = self.batch_list_view.verticalScrollBar()
+            was_at_bottom = sb.maximum() <= 0 or sb.value() >= sb.maximum() - 2
+            self.batch_list_view.setHtml(summary)
+            if was_at_bottom:
+                sb.setValue(sb.maximum())
+            else:
+                current = sb.value()
+                QTimer.singleShot(0, lambda v=current: self.batch_list_view.verticalScrollBar().setValue(v))
+        except Exception:
+            try:
+                self.batch_list_view.setHtml(summary)
+            except Exception:
+                pass
 
     def _on_log_link_clicked(self, qurl):
         """Intercepts clicks on anchor tags and routes to native Anki Browser actions."""
