@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.2.5 (2026-08-18)
+- **Reviewer Unlimited-Recursion Crash Fix (Critical)**: Fixed a `RecursionError: maximum recursion depth exceeded` crash when auto-generating hints on a **contentless card** (e.g. a cloze card whose required deletion, like `{{c2::…}}`, is missing). The skip/refresh path re-fired `on_show_question`, which re-triggered auto-generation for the still hint-less card, looping until the interpreter gave up.
+- **Empty/Clozeless Cards Are Skipped Up Front**: Contentless cards are now detected at the very start of the generation path — **before** the card enters the generating set, **before** any network/provider checks, and **before** any card refresh. As a result, an empty card no longer shows the "generating" spinner, no longer makes a pointless API/network call, and no longer triggers a redundant card redraw. The card is still tagged `ai-hints::skipped` in the database so it is not retried.
+
 ## 6.2.4 (2026-08-18)
 - **API Key Wipe Fix (Critical)**: Fixed two config save paths that could silently write empty API keys over your saved keys, wiping them from `meta.json`:
   - The settings dialog **tab-switch** handler was dumping the whole in-memory config straight to disk with no key protection.
