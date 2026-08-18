@@ -883,6 +883,10 @@ class BatchManager:
                 self.active_providers = providers
                 logger.info(f"Local Queue Pass #{self.local_queue_pass}: Running with {len(self.local_queue)} cards using providers: {providers}")
                 
+                # Reset the abort flag before (re)starting worker threads so a stale
+                # signal from a previous pass can't immediately cancel this one.
+                self._abort_threads = threading.Event()
+                
                 threads = []
                 for prov in providers:
                      t = threading.Thread(
@@ -893,8 +897,32 @@ class BatchManager:
                      threads.append(t)
                      t.start()
                      
+                # Watchdog: don't let a single hung provider thread hold the whole
+                # pass hostage. Once every card has been dispatched (queue empty)
+                # and only one stuck thread remains, give it a short grace period to
+                # finish its in-flight request, then release the pass. The leftover
+                # daemon thread exits on its own once its HTTP call times out, and
+                # the Verification Pass below re-queues any card it hadn't finished.
+                grace_until = time.time() + 45
+                while True:
+                    alive = [t for t in threads if t.is_alive()]
+                    if not alive:
+                        break
+                    if self._abort_threads.is_set():
+                        break
+                    with self._db_lock:
+                        queue_empty = not self.local_queue
+                    if queue_empty and len(alive) <= 1 and time.time() >= grace_until:
+                        logger.warning(
+                            f"Local Queue watchdog: releasing pass; hung thread(s) "
+                            f"{[t.name for t in alive]} still busy with an empty queue."
+                        )
+                        self._abort_threads.set()
+                        break
+                    time.sleep(1)
+                
                 for t in threads:
-                     t.join()
+                     t.join(timeout=1)
                 
                 # --- Verification Pass Logic ---
                 if not self.local_queue_active:
@@ -1004,6 +1032,9 @@ class BatchManager:
         }
 
         while self.local_queue_active:
+            if getattr(self, "_abort_threads", None) and self._abort_threads.is_set():
+                logger.info(f"AI-Hints Thread for {provider} aborting due to watchdog signal.")
+                break
             if self.local_queue_paused:
                  self.active_threads_status[provider] = {
                      "model": current_model,

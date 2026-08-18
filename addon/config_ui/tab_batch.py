@@ -6,6 +6,8 @@ from aqt.qt import *
 from ..logger import logger, info, tooltip
 from .widgets import ADDON_PACKAGE
 
+ENTIRE_COLLECTION = "🗂️ Entire Collection"
+
 def _subtree_deck_names(deck_name):
     """Return deck_name plus every deck directly or indirectly beneath it."""
     try:
@@ -20,7 +22,7 @@ class BatchTabMixin:
         """Constructs the Tab 5: Batch Generation UI"""
         tab = QWidget()
         layout = QVBoxLayout()
-        layout.setSpacing(4)
+        layout.setSpacing(0)
         layout.setContentsMargins(6, 6, 6, 6)
 
         # -- 1. START GROUP --
@@ -88,6 +90,7 @@ class BatchTabMixin:
         # Load and Sort Deck Names
         try:
              all_decks = mw.col.decks.all_names()
+             self.batch_deck_chooser.addItem(ENTIRE_COLLECTION)
              self.batch_deck_chooser.addItems(all_decks)
              # Pre-select current active deck in main window
              curr = getattr(self, "selected_deck_name", None) or mw.col.decks.current().get('name', '')
@@ -173,7 +176,10 @@ class BatchTabMixin:
         
         # -- 1.5 REGENERATE BY MODEL GROUP --
         regen_group = QGroupBox("🎯 Regenerate Cards by Stored Model")
+        regen_group.setStyleSheet("QGroupBox { margin-bottom: 0px; padding-bottom: 0px; }")
         rg_layout = QFormLayout()
+        rg_layout.setContentsMargins(6, 0, 6, 0)
+        rg_layout.setVerticalSpacing(2)
 
         self.regen_model_edit = QLineEdit()
         self.regen_model_edit.setPlaceholderText("e.g. gpt-oss-120b")
@@ -219,15 +225,39 @@ class BatchTabMixin:
         
         # -- 2. ACTIVE GROUP --
         active_group = QGroupBox("Running & Pending Batches")
-        active_group.setStyleSheet("QGroupBox { margin-top: 2px; }")
+        active_group.setStyleSheet("QGroupBox { margin-top: 0px; padding-top: 0px; }")
         a_layout = QVBoxLayout()
-        a_layout.setContentsMargins(4, 4, 4, 4)
+        a_layout.setContentsMargins(4, 0, 4, 4)
         a_layout.setSpacing(2)
-        
-        # Note: the batch control buttons (Initiate/Stop/Refresh) live in the
-        # always-visible footer (see main_dialog.setup_ui), so they are not
-        # re-created here. Only the status list is shown in this tab.
-        
+
+        # Batch queue control buttons sit on top of the batch job logs, above the
+        # status list. Created here (not the footer) so the batch tab's state logic
+        # (_refresh_batch_controls) can reference them during construction.
+        batch_btn_row = QHBoxLayout()
+        batch_btn_row.setSpacing(4)
+        self.batch_run_btn = QPushButton("🚀 Initiate Queue")
+        self.batch_run_btn.setAutoDefault(False)
+        self.batch_run_btn.setMinimumHeight(30)
+        self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+        self.batch_run_btn.clicked.connect(self.on_batch_control_clicked)
+        batch_btn_row.addWidget(self.batch_run_btn)
+
+        self.stop_local_btn = QPushButton("🛑 Stop & Discard Queue")
+        self.stop_local_btn.setAutoDefault(False)
+        self.stop_local_btn.setMinimumHeight(30)
+        self.stop_local_btn.setStyleSheet("color: #dc3545; font-weight: bold;")
+        self.stop_local_btn.clicked.connect(self.on_stop_local_queue)
+        batch_btn_row.addWidget(self.stop_local_btn)
+
+        self.refresh_status_btn = QPushButton("🔄 Refresh Status")
+        self.refresh_status_btn.setAutoDefault(False)
+        self.refresh_status_btn.setMinimumHeight(30)
+        self.refresh_status_btn.clicked.connect(self.update_batch_status_tab)
+        batch_btn_row.addWidget(self.refresh_status_btn)
+
+        batch_btn_row.addStretch()
+        a_layout.addLayout(batch_btn_row)
+
         self.batch_list_view = QTextBrowser()
         self.batch_list_view.setReadOnly(True)
         self.batch_list_view.setTextInteractionFlags(
@@ -466,6 +496,7 @@ class BatchTabMixin:
             current_text = self.batch_deck_chooser.currentText()
             self.batch_deck_chooser.clear()
             all_decks = mw.col.decks.all_names()
+            self.batch_deck_chooser.addItem(ENTIRE_COLLECTION)
             self.batch_deck_chooser.addItems(all_decks)
             
             # 1. First, check if currentText is a valid deck name
@@ -500,7 +531,7 @@ class BatchTabMixin:
         """Persist a per-deck "last full scan" cursor (max note id) for this deck + all its
         sub-decks. Called on a full, eligible batch pass so each deck keeps an independent
         timestamp and a later scan of a sub-deck never skips its older cards wrongly."""
-        if not deck_name or deck_name == "Selected Cards":
+        if not deck_name or deck_name in ("Selected Cards", ENTIRE_COLLECTION):
             return
         try:
             max_nid = 0
@@ -601,7 +632,10 @@ class BatchTabMixin:
         else:
             deck_name = self.batch_deck_chooser.currentText().strip()
             valid_decks = mw.col.decks.all_names()
-            if deck_name and deck_name in valid_decks:
+            if deck_name == ENTIRE_COLLECTION:
+                scope_note_ids = None
+                scope_label = "entire collection"
+            elif deck_name and deck_name in valid_decks:
                 try:
                     scope_note_ids = mw.col.find_notes(f'deck:"{deck_name}"')
                 except Exception as e:
@@ -703,9 +737,7 @@ class BatchTabMixin:
             chunked, config, provider_override=prov_override
         )
         if started:
-            self.regen_status_label.setText(
-                f"Queued <b>{len(chunked)}</b> card(s) matching '{model}' for regeneration."
-            )
+            self.regen_status_label.setText("")
             QTimer.singleShot(500, self._focus_batch_log)
         else:
             self.regen_status_label.setText("Failed to start the regeneration queue.")
@@ -759,8 +791,9 @@ class BatchTabMixin:
                       batch_manager.stop_local_queue() 
 
             deck_name = self.batch_deck_chooser.currentText().strip()
+            is_entire = deck_name == ENTIRE_COLLECTION
             all_valid_decks = mw.col.decks.all_names()
-            if deck_name not in all_valid_decks:
+            if not is_entire and deck_name not in all_valid_decks:
                  info(f"⚠️ Deck not found: '{deck_name}'\nPlease select a valid deck from the list.")
                  return
 
@@ -768,41 +801,49 @@ class BatchTabMixin:
                  info("Please select a deck first.")
                  return
                  
-            try:
-                source_cids = mw.col.find_cards(f"deck:\"{deck_name}\"")
-            except Exception as e:
-                logger.error(f"Deck search failed: {e}")
-                source_cids = []
-
-            # ⏱️ Incremental fast scan: skip notes created before this deck's last FULL batch scan.
-            # The cursor is tracked per-deck (and per-sub-deck), so sub-decks are never wrongly
-            # skipped by other deck's (or a global) scan timestamp.
-            #
-            # NOTE: Anki's search syntax only accepts exact numbers (or a comma-separated list)
-            # for `nid:` / `cid:` — operators like `nid:>` or `nid:1-5` are REJECTED with
-            # "expected only digits and commas in nid:". So we resolve the new note ids in
-            # Python and filter via the valid comma-list form.
             tag_filter_msg = ""
-            try:
-                cursor_cfg = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-                cursors = cursor_cfg.get("deck_last_scan_nid", {}) or {}
-                cursor = int(cursors.get(deck_name, 0) or 0)
-                want_full = hasattr(self, "batch_full_scan_cb") and self.batch_full_scan_cb.isChecked()
-                if want_full:
-                    tag_filter_msg = ""
-                elif cursor:
-                    new_nids = [n for n in mw.col.find_notes(f'deck:"{deck_name}"') if n > cursor]
-                    if new_nids:
-                        source_cids = mw.col.find_cards(f'deck:"{deck_name}" nid:{",".join(map(str, new_nids))}')
-                        tag_filter_msg = f" (fast scan: {len(source_cids)} candidates - notes created since the last full scan of this deck)"
+            if is_entire:
+                try:
+                    source_cids = mw.col.find_cards("")
+                except Exception as e:
+                    logger.error(f"Full collection search failed: {e}")
+                    source_cids = []
+                tag_filter_msg = f" (entire collection: {len(source_cids)} cards)"
+            else:
+                try:
+                    source_cids = mw.col.find_cards(f"deck:\"{deck_name}\"")
+                except Exception as e:
+                    logger.error(f"Deck search failed: {e}")
+                    source_cids = []
+
+                # ⏱️ Incremental fast scan: skip notes created before this deck's last FULL batch scan.
+                # The cursor is tracked per-deck (and per-sub-deck), so sub-decks are never wrongly
+                # skipped by other deck's (or a global) scan timestamp.
+                #
+                # NOTE: Anki's search syntax only accepts exact numbers (or a comma-separated list)
+                # for `nid:` / `cid:` — operators like `nid:>` or `nid:1-5` are REJECTED with
+                # "expected only digits and commas in nid:". So we resolve the new note ids in
+                # Python and filter via the valid comma-list form.
+                try:
+                    cursor_cfg = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+                    cursors = cursor_cfg.get("deck_last_scan_nid", {}) or {}
+                    cursor = int(cursors.get(deck_name, 0) or 0)
+                    want_full = hasattr(self, "batch_full_scan_cb") and self.batch_full_scan_cb.isChecked()
+                    if want_full:
+                        tag_filter_msg = ""
+                    elif cursor:
+                        new_nids = [n for n in mw.col.find_notes(f'deck:"{deck_name}"') if n > cursor]
+                        if new_nids:
+                            source_cids = mw.col.find_cards(f'deck:"{deck_name}" nid:{",".join(map(str, new_nids))}')
+                            tag_filter_msg = f" (fast scan: {len(source_cids)} candidates - notes created since the last full scan of this deck)"
+                        else:
+                            source_cids = []
+                            tag_filter_msg = " (fast scan: no new notes since the last full scan of this deck)"
                     else:
-                        source_cids = []
-                        tag_filter_msg = " (fast scan: no new notes since the last full scan of this deck)"
-                else:
-                    tag_filter_msg = ""
-            except Exception as e:
-                logger.error(f"Cursor-based batch filtering failed, falling back to full scan: {e}")
-                tag_filter_msg = " (cursor read failed → full scan)"
+                        tag_filter_msg = ""
+                except Exception as e:
+                    logger.error(f"Cursor-based batch filtering failed, falling back to full scan: {e}")
+                    tag_filter_msg = " (cursor read failed → full scan)"
 
         try:
             if not source_cids:
@@ -866,7 +907,7 @@ class BatchTabMixin:
 
             # Only a full, eligible pass advances the per-deck scan cursor: the deck is wholly
             # scanned (no cards dropped to the safety limit) and it is not a selection run.
-            record_cursor = (excess <= 0) and deck_name != "Selected Cards"
+            record_cursor = (excess <= 0) and deck_name not in ("Selected Cards", ENTIRE_COLLECTION)
 
             is_native = self.rb_native_async.isChecked()
             mode_str = "Native Cloud Batch" if is_native else "Local Background Queue"
