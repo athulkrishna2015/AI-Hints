@@ -26,6 +26,7 @@ from .tab_mobile import MobileTabMixin
 
 # Import Support Widgets
 from .widgets import CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS, NEWLY_ADDED_MODELS, MISSING_FROM_FETCH
+from ..config_io import write_pretty_config_preserve_keys
 
 LAST_ACTIVE_TAB_INDEX = 7  # Fallback static state
 
@@ -42,7 +43,16 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         self.selected_card_ids = card_ids
         self.selected_deck_name = deck_name
-        self.config = self._normalize_config(mw.addonManager.getConfig(ADDON_PACKAGE) or {})
+        # Prefer the on-disk meta.json: addonManager.getConfig() falls back to
+        # config.json defaults when the addon package name does not resolve to
+        # this addon's folder, and a defaults-based snapshot would then destroy
+        # the user's real config on the next save.
+        from ..config_io import read_meta_config
+        disk_config = read_meta_config()
+        if isinstance(disk_config, dict) and disk_config:
+            self.config = self._normalize_config(disk_config)
+        else:
+            self.config = self._normalize_config(mw.addonManager.getConfig(ADDON_PACKAGE) or {})
         
         # Load default config for restoration
         try:
@@ -1745,7 +1755,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if total == 0:
             if only_modified and last_check > 0:
                 config["last_orphans_check_time"] = int(time.time())
-                mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+                write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
             QMessageBox.information(self, "AI-Hints", f"No notes found in the selected scope ({scope_str}){time_filter_msg}!")
             return
 
@@ -1791,7 +1801,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not orphaned_hints:
             config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
             config["last_orphans_check_time"] = int(time.time())
-            mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+            write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
             QMessageBox.information(self, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
             return
 
@@ -1941,7 +1951,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             mw.reset()
             config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
             config["last_orphans_check_time"] = int(time.time())
-            mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+            write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
             logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
             QMessageBox.information(
                 self, "Cleanup Complete",
@@ -2285,7 +2295,7 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
     if total == 0:
         if only_modified and last_check > 0:
             config["last_orphans_check_time"] = int(time.time())
-            mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+            write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
         QMessageBox.information(parent, "AI-Hints", f"No notes found in {scope_str}{time_filter_msg}!")
         return
 
@@ -2328,7 +2338,7 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
     if not orphaned_hints:
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         config["last_orphans_check_time"] = int(time.time())
-        mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+        write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
         QMessageBox.information(parent, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
         return
 
@@ -2457,7 +2467,7 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
         mw.reset()
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
         config["last_orphans_check_time"] = int(time.time())
-        mw.addonManager.writeConfig(ADDON_PACKAGE, config)
+        write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
         logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
         QMessageBox.information(
             parent, "Cleanup Complete",

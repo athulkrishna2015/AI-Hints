@@ -567,8 +567,10 @@ class BatchTabMixin:
             cursors = dict(cfg.get("deck_last_scan_nid", {}) or {})
             for name in _subtree_deck_names(deck_name):
                 cursors[name] = max_nid
+            cfg = dict(cfg)
             cfg["deck_last_scan_nid"] = cursors
-            mw.addonManager.writeConfig(ADDON_PACKAGE, cfg)
+            from ..config_io import write_pretty_config_preserve_keys
+            write_pretty_config_preserve_keys(ADDON_PACKAGE, cfg)
             logger.info(f"AI-Hints Batch: advanced per-deck scan cursor to {max_nid} for {deck_name}")
         except Exception as e:
             logger.error(f"Failed to record batch scan cursor: {e}")
@@ -797,6 +799,10 @@ class BatchTabMixin:
         from ..batch_manager import batch_manager
 
         tag_filter_msg = ""
+        # Set to True when the source scan covered the WHOLE (eligible) deck, i.e. it was
+        # not a cursor-limited fast scan. A full pass lets us advance the per-deck cursor so
+        # the next run can be incremental. Never advanced for "Selected Cards"/"Entire Collection".
+        full_scan_done = False
 
         # 1. Handle selection from browser if present
         if hasattr(self, "selected_card_ids") and self.selected_card_ids:
@@ -856,11 +862,14 @@ class BatchTabMixin:
                 # "expected only digits and commas in nid:". So we resolve the new note ids in
                 # Python and filter via the valid comma-list form.
                 try:
-                    cursor_cfg = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+                    from ..config_io import read_meta_config
+                    cursor_cfg = read_meta_config() or {}
                     cursors = cursor_cfg.get("deck_last_scan_nid", {}) or {}
                     cursor = int(cursors.get(deck_name, 0) or 0)
                     want_full = hasattr(self, "batch_full_scan_cb") and self.batch_full_scan_cb.isChecked()
                     if want_full:
+                        # Forced FULL pass: covers the whole deck, so it may advance the cursor.
+                        full_scan_done = True
                         tag_filter_msg = ""
                     elif cursor:
                         new_nids = [n for n in mw.col.find_notes(f'deck:"{deck_name}"') if n > cursor]
@@ -871,9 +880,12 @@ class BatchTabMixin:
                             source_cids = []
                             tag_filter_msg = " (fast scan: no new notes since the last full scan of this deck)"
                     else:
+                        # No cursor yet (first scan of this deck): full pass, may advance the cursor.
+                        full_scan_done = True
                         tag_filter_msg = ""
                 except Exception as e:
                     logger.error(f"Cursor-based batch filtering failed, falling back to full scan: {e}")
+                    # Do NOT advance the cursor on a failed cursor read.
                     tag_filter_msg = " (cursor read failed → full scan)"
 
         try:
@@ -929,6 +941,12 @@ class BatchTabMixin:
                 final_ids = list(source_cids)
                 
             if not final_ids:
+                # A full pass found nothing new to generate. The deck was still completely
+                # scanned, so advance the per-deck cursor here too — otherwise the NEXT run
+                # would re-scan the whole deck again (the deck never gets a cursor because
+                # the early return below skips the normal post-queue cursor recording).
+                if full_scan_done and deck_name not in ("Selected Cards", ENTIRE_COLLECTION):
+                    self._record_batch_scan_cursor(deck_name)
                 info("No cards need hint generation (all selected have hints already).")
                 return
                 

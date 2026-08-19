@@ -2,6 +2,15 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.3.1 (2026-08-19)
+- **Config Loss Fix (Critical)**: Fixed a bug where the batch-start autosave (and other save paths) could overwrite your entire real configuration with the `config.json` defaults. When Anki's `addonManager.getConfig()` could not resolve the addon's own `meta.json` (package-name mismatch / transient unreadable file), it silently returned the default template; saving that template then destroyed custom providers, templates, tweaks and per-deck scan cursors from `addon/meta.json`. Recovery from the affected session (user config restored from the startup backup) is documented in the README. Fixes:
+  - Config writes are now **merge-safe**: the on-disk config is the baseline and an incoming snapshot can never drop keys that already exist on disk (custom providers, templates, tweaks, `api_keys`, scan cursors). `api_keys` additionally keeps on-disk values for any provider the UI doesn't currently render.
+  - The config dialog now builds its base directly from the on-disk `addon/meta.json` instead of Anki's name-based `getConfig()`, so it can never start from defaults while a real config exists.
+  - The previous `meta.json` is copied to `addon/meta.json.bak` **before every write** (in addition to the startup backup), so a bad write can always be rolled back.
+  - The orphaned-hints scan/cleanup save paths (6 more full-replace `writeConfig` calls) now go through the same merge-safe writer.
+- **meta.json Write Audit Logging**: Every config write is now logged to `ai_hints.log` with the writer, package, on-disk vs written key counts, API-key count and scan-cursor count (`meta.json written [direct-file(preserve-merge)] ...`). If an incoming snapshot is missing keys the disk has, the preserved key names are logged too, so any future config-loss event is immediately diagnosable from the logs.
+- **Batch Fast-Scan Cursor Fix**: A full batch scan of a deck that found nothing new to generate now still records the deck's scan cursor (previously it returned early without one), so the deck is never re-scanned in full again — subsequent runs use the incremental "only notes since last full scan" path instead of scanning the whole deck every time. Cursor reads/writes also now use the on-disk config directly and the merge-safe writer.
+
 ## 6.3.0 (2026-08-18)
 - **Reliable Batch Queue Recovery**: Added a watchdog that releases a batch pass when a provider thread hangs after all queued cards have been dispatched, allowing verification to requeue unfinished cards instead of stalling indefinitely.
 - **Entire Collection Batch Source**: Batch generation and regenerate-by-model now support processing the entire collection in one run, in addition to decks and browser selections.

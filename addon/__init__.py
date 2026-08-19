@@ -53,7 +53,7 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
             if stored_version < 4:
                 config["config_version"] = 4
                 mw.addonManager.writeConfig(ADDON_PACKAGE, config)
-                logger.info("AI-Hints: Migrated config (timeouts bumped to 60s).")
+                logger.info(f"AI-Hints: Migrated config (timeouts bumped to 60s). meta.json written via addonManager (config_version {stored_version} -> 4).")
         except Exception as mig_err:
             logger.error(f"AI-Hints: Failed to migrate config: {mig_err}")
 
