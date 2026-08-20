@@ -1852,18 +1852,19 @@ class AIClient:
             # so always merge the on-disk keys back in before writing — otherwise
             # a stale snapshot would silently wipe the user's API keys. Only the
             # blacklist payload is updated here.
+            #
+            # Pass ONLY the changed key as a delta. Building a full snapshot from
+            # addonManager.getConfig() (which can silently return config.json
+            # defaults) and writing it would overwrite every other on-disk key
+            # with defaults — that is how custom providers/templates were lost
+            # during batch blacklist updates on 2026-08-20. write_pretty_config_
+            # preserve_keys merges this delta onto the real on-disk config.
             try:
                 from aqt import mw
                 if mw is not None and mw.addonManager is not None:
                     addon_package = __name__.split(".")[0]
-                    current_config = mw.addonManager.getConfig(addon_package) or {}
-                    if isinstance(current_config, dict):
-                        merged_config = dict(current_config)
-                        merged_config["model_blacklist_data"] = data
-                    else:
-                        merged_config = dict(self.config)
                     from .config_io import write_pretty_config_preserve_keys
-                    write_pretty_config_preserve_keys(addon_package, merged_config)
+                    write_pretty_config_preserve_keys(addon_package, {"model_blacklist_data": data})
             except Exception:
                 pass
         except Exception as e:

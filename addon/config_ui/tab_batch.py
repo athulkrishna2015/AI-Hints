@@ -563,14 +563,20 @@ class BatchTabMixin:
                 max_nid = 0
             if max_nid <= 0:
                 return
-            cfg = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-            cursors = dict(cfg.get("deck_last_scan_nid", {}) or {})
+            try:
+                from ..config_io import read_meta_config as _rmc
+                cursors = dict(_rmc().get("deck_last_scan_nid", {}) or {})
+            except Exception:
+                cursors = {}
             for name in _subtree_deck_names(deck_name):
                 cursors[name] = max_nid
-            cfg = dict(cfg)
-            cfg["deck_last_scan_nid"] = cursors
+            # Pass ONLY the scan-cursor delta. Building a full snapshot from
+            # addonManager.getConfig() (which can return config.json defaults)
+            # and writing it would overwrite every other on-disk key with
+            # defaults. write_pretty_config_preserve_keys merges this delta onto
+            # the real on-disk config.
             from ..config_io import write_pretty_config_preserve_keys
-            write_pretty_config_preserve_keys(ADDON_PACKAGE, cfg)
+            write_pretty_config_preserve_keys(ADDON_PACKAGE, {"deck_last_scan_nid": cursors})
             logger.info(f"AI-Hints Batch: advanced per-deck scan cursor to {max_nid} for {deck_name}")
         except Exception as e:
             logger.error(f"Failed to record batch scan cursor: {e}")
@@ -890,9 +896,11 @@ class BatchTabMixin:
 
         try:
             if not source_cids:
+                logger.info(f"AI-Hints Batch Scan: deck='{deck_name}' total_scanned=0 found_for_generation=0 (no matching cards)")
                 info(f"No cards found for processing ({deck_name}).")
                 return
                 
+            skipped_count = 0
             if self.batch_skip_existing_cb.isChecked():
                 from ..reviewer_hooks import card_has_hints, _get_card_from_collection, _card_saved_version, _version_less_than
                 from aqt.qt import Qt, QProgressDialog, QApplication
@@ -900,8 +908,6 @@ class BatchTabMixin:
                 final_ids = []
                 use_ver_gate = self.batch_regen_version_cb.isChecked()
                 min_ver = self.batch_regen_min_version_edit.text().strip()
-                
-                skipped_count = 0
                 
                 # Show a progress dialog
                 progress = QProgressDialog("Scanning deck for eligible cards...", "Cancel", 0, len(source_cids), self)
@@ -939,7 +945,13 @@ class BatchTabMixin:
                 logger.info(f"AI-Hints Batch Filtering: Filtered {len(source_cids)} cards -> {len(final_ids)} cards to process ({skipped_count} skipped).")
             else:
                 final_ids = list(source_cids)
-                
+
+            logger.info(
+                f"AI-Hints Batch Scan: deck='{deck_name}' total_scanned={len(source_cids)} "
+                f"found_for_generation={len(final_ids)} skipped={skipped_count}"
+                f"{tag_filter_msg}"
+            )
+
             if not final_ids:
                 # A full pass found nothing new to generate. The deck was still completely
                 # scanned, so advance the per-deck cursor here too — otherwise the NEXT run
