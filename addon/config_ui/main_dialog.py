@@ -1502,7 +1502,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["mobile_use_emojis"] = self.mobile_emojis_cb.isChecked()
             new_config["mobile_show_extra_buttons"] = self.mobile_extra_cb.isChecked()
             new_config["mobile_setup_completed"] = self.config.get("mobile_setup_completed", False)
-            new_config["model_blacklist_data"] = self.config.get("model_blacklist_data", {})
 
             priority = []
             disabled = []
@@ -1605,7 +1604,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("answer_display_position", "between")
         config.setdefault("system_prompt", "")
         config.setdefault("additional_system_instructions", "")
-        config.setdefault("model_blacklist_data", {})
         config.setdefault("show_hints_button", True)
         config.setdefault("show_options_button", True)
         if not isinstance(config.get("custom_providers", {}), dict): config["custom_providers"] = {}

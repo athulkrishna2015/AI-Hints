@@ -25,6 +25,20 @@ except ImportError:
 ADDON_PATH = os.path.dirname(__file__)
 BLACKLIST_FILE = os.path.join(ADDON_PATH, "blacklist.json")
 
+# Serialize blacklist.json writes (the blacklist is updated from many batch
+# worker threads). Written atomically via a temp file + os.replace so a
+# reader never sees a partial/empty file.
+_blacklist_lock = threading.Lock()
+
+
+def _write_blacklist_file(data):
+    """Atomically write the blacklist payload to blacklist.json."""
+    with _blacklist_lock:
+        tmp = BLACKLIST_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, BLACKLIST_FILE)
+
 LOG_SYSTEM_PROMPT_CHARS = 120
 
 
@@ -1831,77 +1845,80 @@ class AIClient:
         return self.config.get("model_cooldown_minutes", 10) * 60
 
     def _save_blacklist(self):
-        """Persists the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK to meta.json config."""
+        """Persists the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK to blacklist.json.
+
+        The blacklist is updated extremely frequently during a batch run, so it
+        must NOT live inside meta.json (the file holding api_keys, providers and
+        the entire user config). A single bad write there would wipe the whole
+        config — which is exactly the 2026-08-20 corruption. Keeping it in its
+        own dedicated file both isolates the failure domain and takes it off the
+        high-churn meta.json write path entirely.
+        """
         try:
             # Convert tuple keys to strings for JSON
             expiries = {f"{p}|{m}|{k}": e for (p, m, k), e in FAILED_COMBOS_CACHE.items()}
             streaks = {f"{p}|{m}|{k}": s for (p, m, k), s in RATE_LIMIT_STREAK.items()}
-            
-            # Save as a nested structure
+
             data = {
                 "combos_expiries": expiries,
                 "streaks": streaks,
-                "version": 3
+                "version": 3,
             }
-            
-            # Update self.config in memory
-            self.config["model_blacklist_data"] = data
-            
-            # Save to meta.json via writeConfig. Background batch queues can run
-            # with sanitized or stale config snapshots (e.g. api_keys stripped),
-            # so always merge the on-disk keys back in before writing — otherwise
-            # a stale snapshot would silently wipe the user's API keys. Only the
-            # blacklist payload is updated here.
-            #
-            # Pass ONLY the changed key as a delta. Building a full snapshot from
-            # addonManager.getConfig() (which can silently return config.json
-            # defaults) and writing it would overwrite every other on-disk key
-            # with defaults — that is how custom providers/templates were lost
-            # during batch blacklist updates on 2026-08-20. write_pretty_config_
-            # preserve_keys merges this delta onto the real on-disk config.
-            try:
-                from aqt import mw
-                if mw is not None and mw.addonManager is not None:
-                    addon_package = __name__.split(".")[0]
-                    from .config_io import write_pretty_config_preserve_keys
-                    write_pretty_config_preserve_keys(addon_package, {"model_blacklist_data": data})
-            except Exception:
-                pass
+            _write_blacklist_file(data)
         except Exception as e:
             logger.error(f"AI-Hints: Failed to save blacklist: {e}")
 
     def _load_blacklist(self):
-        """Loads the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK from meta.json config."""
+        """Loads FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK from blacklist.json.
+
+        On first run (or after upgrading from a build that stored the blacklist
+        inside meta.json) the data is migrated out of meta.json when
+        blacklist.json is absent, so existing cooldowns are preserved.
+        """
         global _BLACKLIST_LOADED
         _BLACKLIST_LOADED = True
+        data = None
         try:
-            data = self.config.get("model_blacklist_data")
-            if not isinstance(data, dict):
-                return
-            
+            if os.path.exists(BLACKLIST_FILE):
+                with open(BLACKLIST_FILE, encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                # Migrate legacy meta.json storage into the dedicated file.
+                from .config_io import read_meta_config
+                legacy = (read_meta_config() or {}).get("model_blacklist_data")
+                if isinstance(legacy, dict):
+                    data = legacy
+                    try:
+                        _write_blacklist_file(data)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to load blacklist: {e}")
+            return
+
+        if not isinstance(data, dict):
+            return
+
+        try:
             now = time.time()
-            
-            # Clear existing memory caches to stay in sync
             FAILED_COMBOS_CACHE.clear()
             RATE_LIMIT_STREAK.clear()
 
             if data.get("version") == 3:
                 expiries = data.get("combos_expiries", {})
                 streaks = data.get("streaks", {})
-                
+
                 for key, expiry in expiries.items():
                     parts = key.split("|")
                     if len(parts) == 3 and expiry > now:
-                        p, m, k = parts
-                        FAILED_COMBOS_CACHE[(p, m, k)] = expiry
-                
+                        FAILED_COMBOS_CACHE[(parts[0], parts[1], parts[2])] = expiry
+
                 for key, streak in streaks.items():
                     parts = key.split("|")
                     if len(parts) == 3:
-                        p, m, k = parts
-                        RATE_LIMIT_STREAK[(p, m, k)] = streak
+                        RATE_LIMIT_STREAK[(parts[0], parts[1], parts[2])] = streak
         except Exception as e:
-            logger.error(f"AI-Hints: Failed to load blacklist: {e}")
+            logger.error(f"AI-Hints: Failed to parse blacklist: {e}")
 
     def _extract_retry_delay(self, provider: str, model: str, api_key: str, error: urllib.error.HTTPError, body: str) -> float:
         """
