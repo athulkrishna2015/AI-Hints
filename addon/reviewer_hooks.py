@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import time
 import sys
 from aqt import mw, gui_hooks
@@ -156,6 +157,35 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
         "show_hints_button": config.get("show_hints_button", True),
         "show_options_button": config.get("show_options_button", True)
     }
+    
+    if config.get("debug_logging", False):
+        try:
+            current_id = (mw.reviewer.card.id if mw.reviewer and mw.reviewer.card else None)
+            if isinstance(data, dict):
+                keys = ", ".join(str(k) for k in data.keys())
+                keyed = any(isinstance(v, dict) for v in data.values())
+                src_present = bool(data.get("_src"))
+                per_key = ""
+                if keyed:
+                    per_key = ", ".join(
+                        f"{k}:src={'Y' if isinstance(v, dict) and v.get('_src') else 'N'}"
+                        for k, v in data.items()
+                    )
+                else:
+                    per_key = f"src={'Y' if src_present else 'N'}"
+            else:
+                keys, per_key = "n/a", "n/a"
+            logger.info(
+                f"[BLEED-WRITE] target card={fresh_card.id} ord={fresh_card.ord} note={note.id} "
+                f"reviewer_card={current_id} match={current_id == fresh_card.id} "
+                f"gtype={data.get('_generation_type', '?') if isinstance(data, dict) else '?'} "
+                f"keys=[{keys}] {per_key}"
+            )
+        except Exception as e:
+            try:
+                logger.info(f"[BLEED-WRITE] dump failed: {e!r}")
+            except Exception:
+                pass
     
     if parser.update_note_with_hints(note, data, toggles, fresh_card):
         logger.info(f"AI-Hints: Updating database for card {fresh_card.id} (Note {note.id}, Ord {fresh_card.ord}) with new hints.")
@@ -658,6 +688,47 @@ def _get_ui_config(card, auto_reveal=False, is_answer=False, has_data=False):
         "model_choices": _get_model_choices(config)
     }
 
+def _debug_dump_block_selection(note, card, valid_block, source, parser):
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    if not config.get("debug_logging", False):
+        return
+    try:
+        msg = (
+            f"[BLEED] source={source} card={getattr(card, 'id', None)} "
+            f"ord={getattr(card, 'ord', None)} note={getattr(note, 'id', None)} "
+            f"found={bool(valid_block)}"
+        )
+        if valid_block:
+            msg += (
+                f" scope={parser._block_has_card_scope(valid_block)} "
+                f"block_id={parser._data_attr(valid_block, 'data-ai-hints-card-id')} "
+                f"block_ord={parser._data_attr(valid_block, 'data-ai-hints-card-ord')}"
+            )
+            try:
+                inner = valid_block[valid_block.index(">") + 1:]
+                inner = re.sub(r"(</div>\s*)+$", "", inner)
+                parsed = parser._parse_json_payload(inner)
+                keyed = parser._is_keyed_payload(parsed) if isinstance(parsed, dict) else False
+                keys = ", ".join(str(k) for k in parsed.keys()) if isinstance(parsed, dict) else "n/a"
+                src_info = ""
+                if isinstance(parsed, dict):
+                    if keyed:
+                        src_info = ", ".join(
+                            f"{k}:src={'Y' if isinstance(v, dict) and v.get('_src') else 'N'}"
+                            for k, v in parsed.items()
+                        )
+                    else:
+                        src_info = f"src={'Y' if parsed.get('_src') else 'N'}"
+                msg += f" keyed={keyed} keys=[{keys}] {src_info}"
+            except Exception as e:
+                msg += f" payload_parse_err={e!r}"
+        logger.info(msg)
+    except Exception as e:
+        try:
+            logger.info(f"[BLEED] dump failed: {e!r}")
+        except Exception:
+            pass
+
 def on_webview_will_set_content(web_content, context):
     if type(context).__name__ == "ReviewerBottomBar":
         return
@@ -687,6 +758,7 @@ def on_webview_will_set_content(web_content, context):
     hints_blocks = []
     has_hints = False
     auto_reveal = False
+    block_source = "none"
     if card:
         try:
             # Force reload to ensure we don't have stale data (especially for new cards)
@@ -713,6 +785,7 @@ def on_webview_will_set_content(web_content, context):
                 valid_block = parser.find_hints_block(note, card)
                 if valid_block:
                     hints_blocks = [valid_block]
+                    block_source = "note"
             
             # If no blocks in note, check cache
             if not hints_blocks:
@@ -724,9 +797,15 @@ def on_webview_will_set_content(web_content, context):
                         card,
                     )
                     hints_blocks = [block]
+                    block_source = "cache"
             
             if hints_blocks:
                 has_hints = True
+
+            _debug_dump_block_selection(
+                note, card, hints_blocks[0] if hints_blocks else None,
+                source=block_source if hints_blocks else "none", parser=parser,
+            )
             
             if card.id in _just_generated_card_ids:
                 auto_reveal = True
