@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 from aqt import mw
@@ -6,7 +7,35 @@ from aqt.qt import *
 from ..logger import logger, info, tooltip
 from .widgets import ADDON_PACKAGE
 
+from ..config_io import atomic_write_json, read_json_file, _ADDON_DIR
+
 ENTIRE_COLLECTION = "🗂️ Entire Collection"
+
+# Per-deck incremental-scan cursors used to be stored inside meta.json. They are
+# written on every batch run, so they now live in their own sidecar file to keep
+# that high-frequency write off meta.json (which holds api_keys/providers).
+SCAN_CURSORS_FILE = os.path.join(_ADDON_DIR, "batch_scan_cursors.json")
+
+
+def _load_scan_cursors():
+    """Load per-deck scan cursors from the sidecar file, migrating from meta.json
+    on first run so existing cursors are preserved."""
+    data = read_json_file(SCAN_CURSORS_FILE)
+    if isinstance(data, dict):
+        return data
+    try:
+        from ..config_io import read_meta_config
+        legacy = (read_meta_config() or {}).get("deck_last_scan_nid")
+        if isinstance(legacy, dict):
+            atomic_write_json(SCAN_CURSORS_FILE, legacy)
+            return legacy
+    except Exception:
+        pass
+    return {}
+
+
+def _save_scan_cursors(cursors):
+    atomic_write_json(SCAN_CURSORS_FILE, cursors)
 
 def _subtree_deck_names(deck_name):
     """Return deck_name plus every deck directly or indirectly beneath it."""
@@ -563,20 +592,10 @@ class BatchTabMixin:
                 max_nid = 0
             if max_nid <= 0:
                 return
-            try:
-                from ..config_io import read_meta_config as _rmc
-                cursors = dict(_rmc().get("deck_last_scan_nid", {}) or {})
-            except Exception:
-                cursors = {}
+            cursors = dict(_load_scan_cursors())
             for name in _subtree_deck_names(deck_name):
                 cursors[name] = max_nid
-            # Pass ONLY the scan-cursor delta. Building a full snapshot from
-            # addonManager.getConfig() (which can return config.json defaults)
-            # and writing it would overwrite every other on-disk key with
-            # defaults. write_pretty_config_preserve_keys merges this delta onto
-            # the real on-disk config.
-            from ..config_io import write_pretty_config_preserve_keys
-            write_pretty_config_preserve_keys(ADDON_PACKAGE, {"deck_last_scan_nid": cursors})
+            _save_scan_cursors(cursors)
             logger.info(f"AI-Hints Batch: advanced per-deck scan cursor to {max_nid} for {deck_name}")
         except Exception as e:
             logger.error(f"Failed to record batch scan cursor: {e}")
@@ -868,9 +887,7 @@ class BatchTabMixin:
                 # "expected only digits and commas in nid:". So we resolve the new note ids in
                 # Python and filter via the valid comma-list form.
                 try:
-                    from ..config_io import read_meta_config
-                    cursor_cfg = read_meta_config() or {}
-                    cursors = cursor_cfg.get("deck_last_scan_nid", {}) or {}
+                    cursors = _load_scan_cursors()
                     cursor = int(cursors.get(deck_name, 0) or 0)
                     want_full = hasattr(self, "batch_full_scan_cb") and self.batch_full_scan_cb.isChecked()
                     if want_full:

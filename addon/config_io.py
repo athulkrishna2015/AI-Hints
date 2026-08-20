@@ -44,6 +44,31 @@ def read_meta_config():
     return config
 
 
+def atomic_write_json(path, data):
+    """Atomically write ``data`` to ``path`` (temp file + rename).
+
+    Used for the high-frequency sidecar files (blacklist.json, batch scan
+    cursors) so a reader never observes a partial/empty file, and so these
+    churning writes never touch meta.json (which holds api_keys, providers
+    and the whole user config).
+    """
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def read_json_file(path, default=None):
+    """Read a JSON sidecar file, returning ``default`` if missing or unreadable."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return default
+    except Exception:
+        return default
+
+
 def _log_write(addon_package, mode, on_disk, merged):
     """Emit an audit line for every meta.json write so misbehaving write paths
     can be diagnosed from ai_hints.log after the fact."""

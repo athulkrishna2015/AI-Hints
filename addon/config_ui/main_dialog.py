@@ -1638,7 +1638,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("manual_show_options", False)
         config.setdefault("maint_only_modified", True)
         config.setdefault("batch_full_scan", False)
-        config.setdefault("deck_last_scan_nid", {})
         config.setdefault("tag_hinted_notes", True)
         config.setdefault("tag_skipped_notes", True)
         
