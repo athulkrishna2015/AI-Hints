@@ -1729,8 +1729,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         query = self._get_maint_search_query()
         scope_str = "entire collection" if not query else f"deck '{self.maint_deck_cb.currentText()}'"
 
-        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-        last_check = config.get("last_orphans_check_time", 0)
+        from ..config_io import get_orphans_check_time, set_orphans_check_time
+        last_check = get_orphans_check_time()
         
         # Only check modified notes if checkbox is checked and we have a previous clean timestamp
         only_modified = hasattr(self, "maint_only_modified_cb") and self.maint_only_modified_cb.isChecked()
@@ -1751,8 +1751,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         total = len(nids)
         if total == 0:
             if only_modified and last_check > 0:
-                config["last_orphans_check_time"] = int(time.time())
-                write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
+                set_orphans_check_time(int(time.time()))
             QMessageBox.information(self, "AI-Hints", f"No notes found in the selected scope ({scope_str}){time_filter_msg}!")
             return
 
@@ -1796,9 +1795,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         _log_orphaned_results(orphaned_hints, is_standalone=False)
 
         if not orphaned_hints:
-            config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-            config["last_orphans_check_time"] = int(time.time())
-            write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
+            set_orphans_check_time(int(time.time()))
             QMessageBox.information(self, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
             return
 
@@ -1946,9 +1943,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
             dialog.accept()
             mw.reset()
-            config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-            config["last_orphans_check_time"] = int(time.time())
-            write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
+            set_orphans_check_time(int(time.time()))
             logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
             QMessageBox.information(
                 self, "Cleanup Complete",
@@ -2266,8 +2261,9 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
     import json, html, re
 
     from .widgets import ADDON_PACKAGE
+    from ..config_io import get_orphans_check_time, set_orphans_check_time
     config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-    last_check = config.get("last_orphans_check_time", 0)
+    last_check = get_orphans_check_time()
     
     # Check config settings first to respect user checkbox preference at all times
     only_modified = config.get("maint_only_modified", True)
@@ -2291,8 +2287,7 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
     total = len(nids)
     if total == 0:
         if only_modified and last_check > 0:
-            config["last_orphans_check_time"] = int(time.time())
-            write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
+            set_orphans_check_time(int(time.time()))
         QMessageBox.information(parent, "AI-Hints", f"No notes found in {scope_str}{time_filter_msg}!")
         return
 
@@ -2333,9 +2328,7 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
     _log_orphaned_results(orphaned_hints, is_standalone=True)
 
     if not orphaned_hints:
-        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-        config["last_orphans_check_time"] = int(time.time())
-        write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
+        set_orphans_check_time(int(time.time()))
         QMessageBox.information(parent, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
         return
 
@@ -2462,9 +2455,7 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
 
         dialog.accept()
         mw.reset()
-        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-        config["last_orphans_check_time"] = int(time.time())
-        write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
+        set_orphans_check_time(int(time.time()))
         logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
         QMessageBox.information(
             parent, "Cleanup Complete",

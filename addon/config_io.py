@@ -69,6 +69,37 @@ def read_json_file(path, default=None):
         return default
 
 
+ORPHAN_SCAN_STATE_FILE = os.path.join(_ADDON_DIR, "orphan_scan_state.json")
+
+
+def get_orphans_check_time():
+    """Return the last orphan-hint scan timestamp (0 if never scanned).
+
+    Stored in its own sidecar file; on first use a legacy value left in
+    meta.json is migrated over so existing state is preserved.
+    """
+    data = read_json_file(ORPHAN_SCAN_STATE_FILE, {})
+    if isinstance(data, dict) and data.get("last_orphans_check_time"):
+        return int(data["last_orphans_check_time"])
+    try:
+        legacy = (read_meta_config() or {}).get("last_orphans_check_time", 0) or 0
+        if legacy:
+            set_orphans_check_time(legacy)
+            return int(legacy)
+    except Exception:
+        pass
+    return 0
+
+
+def set_orphans_check_time(ts):
+    """Record the orphan-hint scan timestamp in orphan_scan_state.json."""
+    data = read_json_file(ORPHAN_SCAN_STATE_FILE, {}) or {}
+    if not isinstance(data, dict):
+        data = {}
+    data["last_orphans_check_time"] = int(ts)
+    atomic_write_json(ORPHAN_SCAN_STATE_FILE, data)
+
+
 def _log_write(addon_package, mode, on_disk, merged):
     """Emit an audit line for every meta.json write so misbehaving write paths
     can be diagnosed from ai_hints.log after the fact."""
