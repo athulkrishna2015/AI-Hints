@@ -16,6 +16,11 @@ addon/meta.json
 addon/meta.json.*
 addon/batch_state.json
 addon/blacklist.json
+addon/blacklist.json.tmp
+addon/batch_scan_cursors.json
+addon/batch_scan_cursors.json.tmp
+addon/orphan_scan_state.json
+addon/orphan_scan_state.json.tmp
 .vscode/
 .idea/
 .DS_Store

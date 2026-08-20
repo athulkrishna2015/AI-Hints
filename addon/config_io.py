@@ -2,7 +2,6 @@ import json
 import os
 import shutil
 import threading
-import time
 
 try:
     from .logger import logger

@@ -181,11 +181,11 @@ class MobileTabMixin:
             QMessageBox.critical(self, "AI-Hints", "Failed to sync script file to media folder.")
             return
 
-        # Update flag
-        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-        config["mobile_setup_completed"] = True
+        # Update flag. Pass only the changed key: a full getConfig() snapshot can
+        # silently come back as config.json defaults, and merging that over the
+        # on-disk config would overwrite the user's other settings.
         from ..config_io import write_pretty_config_preserve_keys
-        write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
+        write_pretty_config_preserve_keys(ADDON_PACKAGE, {"mobile_setup_completed": True})
 
         # 2. Inject into all templates
         count = 0
@@ -253,11 +253,9 @@ class MobileTabMixin:
             self.status_label.setText(f"❌ Error during template installation: {e}")
 
     def on_full_remove(self):
-        # Update flag
-        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-        config["mobile_setup_completed"] = False
+        # Update flag. Delta-only write (see on_full_install).
         from ..config_io import write_pretty_config_preserve_keys
-        write_pretty_config_preserve_keys(ADDON_PACKAGE, config)
+        write_pretty_config_preserve_keys(ADDON_PACKAGE, {"mobile_setup_completed": False})
 
         count = 0
         pattern = r"(\n\n)?<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"

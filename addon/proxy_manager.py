@@ -230,9 +230,11 @@ class ProxyManager:
                 
                 # Check if it differs from what is stored in config
                 if local_data and local_data != stored_data:
-                    config["antigravity_accounts"] = local_data
+                    # Delta-only write: a full getConfig() snapshot can come back
+                    # as config.json defaults, and merging that over the on-disk
+                    # config would overwrite the user's other settings.
                     from .config_io import write_pretty_config_preserve_keys
-                    write_pretty_config_preserve_keys(addon_package, config)
+                    write_pretty_config_preserve_keys(addon_package, {"antigravity_accounts": local_data})
                     logger.info("AI-Hints: Backed up antigravity-accounts.json to meta.json config.")
             elif stored_data:
                 # Local file is missing, restore from config
