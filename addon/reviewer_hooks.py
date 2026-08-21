@@ -1956,21 +1956,45 @@ def on_deck_browser_context_menu(menu, did) -> None:
                     continue
                 cards_by_nid.setdefault(getattr(card, "nid", None), []).append(card)
 
+            total = len(card_ids)
+
+            def _report_progress(done_count: int) -> None:
+                def _update():
+                    try:
+                        mw.progress.update(
+                            label=f"AI-Hints: Counting skipped cards... {done_count}/{total}",
+                            value=done_count,
+                            max=total,
+                        )
+                    except Exception:
+                        pass
+                try:
+                    mw.taskman.run_on_main(_update)
+                except Exception:
+                    pass
+
             skipped_count = 0
+            processed = 0
+            last_report = 0.0
             for nid, cards in cards_by_nid.items():
                 try:
                     note = mw.col.get_note(nid) if nid is not None else None
                 except Exception as e:
                     logger.error(f"AI-Hints: Failed to load note {nid} during skip count: {e}")
-                    continue
-                if note is None:
-                    continue
-                for card in cards:
-                    try:
-                        if parser.is_card_skipped(note, card):
-                            skipped_count += 1
-                    except Exception as e:
-                        logger.error(f"AI-Hints: Failed to check skip state for card {card.id}: {e}")
+                    note = None
+                if note is not None:
+                    for card in cards:
+                        try:
+                            if parser.is_card_skipped(note, card):
+                                skipped_count += 1
+                        except Exception as e:
+                            logger.error(f"AI-Hints: Failed to check skip state for card {card.id}: {e}")
+                processed += len(cards)
+                now = time.time()
+                if now - last_report >= 0.1:
+                    last_report = now
+                    _report_progress(processed)
+            _report_progress(total)
             return deck_name, card_ids, skipped_count
             
         def on_success(res) -> None:
