@@ -929,6 +929,48 @@ class CardParser:
 
         return cleared
 
+    def is_card_skipped(self, note, card=None) -> bool:
+        """Returns True if the block matching this card is currently marked skipped.
+
+        Mirrors the detection logic of `unskip_hints_from_note` (keyed `_skipped`
+        flag in the JSON payload, or `data-ai-hints-skipped="true"` on an HTML
+        container) so counts shown to the user match what unskip would change.
+        """
+        card_key = None
+        card_ord = self._card_ord(card)
+        if card_ord is not None:
+            card_key = f"c{card_ord + 1}"
+
+        pattern = re.compile(
+            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+
+        fields = list(note.values()) if hasattr(note, "values") else getattr(note, "fields", [])
+        for f_val in fields:
+            if not isinstance(f_val, str):
+                continue
+            for match in pattern.finditer(f_val):
+                block_html = match.group(0)
+                if not self._block_matches_card(block_html, card):
+                    continue
+                if self.container_class in block_html and self.json_class not in block_html:
+                    if 'data-ai-hints-skipped="true"' in block_html or "data-ai-hints-skipped='true'" in block_html:
+                        return True
+                    continue
+                try:
+                    parsed = self._parse_json_payload(match.group(1))
+                except Exception:
+                    continue
+                if not isinstance(parsed, dict):
+                    continue
+                if self._is_keyed_payload(parsed):
+                    if card_key and isinstance(parsed.get(card_key), dict) and parsed[card_key].get("_skipped"):
+                        return True
+                elif parsed.get("_skipped"):
+                    return True
+        return False
+
     def clear_hints_from_note(self, note, card=None) -> bool:
         """Removes AI hints blocks matching the card from all fields, including HTML line breaks."""
         # Regex updated to match leading/trailing whitespace, <br> tags, and &nbsp;

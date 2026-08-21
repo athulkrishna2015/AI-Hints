@@ -1935,17 +1935,36 @@ def on_deck_browser_context_menu(menu, did) -> None:
     def on_unskip_triggered() -> None:
         from aqt.operations import QueryOp
         
-        def run_unskip(col) -> tuple[str, list[int]]:
+        def run_unskip(col) -> tuple[str, list[int], int]:
             deck_name = get_deck_name(col)
             card_ids = col.find_cards(f'\"deck:{deck_name}\"')
-            return deck_name, card_ids
+            config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+            parser = CardParser(
+                mathjax_format=config.get("mathjax_format", "delimiters"),
+                fix_latex=config.get("fix_latex", False)
+            )
+            skipped_count = 0
+            for cid in card_ids:
+                try:
+                    card = _get_card_from_collection(cid)
+                    if card and parser.is_card_skipped(card.note(), card):
+                        skipped_count += 1
+                except Exception as e:
+                    logger.error(f"AI-Hints: Failed to check skip state for card {cid}: {e}")
+            return deck_name, card_ids, skipped_count
             
         def on_success(res) -> None:
-            deck_name, card_ids = res
+            deck_name, card_ids, skipped_count = res
             if not card_ids:
                 tooltip("AI-Hints: No cards found in this deck.")
                 return
-            if not askUser(f"Are you sure you want to re-enable AI hints for all {len(card_ids)} cards in deck '{deck_name}'?"):
+            if skipped_count == 0:
+                tooltip("AI-Hints: No skipped cards found in this deck.")
+                return
+            if not askUser(
+                f"Are you sure you want to re-enable AI hints for {skipped_count} "
+                f"skipped card{'s' if skipped_count != 1 else ''} in deck '{deck_name}'?"
+            ):
                 return
             
             def do_unskip(col):
