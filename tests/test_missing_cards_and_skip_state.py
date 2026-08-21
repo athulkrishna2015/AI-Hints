@@ -152,12 +152,16 @@ class GetCardFromCollectionTests(unittest.TestCase):
         self.assertIs(_get_card_from_collection(123), mock_card)
 
     def test_deleted_card_returns_none(self):
-        self.mw.col.get_card.side_effect = NotFoundError("No such card", None, None, None)
-        self.assertIsNone(_get_card_from_collection(1787254061415))
+        with patch.object(self.mw.col, "get_card", side_effect=NotFoundError("No such card", None, None, None)):
+            self.assertIsNone(_get_card_from_collection(1787254061415))
 
     def test_missing_collection_returns_none(self):
-        self.mw.col = None
-        self.assertIsNone(_get_card_from_collection(123))
+        original_col = reviewer_hooks.mw.col
+        try:
+            reviewer_hooks.mw.col = None
+            self.assertIsNone(_get_card_from_collection(123))
+        finally:
+            reviewer_hooks.mw.col = original_col
 
 
 class PregenDeletedCardTests(unittest.TestCase):
@@ -165,6 +169,8 @@ class PregenDeletedCardTests(unittest.TestCase):
         _pregenerated_data.clear()
         _generating_card_ids.clear()
         self.mw = reviewer_hooks.mw
+        self._original_col = self.mw.col
+        self._original_config = self.mw.addonManager.getConfig.return_value
         self.mw.col = MagicMock()
         self.mw.reviewer = MagicMock()
         self.mw.addonManager.getConfig.return_value = {
@@ -172,6 +178,12 @@ class PregenDeletedCardTests(unittest.TestCase):
             "pre_generate_next": True,
             "pre_generate_count": 1,
         }
+
+    def tearDown(self):
+        _pregenerated_data.clear()
+        _generating_card_ids.clear()
+        self.mw.col = self._original_col
+        self.mw.addonManager.getConfig.return_value = self._original_config
 
     def test_deleted_queued_card_is_skipped_and_next_is_generated(self):
         next_card = MagicMock()
@@ -185,18 +197,17 @@ class PregenDeletedCardTests(unittest.TestCase):
         queued = MagicMock()
         queued.cards = [q_deleted, q_alive]
 
-        self.mw.col.sched.get_queued_cards.return_value = queued
-
         def get_card_side_effect(cid):
             if cid == 555:
                 raise NotFoundError("No such card", None, None, None)
             return next_card
 
-        self.mw.col.get_card.side_effect = get_card_side_effect
         self.mw.reviewer.card.id = 111
-        self.mw.taskman.run_on_main.side_effect = lambda fn: fn()
 
-        with patch('addon.reviewer_hooks.generate_hints') as mock_generate, \
+        with patch.object(self.mw.col.sched, "get_queued_cards", return_value=queued), \
+             patch.object(self.mw.col, "get_card", side_effect=get_card_side_effect), \
+             patch.object(self.mw.taskman, "run_on_main", side_effect=lambda fn: fn()) as run_on_main, \
+             patch('addon.reviewer_hooks.generate_hints') as mock_generate, \
              patch('addon.reviewer_hooks.card_has_hints', return_value=False), \
              patch('addon.reviewer_hooks.AIClient'), \
              patch('addon.reviewer_hooks.QTimer') as mock_timer:
@@ -214,12 +225,12 @@ class PregenDeletedCardTests(unittest.TestCase):
         q_deleted.card_id = 555
         queued = MagicMock()
         queued.cards = [q_deleted]
-        self.mw.col.sched.get_queued_cards.return_value = queued
-        self.mw.col.get_card.side_effect = NotFoundError("No such card", None, None, None)
         self.mw.reviewer.card.id = 111
-        self.mw.taskman.run_on_main.side_effect = lambda fn: fn()
 
-        with patch('addon.reviewer_hooks.generate_hints') as mock_generate, \
+        with patch.object(self.mw.col.sched, "get_queued_cards", return_value=queued), \
+             patch.object(self.mw.col, "get_card", side_effect=NotFoundError("No such card", None, None, None)), \
+             patch.object(self.mw.taskman, "run_on_main", side_effect=lambda fn: fn()), \
+             patch('addon.reviewer_hooks.generate_hints') as mock_generate, \
              patch('addon.reviewer_hooks.AIClient'), \
              patch('addon.reviewer_hooks.QTimer') as mock_timer:
             mock_timer.singleShot.side_effect = lambda delay, fn: fn()

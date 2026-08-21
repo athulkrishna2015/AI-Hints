@@ -1943,14 +1943,34 @@ def on_deck_browser_context_menu(menu, did) -> None:
                 mathjax_format=config.get("mathjax_format", "delimiters"),
                 fix_latex=config.get("fix_latex", False)
             )
-            skipped_count = 0
+            # Group sibling cards by note so each note is loaded and parsed once
+            # (a cloze note with N cards in the deck shares one field payload).
+            cards_by_nid = {}
             for cid in card_ids:
                 try:
                     card = _get_card_from_collection(cid)
-                    if card and parser.is_card_skipped(card.note(), card):
-                        skipped_count += 1
                 except Exception as e:
-                    logger.error(f"AI-Hints: Failed to check skip state for card {cid}: {e}")
+                    logger.error(f"AI-Hints: Failed to load card {cid} during skip count: {e}")
+                    continue
+                if card is None:
+                    continue
+                cards_by_nid.setdefault(getattr(card, "nid", None), []).append(card)
+
+            skipped_count = 0
+            for nid, cards in cards_by_nid.items():
+                try:
+                    note = mw.col.get_note(nid) if nid is not None else None
+                except Exception as e:
+                    logger.error(f"AI-Hints: Failed to load note {nid} during skip count: {e}")
+                    continue
+                if note is None:
+                    continue
+                for card in cards:
+                    try:
+                        if parser.is_card_skipped(note, card):
+                            skipped_count += 1
+                    except Exception as e:
+                        logger.error(f"AI-Hints: Failed to check skip state for card {card.id}: {e}")
             return deck_name, card_ids, skipped_count
             
         def on_success(res) -> None:
