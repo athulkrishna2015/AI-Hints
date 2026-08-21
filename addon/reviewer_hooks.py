@@ -3,6 +3,7 @@ import json
 import re
 import time
 import sys
+from anki.errors import NotFoundError
 from aqt import mw, gui_hooks
 from aqt.qt import QMessageBox, QMenu, QAction, QPoint, Qt, QDialog, QVBoxLayout, QTimer
 from .logger import logger, info, tooltip, state
@@ -283,7 +284,12 @@ def _trigger_next_pregeneration(current_card_id=None):
                                 if current_card_id and cid == current_card_id:
                                     continue
                                 
-                                card = mw.col.get_card(cid)
+                                try:
+                                    card = mw.col.get_card(cid)
+                                except NotFoundError:
+                                    # Queued snapshot may reference a card deleted since.
+                                    logger.debug(f"AI-Hints pre-gen: queued card {cid} no longer exists; skipping.")
+                                    continue
                                 if not card:
                                     continue
                                     
@@ -1426,7 +1432,13 @@ def _get_card_from_collection(card_id):
     if not callable(get_card):
         get_card = getattr(collection, "getCard", None)
     if callable(get_card):
-        return get_card(card_id)
+        try:
+            return get_card(card_id)
+        except NotFoundError:
+            # Card was deleted while a batch/queue still referenced it.
+            # Treat as missing so worker loops skip it instead of crashing.
+            logger.debug(f"AI-Hints: Card {card_id} no longer exists; skipping.")
+            return None
     return None
 
 def clear_ai_hints_for_cards(card_ids) -> tuple[int, int, int]:
