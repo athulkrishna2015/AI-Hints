@@ -1987,7 +1987,7 @@ def on_deck_browser_context_menu(menu, did) -> None:
             parent=mw,
             op=run_unskip,
             success=on_success,
-        ).run_in_background()
+        ).with_progress("AI-Hints: Counting skipped cards...").run_in_background()
         
     act_unskip.triggered.connect(on_unskip_triggered)
     
