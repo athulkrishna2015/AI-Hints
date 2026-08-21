@@ -2,6 +2,13 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.3.3 (2026-08-21)
+- **Batch Worker Crash Fix (Deleted Cards)**: Fixed a `NotFoundError: No such card` crash that killed the batch worker thread when a card was deleted while a batch/pregen queue still referenced its id. `_get_card_from_collection()` now treats deleted cards as missing (all callers already skip on `None`), and the pre-generation chain skips queued cards that no longer exist instead of aborting the whole queue.
+- **Accurate Unskip Confirmation Count**: The deck menu's "Unskip AI for All Cards in Deck" prompt previously showed the deck's total card count; it now counts only the cards actually marked skipped (`_skipped` flag / skip marker), shows a tooltip and bails out when the deck has no skipped cards, so the number always matches what unskip will change.
+- **Live Progress Bar for Skip Counting**: Scanning a large deck before the unskip prompt now shows Anki's native progress dialog with real progress (`Counting skipped cards... x/y`) instead of a static label, throttled to 10 updates/sec.
+- **Faster Skip Counting**: Sibling cloze cards sharing one note are now grouped, so each note is loaded and parsed once per scan instead of once per card — identical exact result, fewer redundant loads on cloze-heavy decks.
+- **Bleed Diagnostics**: New `debug_logging`-gated `[BLEED]` (card-load block source, scope attrs, payload keys, `_src` presence) and `[BLEED-WRITE]` (target card vs reviewer card match, generation type) log lines to trace reports of data bleeding between cards.
+
 ## 6.3.2 (2026-08-20)
 - **meta.json Wipe Prevention (Critical)**: Fixed a second config-loss incident (2026-08-20) where `addon/meta.json` was destroyed during a batch run. The custom pretty-JSON writer opened the file with `"w"` (truncating it to 0 bytes) and dumped JSON while batch blacklist updates ran from many concurrent worker threads; a reader hitting the file mid-truncation saw an empty file, `read_meta_config()` fell back to `{}`, and the next write persisted a pure `config.json` defaults blob — wiping api_keys, custom providers, templates and tweaks. Fixes:
   - Config writes now go through Anki's atomic `addonManager.writeConfig` (the default, non-pretty path) instead of the hand-rolled truncating file write, and are serialized with a module-level lock, so the truncate/read race can no longer happen.
