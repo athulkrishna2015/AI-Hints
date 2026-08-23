@@ -58,14 +58,18 @@ from addon.reviewer_hooks import (
     generate_hints, 
     _apply_results_to_card, 
     _trigger_next_pregeneration,
-    _pregenerated_data,
+    _get_pregenerated_data,
     _generating_card_ids
 )
+
+# Module-level binding to the lazily-created singleton so existing test
+# bodies can keep referencing `_pregenerated_data` directly.
+_pregenerated_data = _get_pregenerated_data()
 
 class TestPregeneration(unittest.TestCase):
 
     def setUp(self):
-        # Clear global state
+        # Clear global state (cache is lazily created; grab the accessor)
         _pregenerated_data.clear()
         _generating_card_ids.clear()
         

@@ -10,6 +10,127 @@ except ImportError:
     normalize_math_text = lambda x, **kwargs: x
     repair_latex_control_chars = lambda x: x
 
+# ---------------------------------------------------------------------------
+# Depth-aware AI-Hints block scanning
+# ---------------------------------------------------------------------------
+# The previous approach matched blocks with a non-greedy regex
+# `(.*?)</div>`, which truncated any block whose payload contained real
+# (unescaped) HTML — e.g. legacy blocks written before payloads were HTML-
+# escaped. Updating such a note spliced the replacement into the middle of
+# the block and corrupted the field. The scanner below pairs every opening
+# <div ... class="ai-hints-json|ai-hints-container"> with its MATCHING
+# </div>, honoring nesting depth.
+
+_HINT_BLOCK_OPEN_RE = re.compile(
+    r'<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>',
+    flags=re.IGNORECASE,
+)
+_DIV_TAG_RE = re.compile(r'<(/?)div\b[^>]*?(/?)>', flags=re.IGNORECASE)
+
+
+class HintBlockMatch:
+    """Mimics the subset of re.Match semantics used by block processors."""
+
+    __slots__ = ("_text", "_s", "_e", "_is", "_ie", "_cls")
+
+    def __init__(self, text: str, start: int, end: int, inner_start: int, inner_end: int, cls: str):
+        self._text = text
+        self._s = start
+        self._e = end
+        self._is = inner_start
+        self._ie = inner_end
+        self._cls = cls or ""
+
+    def group(self, i=0):
+        if i == 0:
+            return self._text[self._s:self._e]
+        if i in (1, 2):
+            return self._text[self._is:self._ie]
+        raise IndexError(f"no such group: {i}")
+
+    def start(self, i=0):
+        return self._s if i == 0 else self._is
+
+    def end(self, i=0):
+        return self._e if i == 0 else self._ie
+
+    @property
+    def span(self):
+        return (self._s, self._e)
+
+    @property
+    def class_value(self) -> str:
+        return html.unescape(self._cls)
+
+
+def _iter_hint_blocks(text: str):
+    """Yield HintBlockMatch objects for every balanced ai-hints block."""
+    if not isinstance(text, str):
+        return
+    for open_match in _HINT_BLOCK_OPEN_RE.finditer(text):
+        open_tag = open_match.group(0)
+        cls_m = re.search(r'class\s*=\s*["\']([^"\']*)["\']', open_tag, flags=re.IGNORECASE)
+        depth = 1
+        close_start = close_end = None
+        for t in _DIV_TAG_RE.finditer(text, open_match.end()):
+            closing, selfclosing = t.group(1), t.group(2)
+            if selfclosing and not closing:
+                continue
+            if closing:
+                depth -= 1
+                if depth == 0:
+                    close_start, close_end = t.start(), t.end()
+                    break
+            else:
+                depth += 1
+        if close_start is None:
+            # Unterminated block: skip rather than swallowing the rest of
+            # the field the way the old non-greedy regex did.
+            continue
+        yield HintBlockMatch(
+            text, open_match.start(), close_end, open_match.end(), close_start,
+            cls_m.group(1) if cls_m else "",
+        )
+
+
+# Runs of noise commonly inserted around blocks by the Anki editor.
+_WS_NOISE_RUN_RE = re.compile(
+    r'(?:[\s]|<br\s*/?>|&nbsp;|<div>\s*</div>)+',
+    flags=re.IGNORECASE,
+)
+
+
+def _consume_ws_noise(text: str, pos: int, direction: int):
+    """Extend pos over whitespace/<br>/&nbsp;/empty-div noise. direction=-1 scans left."""
+    if direction < 0:
+        while pos > 0:
+            m = None
+            # try to extend by one noise token ending exactly at pos
+            for t in _WS_NOISE_RUN_RE.finditer(text, max(0, pos - 40), pos):
+                if t.end() == pos:
+                    m = t
+            if m is None and pos > 0 and text[pos - 1] in " \t\r\n":
+                pos -= 1
+                continue
+            if m is None:
+                break
+            pos = m.start()
+        return pos
+    else:
+        while pos < len(text):
+            m = _WS_NOISE_RUN_RE.match(text, pos)
+            if m is None:
+                break
+            pos = m.end()
+        return pos
+
+
+def _strip_block_with_ws(text: str, match: HintBlockMatch):
+    """Remove a block plus adjacent editor noise; returns updated text."""
+    s = _consume_ws_noise(text, match.start(), -1)
+    e = _consume_ws_noise(text, match.end(), 1)
+    return text[:s] + text[e:]
+
 class CardParser:
 
     def __init__(self, mathjax_format: str = "delimiters", fix_latex: bool = False, **kwargs):
@@ -477,11 +598,7 @@ class CardParser:
     def _update_json_block_in_field(self, current_val: str, new_data: Dict[str, List[str]], card_key: Optional[str], toggles: Dict[str, bool], card=None, note=None) -> str:
         # 1. First, try to find ANY existing block (JSON or HTML) that matches THIS specific card.
         # This is the most surgical update.
-        pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
-        matches = list(pattern.finditer(current_val))
+        matches = list(_iter_hint_blocks(current_val))
         
         # Priority 1: Update block that specifically matches this card
         for match in matches:
@@ -519,7 +636,7 @@ class CardParser:
                         new_attrs = self._build_attrs(toggles, card if not card_key else None)
                         new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
                         return current_val[:match.start()] + new_block + current_val[match.end():]
-                    except:
+                    except Exception:
                         pass
                 
                 # If it matched card but was HTML-only or failed JSON parse, replace it entirely.
@@ -558,7 +675,7 @@ class CardParser:
                             new_attrs = self._build_attrs(toggles, None) # keep universal
                             new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
                             return current_val[:match.start()] + new_block + current_val[match.end():]
-                    except:
+                    except Exception:
                         pass
                 
                 # If it's an HTML block, extract its data, convert to JSON, and merge!
@@ -640,12 +757,6 @@ class CardParser:
 
     def find_hints_block(self, note, card=None) -> Optional[str]:
         """Searches all fields of the note for an AI hints block matching the card."""
-        # More flexible regex for class matching (allows any order of classes)
-        pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
-        
         # Anki Note objects have a .fields attribute (list of strings)
         fields = getattr(note, "fields", [])
         if not fields and hasattr(note, "values"):
@@ -653,11 +764,11 @@ class CardParser:
                 fields = list(note.values())
             except Exception:
                 fields = []
-        
+
         for f_val in fields:
             if not isinstance(f_val, str):
                 continue
-            for match in pattern.finditer(f_val):
+            for match in _iter_hint_blocks(f_val):
                 block = match.group(0)
                 # Check if this block is scoped to the card
                 if self._block_matches_card(block, card):
@@ -668,17 +779,12 @@ class CardParser:
 
     def find_all_hints_blocks(self, note) -> List[str]:
         """Extracts all AI hints blocks from all fields of the note."""
-        pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>.*?</div>',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
-        
         blocks = []
         fields = list(note.values()) if hasattr(note, "values") else getattr(note, "fields", [])
         for f_val in fields:
             if not isinstance(f_val, str):
                 continue
-            for match in pattern.finditer(f_val):
+            for match in _iter_hint_blocks(f_val):
                 blocks.append(match.group(0))
         return blocks
 
@@ -727,21 +833,20 @@ class CardParser:
         note_orphans = []
         for block in raw_blocks:
             if self.json_class in block:
-                # Use re.search to extract the JSON payload
-                m = re.search(
-                    r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
-                    block, re.DOTALL | re.IGNORECASE
-                )
-                if m:
-                    raw = html.unescape(m.group(1) or "")
-                    try:
-                        parsed = json.loads(raw)
-                    except Exception:
-                        continue
-                    if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
-                        for key in list(parsed.keys()):
-                            if re.fullmatch(r"c\d+", str(key)) and key not in valid_keys:
-                                note_orphans.append((block, key, parsed[key]))
+                # The block is already a fully-balanced match; extract the
+                # inner payload via the depth-aware scanner.
+                inner_iter = list(_iter_hint_blocks(block))
+                if not inner_iter:
+                    continue
+                raw = html.unescape(inner_iter[0].group(1) or "")
+                try:
+                    parsed = json.loads(raw)
+                except Exception:
+                    continue
+                if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
+                    for key in list(parsed.keys()):
+                        if re.fullmatch(r"c\d+", str(key)) and key not in valid_keys:
+                            note_orphans.append((block, key, parsed[key]))
         return note_orphans
 
 
@@ -758,14 +863,9 @@ class CardParser:
         """Extracts AI data from a single field string."""
         if not isinstance(field_val, str):
             return []
-            
-        pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
-        
+
         extracted = []
-        for match in pattern.finditer(field_val):
+        for match in _iter_hint_blocks(field_val):
             block = match.group(0)
             content = match.group(1)
             parsed = None
@@ -826,16 +926,15 @@ class CardParser:
 
     def _remove_all_hints_from_fields(self, note) -> bool:
         """Forcefully removes all AI hints blocks from all fields of the note."""
-        pattern = re.compile(
-            r'(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
         cleared = False
         for f_name in note.keys():
             val = note[f_name]
             if not isinstance(val, str):
                 continue
-            new_val = re.sub(pattern, "", val)
+            new_val = val
+            for match in reversed(list(_iter_hint_blocks(val))):
+                new_val = _strip_block_with_ws(new_val, match)
+            new_val = new_val.strip()
             if new_val != val:
                 note[f_name] = new_val.strip()
                 cleared = True
@@ -847,13 +946,6 @@ class CardParser:
         card_key = f"c{card_ord + 1}" if card_ord is not None else None
         cleared = False
 
-        # Regex to match div blocks of either class
-        ws_pattern = r'(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*'
-        pattern = re.compile(
-            rf'{ws_pattern}<div\b[^>]*class=["\']([^"\']*)(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>{ws_pattern}',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
-
         for f_name in note.keys():
             current_val = note[f_name]
             if not isinstance(current_val, str):
@@ -861,12 +953,12 @@ class CardParser:
 
             new_val = current_val
             field_cleared = False
-            matches = list(pattern.finditer(current_val))
+            matches = list(_iter_hint_blocks(current_val))
 
             for match in reversed(matches):
                 block_html = match.group(0)
-                class_str = match.group(1)
-                
+                class_str = match.class_value
+
                 # Check if it matches this card
                 if not self._block_matches_card(block_html, card):
                     continue
@@ -874,7 +966,7 @@ class CardParser:
                 # Case A: JSON block
                 if self.json_class in block_html:
                     try:
-                        raw_payload = match.group(2)
+                        raw_payload = match.group(1)
                         parsed = self._parse_json_payload(raw_payload)
                         if isinstance(parsed, dict):
                             # Keyed JSON format
@@ -941,16 +1033,11 @@ class CardParser:
         if card_ord is not None:
             card_key = f"c{card_ord + 1}"
 
-        pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
-
         fields = list(note.values()) if hasattr(note, "values") else getattr(note, "fields", [])
         for f_val in fields:
             if not isinstance(f_val, str):
                 continue
-            for match in pattern.finditer(f_val):
+            for match in _iter_hint_blocks(f_val):
                 block_html = match.group(0)
                 if not self._block_matches_card(block_html, card):
                     continue
@@ -973,13 +1060,6 @@ class CardParser:
 
     def clear_hints_from_note(self, note, card=None) -> bool:
         """Removes AI hints blocks matching the card from all fields, including HTML line breaks."""
-        # Regex updated to match leading/trailing whitespace, <br> tags, and &nbsp;
-        # We use a greedy match for surrounding whitespace to clean up as much as possible
-        ws_pattern = r'(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*'
-        pattern = re.compile(
-            rf'{ws_pattern}<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>{ws_pattern}',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
         cleared = False
         card_ord = self._card_ord(card)
         card_key = f"c{card_ord + 1}" if card_ord is not None else None
@@ -993,7 +1073,7 @@ class CardParser:
             field_cleared = False
             
             # 1. Clean standard div container blocks
-            matches = list(pattern.finditer(current_val))
+            matches = list(_iter_hint_blocks(current_val))
             # Work backwards to avoid offset issues
             for match in reversed(matches):
                 block_html = match.group(0)
@@ -1019,8 +1099,9 @@ class CardParser:
                         pass
 
                 if self._block_matches_card(block_html, card):
-                    # Replace the entire matched block (including surrounding <br>/whitespace) with a single newline or nothing
-                    new_val = new_val[:match.start()] + new_val[match.end():]
+                    # Remove the block plus adjacent <br>/whitespace noise the
+                    # old regex used to consume as part of the match.
+                    new_val = _strip_block_with_ws(new_val, match)
                     field_cleared = True
 
             # 2. Clean naked/raw JSON strings left behind by older versions or failures
@@ -1098,17 +1179,13 @@ class CardParser:
         card_key = f"c{card_ord + 1}" if card_ord is not None else None
         
         modified = False
-        pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
 
         for f_name in note.keys():
             current_val = note[f_name]
             if not isinstance(current_val, str):
                 continue
                 
-            matches = list(pattern.finditer(current_val))
+            matches = list(_iter_hint_blocks(current_val))
             field_modified = False
             new_val = current_val
             
@@ -1168,11 +1245,7 @@ class CardParser:
         return modified
 
     def _replace_or_append_block(self, current_val: str, content_block: str, card=None) -> str:
-        pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*(?:{self.json_class}|{self.container_class})[^"\']*["\'][^>]*>(.*?)</div>',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
-        matches = list(pattern.finditer(current_val))
+        matches = list(_iter_hint_blocks(current_val))
         if not matches:
             return current_val + "\n" + content_block
 
@@ -1467,18 +1540,14 @@ class CardParser:
             return False
             
         note_changed = False
-        pattern = re.compile(
-            rf'<div\b[^>]*class=["\'][^"\']*{self.json_class}[^"\']*["\'][^>]*>(.*?)</div>',
-            flags=re.DOTALL | re.IGNORECASE,
-        )
-        
+
         for f_name in fields:
             val = note[f_name]
             if not isinstance(val, str) or self.json_class not in val:
                 continue
                 
             new_val = val
-            matches = list(pattern.finditer(val))
+            matches = list(_iter_hint_blocks(val))
             for match in reversed(matches):
                 block_html = match.group(0)
                 raw_payload = match.group(1)

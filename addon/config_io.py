@@ -17,6 +17,55 @@ def _meta_path():
     return os.path.join(_ADDON_DIR, "meta.json")
 
 
+def addon_data_dir() -> str:
+    """Directory for mutable state files (blacklist, pregen cache, logs...).
+
+    Lives in the active PROFILE folder so it survives addon updates (files in
+    the addon folder are wiped on every update). Falls back to the addon
+    directory when no Anki profile is available (tests, headless import).
+    """
+    try:
+        from aqt import mw
+        if (
+            mw is not None
+            and "Mock" not in type(mw).__name__
+            and getattr(mw, "pm", None) is not None
+        ):
+            profile_dir = mw.pm.profileFolder()
+            if profile_dir:
+                d = os.path.join(profile_dir, "ai_hints_bin")
+                os.makedirs(d, exist_ok=True)
+                return d
+    except Exception:
+        pass
+    return _ADDON_DIR
+
+
+def resolve_data_file(filename: str) -> str:
+    """Return the profile-scoped path for a mutable state file.
+
+    Migrates a legacy copy left in the addon folder (pre-profile-storage
+    versions wrote there) exactly once, preserving user data across the move.
+    """
+    data_dir = addon_data_dir()
+    new_path = os.path.join(data_dir, filename)
+    old_path = os.path.join(_ADDON_DIR, filename)
+    if old_path != new_path and os.path.exists(old_path) and not os.path.exists(new_path):
+        try:
+            shutil.move(old_path, new_path)
+            try:
+                logger.info(f"AI-Hints: migrated {filename} to the profile folder ({data_dir}).")
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                logger.error(f"AI-Hints: failed to migrate {filename}: {e}")
+            except Exception:
+                pass
+            return old_path
+    return new_path
+
+
 def read_meta_config():
     """Read the live config dict from the addon's own meta.json on disk.
 
@@ -68,7 +117,8 @@ def read_json_file(path, default=None):
         return default
 
 
-ORPHAN_SCAN_STATE_FILE = os.path.join(_ADDON_DIR, "orphan_scan_state.json")
+def _orphans_state_path() -> str:
+    return resolve_data_file("orphan_scan_state.json")
 
 
 def get_orphans_check_time():
@@ -77,7 +127,7 @@ def get_orphans_check_time():
     Stored in its own sidecar file; on first use a legacy value left in
     meta.json is migrated over so existing state is preserved.
     """
-    data = read_json_file(ORPHAN_SCAN_STATE_FILE, {})
+    data = read_json_file(_orphans_state_path(), {})
     if isinstance(data, dict) and data.get("last_orphans_check_time"):
         return int(data["last_orphans_check_time"])
     try:
@@ -92,11 +142,11 @@ def get_orphans_check_time():
 
 def set_orphans_check_time(ts):
     """Record the orphan-hint scan timestamp in orphan_scan_state.json."""
-    data = read_json_file(ORPHAN_SCAN_STATE_FILE, {}) or {}
+    data = read_json_file(_orphans_state_path(), {}) or {}
     if not isinstance(data, dict):
         data = {}
     data["last_orphans_check_time"] = int(ts)
-    atomic_write_json(ORPHAN_SCAN_STATE_FILE, data)
+    atomic_write_json(_orphans_state_path(), data)
 
 
 def _log_write(addon_package, mode, on_disk, merged):
@@ -104,8 +154,6 @@ def _log_write(addon_package, mode, on_disk, merged):
     can be diagnosed from ai_hints.log after the fact."""
     try:
         on_disk_keys = set(on_disk) if isinstance(on_disk, dict) else set()
-        incoming_had = set()  # caller passes merged only; deltas are logged by writer
-        preserved = on_disk_keys - incoming_had
         merged_keys = merged.get("api_keys") if isinstance(merged, dict) else None
         merged_decks = merged.get("deck_last_scan_nid") if isinstance(merged, dict) else None
         logger.info(

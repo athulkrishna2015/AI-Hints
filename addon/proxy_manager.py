@@ -89,7 +89,8 @@ class ProxyManager:
                             if os.path.isfile(old_path):
                                 os.remove(old_path)
                                 logger.debug(f"Pruned legacy proxy binary: {item}")
-            except: pass
+            except Exception:
+                pass
 
             urllib.request.urlretrieve(remote_url, self.executable, reporthook=_reporthook)
             logger.info(f"Successfully downloaded proxy to {self.executable}")
@@ -99,7 +100,8 @@ class ProxyManager:
                     os.chmod(self.executable, 0o755)
                     # Add shell fallback just in case of rigid mount drivers (NTFS/FUSE)
                     subprocess.run(["chmod", "+x", self.executable], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-                except: pass
+                except Exception:
+                    pass
             return True
         except Exception as e:
             logger.error(f"Failed to download Antigravity Proxy: {e}")
@@ -146,7 +148,8 @@ class ProxyManager:
                     os.chmod(self.executable, 0o755)
                     # Force absolute authority shell call exactly like the user commands
                     subprocess.run(["chmod", "+x", self.executable], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-                except: pass
+                except Exception:
+                    pass
             
         env = os.environ.copy()
         env["PORT"] = "3000"
@@ -189,23 +192,30 @@ class ProxyManager:
 
     def stop(self):
         """Gracefully terminate the background binary."""
-        if self.process and self.process.poll() is None:
-            logger.info(f"Stopping Antigravity Proxy daemon (PID: {self.process.pid})...")
-            try:
-                if sys.platform == "win32":
-                    self.process.terminate()
-                else:
-                    self.process.send_signal(signal.SIGTERM)
-                
-                self.process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                logger.warning("Proxy did not terminate gracefully, force killing...")
-                self.process.kill()
-            except Exception as e:
-                logger.error(f"Error stopping proxy: {e}")
-            finally:
-                self.process = None
-        self._sync_accounts_file()
+        try:
+            if self.process and self.process.poll() is None:
+                logger.info(f"Stopping Antigravity Proxy daemon (PID: {self.process.pid})...")
+                try:
+                    if sys.platform == "win32":
+                        self.process.terminate()
+                    else:
+                        self.process.send_signal(signal.SIGTERM)
+
+                    self.process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    logger.warning("Proxy did not terminate gracefully, force killing...")
+                    self.process.kill()
+                except Exception as e:
+                    logger.error(f"Error stopping proxy: {e}")
+                finally:
+                    self.process = None
+        except Exception as e:
+            # Never raise during interpreter shutdown / atexit.
+            logger.debug(f"Ignoring error while stopping proxy: {e}")
+        try:
+            self._sync_accounts_file()
+        except Exception as e:
+            logger.debug(f"Ignoring accounts sync error on stop: {e}")
 
     def _sync_accounts_file(self, config=None):
         """Synchronizes antigravity-accounts.json with meta.json via Anki's config management."""
@@ -221,7 +231,7 @@ class ProxyManager:
                 config = mw.addonManager.getConfig(addon_package) or {}
             
             bin_exists = os.path.exists(bin_accounts)
-            stored_data = config.get("antigravity_accounts", "").strip()
+            stored_data = str(config.get("antigravity_accounts") or "").strip()
             
             if bin_exists:
                 # Read local accounts file
@@ -245,7 +255,8 @@ class ProxyManager:
                 if sys.platform != "win32":
                     try:
                         os.chmod(bin_accounts, 0o666)
-                    except: pass
+                    except Exception:
+                        pass
                 logger.info("AI-Hints: Restored antigravity-accounts.json from meta.json config.")
         except Exception as e:
             logger.error(f"AI-Hints: Failed to sync antigravity-accounts.json with meta.json: {e}")

@@ -23,21 +23,43 @@ except ImportError:
     repair_loads = json.loads
 
 ADDON_PATH = os.path.dirname(__file__)
-BLACKLIST_FILE = os.path.join(ADDON_PATH, "blacklist.json")
 
 # Serialize blacklist.json writes (the blacklist is updated from many batch
 # worker threads). Written atomically via a temp file + os.replace so a
-# reader never sees a partial/empty file.
+# reader never sees a partial/empty file. Stored in the profile data dir
+# (migrated from the addon folder on first use) so it survives addon updates.
 _blacklist_lock = threading.Lock()
+
+BLACKLIST_FILE = os.path.join(ADDON_PATH, "blacklist.json")
+_blacklist_path_resolved = False
+
+
+def _blacklist_path() -> str:
+    """Resolve the blacklist file location once (profile data dir when running
+    inside Anki; falls back to the addon folder elsewhere). Tests may point
+    BLACKLIST_FILE at a temp path by setting _blacklist_path_resolved = True.
+    """
+    global _blacklist_path_resolved
+    if not _blacklist_path_resolved:
+        global BLACKLIST_FILE
+        try:
+            from .config_io import resolve_data_file
+
+            BLACKLIST_FILE = resolve_data_file("blacklist.json")
+        except Exception:
+            pass
+        _blacklist_path_resolved = True
+    return BLACKLIST_FILE
 
 
 def _write_blacklist_file(data):
     """Atomically write the blacklist payload to blacklist.json."""
     with _blacklist_lock:
-        tmp = BLACKLIST_FILE + ".tmp"
+        path = _blacklist_path()
+        tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, BLACKLIST_FILE)
+        os.replace(tmp, path)
 
 LOG_SYSTEM_PROMPT_CHARS = 120
 
@@ -95,6 +117,24 @@ def _elide_system(data: Any, sys_hash: str) -> Any:
 # only written to the log once per distinct value.
 _LOGGED_SYSTEM_PROMPTS: set = set()
 
+# Cache for the default config.json system prompt so generate_options() does
+# not hit the disk on every single generation call.
+_default_prompt_cache: Dict[str, Any] = {"mtime": None, "prompt": ""}
+
+
+def _default_system_prompt() -> str:
+    """Read the stock system prompt from the addon's config.json (cached by mtime)."""
+    try:
+        path = os.path.join(ADDON_PATH, "config.json")
+        mtime = os.path.getmtime(path)
+        if _default_prompt_cache["mtime"] != mtime:
+            with open(path, "r", encoding="utf-8") as f:
+                _default_prompt_cache["prompt"] = json.load(f).get("system_prompt", "")
+            _default_prompt_cache["mtime"] = mtime
+        return _default_prompt_cache["prompt"]
+    except Exception:
+        return ""
+
 def _log_full_request(provider: str, model: str, data: Any) -> None:
     """Log the outbound request for debugging. The constant system prompt is logged in
     full only once (keyed by hash); subsequent requests log only the varying parts."""
@@ -150,8 +190,20 @@ def _compact_request_data(data: Dict[str, Any], max_len: int = LOG_SYSTEM_PROMPT
         out["prompt"] = f"[{len(out['prompt'])} chars]"
 
     return out
+
 REQUEST_TIMEOUT_SECONDS = 10
-USER_AGENT = "Anki-AI-Hints/1.0"
+
+
+def _load_addon_version() -> str:
+    try:
+        with open(os.path.join(ADDON_PATH, "VERSION"), "r", encoding="utf-8") as f:
+            return f.read().strip() or "0"
+    except Exception:
+        return "0"
+
+
+USER_AGENT = f"Anki-AI-Hints/{_load_addon_version()}"
+
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 MODEL_COOLDOWN_SECONDS = 3600  # 1 hour
 FAILED_MODELS_CACHE: Dict[Tuple[str, str], float] = {}  # Legacy stub
@@ -168,6 +220,7 @@ def register_network_state_callback(callback):
     """Register a callback invoked only when connectivity changes."""
     if callback not in _NETWORK_STATE_CALLBACKS:
         _NETWORK_STATE_CALLBACKS.append(callback)
+    _ensure_network_monitor()
 
 def _check_network_online() -> bool:
     """Internal helper to perform a quick connectivity check."""
@@ -192,17 +245,32 @@ def _check_network_online() -> bool:
     return _NETWORK_STATE["online"]
 
 def _start_network_monitor():
-    """Starts a background thread to periodically update network status."""
+    """Starts a background thread to periodically update network status (once)."""
+    global _monitor_thread
+    if _monitor_thread is not None and _monitor_thread.is_alive():
+        return
+
     def monitor():
         while True:
             _check_network_online()
             time.sleep(30)
-    t = threading.Thread(target=monitor, daemon=True)
-    t.name = "AI-Hints-NetworkMonitor"
-    t.start()
 
-# Initialize monitor
-_start_network_monitor()
+    _monitor_thread = threading.Thread(target=monitor, daemon=True)
+    _monitor_thread.name = "AI-Hints-NetworkMonitor"
+    _monitor_thread.start()
+
+
+# Started lazily on first AIClient construction / callback registration
+# instead of at import time, so merely importing this module (e.g. in tests)
+# doesn't spawn a permanent polling thread.
+_monitor_thread = None
+
+
+def _ensure_network_monitor():
+    try:
+        _start_network_monitor()
+    except Exception:
+        pass
 
 PROVIDER_ORDER = [
     "anthropic",
@@ -426,6 +494,7 @@ def _collect_deprecated_items(items):
 
 class AIClient:
     def __init__(self, config: Dict[str, Any], is_pregen: bool = False):
+        _ensure_network_monitor()
         self.config = config or {}
         self._key_names: Dict[Tuple[str, str], str] = {}
         self.is_pregen = is_pregen
@@ -498,18 +567,8 @@ class AIClient:
     def generate_options(self, front: str, back: str, override_provider: str = None, only_this_provider: bool = False, override_model: str = None) -> Dict[str, List[str]]:
         primary_provider = override_provider or self.config.get("ai_provider", "openai")
         # Always dynamically read the core prompt from the default config.json
-        # so it gets updated automatically when the addon is upgraded.
-        default_prompt = ""
-        try:
-            import os
-            addon_dir = os.path.dirname(os.path.abspath(__file__))
-            default_config_path = os.path.join(addon_dir, "config.json")
-            if os.path.exists(default_config_path):
-                with open(default_config_path, "r", encoding="utf-8") as f:
-                    default_cfg = json.load(f)
-                    default_prompt = default_cfg.get("system_prompt", "")
-        except Exception:
-            pass
+        # so it gets updated automatically when the addon is upgraded (cached).
+        default_prompt = _default_system_prompt()
             
         if not default_prompt:
             default_prompt = self.config.get("system_prompt", "")
@@ -1626,8 +1685,13 @@ class AIClient:
                 
             name = ""
             key = ""
-            
-            paren_match = re.search(r'\s*[\(\[]([^\]\)]+)[\)\]]\s*$', entry)
+
+            # Match a trailing "(name)" or "[name]" suffix with MATCHING bracket
+            # pairs only — previously "(name]" was also accepted.
+            paren_match = (
+                re.search(r'\s*\(([^()]*)\)\s*$', entry) or
+                re.search(r'\s*\[([^\[\]]*)\]\s*$', entry)
+            )
             if paren_match:
                 name = paren_match.group(1).strip()
                 key = entry[:paren_match.start()].strip()
@@ -1635,6 +1699,9 @@ class AIClient:
                 parts = entry.split(":", 1)
                 name = parts[0].strip()
                 key = parts[1].strip()
+                # NOTE: intentionally no length heuristics here — short
+                # "name:key" pairs (e.g. "primary:key1") are a supported
+                # format covered by tests.
             else:
                 key = entry.strip()
                 
@@ -1842,7 +1909,10 @@ class AIClient:
         return self._is_actually_online()
 
     def _cooldown_seconds(self) -> float:
-        return self.config.get("model_cooldown_minutes", 10) * 60
+        try:
+            return float(self.config.get("model_cooldown_minutes", 10) or 10) * 60
+        except (TypeError, ValueError):
+            return 10 * 60
 
     def _save_blacklist(self):
         """Persists the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK to blacklist.json.
@@ -1879,8 +1949,9 @@ class AIClient:
         _BLACKLIST_LOADED = True
         data = None
         try:
-            if os.path.exists(BLACKLIST_FILE):
-                with open(BLACKLIST_FILE, encoding="utf-8") as f:
+            path = _blacklist_path()
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as f:
                     data = json.load(f)
             else:
                 # Migrate legacy meta.json storage into the dedicated file.
@@ -1924,15 +1995,20 @@ class AIClient:
         """
         Calculates cooldown delay.
         For 429 (rate limit), we respect any Retry-After header or use streak-based logic.
+
+        NOTE: This only COMPUTES the delay — it must not increment
+        RATE_LIMIT_STREAK, because _mark_combo_failed() (which always runs
+        right after with this delay) performs the single authoritative
+        increment. Incrementing in both places double-advanced the streak
+        and made cooldowns escalate twice as fast as configured.
         """
         if getattr(error, "code", None) != 429:
             return None
-            
+
         cooldown_sec = self._cooldown_seconds()
         key = (provider, model, api_key)
         streak = RATE_LIMIT_STREAK.get(key, 0) + 1
-        RATE_LIMIT_STREAK[key] = streak
-        
+
         delay = cooldown_sec * streak
         logger.info(f"AI-Hints: Rate limit (429) hit for {provider}/{model} (Key: ...{api_key[-6:] if len(api_key)>6 else api_key}). Streak: {streak}. New delay: {delay/60:.1f} minutes.")
         return delay
@@ -2108,7 +2184,6 @@ class AIClient:
                     if isinstance(custom_headers, dict):
                         headers.update(custom_headers)
                     result = self._get_json(models_url, headers)
-                    self._on_key_success(provider, api_key)
                     FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
                     return [m.get("id") for m in result.get("data", []) if m.get("id")]
 
@@ -2116,13 +2191,15 @@ class AIClient:
                     url = "https://openrouter.ai/api/v1/models"
                     headers = self._json_headers(api_key)
                     result = self._get_json(url, headers)
-                    self._on_key_success(provider, api_key)
                     FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
                     return [m.get("id") for m in result.get("data", []) if m.get("id")]
                 
                 elif provider == "gemini":
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-                    result = self._get_json(url, {})
+                    # Pass the key via header, never the URL query string —
+                    # URLs end up in proxy/server access logs.
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models"
+                    headers = {"x-goog-api-key": api_key}
+                    result = self._get_json(url, headers)
                     models = []
                     deprecated = set()
                     for m in result.get("models", []):
@@ -2135,7 +2212,6 @@ class AIClient:
                             dep_name = name[7:] if name.startswith("models/") else name
                             if dep_name:
                                 deprecated.add(dep_name)
-                    self._on_key_success(provider, api_key)
                     FETCHED_DEPRECATED_MODELS[provider] = deprecated
                     return models
 
@@ -2143,7 +2219,6 @@ class AIClient:
                     url = "https://api.groq.com/openai/v1/models"
                     headers = self._json_headers(api_key)
                     result = self._get_json(url, headers)
-                    self._on_key_success(provider, api_key)
                     return [m.get("id") for m in result.get("data", []) if m.get("id")]
 
                 elif provider == "local":
@@ -2178,14 +2253,13 @@ class AIClient:
                     if url:
                         headers = self._json_headers(api_key)
                         result = self._get_json(url, headers)
-                        self._on_key_success(provider, api_key)
                         return [m.get("id") for m in result.get("data", []) if m.get("id")]
 
                 elif provider == "huggingface":
                     return MODEL_SUGGESTIONS.get("huggingface", [])
 
             except Exception as e:
-                self._mark_key_failed(provider, api_key)
+                logger.debug(f"AI-Hints: model fetch failed for {provider}: {e}")
                 last_err = e
                 continue
         if last_err:

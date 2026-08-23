@@ -45,6 +45,11 @@ class Dummy:
 
 setattr(aqt.qt, 'QTimer', Dummy)
 
+# Execute taskman.run_on_main callbacks SYNCHRONOUSLY so main-thread hops
+# (e.g. BatchManager._missing_hint_cids_on_main) complete instead of waiting.
+aqt.mw.taskman.run_on_main.side_effect = lambda fn, *args, **kwargs: fn(*args, **kwargs)
+aqt.mw.pm.profileFolder.return_value = ''  # keep state file in addon dir for tests
+
 # Setup paths
 sys.dont_write_bytecode = True
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -172,34 +177,29 @@ class TestBatchManager(unittest.TestCase):
 
     @patch('addon.batch_manager.BatchManager.start_local_sequential_queue')
     @patch('addon.batch_manager.BatchManager.start_timer_if_needed')
-    def test_initialize_batch_manager_auto_resumes(self, mock_start_timer, mock_start_queue):
-        """Test that initialize_batch_manager restores active sequential queues in a paused state."""
-        # 1. Active & unpaused -> should restore in paused state
+    def test_initialize_batch_manager_restores_paused(self, mock_start_timer, mock_start_queue):
+        """Interrupted queues are restored PAUSED and NOT auto-resumed (user resumes manually)."""
+        # 1. Active & unpaused -> should restore in paused state, no auto-start
         batch_manager.local_queue = [100, 200]
         batch_manager.local_queue_active = True
         batch_manager.local_queue_paused = False
 
         initialize_batch_manager()
-        mock_start_queue.assert_called_once_with(None)
-        self.assertTrue(batch_manager.local_queue_paused)   # Should be set to True on startup!
-        self.assertFalse(batch_manager.local_queue_active)  # Reset to False so start_local_sequential_queue can run
+        mock_start_queue.assert_not_called()
+        self.assertTrue(batch_manager.local_queue_paused)
+        self.assertFalse(batch_manager.local_queue_active)
 
-        # Reset mocks
-        mock_start_queue.reset_mock()
-
-        # 2. Active and already paused -> should also restore in paused state
+        # 2. Active and already paused -> stays paused, no auto-start
         batch_manager.local_queue = [100, 200]
         batch_manager.local_queue_active = True
         batch_manager.local_queue_paused = True
 
         initialize_batch_manager()
-        mock_start_queue.assert_called_once_with(None)
+        mock_start_queue.assert_not_called()
         self.assertTrue(batch_manager.local_queue_paused)
+        self.assertFalse(batch_manager.local_queue_active)
 
-        # Reset mocks
-        mock_start_queue.reset_mock()
-
-        # 3. Not active -> should NOT restore
+        # 3. Not active -> should NOT touch state
         batch_manager.local_queue = [100, 200]
         batch_manager.local_queue_active = False
         batch_manager.local_queue_paused = False
@@ -277,7 +277,6 @@ class TestBatchManager(unittest.TestCase):
         # Run one step/loop of the thread
         manager._run_local_queue_thread(
             provider="gemini",
-            client=mock_client,
             parser=mock_parser,
             config={}
         )

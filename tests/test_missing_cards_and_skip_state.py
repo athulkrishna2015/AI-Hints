@@ -49,9 +49,12 @@ from addon import reviewer_hooks
 from addon.reviewer_hooks import (
     _get_card_from_collection,
     _trigger_next_pregeneration,
-    _pregenerated_data,
+    _get_pregenerated_data,
     _generating_card_ids,
 )
+
+# Bind to the lazily-created singleton so test bodies can use it directly.
+_pregenerated_data = _get_pregenerated_data()
 
 
 class FakeNote(dict):

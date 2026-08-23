@@ -144,6 +144,17 @@ def _mock_batch_manager():
 class TestBatchFastScan(unittest.TestCase):
     def setUp(self):
         self._prev_states = {}
+        # Isolate the cursor sidecar so tests never read the developer's real file
+        import tempfile
+        self._cursor_tmpdir = tempfile.mkdtemp()
+        self._cursor_file = os.path.join(self._cursor_tmpdir, "batch_scan_cursors.json")
+        self._path_patch = patch(
+            "addon.config_ui.tab_batch._scan_cursors_path",
+            return_value=self._cursor_file,
+        )
+        self._path_patch.start()
+        self.addCleanup(self._path_patch.stop)
+        self.addCleanup(lambda: __import__("shutil", fromlist=["rmtree"]).rmtree(self._cursor_tmpdir, ignore_errors=True))
 
     def _run(self, **kwargs):
         obj = _make_dummy(**kwargs)
@@ -170,6 +181,10 @@ class TestBatchFastScan(unittest.TestCase):
         return obj
 
     def test_fast_scans_notes_since_last_cursor(self):
+        # Seed a cursor for DeckA between 55550 and 55560 so only those two
+        # notes are "new" (matches the deck_results mapping in _run()).
+        from addon.config_ui.tab_batch import _save_scan_cursors
+        _save_scan_cursors({"DeckA": 55559})
         self._run()
         self.assertIn('deck:"DeckA"', self.calls)
         self.assertIn('deck:"DeckA" nid:55560,55570', self.calls)
@@ -218,6 +233,8 @@ class DummyTagNote:
 
 class TestBatchCursorRecording(unittest.TestCase):
     def test_records_cursor_for_deck_and_subdecks(self):
+        import json as _json
+        import tempfile
         obj = MagicMock()
         obj.selected_card_ids = None
 
@@ -233,11 +250,17 @@ class TestBatchCursorRecording(unittest.TestCase):
         addmgr.getConfig.return_value = {"deck_last_scan_nid": {}}
         mw.addonManager = addmgr
 
-        with patch("addon.config_ui.tab_batch.mw", new=mw):
+        # Cursors persist to a dedicated sidecar file (NOT meta.json)
+        tmpdir = tempfile.mkdtemp()
+        cursor_file = os.path.join(tmpdir, "batch_scan_cursors.json")
+
+        with patch("addon.config_ui.tab_batch.mw", new=mw), \
+             patch("addon.config_ui.tab_batch._scan_cursors_path", return_value=cursor_file):
             BatchTabMixin._record_batch_scan_cursor(obj, "DeckA")
 
-        written = addmgr.writeConfig.call_args[0][1]
-        cursors = written["deck_last_scan_nid"]
+        addmgr.writeConfig.assert_not_called()  # meta.json untouched
+        with open(cursor_file, "r", encoding="utf-8") as f:
+            cursors = _json.load(f)
         self.assertEqual(cursors["DeckA"], 900000)
         self.assertEqual(cursors["DeckA::Sub"], 900000)
         self.assertNotIn("DeckB", cursors)

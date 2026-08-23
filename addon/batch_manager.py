@@ -8,6 +8,7 @@ from aqt.qt import QTimer
 from .logger import logger, info, tooltip, state
 from .ai_client import AIClient
 from .card_parser import CardParser
+from .config_io import atomic_write_json
 
 ADDON_PATH = os.path.dirname(__file__)
 
@@ -125,17 +126,6 @@ class BatchManager:
     def local_queue_errors(self, val: int):
         self._ensure_current_job()
         self.local_queue_jobs[0]["errors"] = val
-        
-        # Live Runtime Diagnostic Hooks
-        self.current_local_cid = None
-        self.current_local_model = ""
-        self.current_local_provider = ""
-        self.last_run_stats = None
-        
-        self.active_threads_status = {}
-        self._db_lock = threading.RLock()
-        
-        self.load_state()
 
     def _state_file_path(self) -> str:
         """Returns the path to the batch state file, storing it in the active profile directory if available."""
@@ -246,13 +236,15 @@ class BatchManager:
                     }
                 }
                 state_file = self._state_file_path()
-                with open(state_file, "w", encoding="utf-8") as f:
-                    json.dump(payload, f, indent=2)
+                # Atomic write (temp + os.replace) so a crash mid-write can
+                # never leave a truncated/partial state file behind.
+                atomic_write_json(state_file, payload)
             except Exception as e:
                 logger.error(f"AI-Hints BatchManager failed save: {e}")
 
     def get_status_summary(self) -> str:
         """Builds rich contextual HTML summary of queue activity."""
+        import html as _html
         html_parts = []
         
         if self.local_queue_active:
@@ -266,7 +258,7 @@ class BatchManager:
             # Show friendly description of the active job
             active_job = self.current_job
             if active_job and active_job.get("description"):
-                html_parts.append(f"📦 Active Job: <b>{active_job['description']}</b><br/>")
+                html_parts.append(f"📦 Active Job: <b>{_html.escape(str(active_job['description']))}</b><br/>")
                 
             html_parts.append(f"📊 Progress: <b>{done}</b> / {self.local_queue_total} cards generated. ({remaining} left)<br/>")
             failed_cards = getattr(self, "local_queue_failed_cards", [])
@@ -293,14 +285,14 @@ class BatchManager:
                  html_parts.append("<b>Active Concurrent Threads:</b><br/>")
                  for prov, info in active_threads.items():
                       cid_link = f"<a href='browse:cid:{info['cid']}' style='color: #007bff;'>[Card {info['cid']}]</a>" if info['cid'] else "None"
-                      html_parts.append(f"• 🔌 <b>{prov.capitalize()}</b> ({info['model']}): Processing {cid_link}<br/>")
+                      html_parts.append(f"• 🔌 <b>{_html.escape(str(prov).capitalize())}</b> ({_html.escape(str(info.get('model', '?')))}): Processing {cid_link}<br/>")
                  html_parts.append("</div>")
             else:
                  if getattr(self, "current_local_provider", None):
-                      html_parts.append(f"🔌 Provider: <b>{self.current_local_provider}</b><br/>")
+                      html_parts.append(f"🔌 Provider: <b>{_html.escape(str(self.current_local_provider))}</b><br/>")
 
                  if self.current_local_model:
-                      html_parts.append(f"🤖 Model: <code>{self.current_local_model}</code><br/>")
+                      html_parts.append(f"🤖 Model: <code>{_html.escape(str(self.current_local_model))}</code><br/>")
                       
                  if self.current_local_cid:
                       # Explicitly provide HTML clickable navigation link
@@ -338,7 +330,7 @@ class BatchManager:
             # Show friendly description of the active job
             active_job = self.current_job
             if active_job and active_job.get("description"):
-                html_parts.append(f"📦 Job: <b>{active_job['description']}</b><br/>")
+                html_parts.append(f"📦 Job: <b>{_html.escape(str(active_job['description']))}</b><br/>")
 
             html_parts.append(f"Completed so far: {done} / {self.local_queue_total} total.<br/>")
             failed_cards = getattr(self, "local_queue_failed_cards", [])
@@ -407,7 +399,7 @@ class BatchManager:
                 elapsed = int(now - details.get("created_at", now))
                 minutes = elapsed // 60
                 cards = len(details.get("card_ids", []))
-                html_parts.append(f"🔹 <b>{name}</b>: {cards} cards queued ({minutes} mins ago)<br/>")
+                html_parts.append(f"🔹 <b>{_html.escape(str(name))}</b>: {cards} cards queued ({minutes} mins ago)<br/>")
         
         return "\n".join(html_parts)
 
@@ -422,8 +414,8 @@ class BatchManager:
         
         for idx, job in enumerate(self.local_queue_jobs[1:], 1):
             job_id = job.get("id")
-            desc = job.get("description", f"{job['total']} cards")
-            prov_str = f" ({job.get('provider') or 'Default'})"
+            desc = _html.escape(str(job.get("description", f"{job['total']} cards")))
+            prov_str = f" ({_html.escape(str(job.get('provider') or 'Default'))})"
             
             # Build control links
             controls = []
@@ -838,10 +830,44 @@ class BatchManager:
                        return True
         return False
 
+    @staticmethod
+    def _missing_hint_cids_on_main(cid_list):
+        """Return the subset of cid_list whose cards still lack AI hints.
+
+        Runs the collection access on Anki's main thread (the collection is
+        not thread-safe) and blocks the calling worker until the result is
+        back. Falls back to reporting everything as missing if the main loop
+        is unreachable, which conservatively triggers another pass.
+        """
+        import threading as _threading
+        result = {}
+        evt = _threading.Event()
+
+        def _task():
+            try:
+                from .reviewer_hooks import card_has_hints, _get_card_from_collection
+                missing = []
+                for cid in cid_list:
+                    card = _get_card_from_collection(cid)
+                    if card is None or not card_has_hints(card):
+                        missing.append(cid)
+                result["value"] = missing
+            except Exception as e:
+                logger.error(f"AI-Hints: hint verification failed: {e}")
+                result["value"] = list(cid_list)
+            finally:
+                evt.set()
+
+        try:
+            mw.taskman.run_on_main(_task)
+        except Exception as e:
+            logger.error(f"AI-Hints: could not schedule hint verification on main: {e}")
+            return list(cid_list)
+        evt.wait(timeout=120)
+        return result.get("value", list(cid_list))
+
     def _run_local_queue(self, config: Dict, provider_override: str):
         """Core iterative engine thread that drives the sequential queue, processing multiple jobs."""
-        from .reviewer_hooks import card_has_hints, _get_card_from_collection
-        
         if not hasattr(self, "_db_lock"):
              self._db_lock = threading.RLock()
              
@@ -891,7 +917,7 @@ class BatchManager:
                 for prov in providers:
                      t = threading.Thread(
                           target=self._run_local_queue_thread,
-                          args=(prov, client, parser, self.saved_config),
+                          args=(prov, parser, self.saved_config),
                           daemon=True
                      )
                      threads.append(t)
@@ -932,11 +958,8 @@ class BatchManager:
                         break
 
                 # Check if any cards from the original request are still missing hints
-                missing_cids = []
-                for cid in original_request:
-                    card = _get_card_from_collection(cid)
-                    if card and not card_has_hints(card):
-                        missing_cids.append(cid)
+                # (collection access is marshalled to the main thread).
+                missing_cids = self._missing_hint_cids_on_main(original_request)
                 
                 if not missing_cids:
                     logger.info(f"Verification Pass: All {len(original_request)} cards successfully have hints now.")
@@ -958,12 +981,8 @@ class BatchManager:
             # Check if this job finished or was aborted/skipped
             with self._db_lock:
                 if self.local_queue_jobs and self.local_queue_jobs[0].get("id") == current_job_id:
-                    # Calculate final error count for stats
-                    final_missing = []
-                    for cid in original_request:
-                        card = _get_card_from_collection(cid)
-                        if card and not card_has_hints(card):
-                            final_missing.append(cid)
+                    # Calculate final error count for stats (main-thread hop)
+                    final_missing = self._missing_hint_cids_on_main(original_request)
                     
                     self.last_run_stats = {
                         "total": self.local_queue_total,
@@ -1015,13 +1034,18 @@ class BatchManager:
                 self.local_queue.insert(0, cid)
                 self.save_state()
 
-    def _run_local_queue_thread(self, provider: str, client: AIClient, parser: CardParser, config: Dict):
+    def _run_local_queue_thread(self, provider: str, parser: CardParser, config: Dict):
         from .reviewer_hooks import _get_card_from_collection
-        
+
+        # Each worker thread gets its OWN AIClient instance. AIClient mutates
+        # per-request state (_request_provider/_request_model) on the instance,
+        # so sharing one client across threads corrupts timeout resolution.
+        client = AIClient(config or {})
+
         try:
              models = client._provider_models(provider)
              current_model = models[0] if models else "Unknown"
-        except:
+        except Exception:
              current_model = "Unknown"
 
         logger.info(f"AI-Hints Thread for {provider} started.")
@@ -1233,17 +1257,21 @@ class BatchManager:
         if provider in self.active_threads_status:
             try:
                 del self.active_threads_status[provider]
-            except: pass
+            except Exception:
+                pass
         logger.info(f"AI-Hints Thread for {provider} stopped.")
 
 # Global instance singleton
 batch_manager = BatchManager()
 
 def initialize_batch_manager():
-    """Call on addon setup to resume outstanding polling or auto-resume local sequential queue if needed."""
+    """Call on addon setup to resume outstanding polling or restore the local sequential queue."""
     batch_manager.start_timer_if_needed()
+    # An interrupted queue (Anki was closed mid-run) is restored in a PAUSED
+    # state so the user consciously resumes it — previously this branch said
+    # "PAUSED" but immediately resumed unpaused.
     if batch_manager.local_queue and batch_manager.local_queue_active:
-        logger.info("AI-Hints: Restoring interrupted local sequential queue on startup in a PAUSED state.")
+        logger.info("AI-Hints: Restored interrupted local sequential queue in a PAUSED state. Click Resume to continue.")
+        batch_manager.local_queue_active = False
         batch_manager.local_queue_paused = True
-        batch_manager.local_queue_active = False # Allow the queue to start
-        batch_manager.start_local_sequential_queue(None)
+        batch_manager.save_state()

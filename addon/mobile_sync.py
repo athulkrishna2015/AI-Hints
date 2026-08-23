@@ -33,8 +33,15 @@ def sync_mobile_script():
                 should_copy = False
 
         if should_copy:
-            with open(dest_path, "w", encoding="utf-8") as f:
-                f.write(new_content)
+            # Prefer Anki's media tracker so the file registers with the
+            # media DB and syncs to AnkiWeb reliably; fall back to a direct
+            # write on very old versions.
+            try:
+                import io
+                mw.col.media.write_data(dest_name, io.BytesIO(new_content.encode("utf-8")))
+            except AttributeError:
+                with open(dest_path, "w", encoding="utf-8") as f:
+                    f.write(new_content)
             logger.info(f"AI-Hints: Mobile template script synced to media folder as '{dest_name}'.")
         
         return True
@@ -132,8 +139,14 @@ def auto_update_mobile_setup():
     )
     
     pattern = r"<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"
-    
+
     try:
+        # Make the bulk template mutation undoable in one step.
+        try:
+            mw.checkpoint("AI-Hints: Update Mobile Templates")
+        except Exception:
+            pass
+
         updated_count = 0
 
         for model in mw.col.models.all():

@@ -1,4 +1,5 @@
 import unittest
+import json
 import urllib.error
 import urllib.request
 from unittest.mock import patch, MagicMock
@@ -211,77 +212,78 @@ class TestKeyRotation(unittest.TestCase):
 
     def test_key_blacklist_persistence(self):
         import time
-        # Clear mock config key if present
-        if "model_blacklist_data" in self.client.config:
-            del self.client.config["model_blacklist_data"]
-            
+        import tempfile
+        import shutil
+        from addon import ai_client as ai
+
+        # Point the blacklist at a temp file (current design: dedicated file,
+        # NOT meta.json) and reset resolution so the override sticks.
+        tmpdir = tempfile.mkdtemp()
+        original_path = ai.BLACKLIST_FILE
+        ai.BLACKLIST_FILE = os.path.join(tmpdir, "blacklist.json")
+        ai._blacklist_path_resolved = True
+
         try:
             # Mark a combo as failed
             self.client._mark_combo_failed("gemini", "gemini-flash-latest", "my_failed_key", delay_seconds=100)
-            
+
             # Verify it is in cache
             self.assertIn(("gemini", "gemini-flash-latest", "my_failed_key"), FAILED_COMBOS_CACHE)
-            
-            # Verify it was saved to config
-            self.assertIn("model_blacklist_data", self.client.config)
-            saved_data = self.client.config["model_blacklist_data"]
+
+            # Verify it was saved atomically to the dedicated blacklist file
+            self.assertTrue(os.path.exists(ai.BLACKLIST_FILE))
+            with open(ai.BLACKLIST_FILE, "r", encoding="utf-8") as f:
+                saved_data = json.load(f)
             self.assertEqual(saved_data.get("version"), 3)
             self.assertIn("gemini|gemini-flash-latest|my_failed_key", saved_data.get("combos_expiries", {}))
-            
+
             # Clear cache and reload
             FAILED_COMBOS_CACHE.clear()
             self.assertEqual(len(FAILED_COMBOS_CACHE), 0)
-            
+
             self.client._load_blacklist()
-            
+
             # Verify it was reloaded
             self.assertIn(("gemini", "gemini-flash-latest", "my_failed_key"), FAILED_COMBOS_CACHE)
             self.assertGreater(FAILED_COMBOS_CACHE[("gemini", "gemini-flash-latest", "my_failed_key")], time.time())
-            
         finally:
-            if "model_blacklist_data" in self.client.config:
-                del self.client.config["model_blacklist_data"]
+            ai.BLACKLIST_FILE = original_path
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     def test_blacklist_save_preserves_live_meta_config(self):
+        """Blacklist saves must NEVER touch meta.json — the 2026-08-20 corruption
+        came from writing high-churn blacklist data into the live config."""
         stripped_batch_config = {
             "ai_provider": "gemini",
             "models": {"gemini": "gemini-flash-latest"},
             "model_cooldown_minutes": 10,
         }
-        live_meta_config = {
-            "api_keys": {"gemini": "real_saved_key"},
-            "additional_system_instructions": "keep this",
-            "antigravity_accounts": "keep accounts",
-            "provider_priority": ["openrouter", "gemini", "openai"],
-            "model_fallbacks": {"gemini": ["gemini-3.1-flash-lite", "gemini-2.5-flash"]},
-            "global_model_priority": ["gemini:gemini-3.1-flash-lite", "openrouter:openrouter/auto"],
-            "use_global_model_priority": True,
-            "disabled_fallback_models": {"gemini": ["gemini-flash-latest"]},
-            "model_blacklist_data": {"version": 3, "old": True},
-        }
+        import tempfile
+        import shutil
+        from addon import ai_client as ai
+
+        tmpdir = tempfile.mkdtemp()
+        original_path = ai.BLACKLIST_FILE
+        ai.BLACKLIST_FILE = os.path.join(tmpdir, "blacklist.json")
+        ai._blacklist_path_resolved = True
 
         client = AIClient(stripped_batch_config)
         fake_mw = MagicMock()
-        fake_mw.addonManager.getConfig.return_value = dict(live_meta_config)
 
-        with patch.dict(sys.modules, {"aqt": MagicMock(mw=fake_mw)}):
-            client._mark_combo_failed("gemini", "gemini-flash-latest", "failed_key", delay_seconds=100)
+        try:
+            with patch.dict(sys.modules, {"aqt": MagicMock(mw=fake_mw)}):
+                client._mark_combo_failed("gemini", "gemini-flash-latest", "failed_key", delay_seconds=100)
 
-        fake_mw.addonManager.writeConfig.assert_called()
-        _package, saved_config = fake_mw.addonManager.writeConfig.call_args.args
-        self.assertEqual(saved_config["api_keys"], live_meta_config["api_keys"])
-        self.assertEqual(saved_config["additional_system_instructions"], "keep this")
-        self.assertEqual(saved_config["antigravity_accounts"], "keep accounts")
-        self.assertEqual(saved_config["provider_priority"], live_meta_config["provider_priority"])
-        self.assertEqual(saved_config["model_fallbacks"], live_meta_config["model_fallbacks"])
-        self.assertEqual(saved_config["global_model_priority"], live_meta_config["global_model_priority"])
-        self.assertEqual(saved_config["use_global_model_priority"], True)
-        self.assertEqual(saved_config["disabled_fallback_models"], live_meta_config["disabled_fallback_models"])
-        self.assertIn("model_blacklist_data", saved_config)
-        self.assertIn(
-            "gemini|gemini-flash-latest|failed_key",
-            saved_config["model_blacklist_data"].get("combos_expiries", {}),
-        )
+            # meta.json must not be written at all by a blacklist save
+            fake_mw.addonManager.writeConfig.assert_not_called()
+
+            # The combo landed in the dedicated file instead
+            with open(ai.BLACKLIST_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.assertIn("gemini|gemini-flash-latest|failed_key", data["combos_expiries"])
+        finally:
+            ai.BLACKLIST_FILE = original_path
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     @patch("urllib.request.urlopen")
     def test_gemini_rate_limit_checks_other_models_before_blacklisting(self, mock_urlopen):

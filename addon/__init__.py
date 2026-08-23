@@ -36,24 +36,27 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
         # that existing users should pick up.
         #  v2: auto-show on for options on card load and for hints/options on the back side.
         #  v3: removed the redundant "Do Not Auto-Collapse on Next Card" option.
+        #  v4: bumped default request timeouts.
         try:
             stored_version = int(config.get("config_version", 1) or 1)
+            changed = False
             if stored_version < 2:
                 config["auto_show_hints"] = True
                 config["auto_show_options"] = True
                 config["auto_show_hints_answer"] = True
                 config["auto_show_options_answer"] = True
+                changed = True
             if stored_version < 3:
                 config.pop("do_not_auto_collapse", None)
+                changed = True
             if stored_version < 4:
                 config["request_timeout"] = 60
                 config["pregen_request_timeout"] = 120
-            if stored_version < 3:
-                config["config_version"] = 3
-            if stored_version < 4:
-                config["config_version"] = 4
+                changed = True
+            if changed:
+                config["config_version"] = max(stored_version, 4)
                 mw.addonManager.writeConfig(ADDON_PACKAGE, config)
-                logger.info(f"AI-Hints: Migrated config (timeouts bumped to 60s). meta.json written via addonManager (config_version {stored_version} -> 4).")
+                logger.info(f"AI-Hints: Migrated config (config_version {stored_version} -> {config['config_version']}). meta.json written via addonManager.")
         except Exception as mig_err:
             logger.error(f"AI-Hints: Failed to migrate config: {mig_err}")
 

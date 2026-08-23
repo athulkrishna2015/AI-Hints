@@ -14,20 +14,30 @@ ENTIRE_COLLECTION = "🗂️ Entire Collection"
 # Per-deck incremental-scan cursors used to be stored inside meta.json. They are
 # written on every batch run, so they now live in their own sidecar file to keep
 # that high-frequency write off meta.json (which holds api_keys/providers).
-SCAN_CURSORS_FILE = os.path.join(_ADDON_DIR, "batch_scan_cursors.json")
+SCAN_CURSORS_FILENAME = "batch_scan_cursors.json"
+
+
+def _scan_cursors_path():
+    """Cursor sidecar lives in the profile data dir so it survives updates."""
+    try:
+        from ..config_io import resolve_data_file
+
+        return resolve_data_file(SCAN_CURSORS_FILENAME)
+    except Exception:
+        return os.path.join(_ADDON_DIR, SCAN_CURSORS_FILENAME)
 
 
 def _load_scan_cursors():
     """Load per-deck scan cursors from the sidecar file, migrating from meta.json
     on first run so existing cursors are preserved."""
-    data = read_json_file(SCAN_CURSORS_FILE)
+    data = read_json_file(_scan_cursors_path())
     if isinstance(data, dict):
         return data
     try:
         from ..config_io import read_meta_config
         legacy = (read_meta_config() or {}).get("deck_last_scan_nid")
         if isinstance(legacy, dict):
-            atomic_write_json(SCAN_CURSORS_FILE, legacy)
+            atomic_write_json(_scan_cursors_path(), legacy)
             return legacy
     except Exception:
         pass
@@ -35,7 +45,8 @@ def _load_scan_cursors():
 
 
 def _save_scan_cursors(cursors):
-    atomic_write_json(SCAN_CURSORS_FILE, cursors)
+    atomic_write_json(_scan_cursors_path(), cursors)
+
 
 def _subtree_deck_names(deck_name):
     """Return deck_name plus every deck directly or indirectly beneath it."""

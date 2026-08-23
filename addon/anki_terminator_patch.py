@@ -124,7 +124,6 @@ def patch_anki_terminator():
     # Check if already patched to avoid double patching
     if hasattr(resizable_web_view_class, "_ai_hints_patched"):
         return
-
     original_get_field_text = resizable_web_view_class.get_field_text
     original_load_and_interact = resizable_web_view_class.load_and_interact
 
@@ -160,6 +159,7 @@ def patch_anki_terminator():
     resizable_web_view_class.get_field_text = patched_get_field_text
     resizable_web_view_class.load_and_interact = patched_load_and_interact
     resizable_web_view_class._ai_hints_patched = True
+    return True
 
 def should_bypass_cleaning() -> bool:
     import sys
@@ -224,31 +224,44 @@ class CleanFieldsList(list):
                 yield val
 
 def patch_anki_note_fields():
+    """Wrap Note.fields in a cleaning proxy.
+
+    SAFETY: this globally monkey-patches anki.notes.Note for the whole
+    process, so it must only ever be installed once the Anki Terminator addon
+    has actually been detected. Previously it ran unconditionally at startup,
+    changing field-read behavior (with a stack-scan on every access) for ALL
+    users — including those without Terminator — and risking cleaned text
+    being written back by code that round-trips note.fields.
+    """
     try:
         import anki.notes
         if hasattr(anki.notes.Note, "_ai_hints_fields_patched"):
             return
-            
+
         original_init = anki.notes.Note.__init__
         def patched_init(self, *args, **kwargs):
             original_init(self, *args, **kwargs)
             self.fields = CleanFieldsList(self.fields)
-            
+
         anki.notes.Note.__init__ = patched_init
         anki.notes.Note._ai_hints_fields_patched = True
     except Exception:
         pass
 
 def setup_anki_terminator_patch():
-    # Patch Note.fields immediately
-    patch_anki_note_fields()
-    
-    # Attempt patching immediately in case already loaded
-    patch_anki_terminator()
+    # The Note.fields proxy is invasive; install it ONLY when the Anki
+    # Terminator webview module is actually present (checked now and after a
+    # short delay to cover late-loading addons).
     try:
         from aqt.qt import QTimer
-        # Schedule another try in 1 second to make sure it's captured
-        QTimer.singleShot(1000, patch_anki_terminator)
+        # Attempt patching immediately in case already loaded...
+        if patch_anki_terminator():
+            patch_anki_note_fields()
+        # ...and retry once shortly after startup.
+        def _retry():
+            if patch_anki_terminator():
+                patch_anki_note_fields()
+        QTimer.singleShot(1000, _retry)
     except Exception:
         pass
 

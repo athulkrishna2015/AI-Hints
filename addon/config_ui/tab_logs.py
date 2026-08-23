@@ -101,7 +101,11 @@ class LogTabMixin:
             self.load_log()
 
     def load_log(self):
-        log_file = os.path.join(self.addon_dir, "ai_hints.log")
+        try:
+            from ..logger import _log_path
+            log_file = _log_path()
+        except Exception:
+            log_file = os.path.join(self.addon_dir, "ai_hints.log")
         if not os.path.exists(log_file):
             self.log_view.setPlainText("No log file found yet. Errors will appear here after using the add-on.")
             return
@@ -253,7 +257,11 @@ class LogTabMixin:
             self.match_count_label.setText(f"{count} matches{limit_hit}")
 
     def clear_log(self):
-        log_file = os.path.join(self.addon_dir, "ai_hints.log")
+        try:
+            from ..logger import _log_path
+            log_file = _log_path()
+        except Exception:
+            log_file = os.path.join(self.addon_dir, "ai_hints.log")
         try:
             open(log_file, "w", encoding="utf-8").close()
             self.log_view.setPlainText("Log cleared.")

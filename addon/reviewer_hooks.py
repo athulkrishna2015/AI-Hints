@@ -54,8 +54,12 @@ class PregenCache(UserDict):
 
     def save(self):
         try:
-            with open(self.filepath, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, indent=2, ensure_ascii=False)
+            # Atomic write (temp + os.replace) so a crash mid-write can never
+            # truncate the cache — same failure mode that destroyed meta.json
+            # on 2026-08-20.
+            from .config_io import atomic_write_json
+
+            atomic_write_json(self.filepath, {str(k): v for k, v in self.data.items()})
         except Exception as e:
             from .logger import logger
             logger.error(f"Failed to save pregen cache: {e}")
@@ -79,8 +83,22 @@ class PregenCache(UserDict):
         super().clear()
         self.save()
 
-_pregen_cache_path = os.path.join(os.path.dirname(__file__), "pregen_cache.json")
-_pregenerated_data = PregenCache(_pregen_cache_path)
+_pregenerated_data = None
+
+
+def _get_pregenerated_data() -> PregenCache:
+    """Lazily create the pregen cache, stored in the profile data dir
+    (migrated from the addon folder on first use) so it survives updates."""
+    global _pregenerated_data
+    if _pregenerated_data is None:
+        try:
+            from .config_io import resolve_data_file
+
+            path = resolve_data_file("pregen_cache.json")
+        except Exception:
+            path = os.path.join(os.path.dirname(__file__), "pregen_cache.json")
+        _pregenerated_data = PregenCache(path)
+    return _pregenerated_data
 
 _generated_hint_cache = {}
 _popup_dialog_instance = None
@@ -312,7 +330,8 @@ def _trigger_next_pregeneration(current_card_id=None):
                                         # Already has hints on disk, does not count against our pregen buffer limit
                                         continue
                                     
-                                if cid in _pregenerated_data or cid in _generating_card_ids:
+                                _pregen = _get_pregenerated_data()
+                                if cid in _pregen or cid in _generating_card_ids:
                                     prepared_count += 1
                                     if prepared_count >= pregen_limit:
                                         logger.debug(f"AI-Hints pre-gen: Buffer is fully saturated with {prepared_count} cards.")
@@ -1490,6 +1509,7 @@ def clear_ai_hints_from_browser_selection(browser):
         tooltip("AI-Hints: Select one or more cards first.")
         return 0, 0, 0
 
+    mw.checkpoint("Clear AI Hints")
     res = clear_ai_hints_for_cards(card_ids)
     changed_cards = res[1]
 
@@ -1573,6 +1593,7 @@ def unskip_ai_hints_from_browser_selection(browser):
         tooltip("AI-Hints: Select one or more cards first.")
         return 0, 0, 0
 
+    mw.checkpoint("Unskip AI Hints")
     res = unskip_ai_hints_for_cards(card_ids)
     changed_cards = res[1]
 
@@ -1671,6 +1692,7 @@ def skip_ai_hints_from_browser_selection(browser):
         tooltip("AI-Hints: Select one or more cards first.")
         return 0, 0, 0
 
+    mw.checkpoint("Skip AI Hints")
     res = skip_ai_hints_for_cards(card_ids)
     changed_cards = res[1]
 
@@ -2450,9 +2472,10 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
     card_id = getattr(card, "id", None)
     
     # Check cache first for manual generation (to avoid redundant API calls)
-    if not is_pregen and card_id in _pregenerated_data:
+    pregen_cache = _get_pregenerated_data()
+    if not is_pregen and card_id in pregen_cache:
         logger.info(f"AI-Hints: Found pre-generated data for card {card_id} in disk cache. Applying directly.")
-        cached_data = _pregenerated_data.pop(card_id)
+        cached_data = pregen_cache.pop(card_id)
         _apply_results_to_card(card, cached_data, is_manual=is_manual, web=web)
         return
 
@@ -2577,7 +2600,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
                          # Explicitly clear frontend state as well for double safety
                          _set_frontend_generating(web, False, card_id, is_pregen)
                     else:
-                        _pregenerated_data[card_id] = data
+                        _get_pregenerated_data()[card_id] = data
                         logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Saved to disk cache).")
                         _set_frontend_generating(web, False, card_id, is_pregen)
                 else:
@@ -2919,12 +2942,16 @@ def trigger_js_click(text_contains: str, emoji: str) -> None:
     web = getattr(mw.reviewer, "web", None)
     if not web:
         return
+    # json.dumps both needles so quotes/backslashes in config values can't
+    # break out of the JS string literals.
+    text_needle = json.dumps(str(text_contains))
+    emoji_needle = json.dumps(str(emoji))
     js = f"""
     (function() {{
         const btns = document.querySelectorAll('.ai-hints-btn');
         for (const btn of btns) {{
             const txt = btn.textContent || "";
-            if (txt.includes("{text_contains}") || txt.includes("{emoji}")) {{
+            if (txt.includes({text_needle}) || txt.includes({emoji_needle})) {{
                 btn.click();
                 break;
             }}
@@ -3134,33 +3161,38 @@ def init_hooks():
         _reviewer_is_ending = False
         _review_token += 1
         state.GLOBAL_STOP = False
-        
-        # Trigger frontend setup immediately.
-        # The JS-side 'aiHintsSetup' is now smarter and will bail out if 
-        # the card is already rendered via the script injection.
-        _trigger_frontend_setup(card)
-        
-        # We no longer need multiple delayed retries because the unified template 
-        # script is injected into the body and handles its own init() on load,
-        # and our smarter init() prevents flickering.
-        
+
         # Auto generate for new cards if configured and no data exists
         config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
-        
-        # 1. Check if we have pre-generated data for THIS card
-        if card.id in _pregenerated_data:
+
+        # 1. Check if we have pre-generated data for THIS card.
+        # Applied BEFORE _trigger_frontend_setup so the frontend push includes
+        # the freshly applied data instead of rendering an empty state that
+        # only resolves on the next interaction.
+        pregen_cache = _get_pregenerated_data()
+        if card.id in pregen_cache:
             # Skip applying pre-generated data if we just undid something.
             # This handles cases where Anki's state is still resolving.
             if time.time() - _last_undo_time < 0.5:
                 logger.info(f"AI-Hints: Skipping pre-gen application for {card.id} due to recent undo.")
                 # Retention: We do not pop here. It will be applied on the next show after the lockout.
             else:
-                data = _pregenerated_data.pop(card.id)
+                data = pregen_cache.pop(card.id)
                 logger.debug(f"AI-Hints: Applying pre-generated data for card {card.id}")
                 _apply_results_to_card(card, data, is_manual=False, skip_redraw=True)
-                # Now that this card is done, pre-generate the NEXT one
+                # Now push the applied data to the UI and pre-generate the NEXT one
+                _trigger_frontend_setup(card)
                 _trigger_next_pregeneration(card.id)
                 return
+
+        # Trigger frontend setup.
+        # The JS-side 'aiHintsSetup' is now smarter and will bail out if
+        # the card is already rendered via the script injection.
+        _trigger_frontend_setup(card)
+
+        # We no longer need multiple delayed retries because the unified template
+        # script is injected into the body and handles its own init() on load,
+        # and our smarter init() prevents flickering.
 
         if config.get("auto_generate_new", False) and card:
             # Skip auto-generation if we just undid something
