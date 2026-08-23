@@ -2,6 +2,26 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 6.3.4 (2026-08-23)
+- **Batch Worker State Corruption Fix (Critical)**: The `local_queue_errors` setter in `batch_manager.py` contained a duplicated `__init__` block that reset `_db_lock`, diagnostics, and reloaded queue state from disk on **every failed card** — corrupting batch state and destroying mutual exclusion mid-run. The stray re-initialization is removed.
+- **Anki Terminator Patch Scoped (Critical)**: The global `anki.notes.Note` fields proxy is now installed **only** when the Anki Terminator webview is actually detected. Previously it patched every user's `Note.__init__`, risking cleaned-text write-backs on field round-trips even without Anki Terminator installed.
+- **Worker Threads No Longer Touch the Collection (Critical)**: Batch verification and final-stats passes now hop to the main thread via `taskman` instead of accessing the collection from worker threads.
+- **429 Streak Double-Increment Fix**: Rate-limit failure streaks were incremented twice per failure (once by the delay calculation). There is now a single authoritative increment in `_mark_combo_failed`.
+- **Atomic Sidecar Writes**: `pregen_cache.json` and the batch state file are now written atomically (temp file + `os.replace`), matching the meta.json corruption post-mortem pattern.
+- **Multithreaded Batch Isolation**: In multithreaded batch mode each provider worker now gets its own `AIClient` instance — `_request_provider`/`_request_model` are per-request instance state and were being clobbered across threads.
+- **Cooldown Parsing Hardened**: `_cooldown_seconds()` coerces string/`None` config values instead of raising inside error handling.
+- **Browser Bulk Undo Checkpoints**: Browser bulk skip/unskip/clear operations now create undo checkpoints (parity with the sidebar actions).
+- **Depth-Aware Hint-Block Parser**: `card_parser.py`'s non-greedy `.*?</div>` regexes are replaced with a depth-aware scanner everywhere. Legacy raw-HTML payloads no longer corrupt fields on update/clear, and unterminated blocks are skipped instead of swallowing the whole field.
+- **Linearized Config Migration**: Startup migration in `addon/__init__.py` performs a single conditional config write instead of multiple overlapping ones.
+- **Pregen Data Applied Before Frontend Setup**: In `on_show_question`, pre-generated data is injected before the frontend setup runs so the UI renders it on the same pass instead of one card late.
+- **Interrupted Batches Restore Paused**: Interrupted batch queues are restored as **PAUSED** on startup instead of silently auto-resuming.
+- **Mobile Sync Template Write Fix**: `mobile_sync` writes the template via `mw.col.media.write_data` with an undo checkpoint.
+- **Proxy Manager Robustness**: A non-string `antigravity_accounts` value no longer crashes sync; `stop()` is shutdown-safe.
+- **Gemini Auth via Header**: `fetch_models` sends the Gemini API key in the `x-goog-api-key` header instead of the URL query string; no-op legacy stub calls removed.
+- **State Files Survive Addon Updates**: Mutable state files (`blacklist.json`, pregen cache, orphan scan state, logs, batch scan cursors) moved to a profile-level `ai_hints_bin` directory with a one-time migration from the addon folder, so they survive addon updates/deletions.
+- **Misc Hardening & Fixes**: "Clear log" actually clears the log file (was a logged-only no-op); the network monitor thread starts lazily; `USER_AGENT` derives from the VERSION file; API key parsing requires matching bracket pairs; batch status summary HTML-escapes job/provider/model strings; `trigger_js_click` JSON-escapes needles into generated JS; TTS patch imports bs4 lazily; latex_fixer submodule fixes a broken Greek-name character class in the `$...$` heuristic.
+- **Regression Test Suite**: New `tests/test_review_fixes.py` with 27 regression tests mapped to review findings; full suite green.
+
 ## 6.3.3 (2026-08-21)
 - **Batch Worker Crash Fix (Deleted Cards)**: Fixed a `NotFoundError: No such card` crash that killed the batch worker thread when a card was deleted while a batch/pregen queue still referenced its id. `_get_card_from_collection()` now treats deleted cards as missing (all callers already skip on `None`), and the pre-generation chain skips queued cards that no longer exist instead of aborting the whole queue.
 - **Accurate Unskip Confirmation Count**: The deck menu's "Unskip AI for All Cards in Deck" prompt previously showed the deck's total card count; it now counts only the cards actually marked skipped (`_skipped` flag / skip marker), shows a tooltip and bails out when the deck has no skipped cards, so the number always matches what unskip will change.
