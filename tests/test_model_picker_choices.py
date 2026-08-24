@@ -118,6 +118,17 @@ class ModelPickerChoicesTests(unittest.TestCase):
             overlap = set(entry["models"]) & set(entry["disabled_models"])
             self.assertEqual(overlap, set(), f"overlap for {entry['provider']}: {overlap}")
 
+    def test_enabled_providers_listed_before_disabled(self):
+        ordered = reviewer_hooks._get_model_choices(base_config())
+        flags = [c["enabled"] for c in ordered]
+        # Stable sort: all True entries first, no False re-appearing later.
+        seen_disabled = False
+        for flag in flags:
+            if not flag:
+                seen_disabled = True
+            else:
+                self.assertFalse(seen_disabled, "enabled provider appears after a disabled one")
+
     def test_blacklisted_model_reported_but_still_selectable(self):
         # Every key-combo for openai-fb1 (its only key) is on cooldown.
         import time

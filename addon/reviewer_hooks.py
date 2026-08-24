@@ -747,6 +747,9 @@ def _get_model_choices(config):
                 "disabled_models": disabled_models_list,
                 "blacklisted": blacklisted,
             })
+        # Enabled providers first (stable sort keeps priority order within
+        # each group); the ⛔-marked disabled ones sink to the bottom.
+        choices.sort(key=lambda c: 0 if c["enabled"] else 1)
         return choices
     except Exception as e:
         logger.debug(f"AI-Hints: Failed to build model choices: {e}")
