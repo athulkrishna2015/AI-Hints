@@ -316,7 +316,8 @@
             cancelText: '#e8e8e8',
             genBg: '#4a6db5',
             genText: '#fff',
-            selFg: '#e8e8e8'
+            selFg: '#e8e8e8',
+            disabledOpt: '#9a6f6f'
         } : {
             overlay: 'rgba(0,0,0,0.45)',
             win: '#fff',
@@ -332,7 +333,8 @@
             cancelText: '#222',
             genBg: '#4a90d9',
             genText: '#fff',
-            selFg: '#222'
+            selFg: '#222',
+            disabledOpt: '#b04a4a'
         };
 
         // --- Overlay / dimmed backdrop ---
@@ -378,7 +380,10 @@
         choices.forEach((c) => {
             const opt = document.createElement('option');
             opt.value = c.provider;
-            opt.textContent = c.provider;
+            // Disabled providers stay selectable: picking one forces an
+            // explicit generation attempt with that provider.
+            opt.textContent = c.provider + (c.enabled === false ? '  ⛔ (disabled)' : '');
+            if (c.enabled === false) opt.style.color = C.disabledOpt;
             providerSel.appendChild(opt);
         });
         const last = getPersistence().get('lastModelOverride') || {};
@@ -396,15 +401,28 @@
         const fillModels = (preferredModel) => {
             const c = choices[providerSel.selectedIndex];
             modelSel.innerHTML = '';
-            (c.models || []).forEach((m) => {
-                const opt = document.createElement('option');
-                opt.value = m;
-                opt.textContent = m;
-                modelSel.appendChild(opt);
-            });
-            let idx = (c.models || []).indexOf(preferredModel);
+            const all = [];
+            const addGroup = (label, arr, dim) => {
+                if (!arr || !arr.length) return;
+                const group = document.createElement('optgroup');
+                group.label = label;
+                arr.forEach((m) => {
+                    all.push(m);
+                    const opt = document.createElement('option');
+                    opt.value = m;
+                    opt.textContent = (dim ? '⊘ ' : '') + m + (dim ? '  (disabled)' : '');
+                    if (dim) opt.style.color = C.disabledOpt;
+                    group.appendChild(opt);
+                });
+                modelSel.appendChild(group);
+            };
+            addGroup('Enabled', c.models, false);
+            // Unchecked fallback models: selectable for explicit generation,
+            // visually distinguished from the enabled set.
+            addGroup('Disabled', c.disabled_models, true);
+            let idx = all.indexOf(preferredModel);
             modelSel.selectedIndex = idx >= 0 ? idx : 0;
-            modelSel.disabled = !(c.models && c.models.length);
+            modelSel.disabled = !all.length;
         };
         providerSel.addEventListener('change', () => fillModels(''));
         // Remember the last used provider/model and preselect it on open.

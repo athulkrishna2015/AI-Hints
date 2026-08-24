@@ -666,55 +666,83 @@ def _set_frontend_generating(web, active, card_id=None, is_pregen=False, status=
     """)
 
 def _get_model_choices(config):
-    """Returns a list of {provider, models} giving each ready provider's active+fallback models.
+    """Builds the Alt+click "Generate with a specific model" picker data.
 
-    Includes blacklisted/on-cooldown models so the user can still retry a specific
-    model explicitly via Alt+click. Only user-disabled fallback models are excluded.
+    Returns a list of {provider, enabled, models, disabled_models}:
+      - providers: the full universe (primary + priority list + custom entries),
+        including user-disabled or unready ones, flagged via `enabled: false`;
+      - models: active + checked fallback models (blacklisted/on-cooldown models
+        stay included so they can be retried explicitly);
+      - disabled_models: unchecked fallback models, listed separately in the UI
+        so the user can still force an explicit generation with them.
     """
     try:
+        from .ai_client import PROVIDER_ORDER
         client = AIClient(config)
         primary = config.get("ai_provider", "openai")
-        candidates = client._candidate_providers(primary)
+        ready_candidates = client._candidate_providers(primary)
         custom = config.get("custom_providers") or {}
         if not isinstance(custom, dict):
             custom = {}
         configured_fallbacks = config.get("model_fallbacks") or {}
         if not isinstance(configured_fallbacks, dict):
             configured_fallbacks = {}
-        disabled_models = config.get("disabled_fallback_models") or {}
-        if not isinstance(disabled_models, dict):
-            disabled_models = {}
+        disabled_map = config.get("disabled_fallback_models") or {}
+        if not isinstance(disabled_map, dict):
+            disabled_map = {}
+        disabled_providers = config.get("disabled_providers") or []
+        if not isinstance(disabled_providers, list):
+            disabled_providers = []
+
+        # Full provider universe (mirrors _candidate_providers' default order)
+        # so explicitly-disabled / unready providers remain visible+selectable.
+        priority = config.get("provider_priority")
+        if not isinstance(priority, list) or not priority:
+            priority = list(PROVIDER_ORDER) + [p for p in custom.keys() if isinstance(p, str)]
+        universe = []
+        for p in [primary] + list(priority) + [p for p in custom.keys() if isinstance(p, str)]:
+            if p and p not in universe:
+                universe.append(p)
+
         choices = []
-        for p in candidates:
+        for p in universe:
             cp = custom.get(p)
             primary_model = ""
             extra_fallbacks = None
             if isinstance(cp, dict):
                 primary_model = str(cp.get("model") or "")
                 extra_fallbacks = cp.get("model_fallbacks") or []
-            # Custom providers should prioritize the ENABLED (checked) fallback
+            # Custom providers prioritize the ENABLED (checked) fallback
             # models over an auto-set/saved model, matching generation behavior.
-            enabled = client._enabled_fallback_models(p) if p in custom else []
-            # Replicate _models_for_provider's candidate order but keep failed models.
+            enabled_fb = client._enabled_fallback_models(p) if p in custom else []
             candidates_list = [
-                *enabled,
+                *enabled_fb,
                 primary_model or client._get_model(p),
                 *client._model_list(extra_fallbacks),
                 *client._model_list(configured_fallbacks.get(p, [])),
             ]
-            disabled = disabled_models.get(p, [])
-            if not isinstance(disabled, list):
-                disabled = []
-            models = []
+            disabled_set = disabled_map.get(p, [])
+            if not isinstance(disabled_set, (list, set)):
+                disabled_set = []
+            enabled_models, disabled_models_list = [], []
             seen = set()
             for candidate in candidates_list:
                 model = client._normalize_model(p, candidate)
-                if not model or model in seen or model in disabled:
+                if not model or model in seen:
                     continue
                 seen.add(model)
-                models.append(model)
-            if models:
-                choices.append({"provider": p, "models": models})
+                if model in disabled_set:
+                    disabled_models_list.append(model)
+                else:
+                    enabled_models.append(model)
+            if not enabled_models and not disabled_models_list:
+                continue
+            choices.append({
+                "provider": p,
+                "enabled": p in ready_candidates and p not in disabled_providers,
+                "models": enabled_models,
+                "disabled_models": disabled_models_list,
+            })
         return choices
     except Exception as e:
         logger.debug(f"AI-Hints: Failed to build model choices: {e}")
