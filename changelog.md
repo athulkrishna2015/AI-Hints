@@ -3,6 +3,7 @@
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
 ## Unreleased
+- **Guarded JSON Parsing (GUI Freeze / Crash Fix)**: Oversized or deeply nested AI payloads could hold the GUI thread for seconds while parsing (the C-level `json` scanner holds the GIL) and abort via scanner recursion — observed crashes on 2026-08-18. All card-field and JS-bridge parse sites in `card_parser.py` / `reviewer_hooks.py` now route through `_safe_loads()`, which refuses payloads larger than 256 KB or nested deeper than 100 levels **before** parsing; small malformed payloads still raise ordinary catchable `JSONDecodeError`s.
 - **Configurable Hints/Options Order**: New **"Show Options Above Hints"** toggle (General tab, `options_before_hints` config key) renders the multiple-choice options section before the hints section on the card — default remains hints first, then options. The Show Hints / Show Options toggle buttons reorder to match, and the setting is synced into mobile templates (`optionsBeforeHints` in `aiHintsMobileConfig`) so AnkiDroid/AnkiMobile honor it too.
 
 ## 6.3.4 (2026-08-23)
