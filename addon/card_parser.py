@@ -11,6 +11,52 @@ except ImportError:
     repair_latex_control_chars = lambda x: x
 
 # ---------------------------------------------------------------------------
+# Guarded JSON parsing for AI payloads
+# ---------------------------------------------------------------------------
+_AI_JSON_MAX_CHARS = 262144
+_AI_JSON_MAX_DEPTH = 100
+
+def _json_size_depth_guard(s):
+    """Refuse huge/deeply nested payloads: C-level json.loads holds the GIL for
+    the whole parse and unbounded nesting can abort via scanner recursion."""
+    s = str(s) if s is not None else ""
+    if len(s) > _AI_JSON_MAX_CHARS:
+        raise ValueError(f"payload too large ({len(s)} chars)")
+    depth = 0
+    in_str = False
+    esc = False
+    for ch in s:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "[{":
+            depth += 1
+            if depth > _AI_JSON_MAX_DEPTH:
+                raise ValueError("payload nested too deep")
+        elif ch in "]}":
+            depth -= 1
+
+def _safe_loads(raw):
+    """json.loads that refuses oversized/deeply-nested AI payloads."""
+    s = str(raw) if raw is not None else ""
+    _json_size_depth_guard(s)
+    return json.loads(s)
+
+def _loads_or_none(raw):
+    """Like _safe_loads but returns None instead of raising."""
+    try:
+        return _safe_loads(raw)
+    except Exception:
+        return None
+
+# ---------------------------------------------------------------------------
 # Depth-aware AI-Hints block scanning
 # ---------------------------------------------------------------------------
 # The previous approach matched blocks with a non-greedy regex
@@ -840,7 +886,7 @@ class CardParser:
                     continue
                 raw = html.unescape(inner_iter[0].group(1) or "")
                 try:
-                    parsed = json.loads(raw)
+                    parsed = _safe_loads(raw)
                 except Exception:
                     continue
                 if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
@@ -1126,7 +1172,7 @@ class CardParser:
                 try:
                     # Clean candidate of internal HTML tags for parsing safety
                     clean_candidate = re.sub(r'<[^>]+>', '', candidate)
-                    parsed = json.loads(clean_candidate)
+                    parsed = _safe_loads(clean_candidate)
                     if isinstance(parsed, dict):
                         is_ai_hints = False
                         is_keyed = False
@@ -1295,7 +1341,9 @@ class CardParser:
         # Clean up any HTML line breaks, divs, p tags, or styling tags that Anki's editor might have inserted
         cleaned = raw_payload.replace("&nbsp;", " ").replace("\xa0", " ")
         cleaned = re.sub(r'</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>', '\n', cleaned)
-        parsed = json.loads(html.unescape(cleaned))
+        parsed = _loads_or_none(html.unescape(cleaned))
+        if not isinstance(parsed, dict):
+            return {}
 
         def repair_val(val: Any) -> Any:
             if isinstance(val, dict):

@@ -10,6 +10,42 @@ from .logger import logger, info, tooltip, state
 
 ADDON_PACKAGE = __name__.split(".")[0]
 
+_AI_JSON_MAX_CHARS = 262144
+_AI_JSON_MAX_DEPTH = 100
+
+def _safe_loads(raw):
+    """Guarded json.loads for AI payloads extracted from cards/bridge messages.
+
+    Huge or deeply-nested blobs stall the UI for seconds (C scanner holds the GIL)
+    and can abort the process via unbounded recursion. Refuse them instead.
+    """
+    s = str(raw) if raw is not None else ""
+    if len(s) > _AI_JSON_MAX_CHARS:
+        logger.info("AI-Hints: refused JSON parse, payload too large (%d chars)", len(s))
+        raise ValueError("ai-hints payload too large")
+    depth = 0
+    in_str = False
+    esc = False
+    for ch in s:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "[{":
+            depth += 1
+            if depth > _AI_JSON_MAX_DEPTH:
+                logger.info("AI-Hints: refused JSON parse, nesting too deep")
+                raise ValueError("ai-hints payload nested too deep")
+        elif ch in "]}":
+            depth -= 1
+    return json.loads(s)
+
 # Lazy imports for helper types
 def CardParser(*args, **kwargs):
     from .card_parser import CardParser as ActualCardParser
@@ -964,7 +1000,7 @@ def _trigger_frontend_setup(card=None, web=None):
                     if m:
                         import json as _json
                         raw = _html.unescape(m.group(1) or "")
-                        parsed = _json.loads(raw)
+                        parsed = _safe_loads(raw)
                         # Unwrap keyed payload for this card
                         card_ord = getattr(card, "ord", None)
                         if card_ord is not None:
@@ -1146,7 +1182,7 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
                 import json as _json
                 try:
                     raw = _html.unescape(m.group(1) or "")
-                    parsed = _json.loads(raw)
+                    parsed = _safe_loads(raw)
                     card_ord = getattr(card, "ord", None)
                     card_key = None
                     if card_ord is not None:
@@ -1248,8 +1284,7 @@ def on_webview_did_receive_js_message(handled, message, context):
     
     if message.startswith("{"):
         try:
-            import json as _json
-            data = _json.loads(message)
+            data = _safe_loads(message)
             if isinstance(data, dict) and data.get("action") == "ai_hints_edit_item":
                 edit_item(
                     card=card,
@@ -2840,7 +2875,7 @@ def _card_saved_version(card) -> str:
             if m:
                 raw = _html.unescape(m.group(1) or "")
                 try:
-                    parsed = json.loads(raw)
+                    parsed = _safe_loads(raw)
                     # Handle keyed payload (cloze)
                     card_ord = getattr(card, "ord", None)
                     if card_ord is not None:
@@ -2899,7 +2934,7 @@ def _card_saved_generation_time(card) -> str:
             if m:
                 raw = _html.unescape(m.group(1) or "")
                 try:
-                    parsed = json.loads(raw)
+                    parsed = _safe_loads(raw)
                     card_ord = getattr(card, "ord", None)
                     if card_ord is not None:
                         card_key = f"c{card_ord + 1}"
