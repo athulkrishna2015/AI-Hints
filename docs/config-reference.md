@@ -84,7 +84,7 @@ Example:
 | `auto_show_options` | `true` | Auto-show options on card load (front). |
 | `auto_show_hints_answer` | `true` | Auto-show hints on the answer side. |
 | `auto_show_options_answer` | `true` | Auto-show options on the answer side. |
-| `options_before_hints` | `false` | Render the options section above the hints section (default: hints first, then options). Also reorders toggle buttons. |
+| `options_before_hints` | `true` | Render the options section above the hints section (default). Set to `false` for hints first, then options. Also reorders toggle buttons. |
 | `manual_show_hints` | `true` | Auto-show hints after manual generation. |
 | `manual_show_options` | `false` | Auto-show options after manual generation. |
 

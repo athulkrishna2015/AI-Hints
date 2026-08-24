@@ -318,7 +318,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.auto_show_hints_answer_cb.setChecked(c.get("auto_show_hints_answer", True))
         self.auto_show_options_answer_cb.setChecked(c.get("auto_show_options_answer", True))
         if hasattr(self, "options_before_hints_cb"):
-            self.options_before_hints_cb.setChecked(c.get("options_before_hints", False))
+            self.options_before_hints_cb.setChecked(c.get("options_before_hints", True))
         if hasattr(self, "rate_good_on_correct_cb"):
             self.rate_good_on_correct_cb.setChecked(c.get("rate_good_on_correct", False))
             self.rate_good_delay_spin.setValue(c.get("rate_good_delay_ms", 0) / 1000.0)
@@ -1075,7 +1075,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.auto_show_hints_answer_cb.setChecked(c.get("auto_show_hints_answer", True))
         self.auto_show_options_answer_cb.setChecked(c.get("auto_show_options_answer", True))
         if hasattr(self, "options_before_hints_cb"):
-            self.options_before_hints_cb.setChecked(c.get("options_before_hints", False))
+            self.options_before_hints_cb.setChecked(c.get("options_before_hints", True))
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
         self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
         tooltip("General defaults restored.")
@@ -1111,245 +1111,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self._migration_stop_requested = True
             self.mig_status_label.setText("Stopping... finishing current note")
             self.mig_stop_btn.setEnabled(False)
-
-    def on_migrate_data(self):
-        """Finds all AI hints in non-first fields and moves them to the first field."""
-        if self._migration_running:
-            return
-
-        query = self._get_maint_search_query()
-        scope_str = "your entire collection" if not query else f"the deck '{self.maint_deck_cb.currentText()}'"
-
-        if not askUser(f"This will scan {scope_str} and move any AI data blocks from secondary fields to the <b>first field</b> of each note to ensure they render correctly during review.\n\nContinue?"):
-            return
-
-        mw.checkpoint("Migrate AI Data")
-
-        from ..card_parser import CardParser
-        parser = CardParser(
-            mathjax_format=self.config.get("mathjax_format", "delimiters"),
-            fix_latex=self.config.get("fix_latex", False)
-        )
-        
-        self._migration_running = True
-        self._migration_stop_requested = False
-        
-        self.migrate_btn.setEnabled(False)
-        self.migrate_btn.setText("🔄 Migration in progress...")
-        
-        self.mig_progress_box.setVisible(True)
-        self.mig_progress_bar.setValue(0)
-        self.mig_status_label.setText("Initializing migration...")
-        self.mig_stop_btn.setEnabled(True)
-        
-        logger.info(f"AI-Hints: Starting migration for {scope_str} to move AI data to first fields.")
-        
-        def _task():
-            moved = 0
-            # Get all note IDs
-            nids = mw.col.find_notes(query)
-            total = len(nids)
-            
-            for i, nid in enumerate(nids):
-                if self._migration_stop_requested:
-                    logger.info(f"AI-Hints: Migration STOPPED by user. Processed {i} notes, moved {moved}.")
-                    break
-                    
-                try:
-                    note = mw.col.get_note(nid)
-                    fields = list(note.keys())
-                    if len(fields) < 2:
-                        # Even if only one field, check if it needs consolidation/conversion
-                        first_field = fields[0]
-                        other_fields = []
-                    else:
-                        first_field = fields[0]
-                        other_fields = fields[1:]
-                    
-                    # 1. Extract all blocks from all fields
-                    all_blocks = parser._extract_all_hints_from_fields(note)
-                    if not all_blocks:
-                        continue
-                        
-                    # 2. Check if migration/consolidation is needed
-                    # - Are there blocks in secondary fields?
-                    # - Are there multiple blocks in total?
-                    blocks_in_others = []
-                    for f in other_fields:
-                        blocks = parser._extract_hints_from_field(note[f], None)
-                        if blocks:
-                            blocks_in_others.extend(blocks)
-                    
-                    # Consolidation triggers:
-                    # - Data in other fields
-                    # - Multiple blocks total (even if all in first field)
-                    if not blocks_in_others and len(all_blocks) <= 1:
-                        # Check format: if single block is HTML, convert anyway
-                        first_field_val = note[first_field]
-                        if "ai-hints-container" in first_field_val:
-                            pass # proceed to migrate/convert
-                        else:
-                            continue
-                    
-                    if blocks_in_others:
-                        logger.debug(f"Migrating note {nid}: found {len(blocks_in_others)} blocks in secondary fields.")
-                    elif len(all_blocks) > 1:
-                        logger.debug(f"Consolidating note {nid}: found {len(all_blocks)} blocks in first field.")
-                    else:
-                        logger.debug(f"Converting note {nid}: converting HTML block to JSON.")
-                        
-                    # 3. If found, we clear ALL fields and re-inject into the first field
-                    parser._remove_all_hints_from_fields(note)
-                    
-                    # Sort blocks by card index (c1, c2...)
-                    all_blocks.sort(key=lambda x: x.get("card_key", "") if x.get("card_key") else "")
-                    
-                    # Re-inject into first field
-                    current_val = note[first_field]
-                    for block in all_blocks:
-                        data = block["data"]
-                        card_key = block.get("card_key")
-                        toggles = block.get("toggles", {})
-                        
-                        current_val = parser._update_json_block_in_field(current_val, data, card_key, toggles)
-                            
-                    note[first_field] = current_val
-                    mw.col.update_note(note)
-                    moved += 1
-                    
-                    if i % 10 == 0 or i == total - 1:
-                        def _prog(v=i, t=total, m=moved):
-                            pct = int((v + 1) / t * 100) if t > 0 else 0
-                            self.mig_progress_bar.setValue(pct)
-                            self.mig_status_label.setText(f"Scanning: {v+1}/{t} notes (Moved: {m})")
-                        mw.taskman.run_on_main(_prog)
-                        
-                except Exception as e:
-                    logger.error(f"Migration error on note {nid}: {e}")
-                    
-            def _done(m=moved, stopped=self._migration_stop_requested):
-                self._migration_running = False
-                self.migrate_btn.setEnabled(True)
-                self.migrate_btn.setText("🚀 Move all AI data to the first field")
-                
-                mw.reset()
-                
-                if stopped:
-                    self.mig_status_label.setText(f"🛑 Stopped. Moved {m} notes.")
-                    info(f"Migration stopped.\n\nProcessed until stop, moved AI data in {m} notes.")
-                else:
-                    logger.info(f"AI-Hints: Migration COMPLETED. Successfully moved AI data in {m} notes.")
-                    self.mig_progress_bar.setValue(100)
-                    self.mig_status_label.setText(f"✅ Complete! Moved {m} notes.")
-                    info(f"✅ Migration Complete!\n\nMoved AI data in {m} notes to their first fields.")
-                
-                # Keep progress box visible for a few seconds then hide if complete
-                if not stopped:
-                    QTimer.singleShot(5000, lambda: self.mig_progress_box.setVisible(False))
-                
-            mw.taskman.run_on_main(_done)
-
-        import threading
-        threading.Thread(target=_task, daemon=True).start()
-
-    def on_convert_html_to_json(self):
-        """Specific maintenance task to convert all visible HTML hint blocks to hidden JSON."""
-        if self._migration_running:
-            return
-
-        query = self._get_maint_search_query()
-        scope_str = "your entire collection" if not query else f"the deck '{self.maint_deck_cb.currentText()}'"
-
-        if not askUser(f"This will scan {scope_str} and find any visible HTML AI hint blocks and convert them into invisible JSON data to clean up your editor.\n\nContinue?"):
-            return
-
-        mw.checkpoint("Convert HTML to JSON")
-
-        from ..card_parser import CardParser
-        # Force JSON mode for this task
-        parser = CardParser(
-            mathjax_format=self.config.get("mathjax_format", "delimiters"),
-            fix_latex=self.config.get("fix_latex", False)
-        )
-        
-        self._migration_running = True
-        self._migration_stop_requested = False
-        
-        self.html_to_json_btn.setEnabled(False)
-        self.html_to_json_btn.setText("🔄 Converting...")
-        
-        self.mig_progress_box.setVisible(True)
-        self.mig_progress_bar.setValue(0)
-        self.mig_status_label.setText("Starting conversion...")
-        self.mig_stop_btn.setEnabled(True)
-        
-        logger.info(f"AI-Hints: Starting HTML to JSON conversion for {scope_str}.")
-        
-        def _task():
-            converted = 0
-            nids = mw.col.find_notes(query)
-            total = len(nids)
-            
-            for i, nid in enumerate(nids):
-                if self._migration_stop_requested: break
-                try:
-                    note = mw.col.get_note(nid)
-                    first_field = list(note.keys())[0]
-                    
-                    # Look specifically for HTML blocks
-                    first_field_val = note[first_field]
-                    if "ai-hints-container" not in first_field_val:
-                        # Check other fields too
-                        other_has = False
-                        for f in list(note.keys())[1:]:
-                            if "ai-hints-container" in note[f]:
-                                other_has = True
-                                break
-                        if not other_has: continue
-
-                    # 1. Extract all blocks (parser now supports HTML extraction)
-                    all_blocks = parser._extract_all_hints_from_fields(note)
-                    if not all_blocks: continue
-                    
-                    # 2. Clear and Re-inject as JSON into first field
-                    parser._remove_all_hints_from_fields(note)
-                    all_blocks.sort(key=lambda x: x.get("card_key", "") if x.get("card_key") else "")
-                    
-                    current_val = note[first_field]
-                    for block in all_blocks:
-                        data = block["data"]
-                        card_key = block.get("card_key")
-                        toggles = block.get("toggles", {})
-                        current_val = parser._update_json_block_in_field(current_val, data, card_key, toggles)
-                            
-                    note[first_field] = current_val
-                    mw.col.update_note(note)
-                    converted += 1
-                    
-                    if i % 10 == 0 or i == total - 1:
-                        def _prog(v=i, t=total, c=converted):
-                            pct = int((v + 1) / t * 100) if t > 0 else 0
-                            self.mig_progress_bar.setValue(pct)
-                            self.mig_status_label.setText(f"Converting: {v+1}/{t} (Fixed: {c})")
-                        mw.taskman.run_on_main(_prog)
-                except Exception as e:
-                    logger.error(f"HTML-to-JSON error on note {nid}: {e}")
-                    
-            def _done(c=converted, stopped=self._migration_stop_requested):
-                self._migration_running = False
-                self.html_to_json_btn.setEnabled(True)
-                self.html_to_json_btn.setText("👻 Convert HTML to Hidden JSON")
-                mw.reset()
-                self.mig_progress_bar.setValue(100)
-                self.mig_status_label.setText(f"✅ Fixed {c} notes.")
-                info(f"Conversion Complete!\n\nSuccessfully hid hint blocks in {c} notes.")
-                if not stopped:
-                    QTimer.singleShot(5000, lambda: self.mig_progress_box.setVisible(False))
-            mw.taskman.run_on_main(_done)
-
-        import threading
-        threading.Thread(target=_task, daemon=True).start()
-
 
     def move_provider_row(self, row_widget, delta):
         curr_index = self.models_layout.indexOf(row_widget)
@@ -1638,7 +1399,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("auto_show_options", True)
         config.setdefault("auto_show_hints_answer", True)
         config.setdefault("auto_show_options_answer", True)
-        config.setdefault("options_before_hints", False)
+        config.setdefault("options_before_hints", True)
         config.setdefault("generate_hints_enabled", True)
         config.setdefault("generate_options_enabled", True)
         config.setdefault("manual_show_hints", True)

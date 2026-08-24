@@ -42,7 +42,6 @@ On a card where you haven't edited anything, the two are equal — hence you may
 
 - Data is stored in a hidden `<div class="ai-hints-json">` block inside your note, so it survives and syncs like any other note content.
 - Use the **Show JSON** shortcut (`Alt+6` by default) or the 📝 **Show JSON** button to inspect a card's payload during review.
-- The **Advanced → Convert HTML to Hidden JSON** tool converts legacy visible HTML hint boxes into this hidden JSON format.
 
 ## Staleness & Auto-Regeneration Rules
 

@@ -111,8 +111,6 @@ Run AI-Hints on **AnkiDroid**, **AnkiMobile**, and **AnkiWeb** through a "Zero-A
 
 ## 🧰 Maintenance Tools (Advanced tab)
 
-- **Migrate AI Data to First Fields** — move AI data into the first field.
-- **Convert HTML to Hidden JSON** — convert legacy visible hint boxes to the optimized invisible JSON format.
 - **Convert Unicode Escapes** — turn `\uXXXX` escapes into readable text.
 - **Clean Orphaned Hints** — remove hint data for clozes that no longer exist.
 - **Purge Naked JSON Blocks** — remove raw JSON pasted without the div wrapper.

@@ -47,11 +47,11 @@ def sync_mobile_script():
         if should_copy:
             # Prefer Anki's media tracker so the file registers with the
             # media DB and syncs to AnkiWeb reliably; fall back to a direct
-            # write when the media-tracker API is unavailable.
+            # write when the media-tracker API is unavailable or rejects
+            # the payload type.
             try:
-                import io
-                col.media.write_data(dest_name, io.BytesIO(new_content.encode("utf-8")))
-            except AttributeError:
+                col.media.write_data(dest_name, new_content.encode("utf-8"))
+            except (AttributeError, TypeError):
                 try:
                     with open(dest_path, "w", encoding="utf-8") as f:
                         f.write(new_content)
@@ -102,20 +102,39 @@ def _insert_template_block(template_html: str, block: str, is_cloze: bool = Fals
     if not clean_html:
         return block
 
-    if is_cloze and not is_front:
-        tldraw_match = re.search(
-            r'(?is)(<ae-tldraw\b[^>]*>\s*</ae-tldraw>\s*<script\b[^>]*\btldraw\.js\b[^>]*>\s*</script>)',
-            clean_html,
-        )
-        if tldraw_match:
-            return clean_html[:tldraw_match.end()].rstrip() + "\n\n" + block + "\n\n" + clean_html[tldraw_match.end():].lstrip()
+    if not is_front:
+        # Cloze back sides anchor next to the drawing widget / first cloze so
+        # the reveal controls sit with the exercise content.
+        if is_cloze:
+            tldraw_match = re.search(
+                r'(?is)(<ae-tldraw\b[^>]*>\s*</ae-tldraw>\s*<script\b[^>]*\btldraw\.js\b[^>]*>\s*</script>)',
+                clean_html,
+            )
+            if tldraw_match:
+                return clean_html[:tldraw_match.end()].rstrip() + "\n\n" + block + "\n\n" + clean_html[tldraw_match.end():].lstrip()
 
-        cloze_match = re.search(
-            r'(?is)(\{\{\s*(?:edit:)?cloze:[^}]+\}\}(?:\s*<br\s*/?>)?)',
-            clean_html,
-        )
-        if cloze_match:
-            return clean_html[:cloze_match.end()].rstrip() + "\n\n" + block + "\n\n" + clean_html[cloze_match.end():].lstrip()
+            cloze_match = re.search(
+                r'(?is)(\{\{\s*(?:edit:)?cloze:[^}]+\}\}(?:\s*<br\s*/?>)?)',
+                clean_html,
+            )
+            if cloze_match:
+                return clean_html[:cloze_match.end()].rstrip() + "\n\n" + block + "\n\n" + clean_html[cloze_match.end():].lstrip()
+
+        # Regular back sides render below the FrontSide copy. Anchor the block
+        # right after the answer divider (or {{FrontSide}}) so hints/options
+        # appear BETWEEN the front and back sections instead of after all of
+        # the back-side content at the bottom of the card.
+        hr_match = re.search(r'(?is)<hr\b[^>]*\bid\s*=\s*["\']?answer["\']?[^>]*>', clean_html)
+        if hr_match:
+            return clean_html[:hr_match.end()].rstrip() + "\n\n" + block + "\n\n" + clean_html[hr_match.end():].lstrip()
+
+        frontside_match = re.search(r'(?is)\{\{\s*(?:edit:)?\s*FrontSide\s*\}\}', clean_html)
+        if frontside_match:
+            return (
+                clean_html[:frontside_match.end()].rstrip()
+                + "\n\n" + block + "\n\n"
+                + clean_html[frontside_match.end():].lstrip()
+            )
 
     return clean_html + "\n\n" + block
 
@@ -140,7 +159,7 @@ def auto_update_mobile_setup():
     auto_show_options = config.get("auto_show_options", True)
     auto_show_hints_answer = config.get("auto_show_hints_answer", True)
     auto_show_options_answer = config.get("auto_show_options_answer", True)
-    options_before_hints = config.get("options_before_hints", False)
+    options_before_hints = config.get("options_before_hints", True)
 
     config_js = (
         "window.aiHintsMobileConfig = { "

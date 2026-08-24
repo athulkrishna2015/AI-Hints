@@ -62,7 +62,7 @@ The dialog opens non-modally and remembers your last tab. Closing it does not sh
 **On Back Side (Answer):**
 - **Auto Show Hints** / **Auto Show Options** — expand hints/options on the answer side.
 
-- **Show Options Above Hints** — display the options section before the hints section on the card. By default hints are rendered first, then options; enabling this swaps the order (and reorders the toggle buttons to match). Applies to both desktop review and mobile templates.
+- **Show Options Above Hints** — display the options section before the hints section on the card. Enabled by default; unchecking it renders hints first, then options (and reorders the toggle buttons to match). Applies to both desktop review and mobile templates.
 
 Each card resets to these defaults on a fresh show (including relearn/retries), so collapsed state never bleeds between cards.
 
@@ -171,8 +171,6 @@ Each provider in your priority order has a row with:
 ### Maintenance Tools
 
 - **Scope Task To** — searchable deck selector; run tools on a specific deck or the entire collection.
-- **📦 Migrate AI Data to First Fields** — move AI data into the first field.
-- **👻 Convert HTML to Hidden JSON** — convert visible HTML hint boxes to invisible JSON.
 - **🔣 Convert Unicode Escapes** — convert `\uXXXX` escapes to readable text.
 - **Only scan notes modified since last clean scan** — speed up scans by only checking edited notes.
 - **🧹 Clean Orphaned Hints** — remove hint data for clozes that no longer exist.

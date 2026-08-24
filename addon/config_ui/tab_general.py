@@ -203,7 +203,7 @@ class GeneralTabMixin:
         self.options_before_hints_cb = QCheckBox("Show Options Above Hints")
         self.options_before_hints_cb.setToolTip(
             "Display the multiple-choice options section before the hints section "
-            "on the card (default is hints first, then options). Also reorders the toggle buttons to match."
+            "on the card (enabled by default; uncheck to show hints first). Also reorders the toggle buttons to match."
         )
         show_layout.addRow(self.options_before_hints_cb)
 

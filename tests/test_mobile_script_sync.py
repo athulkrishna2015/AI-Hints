@@ -62,8 +62,14 @@ class SyncMobileScriptTests(unittest.TestCase):
         col.media.dir.return_value = tmp_media_dir
 
         def fake_write_data(name, data):
+            # Anki's media.write_data(desired_fname, data: bytes) expects raw
+            # bytes, not a file-like object; mirror that contract here so a
+            # regression back to io.BytesIO fails loudly.
+            assert isinstance(data, (bytes, bytearray)), (
+                f"write_data expects bytes, got {type(data).__name__}"
+            )
             with open(os.path.join(tmp_media_dir, name), "wb") as f:
-                f.write(data.read())
+                f.write(data)
 
         col.media.write_data.side_effect = fake_write_data
         return col
@@ -101,6 +107,60 @@ class SyncMobileScriptTests(unittest.TestCase):
             result = self.sync()
         self.assertIsInstance(result, str)
         self.assertIn("not found", result.lower())
+
+
+class InsertTemplateBlockPlacementTests(unittest.TestCase):
+    """Regression tests: back-side block placement.
+
+    The AI-HINTS block used to be appended at the very end of every non-cloze
+    back template, so on AnkiDroid hints/options rendered AFTER all of the
+    back-side content. It must be anchored between the front and back
+    sections: right after <hr id=answer>, or after {{FrontSide}} when no
+    divider exists. Cloze tldraw/cloze anchoring keeps priority on cloze
+    templates, and front sides stay appended at the end.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_sync_fn()[0]
+        cls.insert = staticmethod(cls.mod._insert_template_block)
+
+    BLOCK = "<!-- AI-HINTS-BEGIN -->X<!-- AI-HINTS-END -->"
+
+    def test_back_side_after_answer_hr(self):
+        tpl = "{{FrontSide}}\n<hr id=answer>\n{{Back}}"
+        out = self.insert(tpl, self.BLOCK)
+        before, after = out.split(self.BLOCK)
+        self.assertIn("<hr id=answer>", before)
+        self.assertIn("{{Back}}", after)
+        self.assertNotIn("{{Back}}", before)
+
+    def test_back_side_after_frontside_when_no_hr(self):
+        tpl = "{{FrontSide}}\n{{Back}}"
+        out = self.insert(tpl, self.BLOCK)
+        before, after = out.split(self.BLOCK)
+        self.assertIn("{{FrontSide}}", before)
+        self.assertIn("{{Back}}", after)
+
+    def test_cloze_tldraw_anchor_still_wins(self):
+        tpl = (
+            '{{cloze:Text}}<ae-tldraw></ae-tldraw>'
+            '<script src="tldraw.js"></script><hr id=answer>{{Back}}'
+        )
+        out = self.insert(tpl, self.BLOCK, is_cloze=True)
+        before, after = out.split(self.BLOCK)
+        self.assertIn("tldraw.js", before)
+        self.assertIn("<hr id=answer>", after)
+
+    def test_front_side_still_appended_at_end(self):
+        tpl = "{{Question}}<br>{{Extra}}"
+        out = self.insert(tpl, self.BLOCK, is_front=True)
+        self.assertTrue(out.endswith(self.BLOCK))
+
+    def test_no_anchors_falls_back_to_append(self):
+        tpl = "<div>plain template</div>"
+        out = self.insert(tpl, self.BLOCK)
+        self.assertTrue(out.endswith(self.BLOCK))
 
 
 if __name__ == "__main__":
