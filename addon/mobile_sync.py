@@ -7,48 +7,63 @@ from .logger import logger
 from .config_ui import ADDON_PACKAGE
 
 def sync_mobile_script():
-    """Copies web/template.js to the Anki media folder. Only writes if content changed."""
+    """Copies web/template.js to the Anki media folder. Only writes if content changed.
+
+    Returns None on success, or a human-readable error string describing why the
+    sync failed so callers can surface the actual cause instead of a generic message.
+    """
     try:
         addon_dir = os.path.dirname(__file__)
         src_path = os.path.join(addon_dir, "web", "template.js")
-        
-        if not os.path.exists(src_path):
-            logger.error(f"AI-Hints Mobile Sync: Source script not found at {src_path}")
-            return False
 
-        if not mw.col:
-            return False
+        if not os.path.exists(src_path):
+            reason = f"Source script not found: {src_path}"
+            logger.error(f"AI-Hints Mobile Sync: {reason}")
+            return reason
+
+        col = mw.col
+        if not col:
+            # Previously this exited silently, leaving only a generic
+            # "Failed to sync script file" dialog with no diagnosable cause.
+            reason = "No collection is open (profile not loaded). Open Anki fully, then retry."
+            logger.error(f"AI-Hints Mobile Sync: {reason}")
+            return reason
 
         dest_name = "_ai_hints_template.js"
-        dest_path = os.path.join(mw.col.media.dir(), dest_name)
+        dest_path = os.path.join(col.media.dir(), dest_name)
 
         with open(src_path, "r", encoding="utf-8") as f:
             new_content = f.read()
 
         should_copy = True
         if os.path.exists(dest_path):
-            with open(dest_path, "r", encoding="utf-8") as f:
-                old_content = f.read()
-            if old_content == new_content:
-                should_copy = False
+            try:
+                with open(dest_path, "r", encoding="utf-8") as f:
+                    old_content = f.read()
+                should_copy = old_content != new_content
+            except Exception as e:
+                logger.warning(f"AI-Hints Mobile Sync: could not read existing script ({e}); rewriting.")
 
         if should_copy:
             # Prefer Anki's media tracker so the file registers with the
             # media DB and syncs to AnkiWeb reliably; fall back to a direct
-            # write on very old versions.
+            # write when the media-tracker API is unavailable.
             try:
                 import io
-                mw.col.media.write_data(dest_name, io.BytesIO(new_content.encode("utf-8")))
+                col.media.write_data(dest_name, io.BytesIO(new_content.encode("utf-8")))
             except AttributeError:
-                with open(dest_path, "w", encoding="utf-8") as f:
-                    f.write(new_content)
+                try:
+                    with open(dest_path, "w", encoding="utf-8") as f:
+                        f.write(new_content)
+                except Exception as e:
+                    raise RuntimeError(f"media.write_data unavailable and direct write failed: {e}")
             logger.info(f"AI-Hints: Mobile template script synced to media folder as '{dest_name}'.")
-        
-        return True
+
+        return None
 
     except Exception as e:
         logger.error(f"AI-Hints: Failed to sync mobile script: {e}")
-        return False
+        return str(e) or e.__class__.__name__
 
 def _get_full_template_block(field_name: str, template_html: str, config_js: str, is_cloze: bool = False, is_front: bool = False) -> str:
     should_inject = False

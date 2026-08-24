@@ -172,15 +172,47 @@ class MobileTabMixin:
             m = mw.col.models.all()[0]
             if m.get("flds"):
                 field_name = m["flds"][0]["name"]
-        
+
         QApplication.clipboard().setText(self._get_full_template_block(field_name))
         QMessageBox.information(self, "AI-Hints", "Template script copied to clipboard!")
 
+    def _run_when_collection_ready(self, action, waited_ms=0):
+        """Run `action` once the collection is open again.
+
+        Remove/Install both trigger mw.onSync(), which closes the collection
+        while it runs (mw.col becomes None). Clicking Install during that sync
+        used to fail with a generic "Failed to sync script file" error. Instead,
+        wait (up to 2 minutes) for the sync to finish, then proceed.
+        """
+        if mw.col is not None:
+            self._collection_wait_active = False
+            action()
+            return
+        if waited_ms >= 120000:
+            self._collection_wait_active = False
+            self.status_label.setStyleSheet("color: #dc3545; font-weight: bold; font-size: 11px;")
+            self.status_label.setText(
+                "❌ Timed out waiting for AnkiWeb sync / profile to become available."
+            )
+            return
+        self.status_label.setStyleSheet("color: #fd7e14; font-weight: bold; font-size: 11px;")
+        self.status_label.setText("⏳ Waiting for AnkiWeb sync to finish before continuing...")
+        self._collection_wait_active = True
+        QTimer.singleShot(500, lambda: self._run_when_collection_ready(action, waited_ms + 500))
+
     def on_full_install(self):
-        # 1. Sync script file
+        self._run_when_collection_ready(self._do_full_install)
+
+    def _do_full_install(self):
+        # 1. Sync script file (returns None on success, error string on failure)
         from ..mobile_sync import sync_mobile_script
-        if not sync_mobile_script():
-            QMessageBox.critical(self, "AI-Hints", "Failed to sync script file to media folder.")
+        sync_error = sync_mobile_script()
+        if sync_error:
+            QMessageBox.critical(
+                self,
+                "AI-Hints",
+                "Failed to sync script file to media folder.\n\n" + str(sync_error),
+            )
             return
 
         # Update flag. Pass only the changed key: a full getConfig() snapshot can
@@ -255,6 +287,9 @@ class MobileTabMixin:
             self.status_label.setText(f"❌ Error during template installation: {e}")
 
     def on_full_remove(self):
+        self._run_when_collection_ready(self._do_full_remove)
+
+    def _do_full_remove(self):
         # Update flag. Delta-only write (see on_full_install).
         from ..config_io import write_pretty_config_preserve_keys
         write_pretty_config_preserve_keys(ADDON_PACKAGE, {"mobile_setup_completed": False})
