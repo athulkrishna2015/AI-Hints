@@ -654,7 +654,7 @@ class FallbackOrderDialog(QDialog):
                 if not item: continue
                 m = item.data(Qt.ItemDataRole.UserRole)
                 status = fallback_statuses.get(m)
-                bl = " | 🚫 Blacklisted" if is_model_blacklisted(self.provider, m) else ""
+                bl = " | 🚫 Blacklisted" if is_model_blacklisted(self.provider, m, getattr(self.main_dialog, "config", None)) else ""
                 status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
                 
                 tt = fallback_tooltips.get(m) if fallback_tooltips else None
@@ -1007,7 +1007,7 @@ class GlobalFallbackOrderDialog(QDialog):
                 item = QListWidgetItem()
                 item.setData(Qt.ItemDataRole.UserRole, (provider, model))
                 status = global_statuses.get((provider, model))
-                bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model) else ""
+                bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model, getattr(self.main_dialog, "config", None)) else ""
                 status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
                 new_mark, dep_mark, missing_mark, is_new, is_dep, is_missing = self._global_marks(provider, model)
                 item.setText(f"[{self._provider_display(provider)}] {new_mark}{model}{status_suffix}{dep_mark}{missing_mark}")
@@ -1076,7 +1076,7 @@ class GlobalFallbackOrderDialog(QDialog):
             item = self.list_widget.item(i)
             provider, model = item.data(Qt.ItemDataRole.UserRole)
             status = global_statuses.get((provider, model))
-            bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model) else ""
+            bl = " | 🚫 Blacklisted" if is_model_blacklisted(provider, model, getattr(self.main_dialog, "config", None)) else ""
             status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
             new_mark, dep_mark, missing_mark, is_new, is_dep, is_missing = self._global_marks(provider, model)
             item.setText(f"[{self._provider_display(provider)}] {new_mark}{model}{status_suffix}{dep_mark}{missing_mark}")
@@ -1472,7 +1472,7 @@ class ProvidersTabMixin:
                 PERSISTENT_TEST_STATUSES.pop(provider, None)
                 
         from ..ai_client import is_model_blacklisted
-        if model and is_model_blacklisted(provider, model):
+        if model and is_model_blacklisted(provider, model, getattr(self.main_dialog, "config", None)):
             status_label.setText("🚫 Blacklisted")
             status_label.setToolTip("This model is currently blacklisted on cooldown due to recent failures.")
             status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")

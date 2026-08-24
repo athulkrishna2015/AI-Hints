@@ -1084,7 +1084,15 @@ class AIClient:
 
             from .logger import log_context
             is_test = getattr(log_context, "source", None) == "model_test"
-            available_keys = keys if is_test else [k for k in keys if not self._is_combo_failed(provider_name, model, k)]
+            if is_test:
+                available_keys = keys
+            else:
+                available_keys = [k for k in keys if not self._is_combo_failed(provider_name, model, k)]
+                if not available_keys and override_model:
+                    # Explicit single-model request (Alt+click override): every
+                    # key combo for this model is on cooldown — retry them all
+                    # anyway rather than silently returning nothing.
+                    available_keys = list(keys)
             if not available_keys:
                 continue
 
@@ -1237,7 +1245,15 @@ class AIClient:
 
             from .logger import log_context
             is_test = getattr(log_context, "source", None) == "model_test"
-            available_keys = keys if is_test else [k for k in keys if not self._is_combo_failed(provider, model, k)]
+            if is_test:
+                available_keys = keys
+            else:
+                available_keys = [k for k in keys if not self._is_combo_failed(provider, model, k)]
+                if not available_keys and override_model:
+                    # Explicit single-model request (Alt+click override): every
+                    # key combo for this model is on cooldown — retry them all
+                    # anyway rather than silently returning nothing.
+                    available_keys = list(keys)
             if not available_keys:
                 continue
 
@@ -1385,7 +1401,15 @@ class AIClient:
 
             from .logger import log_context
             is_test = getattr(log_context, "source", None) == "model_test"
-            available_keys = keys if is_test else [k for k in keys if not self._is_combo_failed("anthropic", model, k)]
+            if is_test:
+                available_keys = keys
+            else:
+                available_keys = [k for k in keys if not self._is_combo_failed("anthropic", model, k)]
+                if not available_keys and override_model:
+                    # Explicit single-model request (Alt+click override): every
+                    # key combo for this model is on cooldown — retry them all
+                    # anyway rather than silently returning nothing.
+                    available_keys = list(keys)
             if not available_keys:
                 continue
 
@@ -1471,7 +1495,15 @@ class AIClient:
 
             from .logger import log_context
             is_test = getattr(log_context, "source", None) == "model_test"
-            available_keys = keys if is_test else [k for k in keys if not self._is_combo_failed("gemini", model, k)]
+            if is_test:
+                available_keys = keys
+            else:
+                available_keys = [k for k in keys if not self._is_combo_failed("gemini", model, k)]
+                if not available_keys and override_model:
+                    # Explicit single-model request (Alt+click override): every
+                    # key combo for this model is on cooldown — retry them all
+                    # anyway rather than silently returning nothing.
+                    available_keys = list(keys)
             if not available_keys:
                 continue
 
@@ -2603,12 +2635,17 @@ def save_blacklist():
     client = AIClient(config)
     client._save_blacklist()
 
-def is_model_blacklisted(provider: str, model: str) -> bool:
+def is_model_blacklisted(provider: str, model: str, config: Dict[str, Any] = None) -> bool:
+    """True when every configured key combo for (provider, model) is cooling down.
+
+    `config` should be the live addon config so the provider's actual API keys
+    are checked; without it only the anonymous ("") key combo is visible.
+    """
     try:
         global _BLACKLIST_LOADED
         if not _BLACKLIST_LOADED and not FAILED_COMBOS_CACHE:
             load_blacklist()
-        client = AIClient(None)
+        client = AIClient(config)
         return client._is_model_failed(provider, model)
     except Exception:
         return False

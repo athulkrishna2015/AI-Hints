@@ -56,6 +56,7 @@ def _install_aqt_mocks():
 _install_aqt_mocks()
 
 from addon import reviewer_hooks  # noqa: E402
+from addon.ai_client import FAILED_COMBOS_CACHE  # noqa: E402
 
 
 def base_config():
@@ -116,6 +117,22 @@ class ModelPickerChoicesTests(unittest.TestCase):
         for entry in self.choices.values():
             overlap = set(entry["models"]) & set(entry["disabled_models"])
             self.assertEqual(overlap, set(), f"overlap for {entry['provider']}: {overlap}")
+
+    def test_blacklisted_model_reported_but_still_selectable(self):
+        # Every key-combo for openai-fb1 (its only key) is on cooldown.
+        import time
+        FAILED_COMBOS_CACHE[("openai", "openai-fb1", "k-openai")] = time.time() + 600
+        try:
+            choices = {
+                c["provider"]: c for c in reviewer_hooks._get_model_choices(base_config())
+            }
+        finally:
+            FAILED_COMBOS_CACHE.clear()
+        entry = choices["openai"]
+        self.assertIn("openai-fb1", entry["blacklisted"])
+        # Still selectable: it must remain among the models, not moved to disabled.
+        self.assertIn("openai-fb1", entry["models"])
+        self.assertNotIn("openai-fb2", entry["blacklisted"])
 
 
 if __name__ == "__main__":

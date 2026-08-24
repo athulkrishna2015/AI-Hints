@@ -737,11 +737,15 @@ def _get_model_choices(config):
                     enabled_models.append(model)
             if not enabled_models and not disabled_models_list:
                 continue
+            # Models whose every configured key-combo is on cooldown get a 🚫
+            # marker in the picker but stay selectable for explicit retries.
+            blacklisted = [m for m in enabled_models if client._is_model_failed(p, m)]
             choices.append({
                 "provider": p,
                 "enabled": p in ready_candidates and p not in disabled_providers,
                 "models": enabled_models,
                 "disabled_models": disabled_models_list,
+                "blacklisted": blacklisted,
             })
         return choices
     except Exception as e:

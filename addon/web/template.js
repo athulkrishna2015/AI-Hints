@@ -401,6 +401,7 @@
         const fillModels = (preferredModel) => {
             const c = choices[providerSel.selectedIndex];
             modelSel.innerHTML = '';
+            const cooling = new Set(c.blacklisted || []);
             const all = [];
             const addGroup = (label, arr, dim) => {
                 if (!arr || !arr.length) return;
@@ -408,10 +409,13 @@
                 group.label = label;
                 arr.forEach((m) => {
                     all.push(m);
+                    const isCooling = !dim && cooling.has(m);
                     const opt = document.createElement('option');
                     opt.value = m;
-                    opt.textContent = (dim ? '⊘ ' : '') + m + (dim ? '  (disabled)' : '');
-                    if (dim) opt.style.color = C.disabledOpt;
+                    opt.textContent =
+                        (isCooling ? '🚫 ' : dim ? '⊘ ' : '') + m +
+                        (isCooling ? '  (on cooldown)' : dim ? '  (disabled)' : '');
+                    if (dim || isCooling) opt.style.color = C.disabledOpt;
                     group.appendChild(opt);
                 });
                 modelSel.appendChild(group);
