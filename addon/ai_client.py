@@ -492,6 +492,103 @@ def _collect_deprecated_items(items):
     return deprecated
 
 
+class _LingerPool:
+    """Keeps timed-out requests alive in background threads.
+
+    When a fallback candidate hits a read timeout, instead of discarding it we
+    re-dispatch the same provider/model with an extended timeout on a daemon
+    thread and immediately move on to the next candidate. If the slow request
+    finishes while later candidates are still running — or after all of them
+    failed — its result is claimed, preferring the highest-priority (earliest)
+    candidate that produced one.
+    """
+
+    POLL_INTERVAL = 0.5
+
+    def __init__(self, base_config: Dict[str, Any], linger_timeout: int, system_prompt: str, prompt: str):
+        self._lock = threading.Lock()
+        self._results = []          # [{"order": int, "provider": p, "model": m, "result": dict}]
+        self._cancelled = False
+        self._threads = []
+        self._base_config = dict(base_config or {})
+        self._linger_timeout = linger_timeout
+        self._system_prompt = system_prompt
+        self._prompt = prompt
+
+    def spawn(self, order: int, provider: str, override_model: str = ""):
+        cfg = dict(self._base_config)
+        # Long-deadline retry for both the review and pregen paths; per-model /
+        # per-provider timeout overrides are neutralized so they cannot cut the
+        # lingering attempt short.
+        cfg["request_timeout"] = self._linger_timeout
+        cfg["pregen_request_timeout"] = self._linger_timeout
+        cfg["model_timeouts"] = {}
+        cfg["provider_timeouts"] = {}
+        pool = self
+
+        def _run():
+            try:
+                client = AIClient(cfg)
+                res = client._call_provider(provider, pool._system_prompt, pool._prompt, override_model=override_model)
+                if isinstance(res, dict) and (res.get("hints") or res.get("options") or res.get("distractors") or res.get("correct_answer")):
+                    with pool._lock:
+                        if not pool._cancelled:
+                            pool._results.append({"order": order, "provider": provider, "model": override_model, "result": res})
+                    logger.info(f"AI-Hints Linger: late result arrived from {provider}/{override_model} (candidate #{order + 1}).")
+                else:
+                    logger.info(f"AI-Hints Linger: {provider}/{override_model} finished late with no usable content.")
+            except Exception as e:
+                logger.info(f"AI-Hints Linger: late attempt {provider}/{override_model} failed: {e}")
+
+        t = threading.Thread(target=_run, name=f"ai-hints-linger-{provider}-{override_model}", daemon=True)
+        with self._lock:
+            if self._cancelled:
+                return
+            self._threads.append(t)
+        t.start()
+
+    def _claim_best(self, max_order=None):
+        with self._lock:
+            if not self._results:
+                return None
+            candidates = [r for r in self._results if max_order is None or r["order"] < max_order]
+            if not candidates:
+                return None
+            best = min(candidates, key=lambda r: r["order"])
+            self._results.remove(best)
+            return best
+
+    def claim_ready(self, max_order=None):
+        """Return the earliest ready lingering result (without waiting), if any."""
+        return self._claim_best(max_order)
+
+    def wait_for_any(self):
+        """Block until a lingering request yields a result, or all give up.
+
+        Bounded by the linger timeout itself plus slack; aborts early on
+        emergency stop or when the network goes down.
+        """
+        start = time.monotonic()
+        while True:
+            best = self._claim_best()
+            if best is not None:
+                return best
+            with self._lock:
+                alive = any(t.is_alive() for t in self._threads)
+                cancelled = self._cancelled
+            if cancelled or not alive or state.GLOBAL_STOP or _NETWORK_STATE.get("online") is False:
+                return None
+            if time.monotonic() - start > self._linger_timeout + 15:
+                return None
+            time.sleep(self.POLL_INTERVAL)
+
+    def cancel(self):
+        """Discard all pending results; in-flight threads finish harmlessly."""
+        with self._lock:
+            self._cancelled = True
+            self._results.clear()
+
+
 class AIClient:
     def __init__(self, config: Dict[str, Any], is_pregen: bool = False):
         _ensure_network_monitor()
@@ -524,6 +621,31 @@ class AIClient:
             return int(self.config.get("request_timeout", 60))
         except Exception:
             return 120 if self.is_pregen else 60
+
+    def _linger_enabled(self) -> bool:
+        """Linger-on-timeout: keep timed-out requests alive in the background."""
+        try:
+            return bool(self.config.get("linger_on_timeout", True))
+        except Exception:
+            return True
+
+    def _linger_timeout(self) -> int:
+        """Extended deadline for background (lingering) retry attempts.
+
+        Defaults to 3x the effective request timeout, clamped to
+        [180, 900] seconds; overridable via `timeout_linger_seconds`.
+        """
+        try:
+            configured = int(self.config.get("timeout_linger_seconds", 0) or 0)
+            if configured > 0:
+                return configured
+        except Exception:
+            pass
+        try:
+            base = self.timeout
+        except Exception:
+            base = 60
+        return min(max(base * 3, 180), 900)
 
     def _is_host_unreachable_error(self, e: Exception) -> bool:
         import socket
@@ -631,7 +753,8 @@ class AIClient:
             disabled_fallback_models = self.config.get("disabled_fallback_models") or {}
             
             last_exception = None
-            for provider, model in global_priority:
+            linger_pool = _LingerPool(self.config, self._linger_timeout(), system_prompt, prompt) if self._linger_enabled() else None
+            for gi, (provider, model) in enumerate(global_priority):
                 if state.GLOBAL_STOP:
                     logger.info(f"AI-Hints: Generation aborted via Emergency Stop signal (global loop).")
                     return {"hints": [], "options": []}
@@ -643,6 +766,18 @@ class AIClient:
                 if _NETWORK_STATE["online"] is False:
                     logger.info("AI-Hints: Network unavailable; stopping global fallback attempts.")
                     return {"hints": [], "options": []}
+
+                # A timed-out earlier candidate may have finished while we were
+                # busy with later ones — prefer its result over starting yet
+                # another request.
+                if linger_pool:
+                    early = linger_pool.claim_ready(max_order=gi)
+                    if early:
+                        logger.info(f"AI-Hints Linger: using late result from {early['provider']}/{early['model']} instead of continuing down the list.")
+                        try:
+                            return self._finalize_result(early["result"], back, hints_enabled, options_enabled, is_test)
+                        except Exception:
+                            pass
                 
                 # Skip if provider is disabled or has failed with network error
                 if provider in disabled_providers or provider in network_failed_providers:
@@ -667,6 +802,10 @@ class AIClient:
                 except Exception as e:
                     last_exception = e
                     logger.error(f"Global fallback model {provider}/{model} failed: {e}")
+                    if linger_pool and self._is_read_timeout_error(e):
+                        # Keep this slow request alive in the background while
+                        # the remaining candidates are tried.
+                        linger_pool.spawn(gi, provider, model)
                     if self._is_network_or_timeout_error(e):
                         network_failed_providers.add(provider)
                         if not _check_network_online():
@@ -674,6 +813,16 @@ class AIClient:
                             return {"hints": [], "options": []}
                     continue
             
+            if linger_pool and last_exception is not None:
+                # Every candidate failed — give the lingering background
+                # requests their extended deadline to produce something.
+                got = linger_pool.wait_for_any()
+                if got:
+                    logger.info(f"AI-Hints Linger: all candidates failed; using late result from {got['provider']}/{got['model']}.")
+                    try:
+                        return self._finalize_result(got["result"], back, hints_enabled, options_enabled, is_test)
+                    except Exception:
+                        pass
             if last_exception:
                 raise last_exception
             return {"hints": [], "options": []}
@@ -688,8 +837,9 @@ class AIClient:
             return {"hints": [], "options": []}
         
         last_exception = None
+        linger_pool = _LingerPool(self.config, self._linger_timeout(), system_prompt, prompt) if (self._linger_enabled() and not is_test) else None
         # Try providers in sequence
-        for provider in all_potential:
+        for pi, provider in enumerate(all_potential):
             if state.GLOBAL_STOP:
                 logger.info(f"AI-Hints: Generation aborted via Emergency Stop signal (provider loop).")
                 return {"hints": [], "options": []}
@@ -698,6 +848,18 @@ class AIClient:
                 return {"hints": [], "options": []}
             if provider in network_failed_providers:
                 continue
+
+            # Prefer a timed-out earlier candidate that finished in the
+            # background over starting the next request.
+            if linger_pool:
+                early = linger_pool.claim_ready(max_order=pi)
+                if early:
+                    logger.info(f"AI-Hints Linger: using late result from {early['provider']}/{early['model']} instead of continuing down the list.")
+                    try:
+                        return self._finalize_result(early["result"], back, hints_enabled, options_enabled, is_test)
+                    except Exception:
+                        pass
+
             try:
                 result = self._call_provider(provider, system_prompt, prompt, override_model=override_model or "")
                 if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
@@ -708,13 +870,25 @@ class AIClient:
             except Exception as e:
                 last_exception = e
                 logger.error(f"Provider {provider} failed: {e}")
+                if linger_pool and self._is_read_timeout_error(e):
+                    # Keep this slow request alive in the background while the
+                    # remaining providers are tried.
+                    linger_pool.spawn(pi, provider, override_model or "")
                 if self._is_network_or_timeout_error(e):
                     network_failed_providers.add(provider)
                     if not _check_network_online():
                         logger.info("AI-Hints: Network unavailable; stopping provider fallback attempts.")
                         return {"hints": [], "options": []}
                 continue
-                
+        
+        if linger_pool and last_exception is not None:
+            got = linger_pool.wait_for_any()
+            if got:
+                logger.info(f"AI-Hints Linger: all candidates failed; using late result from {got['provider']}/{got['model']}.")
+                try:
+                    return self._finalize_result(got["result"], back, hints_enabled, options_enabled, is_test)
+                except Exception:
+                    pass
         if last_exception:
             raise last_exception
             
@@ -974,12 +1148,14 @@ class AIClient:
                         break
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
+                    if self._is_read_timeout_error(e):
+                        # Slow ≠ broken: never blacklist on a pure read timeout
+                        # (the linger-on-timeout path may still rescue it).
+                        model_timed_out = True
+                        break
                     self._mark_combo_failed(provider_name, model, api_key)
                     if self._is_host_unreachable_error(e):
                         raise e
-                    if self._is_read_timeout_error(e):
-                        model_timed_out = True
-                        break
 
             if model_timed_out:
                 timeouts_count += 1
@@ -1177,12 +1353,14 @@ class AIClient:
                         break
                 except Exception as e:
                     logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
+                    if self._is_read_timeout_error(e):
+                        # Slow ≠ broken: never blacklist on a pure read timeout
+                        # (the linger-on-timeout path may still rescue it).
+                        model_timed_out = True
+                        break
                     self._mark_combo_failed(provider, model, api_key)
                     if self._is_host_unreachable_error(e):
                         raise e
-                    if self._is_read_timeout_error(e):
-                        model_timed_out = True
-                        break
 
             if model_timed_out:
                 timeouts_count += 1
@@ -1262,12 +1440,14 @@ class AIClient:
                         break
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
+                    if self._is_read_timeout_error(e):
+                        # Slow ≠ broken: never blacklist on a pure read timeout
+                        # (the linger-on-timeout path may still rescue it).
+                        model_timed_out = True
+                        break
                     self._mark_combo_failed("anthropic", model, api_key)
                     if self._is_host_unreachable_error(e):
                         raise e
-                    if self._is_read_timeout_error(e):
-                        model_timed_out = True
-                        break
 
             if model_timed_out:
                 timeouts_count += 1
@@ -1363,12 +1543,14 @@ class AIClient:
                         break
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
+                    if self._is_read_timeout_error(e):
+                        # Slow ≠ broken: never blacklist on a pure read timeout
+                        # (the linger-on-timeout path may still rescue it).
+                        model_timed_out = True
+                        break
                     self._mark_combo_failed("gemini", model, api_key)
                     if self._is_host_unreachable_error(e):
                         raise e
-                    if self._is_read_timeout_error(e):
-                        model_timed_out = True
-                        break
 
             if model_timed_out:
                 timeouts_count += 1

@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## Unreleased
+- **Linger-on-Timeout Fallback Racing**: When a model hits a read timeout, the request is no longer thrown away — it is re-dispatched in a background thread with an extended deadline (3x the request timeout, clamped 180–900s, `timeout_linger_seconds` to override) while fallback continues immediately with the next candidate. If the slow request finishes before later candidates, its result is used (earliest candidate wins); if every candidate fails, generation waits out the lingering attempts instead of returning empty. Pure read timeouts also no longer blacklist a model (slow ≠ broken). Disable with `linger_on_timeout: false`; disabled for single-model tests and skipped on emergency stop / network loss.
+- **Instant Fallback Dialog for Large Providers**: The per-provider Fallback Priority dialog created two live widgets (thinking-level combo + timeout spinbox) for every row up front, so providers with hundreds of models (e.g. OpenRouter's ~400) took seconds to open. Widgets are now materialized lazily for visible rows only (values kept in name-keyed dicts and harvested back before every read/reorder), making the dialog open instantly regardless of model count.
+
 ## 6.4.0 (2026-08-25)
 - **Mobile Template Placement Fixed**: On note types without cloze-specific anchors, the mobile `AI-HINTS` block was appended to the **very end** of the back template, so AnkiDroid/AnkiMobile rendered hints/options *after* all back-side content. The block is now anchored between the front and back sections — right after `<hr id=answer>`, or after `{{FrontSide}}` when no divider exists (cloze tldraw/cloze anchoring keeps priority).
 - **Media Script Sync Fixed**: One-Click Install failed with "expected bytes, _io.BytesIO found" because `col.media.write_data()` was passed a `BytesIO` wrapper while modern Anki expects raw `bytes`. Raw bytes are now written directly, with a fallback to a plain file write if the media-tracker API rejects or lacks the call.
