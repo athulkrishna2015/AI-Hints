@@ -729,6 +729,7 @@ def _get_ui_config(card, auto_reveal=False, is_answer=False, has_data=False):
         "auto_show_options": config.get("auto_show_options", True),
         "auto_show_hints_answer": config.get("auto_show_hints_answer", True),
         "auto_show_options_answer": config.get("auto_show_options_answer", True),
+        "options_before_hints": config.get("options_before_hints", False),
         "generation_enabled": config.get("generate_hints_enabled", True) or config.get("generate_options_enabled", True),
         "rate_good_on_correct": config.get("rate_good_on_correct", False),
         "rate_again_on_wrong": config.get("rate_again_on_wrong", False),

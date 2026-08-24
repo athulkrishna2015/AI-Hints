@@ -62,6 +62,8 @@ The dialog opens non-modally and remembers your last tab. Closing it does not sh
 **On Back Side (Answer):**
 - **Auto Show Hints** / **Auto Show Options** — expand hints/options on the answer side.
 
+- **Show Options Above Hints** — display the options section before the hints section on the card. By default hints are rendered first, then options; enabling this swaps the order (and reorders the toggle buttons to match). Applies to both desktop review and mobile templates.
+
 Each card resets to these defaults on a fresh show (including relearn/retries), so collapsed state never bleeds between cards.
 
 ### Auto-Rating

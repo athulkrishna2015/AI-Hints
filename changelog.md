@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## Unreleased
+- **Configurable Hints/Options Order**: New **"Show Options Above Hints"** toggle (General tab, `options_before_hints` config key) renders the multiple-choice options section before the hints section on the card — default remains hints first, then options. The Show Hints / Show Options toggle buttons reorder to match, and the setting is synced into mobile templates (`optionsBeforeHints` in `aiHintsMobileConfig`) so AnkiDroid/AnkiMobile honor it too.
+
 ## 6.3.4 (2026-08-23)
 - **Batch Worker State Corruption Fix (Critical)**: The `local_queue_errors` setter in `batch_manager.py` contained a duplicated `__init__` block that reset `_db_lock`, diagnostics, and reloaded queue state from disk on **every failed card** — corrupting batch state and destroying mutual exclusion mid-run. The stray re-initialization is removed.
 - **Anki Terminator Patch Scoped (Critical)**: The global `anki.notes.Note` fields proxy is now installed **only** when the Anki Terminator webview is actually detected. Previously it patched every user's `Note.__init__`, risking cleaned-text write-backs on field round-trips even without Anki Terminator installed.

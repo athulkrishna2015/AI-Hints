@@ -154,6 +154,7 @@
   "auto_show_options": true,
   "auto_show_hints_answer": true,
   "auto_show_options_answer": true,
+  "options_before_hints": false,
   "pre_generate_next": true,
   "disabled_providers": [],
   "disabled_fallback_models": {},

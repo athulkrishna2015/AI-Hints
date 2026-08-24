@@ -1254,11 +1254,24 @@
                     answersMatch(data.options[0], data.correct_answer)
                 ) ? 0 : null;
 
-                const hSection = renderSection(contentBox, "Hints:", (data ? data.hints : []), null, 0, showTitles);
-                const oSection = renderSection(contentBox, "Options:", (data ? data.options : []), (txt) => 
-                    onAnswer && data.correct_answer && answersMatch(txt, data.correct_answer),
-                    state.seed, showTitles, correctIndex, state.selectedOptionIdx
-                );
+                // Section order: hints first by default; options first when
+                // configured (desktop uiConfig or mobile aiHintsMobileConfig).
+                const optionsFirst = !!(isAddonActive ? uiCfg.options_before_hints : mobileCfg.optionsBeforeHints);
+                let hSection = null;
+                let oSection = null;
+                if (optionsFirst) {
+                    oSection = renderSection(contentBox, "Options:", (data ? data.options : []), (txt) => 
+                        onAnswer && data.correct_answer && answersMatch(txt, data.correct_answer),
+                        state.seed, showTitles, correctIndex, state.selectedOptionIdx
+                    );
+                    hSection = renderSection(contentBox, "Hints:", (data ? data.hints : []), null, 0, showTitles);
+                } else {
+                    hSection = renderSection(contentBox, "Hints:", (data ? data.hints : []), null, 0, showTitles);
+                    oSection = renderSection(contentBox, "Options:", (data ? data.options : []), (txt) => 
+                        onAnswer && data.correct_answer && answersMatch(txt, data.correct_answer),
+                        state.seed, showTitles, correctIndex, state.selectedOptionIdx
+                    );
+                }
 
                 const updateVisibility = () => {
                     // Only show the box/background when at least one section actually
@@ -1360,7 +1373,7 @@
                 const hasWarning = data && Array.isArray(data.hints) && data.hints.some(h => h && (h.includes('⚠️') || h.includes('⚠')));
 
                 if (hasContent) {
-                    if (hSection) {
+                    const addHintsBtn = hSection ? () => {
                         const btn = createControl();
                         if (hasWarning) {
                             btn.classList.add('ai-hints-btn-warning');
@@ -1382,9 +1395,9 @@
                             saveState();
                         });
                         btnBox.appendChild(btn);
-                    }
+                    } : null;
 
-                    if (oSection) {
+                    const addOptionsBtn = oSection ? () => {
                         const btn = createControl();
                         btn.textContent = state.options ? labels.hideOptions : labels.options;
                         setControlHandler(btn, (e) => {
@@ -1396,6 +1409,15 @@
                             saveState();
                         });
                         btnBox.appendChild(btn);
+                    } : null;
+
+                    // Toggle buttons follow the same order as the sections.
+                    if (optionsFirst) {
+                        if (addOptionsBtn) addOptionsBtn();
+                        if (addHintsBtn) addHintsBtn();
+                    } else {
+                        if (addHintsBtn) addHintsBtn();
+                        if (addOptionsBtn) addOptionsBtn();
                     }
 
                     // Clear button (Only available when Python addon is active)

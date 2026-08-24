@@ -200,6 +200,13 @@ class GeneralTabMixin:
         self.auto_show_options_answer_cb.setToolTip("Automatically expand and show options on the back/answer side of the card during review.")
         show_layout.addRow(self.auto_show_options_answer_cb)
 
+        self.options_before_hints_cb = QCheckBox("Show Options Above Hints")
+        self.options_before_hints_cb.setToolTip(
+            "Display the multiple-choice options section before the hints section "
+            "on the card (default is hints first, then options). Also reorders the toggle buttons to match."
+        )
+        show_layout.addRow(self.options_before_hints_cb)
+
         # Correct Answer rating settings layout
         rate_good_container = QWidget()
         rate_good_row = QHBoxLayout(rate_good_container)

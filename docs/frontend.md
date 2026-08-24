@@ -44,7 +44,7 @@ These are the window globals `template.js` reads (with `const isAddonActive = !!
 | Global | Set by | Meaning |
 |--------|--------|---------|
 | `window.aiHintsUiConfig` | Desktop Python (`state_js`) | If present, the add-on is active → full control (Generate, Clear, edit, etc.). Carries `is_answer_side`, auto-show flags (`auto_show_hints`, etc.), `review_token`, `hints_font_size`, `is_generating`, and more. Its *presence* (truthiness) toggles active mode. |
-| `window.aiHintsMobileConfig` | Note-template script | Mobile-only config: `useEmojis`, `showExtraButtons`, `autoShowHints`, `autoShowOptions`, `autoShowHintsAnswer`, `autoShowOptionsAnswer`, `shortcuts`. |
+| `window.aiHintsMobileConfig` | Note-template script | Mobile-only config: `useEmojis`, `showExtraButtons`, `autoShowHints`, `autoShowOptions`, `autoShowHintsAnswer`, `autoShowOptionsAnswer`, `optionsBeforeHints`, `shortcuts`. |
 | `window.aiHintsCurrentCard` | Desktop `state_js` | `{ id, ord }` of the current card; used to key state and scope rendering. Falls back to a hash (`id = 'temp'` / `'h'+hash`) when absent. |
 | `window.aiHintsUnifiedLoaded` | template.js | Diagnostic flag set to `true` on load. |
 | `window.aiHintsRetryState` | template.js | Tracks init retry attempts per card (`retryInitForCard`). |

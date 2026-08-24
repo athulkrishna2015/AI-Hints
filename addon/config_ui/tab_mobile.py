@@ -112,6 +112,7 @@ class MobileTabMixin:
         auto_show_options = config.get("auto_show_options", True)
         auto_show_hints_answer = config.get("auto_show_hints_answer", True)
         auto_show_options_answer = config.get("auto_show_options_answer", True)
+        options_before_hints = config.get("options_before_hints", False)
         return (
             "window.aiHintsMobileConfig = { "
             f"useEmojis: {'true' if use_emojis else 'false'}, "
@@ -120,6 +121,7 @@ class MobileTabMixin:
             f"autoShowOptions: {'true' if auto_show_options else 'false'}, "
             f"autoShowHintsAnswer: {'true' if auto_show_hints_answer else 'false'}, "
             f"autoShowOptionsAnswer: {'true' if auto_show_options_answer else 'false'}, "
+            f"optionsBeforeHints: {'true' if options_before_hints else 'false'}, "
             f"shortcuts: {shortcuts_json} "
             "};"
         )

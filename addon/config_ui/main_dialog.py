@@ -317,6 +317,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", True))
         self.auto_show_hints_answer_cb.setChecked(c.get("auto_show_hints_answer", True))
         self.auto_show_options_answer_cb.setChecked(c.get("auto_show_options_answer", True))
+        if hasattr(self, "options_before_hints_cb"):
+            self.options_before_hints_cb.setChecked(c.get("options_before_hints", False))
         if hasattr(self, "rate_good_on_correct_cb"):
             self.rate_good_on_correct_cb.setChecked(c.get("rate_good_on_correct", False))
             self.rate_good_delay_spin.setValue(c.get("rate_good_delay_ms", 0) / 1000.0)
@@ -1072,6 +1074,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", True))
         self.auto_show_hints_answer_cb.setChecked(c.get("auto_show_hints_answer", True))
         self.auto_show_options_answer_cb.setChecked(c.get("auto_show_options_answer", True))
+        if hasattr(self, "options_before_hints_cb"):
+            self.options_before_hints_cb.setChecked(c.get("options_before_hints", False))
         self.manual_show_hints_cb.setChecked(c.get("manual_show_hints", True))
         self.manual_show_options_cb.setChecked(c.get("manual_show_options", False))
         tooltip("General defaults restored.")
@@ -1401,6 +1405,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
             new_config["auto_show_hints_answer"] = self.auto_show_hints_answer_cb.isChecked()
             new_config["auto_show_options_answer"] = self.auto_show_options_answer_cb.isChecked()
+            if hasattr(self, "options_before_hints_cb"):
+                new_config["options_before_hints"] = self.options_before_hints_cb.isChecked()
             if hasattr(self, "rate_good_on_correct_cb"):
                 new_config["rate_good_on_correct"] = self.rate_good_on_correct_cb.isChecked()
                 new_config["rate_good_delay_ms"] = int(self.rate_good_delay_spin.value() * 1000)
@@ -1632,6 +1638,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("auto_show_options", True)
         config.setdefault("auto_show_hints_answer", True)
         config.setdefault("auto_show_options_answer", True)
+        config.setdefault("options_before_hints", False)
         config.setdefault("generate_hints_enabled", True)
         config.setdefault("generate_options_enabled", True)
         config.setdefault("manual_show_hints", True)
