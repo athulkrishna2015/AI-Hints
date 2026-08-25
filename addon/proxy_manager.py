@@ -138,7 +138,6 @@ class ProxyManager:
         except Exception:
             pass
 
-        self._sync_accounts_file()
         logger.info("Starting Antigravity Proxy daemon...")
         
         # Ensure executable permissions right before launch ONLY if missing
@@ -212,54 +211,6 @@ class ProxyManager:
         except Exception as e:
             # Never raise during interpreter shutdown / atexit.
             logger.debug(f"Ignoring error while stopping proxy: {e}")
-        try:
-            self._sync_accounts_file()
-        except Exception as e:
-            logger.debug(f"Ignoring accounts sync error on stop: {e}")
-
-    def _sync_accounts_file(self, config=None):
-        """Synchronizes antigravity-accounts.json with meta.json via Anki's config management."""
-        bin_accounts = os.path.join(self.bin_dir, "antigravity-accounts.json")
-        
-        try:
-            from aqt import mw
-            if mw is None or mw.addonManager is None:
-                return
-            
-            addon_package = __name__.split(".")[0]
-            if not config:
-                config = mw.addonManager.getConfig(addon_package) or {}
-            
-            bin_exists = os.path.exists(bin_accounts)
-            stored_data = str(config.get("antigravity_accounts") or "").strip()
-            
-            if bin_exists:
-                # Read local accounts file
-                with open(bin_accounts, "r", encoding="utf-8") as f:
-                    local_data = f.read().strip()
-                
-                # Check if it differs from what is stored in config
-                if local_data and local_data != stored_data:
-                    # Delta-only write: a full getConfig() snapshot can come back
-                    # as config.json defaults, and merging that over the on-disk
-                    # config would overwrite the user's other settings.
-                    from .config_io import write_pretty_config_preserve_keys
-                    write_pretty_config_preserve_keys(addon_package, {"antigravity_accounts": local_data})
-                    logger.info("AI-Hints: Backed up antigravity-accounts.json to meta.json config.")
-            elif stored_data:
-                # Local file is missing, restore from config
-                os.makedirs(self.bin_dir, exist_ok=True)
-                with open(bin_accounts, "w", encoding="utf-8") as f:
-                    f.write(stored_data)
-                # Ensure correct file permissions on restore
-                if sys.platform != "win32":
-                    try:
-                        os.chmod(bin_accounts, 0o666)
-                    except Exception:
-                        pass
-                logger.info("AI-Hints: Restored antigravity-accounts.json from meta.json config.")
-        except Exception as e:
-            logger.error(f"AI-Hints: Failed to sync antigravity-accounts.json with meta.json: {e}")
 
 import atexit
 proxy_manager = ProxyManager()

@@ -8,9 +8,9 @@ This page documents **where** AI-Hints stores data, **what** files it creates, a
 |----------|----------|
 | `addon/config.json` | Factory default config (tracked in git; the "restore defaults" source). |
 | Anki profile config (via `meta.json` / Anki add-on manager) | Your **live** configuration, including user data like blacklist state and scan cursors. |
-| `addon/pregen_cache.json` | Pre-generated hint cache (disk-backed). |
+| Anki profile `ai_hints_bin/pregen_cache.json` | Pre-generated hint cache (disk-backed; legacy fallback: `addon/pregen_cache.json`). |
 | Anki profile `ai_hints_bin/ai_hints_batch_state.json` | Persistent batch queue state (fallback: `addon/batch_state.json`). |
-| `addon/ai_hints.log`, `.1`, `.2` | Rotating log files (3 levels, 5 MB each). |
+| Anki profile `ai_hints_bin/ai_hints.log`, `.1`, `.2` | Rotating log files (3 levels, 5 MB each); resolved via `logger._log_path()`. |
 | `addon/meta.json.bak` | Startup copy of the previous addon metadata file, made when an Anki profile opens before config migration or writes. |
 | In-note hidden JSON block | Per-card generated data (see [Data & Storage Format](data-format.md)). |
 | `addon/manifest.json`, `addon/VERSION` | Package metadata and version string. |
@@ -80,7 +80,7 @@ Persisted by `ai_client._save_blacklist()` with **version 3**:
 
 ## 3. `pregen_cache.json` (Pre-Generation Cache)
 
-- **Path**: `addon/pregen_cache.json`.
+- **Path**: `<profile>/ai_hints_bin/pregen_cache.json` (resolved by `resolve_data_file()`; survives addon updates).
 - **Class**: `PregenCache` (a `UserDict`) in `addon/reviewer_hooks.py`.
 - **Purpose**: Persist background pre-generated hint data across sessions so pre-generated cards survive restarts and Undo.
 - **Structure**: JSON object mapping card keys to their pre-generated payloads.
@@ -113,9 +113,10 @@ Structure (new nested format):
 
 ## 5. Log Files (`ai_hints.log`)
 
-- **Path**: `addon/ai_hints.log`.
+- **Path**: `<profile>/ai_hints_bin/ai_hints.log` — the single canonical location shared by the file handler (`rebind_file_logging()`), the Logs tab and Clear Log.
 - **Handler**: `RotatingFileHandler`, `maxBytes=5*1024*1024`, `backupCount=2`.
-- **Rotation**: 3 levels — `ai_hints.log`, `ai_hints.log.1`, `ai_hints.log.2`. A rollover is forced on every Anki startup so each session starts with a fresh log.
+- **Rotation**: 3 levels — `ai_hints.log`, `ai_hints.log.1`, `ai_hints.log.2`. A rollover happens when the profile opens so each session starts with a fresh log.
+- **Clear on startup**: with `auto_clear_logs` enabled (the default) all three files are deleted on startup, so `.1` / `.2` backups never persist across sessions.
 - **Format**: `%(asctime)s - %(levelname)s - %(message)s`.
 - **Viewable** live in the **Logs** tab; configurable via **Clear on startup** and **Debug logging**.
 

@@ -26,9 +26,7 @@ addon/orphan_scan_state.json.tmp
 .DS_Store
 scratch
 addon/bin/antigravity-proxy-*
-addon/bin/antigravity-accounts.json
 /config.json
-antigravity-accounts.json
 .antigravitycli/
 **/.antigravitycli/
 **/__pycache__/

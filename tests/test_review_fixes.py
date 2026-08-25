@@ -462,18 +462,6 @@ class TestM10ClearLogFile(unittest.TestCase):
         logger.handlers = original_handlers
 
 
-class TestM14ProxyAccountsNonString(unittest.TestCase):
-    def test_sync_handles_nonstring_config(self):
-        from addon.proxy_manager import ProxyManager
-        pm = ProxyManager()
-        fake_mw = MagicMock()
-        fake_mw.addonManager.getConfig.return_value = {"antigravity_accounts": None}
-        with tempfile.TemporaryDirectory() as td:
-            with patch.object(ProxyManager, "bin_dir", property(lambda self: td)):
-                with patch.dict(sys.modules, {"aqt": MagicMock(mw=fake_mw)}):
-                    pm._sync_accounts_file({"antigravity_accounts": None})  # must not raise
-
-
 class TestM18RestorePaused(unittest.TestCase):
     def test_initialize_marks_interrupted_queue_paused_without_starting(self):
         from addon import batch_manager as bmod
