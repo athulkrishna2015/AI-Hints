@@ -264,9 +264,17 @@ class LogTabMixin:
             # GUI thread with bounded memory (streamed + render-capped).
             return process_log_file(log_file, level_filter, source_filter, search_filter)
 
-        def _apply(result):
+        def _apply(fut_or_result):
             if gen != getattr(self, "_log_gen", 0):
                 return  # stale result; filters or file changed meanwhile
+            try:
+                # Anki's taskman hands the callback a concurrent.futures.Future;
+                # older paths / headless fallback deliver the raw value.
+                result = fut_or_result.result() if hasattr(fut_or_result, "result") else fut_or_result
+            except Exception as e:
+                if not self.log_view.textCursor().hasSelection():
+                    self.log_view.setPlainText(f"Error reading log: {e}")
+                return
             try:
                 self._apply_log_result(result, search_filter)
             except Exception as e:
