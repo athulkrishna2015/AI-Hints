@@ -945,6 +945,9 @@ def on_webview_will_set_content(web_content, context):
     // Instantly wipe ALL stale AI-Hints elements from previous card reviews to prevent bleed.
     // We do this before the main script runs init().
     document.querySelectorAll('.ai-hints-container, .ai-hints-container-rendered').forEach(e => e.remove());
+    // A model-picker popup must never survive a card transition: remove it so
+    // its paired Hotmouse suspension cannot outlive the review context.
+    document.querySelectorAll('.ai-hints-model-picker').forEach(e => e.remove());
     document.querySelectorAll('.ai-hints-json').forEach(e => {{
         const inQa = document.getElementById('qa')?.contains(e);
         const isDirectBodyChild = e.parentNode === document.body;
@@ -960,6 +963,13 @@ window.aiHintsUiConfig = {ui_payload};
 {js}
 </script>
 """
+    # Safety net: if a picker was somehow destroyed without sending its
+    # 'closed' message, make sure Hotmouse is not left suspended forever.
+    try:
+        from . import hotmouse_patch
+        hotmouse_patch.resume_hotmouse()
+    except Exception:
+        pass
     web_content.body += state_js
 
 def _trigger_frontend_setup(card=None, web=None):
@@ -1338,6 +1348,15 @@ def on_webview_did_receive_js_message(handled, message, context):
                     override_provider=data.get("provider"),
                     override_model=data.get("model")
                 )
+                return (True, None)
+            if isinstance(data, dict) and data.get("action") == "ai_hints_model_picker":
+                # Suspend/Resume Hotmouse while the picker popup is open so the
+                # wheel scrolls the list instead of flipping cards.
+                from . import hotmouse_patch
+                if data.get("state") == "open":
+                    hotmouse_patch.suspend_hotmouse()
+                else:
+                    hotmouse_patch.resume_hotmouse()
                 return (True, None)
         except Exception as e:
             logger.error(f"AI-Hints: Failed to parse JS JSON message: {e}")

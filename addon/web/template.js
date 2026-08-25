@@ -342,6 +342,19 @@
         overlay.className = 'ai-hints-model-picker';
         overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;background:' + C.overlay + ';';
 
+        // Suspend Hotmouse while the popup is open so wheel events scroll the
+        // lists instead of triggering card actions; resumed on every close path.
+        const notifyHotmouse = (state) => {
+            if (!isAddonActive || typeof pycmd !== 'function') return;
+            try { pycmd(JSON.stringify({ action: 'ai_hints_model_picker', state: state })); } catch (e) {}
+        };
+        const closePicker = () => {
+            if (!overlay.parentNode) return;
+            overlay.remove();
+            notifyHotmouse('closed');
+        };
+        notifyHotmouse('open');
+
         // --- Window ---
         const win = document.createElement('div');
         win.style.cssText = 'background:' + C.win + ';color:' + C.text + ';border:1px solid ' + C.border + ';border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.35);width:100%;max-width:400px;overflow:hidden;font-family:inherit;';
@@ -356,7 +369,7 @@
         closeBtn.textContent = '✕';
         closeBtn.title = "Close";
         closeBtn.style.cssText = 'border:none;background:transparent;color:' + C.close + ';font-size:16px;cursor:pointer;line-height:1;padding:2px 6px;';
-        closeBtn.onclick = () => overlay.remove();
+        closeBtn.onclick = () => closePicker();
         header.appendChild(title);
         header.appendChild(closeBtn);
         win.appendChild(header);
@@ -443,7 +456,7 @@
         const cancelBtn = document.createElement('button');
         cancelBtn.textContent = "Cancel";
         cancelBtn.style.cssText = btnStyle(C.cancelBg, C.cancelText);
-        cancelBtn.onclick = () => overlay.remove();
+        cancelBtn.onclick = () => closePicker();
 
         const genBtn2 = document.createElement('button');
         genBtn2.textContent = "Generate";
@@ -452,7 +465,7 @@
             const provider = choices[providerSel.selectedIndex].provider;
             const model = modelSel.selectedIndex >= 0 ? modelSel.value : '';
             getPersistence().save('lastModelOverride', { provider: provider, model: model });
-            overlay.remove();
+            closePicker();
             onSelect(provider, model);
         };
 
@@ -466,11 +479,11 @@
         overlay.addEventListener('wheel', (ev) => { ev.preventDefault(); ev.stopPropagation(); }, { passive: false });
         overlay.addEventListener('touchmove', (ev) => { ev.preventDefault(); ev.stopPropagation(); }, { passive: false });
         overlay.addEventListener('keydown', (ev) => {
-            if (ev.key === 'Escape') { overlay.remove(); return; }
+            if (ev.key === 'Escape') { closePicker(); return; }
             ev.stopPropagation();
         }, true);
 
-        overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+        overlay.addEventListener('click', (ev) => { if (ev.target === overlay) closePicker(); });
         document.body.appendChild(overlay);
     }
 
