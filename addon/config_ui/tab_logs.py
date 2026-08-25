@@ -1,9 +1,138 @@
 import os
 import re
+from collections import deque
 from aqt.qt import *
 from aqt.utils import askUser
 from ..logger import logger, info, tooltip
 from ..batch_manager import batch_manager
+
+# Render cap: at most this many *matching* lines are turned into HTML per
+# refresh (newest ones), keeping setHtml() cheap even on multi-MB logs.
+LOG_RENDER_CAP = 4000
+
+
+def _linkify_line(stripped: str) -> str:
+    """Escape + hyperlink URLs / 13-digit Anki IDs for one log line."""
+    escaped = stripped.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    # 1. Hyperlink URLs
+    escaped = re.sub(
+        r'(https?://[^\s<>"]+)',
+        r'<a href="\1" style="color: #0d6efd; text-decoration: underline;">\1</a>',
+        escaped,
+    )
+
+    # 2. Hyperlink 13-digit Anki IDs (but not inside the a-tags we just made)
+    def _link_anki_ids(m):
+        return re.sub(r'\b(\d{13})\b', r'<a href="browse:cid:\1" title="Open in Browser" style="color: #0d6efd; text-decoration: underline;">\1</a>', m.group(0))
+
+    escaped = re.sub(r'(<a[^>]*>.*?</a>)|(.*?)(?=<a|$)', lambda m: m.group(1) or _link_anki_ids(m), escaped)
+    return escaped
+
+
+def _line_to_html(line: str) -> str:
+    stripped = line.rstrip("\r\n")
+    escaped = _linkify_line(stripped)
+
+    color = None
+    font_weight = "normal"
+    if " - DEBUG - " in escaped:
+        color = "#8a8a8a"  # gray
+    elif " - WARNING - " in escaped:
+        color = "#fd7e14"  # orange
+        font_weight = "bold"
+    elif " - ERROR - " in escaped or " - CRITICAL - " in escaped:
+        color = "#d9534f"  # red
+        font_weight = "bold"
+    elif " - INFO - " in escaped:
+        if "success" in escaped.lower():
+            color = "#198754"  # green
+            font_weight = "bold"
+        elif "abort" in escaped.lower() or "stop" in escaped.lower() or "aborted" in escaped.lower():
+            color = "#f0ad4e"  # orange-yellow
+            font_weight = "bold"
+
+    style = ""
+    if color:
+        style += f"color: {color};"
+    if font_weight != "normal":
+        style += f"font-weight: {font_weight};"
+
+    if style:
+        return f"<span style='{style}'>{escaped}</span>"
+    return escaped
+
+
+def _line_matches(line: str, level_filter: str, source_filter: str, search_lower: str) -> bool:
+    if level_filter != "ALL" and f" - {level_filter} - " not in line:
+        return False
+    if source_filter == "Antigravity Proxy":
+        if "[Proxy]" not in line:
+            return False
+    elif source_filter == "Batch Processing":
+        if "Batch" not in line and "Queue" not in line:
+            return False
+    elif source_filter == "Pre-generation":
+        low = line.lower()
+        if "pre-generation" not in low and "pregen" not in low:
+            return False
+    elif source_filter == "Model Testing":
+        if "[MODEL_TEST]" not in line:
+            return False
+    elif source_filter == "Standard Addon":
+        if "[Proxy]" in line or "[MODEL_TEST]" in line:
+            return False
+    if search_lower and search_lower not in line.lower():
+        return False
+    return True
+
+
+def process_log_file(path: str, level_filter: str, source_filter: str, search_filter: str,
+                     max_lines: int = LOG_RENDER_CAP) -> dict:
+    """Streams the log file and builds the render payload. Runs OFF the GUI thread.
+
+    Only the newest `max_lines` matching lines are HTML-rendered (older matches
+    collapse into a truncation notice), so huge rotating logs stay responsive.
+    """
+    search_lower = (search_filter or "").strip().lower()
+    total = 0
+    matched_total = 0
+    kept = deque(maxlen=max(1, int(max_lines)))
+
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            total += 1
+            if not _line_matches(line, level_filter, source_filter, search_lower):
+                continue
+            matched_total += 1
+            kept.append(line)
+
+    truncated = matched_total > len(kept)
+    lines = list(kept)
+
+    if not lines:
+        content_html = "<i>No entries matching the selected filters.</i>"
+        content_plain = "No entries matching the selected filters."
+    else:
+        html_lines = [_line_to_html(l) for l in lines]
+        if truncated:
+            skipped = matched_total - len(lines)
+            html_lines.insert(0, (
+                f"<span style='color:#6c757d;'>&#9888; {skipped:,} older matching lines hidden "
+                f"(render cap {max_lines:,}). Narrow with Level/Source/Search or raise "
+                f"AI-Hints' log render cap.</span>"
+            ))
+        content_html = "<pre style='margin:0; font-family:monospace; white-space:pre-wrap;'>" + "<br/>".join(html_lines) + "</pre>"
+        content_plain = "".join(lines)
+
+    return {
+        "total": total,
+        "matched_total": matched_total,
+        "truncated": truncated,
+        "content_html": content_html,
+        "content_plain": content_plain,
+    }
+
 
 class LogTabMixin:
     def _create_log_tab(self):
@@ -107,115 +236,80 @@ class LogTabMixin:
         except Exception:
             log_file = os.path.join(self.addon_dir, "ai_hints.log")
         if not os.path.exists(log_file):
+            self._log_fingerprint = None
             self.log_view.setPlainText("No log file found yet. Errors will appear here after using the add-on.")
             return
-        
+
         level_filter = self.log_level_cb.currentText()
-        search_filter = self.log_search_edit.text().strip().lower()
-        
+        source_filter = self.log_source_cb.currentText()
+        search_filter = self.log_search_edit.text().strip()
+
+        # Cheap change-detection: the live timer fires every second, so skip
+        # all work (even spawning a thread) until the file or filters change.
+        fingerprint = None
         try:
-            with open(log_file, "r", encoding="utf-8", errors="replace") as f:
-                lines = f.readlines()
-            
-            if level_filter != "ALL":
-                lines = [l for l in lines if f" - {level_filter} - " in l]
-            
-            source_filter = self.log_source_cb.currentText()
-            if source_filter == "Antigravity Proxy":
-                lines = [l for l in lines if "[Proxy]" in l]
-            elif source_filter == "Batch Processing":
-                lines = [l for l in lines if "Batch" in l or "Queue" in l]
-            elif source_filter == "Pre-generation":
-                lines = [l for l in lines if "pre-generation" in l.lower() or "pregen" in l.lower()]
-            elif source_filter == "Model Testing":
-                lines = [l for l in lines if "[MODEL_TEST]" in l]
-            elif source_filter == "Standard Addon":
-                lines = [l for l in lines if "[Proxy]" not in l and "[MODEL_TEST]" not in l]
-            
-            if search_filter:
-                lines = [l for l in lines if search_filter in l.lower()]
-            
-            if not lines:
-                content = "No entries matching the selected filters."
-                content_html = "<i>No entries matching the selected filters.</i>"
-            else:
-                content = "".join(lines)
-                html_lines = []
-                for line in lines:
-                    stripped = line.rstrip("\r\n")
-                    escaped = stripped.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                    
-                    # 1. Hyperlink URLs
-                    escaped = re.sub(
-                        r'(https?://[^\s<>"]+)',
-                        r'<a href="\1" style="color: #0d6efd; text-decoration: underline;">\1</a>',
-                        escaped
-                    )
-                    
-                    # 2. Hyperlink 13-digit Anki IDs (but not inside the a-tags we just made)
-                    # We use a custom replace function to avoid matching within href attributes or text content of existing tags
-                    def _link_anki_ids(m):
-                        return re.sub(r'\b(\d{13})\b', r'<a href="browse:cid:\1" title="Open in Browser" style="color: #0d6efd; text-decoration: underline;">\1</a>', m.group(0))
-                    
-                    escaped = re.sub(r'(<a[^>]*>.*?</a>)|(.*?)(?=<a|$)', lambda m: m.group(1) or _link_anki_ids(m), escaped)
-                    
-                    color = None
-                    font_weight = "normal"
-                    
-                    if " - DEBUG - " in escaped:
-                        color = "#8a8a8a"  # gray
-                    elif " - WARNING - " in escaped:
-                        color = "#fd7e14"  # orange
-                        font_weight = "bold"
-                    elif " - ERROR - " in escaped or " - CRITICAL - " in escaped:
-                        color = "#d9534f"  # red
-                        font_weight = "bold"
-                    elif " - INFO - " in escaped:
-                        if "success" in escaped.lower():
-                            color = "#198754"  # green
-                            font_weight = "bold"
-                        elif "abort" in escaped.lower() or "stop" in escaped.lower() or "aborted" in escaped.lower():
-                            color = "#f0ad4e"  # orange-yellow
-                            font_weight = "bold"
-                    
-                    style = ""
-                    if color:
-                        style += f"color: {color};"
-                    if font_weight != "normal":
-                        style += f"font-weight: {font_weight};"
-                    
-                    if style:
-                        html_lines.append(f"<span style='{style}'>{escaped}</span>")
-                    else:
-                        html_lines.append(escaped)
-                
-                content_html = "<pre style='margin:0; font-family:monospace; white-space:pre-wrap;'>" + "<br/>".join(html_lines) + "</pre>"
+            st = os.stat(log_file)
+            fingerprint = (st.st_mtime_ns, st.st_size, level_filter, source_filter, search_filter.lower())
+        except OSError:
+            pass
+        if fingerprint is not None and fingerprint == getattr(self, "_log_fingerprint", None):
+            return
+        self._log_fingerprint = fingerprint
 
-            if self.log_view.toPlainText() == content:
-                return
-            
-            # 🚦 Selection Safety: If user is currently selecting text, DO NOT update
-            # as it will clear their selection and make copying impossible.
-            if self.log_view.textCursor().hasSelection():
-                return
+        self._log_gen = getattr(self, "_log_gen", 0) + 1
+        gen = self._log_gen
 
-            vbar = self.log_view.verticalScrollBar()
-            prev_value = vbar.value()
-            was_at_bottom = prev_value >= vbar.maximum() - 10
-            
-            self.log_view.setHtml(content_html)
-            
-            if was_at_bottom:
-                vbar.setValue(vbar.maximum())
-            else:
-                vbar.setValue(prev_value)
+        def _worker():
+            # Heavy part (streaming read, filtering, HTML build) runs off the
+            # GUI thread with bounded memory (streamed + render-capped).
+            return process_log_file(log_file, level_filter, source_filter, search_filter)
 
-            # 🖍️ Apply Search Highlighting
-            self._apply_search_highlighting(search_filter)
+        def _apply(result):
+            if gen != getattr(self, "_log_gen", 0):
+                return  # stale result; filters or file changed meanwhile
+            try:
+                self._apply_log_result(result, search_filter)
+            except Exception as e:
+                if not self.log_view.textCursor().hasSelection():
+                    self.log_view.setPlainText(f"Error rendering log: {e}")
 
-        except Exception as e:
-            if not self.log_view.textCursor().hasSelection():
-                self.log_view.setPlainText(f"Error reading log: {e}")
+        try:
+            from aqt import mw
+            mw.taskman.run_in_background(_worker, on_done=_apply)
+        except Exception:
+            # Headless/test fallback: no taskman available.
+            _apply(_worker())
+
+    def _apply_log_result(self, result, search_filter: str):
+        label_parts = []
+        if result["total"]:
+            label_parts.append(f"{result['matched_total']:,} / {result['total']:,} lines match")
+        if result["truncated"]:
+            label_parts.append(f"showing newest {LOG_RENDER_CAP:,} (memory-safe cap)")
+        self.match_count_label.setText("  ·  ".join(label_parts))
+
+        content_plain = result["content_plain"]
+        if self.log_view.toPlainText() == content_plain:
+            return
+
+        # 🚦 Selection Safety: If user is currently selecting text, DO NOT update
+        # as it will clear their selection and make copying impossible.
+        if self.log_view.textCursor().hasSelection():
+            return
+
+        vbar = self.log_view.verticalScrollBar()
+        prev_value = vbar.value()
+        was_at_bottom = prev_value >= vbar.maximum() - 10
+
+        self.log_view.setHtml(result["content_html"])
+
+        if was_at_bottom:
+            vbar.setValue(vbar.maximum())
+        else:
+            vbar.setValue(prev_value)
+
+        # 🖍️ Apply Search Highlighting
+        self._apply_search_highlighting(search_filter)
 
     def _apply_search_highlighting(self, pattern: str):
         """Highlights all occurrences of the search pattern in the log view."""
