@@ -11,11 +11,19 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
     from aqt import gui_hooks
 
     def on_profile_loaded():
-        from .logger import logger, clear_log_file
+        from .logger import logger, clear_log_file, rebind_file_logging
         from .mobile_sync import auto_update_mobile_setup, sync_mobile_script
         from aqt.qt import QTimer
         import os
         import shutil
+
+        # Bind the log file handler NOW that the profile (and its data dir) is
+        # known, so the file on disk, the Logs tab and Clear Log all share one
+        # canonical path instead of splitting across addon-dir/profile files.
+        try:
+            rebind_file_logging()
+        except Exception as e:
+            logger.error(f"AI-Hints: Failed to bind log file handler: {e}")
 
         # Preserve the previous metadata before Anki or the addon can update it.
         try:

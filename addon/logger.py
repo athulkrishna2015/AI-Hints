@@ -65,22 +65,59 @@ def get_logger():
 
         if is_testing:
             logger.addHandler(logging.NullHandler())
-            logger.addFilter(ContextFilter())
+            _add_context_filter(logger)
             return logger
 
-        log_file = _log_path()
-        handler = _build_file_handler(log_file)
-        logger.addHandler(handler)
-        logger.addFilter(ContextFilter())
-
-        # Force a rotation on startup so each Anki session starts with a fresh ai_hints.log
-        try:
-            if os.path.exists(log_file) and os.path.getsize(log_file) > 0:
-                handler.doRollover()
-        except Exception:
-            pass
+        # NOTE: no file handler here! At import time the profile is not open
+        # yet, so _log_path() would resolve to the addon folder and every log
+        # stream (handler vs Logs tab vs Clear button) would split across two
+        # different files. The file handler is attached once the profile opens
+        # via rebind_file_logging().
+        _add_context_filter(logger)
 
     return logger
+
+
+def _add_context_filter(log: logging.Logger) -> None:
+    if not any(isinstance(f, ContextFilter) for f in log.filters):
+        log.addFilter(ContextFilter())
+
+
+def rebind_file_logging():
+    """(Re)attach the rotating file handler at the CURRENT _log_path().
+
+    Called when the profile opens — the earliest moment the profile-scoped
+    data directory is known. Closes any previously-bound file handlers (e.g.
+    ones created by older builds at import time, or pointing at another
+    profile) so the handler, the Logs tab and Clear Log all operate on the
+    exact same file. Rolls the previous session's content over so each
+    session starts with a fresh ai_hints.log.
+    """
+    # Detach existing file handlers first.
+    for h in list(logger.handlers):
+        if isinstance(h, RotatingFileHandler):
+            try:
+                h.close()
+            except Exception:
+                pass
+            logger.removeHandler(h)
+    _add_context_filter(logger)
+
+    log_file = _log_path()
+    try:
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    except Exception:
+        pass
+    handler = _build_file_handler(log_file)
+    logger.addHandler(handler)
+
+    # Force a rotation on startup so each Anki session starts with a fresh ai_hints.log
+    try:
+        if os.path.exists(log_file) and os.path.getsize(log_file) > 0:
+            handler.doRollover()
+    except Exception:
+        pass
+    return log_file
 
 
 logger = get_logger()
