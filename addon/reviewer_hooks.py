@@ -177,7 +177,7 @@ def _note_set_tag(note, tag: str, add: bool) -> bool:
         logger.error(f"AI-Hints: Failed to modify tag '{tag}' on note: {e}")
     return False
 
-def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=False):
+def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=False, update_ui=True):
     if not card or not data:
         return False
 
@@ -261,7 +261,7 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
         _just_generated_card_ids.add(fresh_card.id)
         
         # Update UI if we are still on the card in this webview
-        if web:
+        if web and update_ui:
             if skip_redraw:
                 _push_hint_data_to_frontend(web, fresh_card, data, is_manual=is_manual)
             else:
@@ -269,7 +269,22 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
                     refresh_current_card(card=fresh_card, web=web)
                 except Exception as e:
                     logger.error(f"AI-Hints card refresh failed: {e}")
-        
+                # Safety net: the redraw above swaps the card HTML asynchronously,
+                # so its setup pass can race the swap and leave the visible face
+                # stale (data written to disk but not rendered until the next
+                # card transition). Re-push the payload after the swap settles;
+                # the JS-side identity check makes this a no-op if the user has
+                # meanwhile moved to a different card.
+                try:
+                    QTimer.singleShot(
+                        400,
+                        lambda: _push_hint_data_to_frontend(
+                            web, fresh_card, data, is_manual=is_manual
+                        ),
+                    )
+                except Exception:
+                    pass
+
         return True
     return False
 
@@ -2709,7 +2724,22 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
             # Identity Verification: verify the card is still the one on screen
             current_reviewer_card = getattr(mw.reviewer, "card", None)
             if current_reviewer_card and current_reviewer_card.id != card.id:
-                logger.info(f"AI-Hints: Background generation finished for {card_id}, but user is now on {current_reviewer_card.id}. Discarding to prevent bleed.")
+                # The user moved to another card while generation was in flight.
+                # The payload belongs to THIS card's note, so it is safe to save
+                # it silently — we only suppress the UI update (that is what
+                # would bleed). Previously the whole result was discarded here,
+                # wasting a completed API call.
+                logger.info(
+                    f"AI-Hints: Generation finished for {card_id}, but user is now on "
+                    f"{current_reviewer_card.id}. Saving to note without UI update."
+                )
+                if data and (data.get("hints") or data.get("options")):
+                    if is_manual:
+                        data["_generation_type"] = "regenerate" if card_has_hints(card) else "manual"
+                    else:
+                        data["_generation_type"] = "auto"
+                    if _apply_results_to_card(card, data, is_manual=is_manual, web=None, update_ui=False):
+                        _trigger_next_pregeneration(card_id)
                 _set_frontend_generating(web, False, card_id, is_pregen)
                 return
 
@@ -2733,11 +2763,12 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
                     data["_generation_type"] = "auto"
 
             if _apply_results_to_card(card, data, is_manual=is_manual, web=web):
-                # If we just finished the current card, and pre-generation is on, 
-                # try to pre-generate for the NEXT card now.
-                if not is_manual:
-                    _trigger_next_pregeneration(card_id)
-                
+                # The current card just got its data — refill the pre-generation
+                # buffer for the NEXT cards regardless of how this generation was
+                # started (manual generations used to skip this, starving the
+                # buffer until some later auto event happened to fire).
+                _trigger_next_pregeneration(card_id)
+
                 # Double safety: clear animation for current card
                 _set_frontend_generating(web, False, card_id, is_pregen)
             else:
