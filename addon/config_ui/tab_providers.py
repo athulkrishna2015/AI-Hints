@@ -542,11 +542,7 @@ class FallbackOrderDialog(QDialog):
                     temp_config["models"][self.provider] = model
                     
                     if self.provider == "local":
-                        temp_config["local_endpoint"] = {
-                            "base_url": self.main_dialog.local_url_edit.text().strip() or "http://localhost:11434/v1",
-                            "api_key": self.main_dialog.local_api_key_edit.text().strip(),
-                            "model": model
-                        }
+                        temp_config["local_endpoint"] = self.main_dialog._local_endpoint_for(model)
                     client = AIClient(temp_config)
                     test_front = self.main_dialog.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION
                     test_back = self.main_dialog.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
@@ -1264,22 +1260,23 @@ class GlobalFallbackOrderDialog(QDialog):
                     if FETCH_CANCELLATIONS.get(fetch_key):
                         break
                     
-                    api_key = self.main_dialog.api_key_edits[provider].text().strip() if provider in self.main_dialog.api_key_edits else ""
-                    temp_config = self.main_dialog.config.copy()
-                    temp_config["local_providers"] = self.main_dialog.local_providers_data
-                    # Always include current custom_providers so fetch_models has URLs/keys
-                    if hasattr(self.main_dialog, "custom_providers_data"):
-                        temp_config["custom_providers"] = self.main_dialog.custom_providers_data
-                    if "api_keys" not in temp_config: temp_config["api_keys"] = {}
-                    temp_config["api_keys"][provider] = api_key
-                    if provider == "local":
-                        temp_config["local_endpoint"] = {
-                            "base_url": self.main_dialog.local_url_edit.text().strip() or "http://localhost:11434/v1",
-                            "api_key": self.main_dialog.local_api_key_edit.text().strip()
-                        }
+                    try:
+                        api_key = self.main_dialog.api_key_edits[provider].text().strip() if provider in self.main_dialog.api_key_edits else ""
+                        temp_config = self.main_dialog.config.copy()
+                        temp_config["local_providers"] = self.main_dialog.local_providers_data
+                        # Always include current custom_providers so fetch_models has URLs/keys
+                        if hasattr(self.main_dialog, "custom_providers_data"):
+                            temp_config["custom_providers"] = self.main_dialog.custom_providers_data
+                        if "api_keys" not in temp_config: temp_config["api_keys"] = {}
+                        temp_config["api_keys"][provider] = api_key
+                        if provider == "local":
+                            temp_config["local_endpoint"] = self.main_dialog._local_endpoint_for()
 
-                    client = AIClient(temp_config)
-                    models = client.fetch_models(provider)
+                        client = AIClient(temp_config)
+                        models = client.fetch_models(provider)
+                    except Exception as e:
+                        logger.debug(f"AI-Hints: global fetch failed for {provider}: {e}")
+                        continue
                     
                     if FETCH_CANCELLATIONS.get(fetch_key):
                         break
@@ -1392,11 +1389,7 @@ class GlobalFallbackOrderDialog(QDialog):
                     temp_config["models"][provider] = model
                     
                     if provider == "local":
-                        temp_config["local_endpoint"] = {
-                            "base_url": self.main_dialog.local_url_edit.text().strip() or "http://localhost:11434/v1",
-                            "api_key": self.main_dialog.local_api_key_edit.text().strip(),
-                            "model": model
-                        }
+                        temp_config["local_endpoint"] = self.main_dialog._local_endpoint_for(model)
                     client = AIClient(temp_config)
                     test_front = self.main_dialog.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION
                     test_back = self.main_dialog.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
@@ -1470,6 +1463,25 @@ class GlobalFallbackOrderDialog(QDialog):
 
 
 class ProvidersTabMixin:
+    def _local_endpoint_for(self, model=""):
+        """Build a local_endpoint dict from in-memory local_providers_data."""
+        endpoint = dict(self.config.get("local_endpoint", {}) or {})
+        providers = getattr(self, "local_providers_data", {}) or {}
+        provider_data = providers.get("local")
+        if not provider_data:
+            provider_data = next(iter(providers.values()), {}) if providers else {}
+        provider_data = provider_data or {}
+        endpoint["base_url"] = (
+            provider_data.get("url")
+            or provider_data.get("base_url")
+            or endpoint.get("base_url")
+            or "http://localhost:11434/v1"
+        )
+        endpoint["api_key"] = provider_data.get("api_key", endpoint.get("api_key", ""))
+        if model:
+            endpoint["model"] = model
+        return endpoint
+
     def update_fallback_ui_states(self):
         if not hasattr(self, "advanced_fallback_cb"):
             return

@@ -2,6 +2,13 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 7.0.1 (2026-08-26)
+- **Global Fallback Priority Dialog Crash Fix**: Fixed `AttributeError: 'GlobalFallbackOrderDialog' object has no attribute '_build_remove_menu'` that crashed the Advanced Global Fallback Priority dialog on open. `_build_remove_menu` and `_build_test_menu` were `@staticmethod` methods on `FallbackOrderDialog` only — moved to module-level functions shared by both dialogs.
+- **Add Custom Model to Per-Provider Fallback List**: The per-provider Fallback Priority dialog now has an **Add Model...** button that lets you type any custom model name directly into the list (useful for providers whose API doesn't support model fetching, or for manually adding models not yet fetched).
+- **Local Endpoint URL for Fetch/Test**: Fixed `'ConfigDialog' object has no attribute 'local_url_edit'` crash when fetching or testing models for the `local` provider in fallback dialogs. Local endpoint configuration now reads from `local_providers_data` and `config["local_endpoint"]` instead of non-existent UI widgets.
+- **Global Fetch No Longer Aborts on Single Provider Failure**: One provider failing during Fetch All (e.g. bad URL, network error) no longer kills the entire fetch loop — each provider is wrapped in its own try/except so remaining providers continue fetching.
+- **Malformed Provider URL Guard**: Providers with non-HTTP URLs (e.g. missing scheme) are now silently skipped during model fetch instead of crashing with `unknown url type` errors.
+
 ## 7.0.0 (2026-08-26)
 - **Undo / Redo for AI Updates (Ctrl+Alt+Z / Ctrl+Alt+Shift+Z)**: Every AI write now snapshots the previous per-card state before overwriting. In the reviewer, `Ctrl+Alt+Z` steps backward through them — first press restores the result that was replaced (e.g. the fast fallback candidate a lingering higher-priority model overwrote), the next removes the AI data entirely (original value); `Ctrl+Alt+Shift+Z` walks forward again. Scoped to the on-screen card, capped at 50 steps, and a fresh AI write clears that card's redo history.
 - **Batch Generation Gets Its Own Timeout**: Batch workers inherited the short foreground `request_timeout` (e.g. 20s), killing slow-but-healthy models and burning quota on retries even though nobody watches a spinner. New `is_batch` client mode reads `batch_request_timeout` (default **120s**). Custom per-model / per-provider timeouts are now honored by **every** flow (explicit, pregen, batch) with extend-only semantics: a value greater than the flow's base budget wins; a smaller one never shortens it — so your ollama 45s cloud-model overrides also rescue slow calls in batch/pregen without ever shrinking their unattended budgets.

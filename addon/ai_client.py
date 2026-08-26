@@ -2494,6 +2494,8 @@ class AIClient:
                     continue
                 try:
                     base_url = str(local_cfg.get("base_url", local_cfg.get("url", "http://localhost:11434/v1"))).rstrip("/")
+                    if not base_url.startswith(("http://", "https://")):
+                        continue
                     url = f"{base_url}/models"
                     headers = self._json_headers(str(local_cfg.get("api_key", "") or "").strip())
                     result = self._get_json(url, headers)
@@ -2534,6 +2536,8 @@ class AIClient:
                             models_url = models_url.replace("/chat/completions", "/models")
                         elif not models_url.endswith("/models"):
                             models_url = models_url.rstrip("/") + "/models"
+                    if not models_url.startswith(("http://", "https://")):
+                        continue
                     custom_headers = custom_cfg.get("headers", {})
                     headers = self._json_headers(api_key)
                     if isinstance(custom_headers, dict):
