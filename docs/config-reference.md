@@ -61,7 +61,8 @@ Example:
 | `provider_timeouts` | `{}` | Per-provider request timeout (0 = use global). |
 | `request_timeout` | `60` | Global active-review request timeout (seconds). |
 | `pregen_request_timeout` | `120` | Pre-generation request timeout (seconds). |
-| `model_cooldown_minutes` | `10` | Failure lockout duration (minutes). |
+
+**Timeout overrides (`model_timeouts` / `provider_timeouts`)** apply to **every** generation flow — explicit review, pregen, and batch — but only as an *extension*: a custom value greater than the flow's base budget wins; a smaller one never shortens it. So unattended budgets keep their headroom while genuinely slow models can be granted more everywhere.| `model_cooldown_minutes` | `10` | Failure lockout duration (minutes). |
 | `model_blacklist_data` | `{}` | Internal blacklist/cooldown state (provider-model-key combos). |
 
 ### Generation
@@ -87,6 +88,8 @@ Example:
 | `options_before_hints` | `true` | Render the options section above the hints section (default). Set to `false` for hints first, then options. Also reorders toggle buttons. |
 | `linger_on_timeout` | `true` | Keep timed-out requests alive in a background thread while fallback continues; use the slow result if it arrives first. |
 | `timeout_linger_seconds` | `0` | Extended deadline (seconds) for lingering background attempts. `0` = auto: 3x request timeout, clamped to 180–900s. |
+| `linger_race_policy` | `priority` | Who wins when a lower-priority candidate succeeds while a higher-priority lingering attempt is still running. `priority`: wait out the lingered attempt's deadline and prefer its result (usually the smarter model; the card button shows an amber "Waiting for higher-priority model…" state). `first`: first usable result wins immediately. |
+| `batch_request_timeout` | `120` | Per-request base timeout (seconds) for background batch-generation workers. Independent of `request_timeout` — batch runs unattended, so slow models get more headroom. Per-model / per-provider overrides still apply, but only when greater than this value (extend-only). |
 | `manual_show_hints` | `true` | Auto-show hints after manual generation. |
 | `manual_show_options` | `false` | Auto-show options after manual generation. |
 

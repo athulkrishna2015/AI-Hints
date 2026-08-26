@@ -38,6 +38,19 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 
 The add-on features a multi-tiered, intelligence-driven fallback system. If your primary provider fails (due to rate limits, API key exhaustion, or network issues), the system automatically attempts fallback providers and models strictly ranked by absolute intelligence and reasoning capability.
 
+### ⏳ Linger-on-Timeout Fallback
+
+A read timeout no longer throws the request away. The slow-but-alive request is re-dispatched in a background thread with an extended deadline (default: 3× the request timeout, clamped to 180–900s) while fallback continues immediately with the next candidate:
+
+- **First-timeout coverage**: even a timeout on the *first* model of a provider spawns the background retry (pure read timeouts are also never blacklisted — slow ≠ broken).
+- **Priority wins races**: if a lower-priority candidate succeeds while a higher-priority lingering attempt is still running, generation waits out its extended deadline and prefers the smarter result (`linger_race_policy: "priority"`, default — the button shows an amber **"⏳ Waiting for higher-priority model…"** state). Set `"first"` to make the first usable result win instantly instead.
+- **Rescue on total failure**: if every foreground candidate fails, generation waits out the lingering attempts instead of returning empty.
+- Works everywhere: explicit review, pre-generation, and batch (`linger_on_timeout: false` disables it).
+
+### Per-Flow Timeouts
+
+Each generation flow has its own base request budget — `request_timeout` (explicit review), `pregen_request_timeout` (pre-generation), `batch_request_timeout` (batch, default **120s**) — and custom per-model/per-provider timeouts are honored by *every* flow with **extend-only** semantics: a value greater than the flow's base wins; a smaller one never shortens an unattended budget.
+
 ### Default Provider Priority
 1. **Anthropic** (Claude 3.7/3.5 Sonnet)
 2. **OpenAI** (GPT-4o)
@@ -68,6 +81,7 @@ A single **Remove** dropdown removes the models you choose: *Selected*, *Depreca
 The batch generation queue is designed for heavy-duty background processing with maximum reliability:
 
 - **Concurrent Multi-Provider Generation**: Leverages multiple AI providers concurrently to process batches significantly faster, with independent fallback queues per provider.
+- **Unattended-Friendly Timeouts & Linger**: Batch requests use their own generous budget (`batch_request_timeout`, default **120s**) instead of the short review timeout, and benefit from Linger-on-Timeout rescue like every other flow — slow models get room to answer without wasting quota on premature retries.
 - **Multiple Queued Jobs**: Add another deck, browser selection, or sidebar group while a batch is already running. Pending jobs can be reordered, canceled, or cleared from the Batch tab.
 - **Granular Queue Management**: View the next 5 pending cards in the queue directly in the Batch tab status. Includes individual **[✖ Discard]** buttons to surgically remove cards from the current batch.
 - **Deck Browser Cogwheel Option**: Start batch generation for any deck directly from the deck browser's options menu.
@@ -130,14 +144,14 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
     - **No API Key Required**: Local endpoints without authentication can leave the API Key field blank.
     - **Body Params**: Send extra JSON fields in the request body (e.g., `{"think": "low"}` to control model reasoning traces on thinking-capable models like GPT-OSS or Qwen3).
     - **Editable Name**: Provider names can be changed after creation via the Edit button.
-  - **Per-Model Thinking Levels & Timeouts**: In the **Fallbacks** dialog for any provider, each model has a Thinking Level dropdown (`off`/`low`/`medium`/`high`) and a Timeout spinbox. Set thinking to `"low"` for minimal reasoning traces on GPT-OSS or Qwen3, or `"off"` to disable (where supported). Timeout overrides the provider/global timeout for that specific model.
+  - **Per-Model Thinking Levels & Timeouts**: In the **Fallbacks** dialog for any provider, each model has a Thinking Level dropdown (`off`/`low`/`medium`/`high`) and a Timeout spinbox. Set thinking to `"low"` for minimal reasoning traces on GPT-OSS or Qwen3, or `"off"` to disable (where supported). Timeout overrides the provider/global timeout for that specific model — and is honored by every generation flow (review, pregen, batch) whenever it is greater than that flow's base budget (extend-only).
   - **Multi-Select Test Row**: Ctrl+click or Shift+click to select multiple rows, then click **Test → Test Row** to test them.
   - **Model Status Highlights**: Fallback lists highlight 🆕 newly fetched models (green), ⚠️ deprecated (red), and ⚠️ no-longer-returned (amber) models after a fetch, with a unified **Remove** dropdown to strip Selected / Deprecated / No Longer Returned / both flagged types, and a unified **Test** dropdown (Checked / Row / All).
   - **Token Usage Logging**: Every successful provider call logs its token usage (`prompt_tokens`/`completion_tokens`/`total_tokens`) to `ai_hints.log`, visible in the Logs tab.
   - **Debug Logging**: Enable "Debug logging" in the Logs tab to see full request/response payloads in the log file (`addon/ai_hints.log`).
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
 - **Shortcuts Tab**: Customize AI-Hints action keys and the modifier used on the answer side. The front side also accepts the action keys without the modifier for faster review.
-- **Advanced Tab**: Customize your system prompt, tune active-review and pregeneration API request timeouts, migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist**.
+- **Advanced Tab**: Customize your system prompt, tune per-flow API request timeouts (active-review, pregeneration, batch — custom per-model/per-provider values extend any flow), toggle Linger-on-Timeout behavior (`linger_on_timeout`, `timeout_linger_seconds`, `linger_race_policy` via raw config), migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist**.
 - **Logs Tab**: View, filter, search, and copy real-time addon logs. Includes a **Debug logging** toggle to enable verbose `DEBUG`-level output instantly (no restart needed), and a **Clear on startup** option.
 - **Scrollbar Support**: Smooth scrollbars automatically wrap the Advanced, Mobile, and Batch tabs, ensuring the GUI scales perfectly to fit compact laptops and high-DPI screens.
 

@@ -84,12 +84,15 @@
         .nightMode .ai-hints-btn-generating { background: linear-gradient(90deg, #172554 0%, #1d4ed8 50%, #172554 100%); background-size: 200% 100%; color: #ffffff; border-color: #93c5fd; will-change: background-position; }
         .ai-hints-btn-pregenerating { animation: ai-hints-pregen-pulse 2s ease-in-out infinite; background: linear-gradient(90deg, #f0fdf4 0%, #dcfce7 50%, #f0fdf4 100%) !important; background-size: 200% 100%; border-color: #86efac !important; will-change: background-position; }
         .nightMode .ai-hints-btn-pregenerating { background: linear-gradient(90deg, #064e3b 0%, #166534 50%, #064e3b 100%) !important; background-size: 200% 100%; border-color: #22c55e !important; }
+        .ai-hints-btn-lingering { animation: ai-hints-lingering-pulse 2.5s ease-in-out infinite; background: linear-gradient(90deg, #fffbeb 0%, #fef3c7 50%, #fffbeb 100%) !important; background-size: 200% 100%; border-color: #fbbf24 !important; will-change: background-position; }
+        .nightMode .ai-hints-btn-lingering { background: linear-gradient(90deg, #451a03 0%, #b45309 50%, #451a03 100%) !important; background-size: 200% 100%; border-color: #f59e0b !important; }
         .ai-hints-btn-warning { border-color: #f39c12 !important; background-color: #fff9e6 !important; color: #d35400 !important; box-shadow: 0 0 4px rgba(243, 156, 18, 0.4); }
         .ai-hints-btn-warning:hover { background-color: #fef5d1 !important; }
         .nightMode .ai-hints-btn-warning { border-color: #f39c12 !important; background-color: #2c2514 !important; color: #f39c12 !important; box-shadow: 0 0 4px rgba(243, 156, 18, 0.4); }
         .nightMode .ai-hints-btn-warning:hover { background-color: #3e331b !important; }
         @keyframes ai-hints-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
         @keyframes ai-hints-pregen-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+        @keyframes ai-hints-lingering-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
         .ai-hints-ctrl-active .ai-hints-hint-list li:hover,
         .ai-hints-ctrl-active .ai-hints-list li:hover,
         .ai-hints-ctrl-active .ai-hints-warning-item span:hover {
@@ -1334,7 +1337,12 @@
                         genBtn.title = "AI generation is disabled — enable hints or options in Settings.";
                     }
 
-                    if (generationEnabled && uiCfg.is_generating) {
+                    if (generationEnabled && uiCfg.is_lingering) {
+                        genBtn.textContent = "⏳ Waiting for higher-priority model… (Stop)";
+                        genBtn.disabled = false;
+                        genBtn.title = "Click to stop generation";
+                        genBtn.classList.add('ai-hints-btn-lingering');
+                    } else if (generationEnabled && uiCfg.is_generating) {
                         genBtn.textContent = "✨ Generating... (Stop)";
                         genBtn.disabled = false;
                         genBtn.title = "Click to stop generation";
@@ -1347,7 +1355,7 @@
                     
                     genBtn.onclick = (e) => {
                         if (e) { e.stopPropagation(); e.preventDefault(); }
-                        if (genBtn.classList.contains('ai-hints-btn-generating')) {
+                        if (genBtn.classList.contains('ai-hints-btn-generating') || genBtn.classList.contains('ai-hints-btn-lingering')) {
                             genBtn.disabled = true;
                             genBtn.textContent = "Stopping...";
                             if (typeof pycmd === 'function') pycmd('ai_hints_cancel');
@@ -1740,6 +1748,7 @@
 
         if (isCurrentCard && window.aiHintsUiConfig) {
             window.aiHintsUiConfig.is_generating = false;
+            window.aiHintsUiConfig.is_lingering = false;
         }
         init(data, isManualAction);
     };
@@ -1810,6 +1819,14 @@
             }
         }
 
+        // Lingering: a higher-priority candidate timed out once and generation is
+        // blocked on its extended-deadline retry (distinct amber animation).
+        if (active && status === 'Lingering' && isThisCard) {
+            if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_lingering = true;
+        } else if (!active || status !== 'Lingering') {
+            if (window.aiHintsUiConfig) window.aiHintsUiConfig.is_lingering = false;
+        }
+
         const uiCfg = window.aiHintsUiConfig || {};
 
         // If generation is fully disabled, keep generate/regenerate buttons
@@ -1818,6 +1835,7 @@
         if (!generationEnabled) {
             uiCfg.is_generating = false;
             uiCfg.is_pregenerating = false;
+            uiCfg.is_lingering = false;
         }
 
         let genBtns = document.querySelectorAll('.ai-hints-btn');
@@ -1831,26 +1849,38 @@
                 btn.disabled = true;
                 btn.classList.remove('ai-hints-btn-generating');
                 btn.classList.remove('ai-hints-btn-pregenerating');
+                btn.classList.remove('ai-hints-btn-lingering');
                 btn.title = "AI generation is disabled — enable hints or options in Settings.";
                 return;
             }
             if (btn.textContent.includes("AI Hints") || btn.textContent.includes("Regenerate") || 
-                btn.classList.contains('ai-hints-btn-generating') || btn.classList.contains('ai-hints-btn-pregenerating')) {
+                btn.classList.contains('ai-hints-btn-generating') || btn.classList.contains('ai-hints-btn-pregenerating') ||
+                btn.classList.contains('ai-hints-btn-lingering')) {
                 
-                if (uiCfg.is_generating) {
+                if (uiCfg.is_lingering) {
+                    btn.disabled = false;
+                    btn.textContent = "⏳ Waiting for higher-priority model… (Stop)";
+                    btn.title = "A higher-priority model timed out once; waiting for its extended-deadline retry. Click to stop.";
+                    btn.classList.remove('ai-hints-btn-generating');
+                    btn.classList.remove('ai-hints-btn-pregenerating');
+                    btn.classList.add('ai-hints-btn-lingering');
+                } else if (uiCfg.is_generating) {
                     btn.disabled = false;
                     btn.textContent = "✨ Generating... (Stop)";
                     btn.title = "Click to stop generation";
                     btn.classList.remove('ai-hints-btn-pregenerating');
+                    btn.classList.remove('ai-hints-btn-lingering');
                     btn.classList.add('ai-hints-btn-generating');
                 } else if (uiCfg.is_pregenerating) {
                     btn.disabled = false;
                     btn.classList.remove('ai-hints-btn-generating');
+                    btn.classList.remove('ai-hints-btn-lingering');
                     btn.classList.add('ai-hints-btn-pregenerating');
                 } else {
                     btn.disabled = false;
                     btn.classList.remove('ai-hints-btn-generating');
                     btn.classList.remove('ai-hints-btn-pregenerating');
+                    btn.classList.remove('ai-hints-btn-lingering');
                     
                     if (isThisCard && (status === 'Failed' || status === 'Offline')) {
                         const oldTxt = btn.textContent;
@@ -1889,6 +1919,7 @@
             // If no new config provided, reset generation state for the new card
             window.aiHintsUiConfig.is_generating = false;
             window.aiHintsUiConfig.is_pregenerating = false;
+            window.aiHintsUiConfig.is_lingering = false;
         }
 
         const setupKey = JSON.stringify({ card: { id: String(calcId), ord: ord }, hints: hints || null });

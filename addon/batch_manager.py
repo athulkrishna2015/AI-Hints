@@ -1040,7 +1040,9 @@ class BatchManager:
         # Each worker thread gets its OWN AIClient instance. AIClient mutates
         # per-request state (_request_provider/_request_model) on the instance,
         # so sharing one client across threads corrupts timeout resolution.
-        client = AIClient(config or {})
+        # is_batch selects batch_request_timeout (default 120s) instead of the
+        # shorter foreground request_timeout — nobody watches a spinner here.
+        client = AIClient(config or {}, is_batch=True)
 
         try:
              models = client._provider_models(provider)

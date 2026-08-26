@@ -2631,6 +2631,19 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
     provider = override_provider or config.get("ai_provider", "openai")
 
     client = AIClient(config, is_pregen=is_pregen)
+    if web:
+        # Surface linger waits on this card's own animation slot: while the
+        # fallback walk blocks on a higher-priority lingering retry, the button
+        # swaps to the distinct amber "waiting" style, and back on exit.
+        def _linger_status_cb(status, _web=web, _cid=card_id, _pregen=is_pregen):
+            try:
+                if status:
+                    _set_frontend_generating(_web, True, _cid, _pregen, "Lingering")
+                else:
+                    _set_frontend_generating(_web, True, _cid, _pregen)
+            except Exception:
+                pass
+        client.status_cb = _linger_status_cb
     if "unittest" not in sys.modules and not client.is_network_available():
         if not is_pregen:
             logger.info(f"AI-Hints: Network offline, generation paused for card {card_id}.")

@@ -510,6 +510,7 @@ class _LingerPool:
         self._results = []          # [{"order": int, "provider": p, "model": m, "result": dict}]
         self._cancelled = False
         self._threads = []
+        self._pending = set()       # orders of spawned-but-unresolved attempts
         self._base_config = dict(base_config or {})
         self._linger_timeout = linger_timeout
         self._system_prompt = system_prompt
@@ -539,13 +540,27 @@ class _LingerPool:
                     logger.info(f"AI-Hints Linger: {provider}/{override_model} finished late with no usable content.")
             except Exception as e:
                 logger.info(f"AI-Hints Linger: late attempt {provider}/{override_model} failed: {e}")
+            finally:
+                with pool._lock:
+                    pool._pending.discard(order)
 
         t = threading.Thread(target=_run, name=f"ai-hints-linger-{provider}-{override_model}", daemon=True)
         with self._lock:
             if self._cancelled:
                 return
             self._threads.append(t)
+            self._pending.add(order)
         t.start()
+
+    def has_pending_before(self, max_order: int) -> bool:
+        """True while an attempt from a HIGHER-priority (earlier) candidate is in flight."""
+        with self._lock:
+            return any(o < max_order for o in self._pending)
+
+    def has_pending(self) -> bool:
+        """True while ANY lingering attempt is still in flight."""
+        with self._lock:
+            return bool(self._pending)
 
     def _claim_best(self, max_order=None):
         with self._lock:
@@ -562,21 +577,22 @@ class _LingerPool:
         """Return the earliest ready lingering result (without waiting), if any."""
         return self._claim_best(max_order)
 
-    def wait_for_any(self):
+    def wait_for_any(self, max_order=None):
         """Block until a lingering request yields a result, or all give up.
 
         Bounded by the linger timeout itself plus slack; aborts early on
-        emergency stop or when the network goes down.
+        emergency stop or when the network goes down. With ``max_order``,
+        only attempts from higher-priority (earlier) candidates count.
         """
         start = time.monotonic()
         while True:
-            best = self._claim_best()
+            best = self._claim_best(max_order)
             if best is not None:
                 return best
             with self._lock:
-                alive = any(t.is_alive() for t in self._threads)
+                pending = {o for o in self._pending if max_order is None or o < max_order}
                 cancelled = self._cancelled
-            if cancelled or not alive or state.GLOBAL_STOP or _NETWORK_STATE.get("online") is False:
+            if cancelled or not pending or state.GLOBAL_STOP or _NETWORK_STATE.get("online") is False:
                 return None
             if time.monotonic() - start > self._linger_timeout + 15:
                 return None
@@ -590,37 +606,78 @@ class _LingerPool:
 
 
 class AIClient:
-    def __init__(self, config: Dict[str, Any], is_pregen: bool = False):
+    # (linger_pool, order) while an outer fallback loop is walking candidates;
+    # inner per-provider model loops consult it to spawn lingering retries on
+    # read timeouts that would otherwise be absorbed silently. None elsewhere.
+    _active_linger = None
+
+    def __init__(self, config: Dict[str, Any], is_pregen: bool = False, is_batch: bool = False):
         _ensure_network_monitor()
         self.config = config or {}
         self._key_names: Dict[Tuple[str, str], str] = {}
         self.is_pregen = is_pregen
+        self.is_batch = is_batch
         self._request_provider = None
         self._request_model = None
+        # Optional UI progress hook: called with "Lingering" when a fallback
+        # walk blocks on a higher-priority lingering retry, and with None when
+        # it stops. Callers that own a frontend (reviewer_hooks) set this.
+        self.status_cb = None
+
+    def _notify_status(self, status):
+        cb = getattr(self, "status_cb", None)
+        if callable(cb):
+            try:
+                cb(status)
+            except Exception:
+                pass
+
+    @property
+    def _linger_prefers_priority(self) -> bool:
+        """Race policy for lingering retries vs later candidates' successes.
+
+        "priority" (default): a still-running attempt from an earlier
+        (higher-priority) candidate outranks a later candidate's fresh
+        success — generation waits out its extended deadline.
+        "first": first usable result wins, no waiting.
+        """
+        try:
+            return str(self.config.get("linger_race_policy", "priority") or "priority").strip().lower() != "first"
+        except Exception:
+            return True
 
     @property
     def timeout(self) -> int:
         try:
-            # Check model-level timeout first
+            # Type-specific base budget: each flow gets its own generous
+            # default (unattended flows more than foreground).
+            if self.is_pregen:
+                base = int(self.config.get("pregen_request_timeout", 120))
+            elif self.is_batch:
+                base = int(self.config.get("batch_request_timeout", 120))
+            else:
+                base = int(self.config.get("request_timeout", 60))
+
+            # Custom per-model / per-provider timeouts are honored for EVERY
+            # flow, but only as an EXTENSION: a value below the flow's base
+            # never shortens it, so unattended budgets keep their headroom.
+            best = base
             if self._request_provider and self._request_model:
                 model_timeouts = self.config.get("model_timeouts", {}) or {}
                 if isinstance(model_timeouts, dict):
                     provider_mt = model_timeouts.get(self._request_provider, {}) or {}
                     if isinstance(provider_mt, dict):
                         override = int(provider_mt.get(self._request_model, 0) or 0)
-                        if override > 0:
-                            return override
-            # Check provider-level timeout
+                        if override > best:
+                            best = override
             provider_timeouts = self.config.get("provider_timeouts", {}) or {}
             if self._request_provider and isinstance(provider_timeouts, dict):
                 override = int(provider_timeouts.get(self._request_provider, 0) or 0)
-                if override > 0:
-                    return override
-            if self.is_pregen:
-                return int(self.config.get("pregen_request_timeout", 120))
-            return int(self.config.get("request_timeout", 60))
+                if override > best:
+                    best = override
+            return best
         except Exception:
-            return 120 if self.is_pregen else 60
+            return 120 if (self.is_pregen or self.is_batch) else 60
 
     def _linger_enabled(self) -> bool:
         """Linger-on-timeout: keep timed-out requests alive in the background."""
@@ -794,8 +851,33 @@ class AIClient:
                 
                 try:
                     logger.info(f"AI-Hints: Calling {provider} with model: {model} (via global priority)")
-                    result = self._call_provider(provider, system_prompt, prompt, override_model=model)
+                    self._active_linger = (linger_pool, gi)
+                    try:
+                        result = self._call_provider(provider, system_prompt, prompt, override_model=model)
+                    finally:
+                        self._active_linger = None
                     if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
+                        # Priority policy: a still-running attempt from an
+                        # EARLIER (higher-priority, usually smarter) candidate
+                        # outranks this success — give it its extended deadline.
+                        # "first" policy: the fresh success wins immediately.
+                        if linger_pool and self._linger_prefers_priority:
+                            early = linger_pool.claim_ready(max_order=gi)
+                            if not early and linger_pool.has_pending_before(gi):
+                                self._notify_status("Lingering")
+                                try:
+                                    early = linger_pool.wait_for_any(max_order=gi)
+                                finally:
+                                    self._notify_status(None)
+                            if early:
+                                logger.info(
+                                    f"AI-Hints Linger: higher-priority late result from "
+                                    f"{early['provider']}/{early['model']} wins over {provider}/{model}."
+                                )
+                                try:
+                                    return self._finalize_result(early["result"], back, hints_enabled, options_enabled, is_test)
+                                except Exception:
+                                    pass
                         result = self._finalize_result(result, back, hints_enabled, options_enabled, is_test)
                         logger.debug(f"AI-Hints: Successful generation using: {provider}/{model}")
                         return result
@@ -813,10 +895,19 @@ class AIClient:
                             return {"hints": [], "options": []}
                     continue
             
-            if linger_pool and last_exception is not None:
+            # Rescue when every candidate failed AND/OR a lingering attempt from
+            # a timed-out candidate is still alive. The pending check matters
+            # for single-candidate flows (e.g. batch's only_this_provider): a
+            # lone model timeout returns an empty dict WITHOUT raising, which
+            # used to skip the wait entirely and waste the lingering retry.
+            if linger_pool and (last_exception is not None or linger_pool.has_pending()):
                 # Every candidate failed — give the lingering background
                 # requests their extended deadline to produce something.
-                got = linger_pool.wait_for_any()
+                self._notify_status("Lingering")
+                try:
+                    got = linger_pool.wait_for_any()
+                finally:
+                    self._notify_status(None)
                 if got:
                     logger.info(f"AI-Hints Linger: all candidates failed; using late result from {got['provider']}/{got['model']}.")
                     try:
@@ -861,8 +952,31 @@ class AIClient:
                         pass
 
             try:
-                result = self._call_provider(provider, system_prompt, prompt, override_model=override_model or "")
+                self._active_linger = (linger_pool, pi)
+                try:
+                    result = self._call_provider(provider, system_prompt, prompt, override_model=override_model or "")
+                finally:
+                    self._active_linger = None
                 if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
+                    # Same priority policy as the global loop: let a still-running
+                    # higher-priority lingering attempt win before settling.
+                    if linger_pool and self._linger_prefers_priority:
+                        early = linger_pool.claim_ready(max_order=pi)
+                        if not early and linger_pool.has_pending_before(pi):
+                            self._notify_status("Lingering")
+                            try:
+                                early = linger_pool.wait_for_any(max_order=pi)
+                            finally:
+                                self._notify_status(None)
+                        if early:
+                            logger.info(
+                                f"AI-Hints Linger: higher-priority late result from "
+                                f"{early['provider']}/{early['model']} wins over {provider}."
+                            )
+                            try:
+                                return self._finalize_result(early["result"], back, hints_enabled, options_enabled, is_test)
+                            except Exception:
+                                pass
                     result = self._finalize_result(result, back, hints_enabled, options_enabled, is_test)
                     if provider != primary_provider:
                         logger.debug(f"AI-Hints: Fallback successful using provider: {provider}")
@@ -881,8 +995,15 @@ class AIClient:
                         return {"hints": [], "options": []}
                 continue
         
-        if linger_pool and last_exception is not None:
-            got = linger_pool.wait_for_any()
+        if linger_pool and (last_exception is not None or linger_pool.has_pending()):
+            # Pending-only rescue matters for single-candidate flows (batch's
+            # only_this_provider): a lone model timeout returns an empty dict
+            # WITHOUT raising, which used to skip the wait entirely.
+            self._notify_status("Lingering")
+            try:
+                got = linger_pool.wait_for_any()
+            finally:
+                self._notify_status(None)
             if got:
                 logger.info(f"AI-Hints Linger: all candidates failed; using late result from {got['provider']}/{got['model']}.")
                 try:
@@ -891,7 +1012,7 @@ class AIClient:
                     pass
         if last_exception:
             raise last_exception
-            
+
         return {"hints": [], "options": []}
 
     def has_ready_provider(self, provider: str) -> bool:
@@ -1167,6 +1288,9 @@ class AIClient:
 
             if model_timed_out:
                 timeouts_count += 1
+                hook = self._active_linger
+                if hook is not None:
+                    hook[0].spawn(hook[1], provider_name, model)
                 if timeouts_count >= 2:
                     raise TimeoutError(f"Multiple read timeouts for provider {provider_name}")
 
@@ -1380,6 +1504,9 @@ class AIClient:
 
             if model_timed_out:
                 timeouts_count += 1
+                hook = self._active_linger
+                if hook is not None:
+                    hook[0].spawn(hook[1], provider, model)
                 if timeouts_count >= 2:
                     raise TimeoutError(f"Multiple read timeouts for provider {provider}")
 
@@ -1475,6 +1602,9 @@ class AIClient:
 
             if model_timed_out:
                 timeouts_count += 1
+                hook = self._active_linger
+                if hook is not None:
+                    hook[0].spawn(hook[1], "anthropic", model)
                 if timeouts_count >= 2:
                     raise TimeoutError("Multiple read timeouts for provider anthropic")
 
@@ -1586,6 +1716,9 @@ class AIClient:
 
             if model_timed_out:
                 timeouts_count += 1
+                hook = self._active_linger
+                if hook is not None:
+                    hook[0].spawn(hook[1], "gemini", model)
                 if timeouts_count >= 2:
                     raise TimeoutError("Multiple read timeouts for provider gemini")
 
