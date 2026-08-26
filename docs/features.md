@@ -57,6 +57,15 @@ Customizable in the **Shortcuts** tab. Defaults (with the modifier, e.g. `Alt`):
 
 On the **front** side, action keys also work **without** the modifier for faster review. MCQ option selection uses bare `1–9` by default.
 
+### AI-Update Undo / Redo (reviewer)
+
+Every AI write is snapshotted before it replaces data, so multi-step generations are fully walkable:
+
+- `Ctrl+Alt+Z` — **Undo last AI update**: first press restores the result that was replaced (e.g. the fast fallback candidate a lingering higher-priority model overwrote); the next press removes the AI data entirely, back to the original value.
+- `Ctrl+Alt+Shift+Z` — **Redo**: re-applies the state the last undo displaced.
+
+Both act on the card currently on screen; a fresh AI write clears that card's redo history. These are fixed bindings, independent of the Shortcuts-tab modifier scheme.
+
 ### Per-Card Model Override (Alt+Click)
 
 **Alt+click** the **Generate/Regenerate** button during review to open a *"Generate with a specific model"* dialog. This forces an exact provider + model for the current card's regeneration, bypassing the automatic fallback order for that one generation:

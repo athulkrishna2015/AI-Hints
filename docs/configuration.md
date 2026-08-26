@@ -205,6 +205,13 @@ On the front side, these also work without the modifier.
 
 A note on shortcut collisions: `ctrl` is used by Anki for flags, `alt` by some OSes, `meta` by the OS dock. The add-on recommends `ctrl+shift` if you change modifiers.
 
+### Fixed Reviewer Shortcuts
+
+Two bindings are independent of the modifier scheme above:
+
+- `Ctrl+Alt+Z` — Undo last AI update (steps back: replaced result → … → original value).
+- `Ctrl+Alt+Shift+Z` — Redo last undone AI update.
+
 ---
 
 ## Batch Generation Tab

@@ -7,6 +7,7 @@ from anki.errors import NotFoundError
 from aqt import mw, gui_hooks
 from aqt.qt import QMessageBox, QMenu, QAction, QPoint, Qt, QDialog, QVBoxLayout, QTimer
 from .logger import logger, info, tooltip, state
+from .card_parser import _iter_hint_blocks as _cp_iter_hint_blocks
 
 ADDON_PACKAGE = __name__.split(".")[0]
 
@@ -142,6 +143,15 @@ MAX_HINT_CACHE_SIZE = 200
 
 _review_token = 0
 _last_undo_time = 0
+
+# ---- AI-update undo stack (Ctrl+Alt+Z in the reviewer) ----------------------
+# Before every AI write that replaces existing data we snapshot the previous
+# per-card JSON block (or None when the card had NO AI data yet). Popping
+# restores step-by-step: replaced result -> ... -> original value.
+MAX_AI_UNDO_STACK = 50
+_ai_undo_stack = []  # [{"card_id": int, "note_id": int, "field_idx": int, "block_html": str|None}]
+# Displaced states from undos; Ctrl+Alt+Shift+Z walks forward again.
+_ai_redo_stack = []
 _reviewer_is_ending = False
 
 _css_cache = None
@@ -242,9 +252,22 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
             except Exception:
                 pass
     
+    # Snapshot the pre-write state so Ctrl+Alt+Z can step back through
+    # AI updates (replaced result -> ... -> original value).
+    try:
+        _pre_snap = _capture_ai_snapshot(fresh_card)
+        _clear_redo_for_card(fresh_card.id)  # fresh write diverges history
+        _push_ai_undo({
+            "card_id": fresh_card.id,
+            "note_id": note.id,
+            "field_idx": (_pre_snap or {}).get("field_idx", 0),
+            "block_html": (_pre_snap or {}).get("block_html"),
+        })
+    except Exception as snap_err:
+        logger.debug(f"AI-Hints: pre-write snapshot skipped: {snap_err}")
+
     if parser.update_note_with_hints(note, data, toggles, fresh_card):
         logger.info(f"AI-Hints: Updating database for card {fresh_card.id} (Note {note.id}, Ord {fresh_card.ord}) with new hints.")
-        
         # Apply note tags based on config
         _config = config  # already loaded above
         is_skipped = bool(data.get("_skipped"))
@@ -527,6 +550,234 @@ def _forget_generated_hints(card):
     key = _card_cache_key(card)
     if key is not None:
         _generated_hint_cache.pop(key, None)
+
+
+def _capture_ai_snapshot(card):
+    """Snapshot the card's current AI block (field index + raw HTML).
+
+    Returns None when the note carries no matching block at all, in which
+    case callers push a block_html=None entry meaning "original value".
+    """
+    if not card:
+        return None
+    try:
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        parser = CardParser(
+            mathjax_format=config.get("mathjax_format", "delimiters"),
+            fix_latex=config.get("fix_latex", False)
+        )
+        note = card.note()
+        fields = list(note.values()) if hasattr(note, "values") else getattr(note, "fields", [])
+        for idx, f_val in enumerate(fields):
+            if not isinstance(f_val, str):
+                continue
+            for match in _cp_iter_hint_blocks(f_val):
+                block = match.group(0)
+                if parser._block_matches_card(block, card) and \
+                        parser._json_block_has_data_for_card(block, match.group(1), card, note):
+                    return {
+                        "card_id": card.id,
+                        "note_id": note.id,
+                        "field_idx": idx,
+                        "block_html": block,
+                    }
+    except Exception as e:
+        logger.debug(f"AI-Hints: AI-undo snapshot failed: {e}")
+    return None
+
+
+def _push_ai_undo(snapshot):
+    """Record a pre-write state. `snapshot` is a dict or a bare marker for
+    'no prior data' (block_html=None)."""
+    if snapshot is None:
+        return
+    _ai_undo_stack.append(snapshot)
+    while len(_ai_undo_stack) > MAX_AI_UNDO_STACK:
+        _ai_undo_stack.pop(0)
+
+
+def _pop_ai_undo_for_card(card_id):
+    """Return the most recent snapshot for this card (LIFO), or None."""
+    for i in range(len(_ai_undo_stack) - 1, -1, -1):
+        if _ai_undo_stack[i].get("card_id") == card_id:
+            return _ai_undo_stack.pop(i)
+    return None
+
+
+def _clear_redo_for_card(card_id):
+    """A fresh AI write diverges history: drop any redoable states."""
+    _ai_redo_stack[:] = [s for s in _ai_redo_stack if s.get("card_id") != card_id]
+
+
+def redo_last_ai_update():
+    """Ctrl+Alt+Shift+Z: re-apply the state an 'Undo last AI update' removed."""
+    from aqt.utils import tooltip as aqt_tooltip
+    reviewer = getattr(mw, "reviewer", None)
+    card = getattr(reviewer, "card", None) if reviewer else None
+    if not card:
+        aqt_tooltip("AI-Hints: no card on screen.")
+        return
+
+    snap = None
+    for i in range(len(_ai_redo_stack) - 1, -1, -1):
+        if _ai_redo_stack[i].get("card_id") == card.id:
+            snap = _ai_redo_stack.pop(i)
+            break
+    if snap is None:
+        aqt_tooltip("AI-Hints: nothing to redo for this card.")
+        return
+
+    try:
+        note = card.note()
+        fields = list(note.values()) if hasattr(note, "values") else getattr(note, "fields", [])
+        card._snap_note = note
+        # The current (pre-redo) state becomes undoable again.
+        cur = _capture_ai_snapshot(card)
+        _push_ai_undo({
+            "card_id": card.id,
+            "note_id": note.id,
+            "field_idx": (cur or {}).get("field_idx", snap.get("field_idx", 0)),
+            "block_html": (cur or {}).get("block_html"),
+        })
+        new_fields, msg, changed = _apply_restore_to_fields(fields, card, snap)
+        if new_fields is None:
+            aqt_tooltip(f"AI-Hints: {msg}")
+            return
+        if not changed:
+            aqt_tooltip(msg)
+            return
+        if hasattr(note, "fields"):
+            note.fields[:] = new_fields
+        mw.col.update_note(note)
+        _forget_generated_hints(card)
+        web = getattr(reviewer, "web", None)
+        try:
+            refresh_current_card(card=card, web=web)
+        except Exception:
+            _trigger_frontend_setup(card)
+        aqt_tooltip(f"Redone — {msg}")
+    except Exception as e:
+        logger.error(f"AI-Hints: AI-update redo failed: {e}")
+        aqt_tooltip(f"AI-Hints: redo failed ({e})")
+
+
+def _apply_restore_to_fields(fields, card, snap):
+    """Pure helper for undo_last_ai_update: applies `snap` to a copy-able
+    field list. Returns (new_fields, message, changed) — new_fields is None
+    when restoration isn't possible (field layout changed)."""
+    parser = None
+    try:
+        config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+        parser = CardParser(
+            mathjax_format=config.get("mathjax_format", "delimiters"),
+            fix_latex=config.get("fix_latex", False)
+        )
+    except Exception:
+        parser = CardParser()
+
+    old_block = snap.get("block_html")
+
+    # Locate whatever currently matches this card.
+    current_span = None  # (field_idx, (start, end))
+    for idx, f_val in enumerate(fields):
+        if not isinstance(f_val, str):
+            continue
+        for match in _cp_iter_hint_blocks(f_val):
+            block = match.group(0)
+            if parser._block_matches_card(block, card) and \
+                    parser._json_block_has_data_for_card(block, match.group(1), card, getattr(card, "_snap_note", None)):
+                current_span = (idx, (match.start(), match.end()))
+                break
+        if current_span:
+            break
+
+    new_fields = list(fields)
+    if old_block:
+        target_idx = current_span[0] if current_span else snap.get("field_idx", 0)
+        if target_idx >= len(new_fields) or not isinstance(new_fields[target_idx], str):
+            return None, "could not restore (field changed)", False
+        if current_span and current_span[0] == target_idx:
+            s, e2 = current_span[1]
+            new_fields[target_idx] = new_fields[target_idx][:s] + old_block + new_fields[target_idx][e2:]
+        elif current_span:
+            s, e2 = current_span[1]
+            cur_idx = current_span[0]
+            new_fields[cur_idx] = new_fields[cur_idx][:s] + new_fields[cur_idx][e2:]
+            new_fields[target_idx] = new_fields[target_idx] + old_block
+        else:
+            new_fields[target_idx] = new_fields[target_idx] + old_block
+        return new_fields, "AI-Hints: reverted to the previous AI result.", True
+
+    # Original value = no AI data: strip the current block.
+    if not current_span:
+        return new_fields, "AI-Hints: already at the original value.", False
+    idx, (s, e2) = current_span
+    f_val = new_fields[idx]
+    new_fields[idx] = f_val[:s] + f_val[e2:]
+    return new_fields, "AI-Hints: removed AI data (back to original).", True
+
+
+def undo_last_ai_update():
+    """Ctrl+Alt+Z in the reviewer: step back through AI writes.
+
+    First press restores the result that was replaced (e.g. the fast
+    fallback candidate a lingering higher-priority model overwrote); the
+    next press removes the AI data entirely (back to the original value).
+    """
+    from aqt.utils import tooltip as aqt_tooltip
+    reviewer = getattr(mw, "reviewer", None)
+    card = getattr(reviewer, "card", None) if reviewer else None
+    if not card:
+        aqt_tooltip("AI-Hints: no card on screen.")
+        return
+
+    snap = _pop_ai_undo_for_card(card.id)
+    if snap is None:
+        aqt_tooltip("AI-Hints: no previous AI update to undo for this card.")
+        return
+
+    try:
+        note = card.note()
+        fields = list(note.values()) if hasattr(note, "values") else getattr(note, "fields", [])
+        # Let the restore helper run the same parser validation the capture
+        # used, even without a live mw config (headless/tests).
+        card._snap_note = note
+        new_fields, msg, changed = _apply_restore_to_fields(fields, card, snap)
+
+        if new_fields is None:
+            aqt_tooltip(f"AI-Hints: {msg}")
+            return
+
+        if not changed:
+            aqt_tooltip(msg)
+            # Re-push so the stack isn't consumed by a no-op
+            _push_ai_undo(snap)
+            return
+
+        # The state we just replaced becomes redoable (Ctrl+Alt+Shift+Z).
+        cur = _capture_ai_snapshot(card)
+        _ai_redo_stack.append({
+            "card_id": card.id,
+            "note_id": note.id,
+            "field_idx": (cur or {}).get("field_idx", snap.get("field_idx", 0)),
+            "block_html": (cur or {}).get("block_html"),
+        })
+        while len(_ai_redo_stack) > MAX_AI_UNDO_STACK:
+            _ai_redo_stack.pop(0)
+
+        if hasattr(note, "fields"):
+            note.fields[:] = new_fields
+        mw.col.update_note(note)
+        _forget_generated_hints(card)
+        web = getattr(reviewer, "web", None)
+        try:
+            refresh_current_card(card=card, web=web)
+        except Exception:
+            _trigger_frontend_setup(card)
+        aqt_tooltip(msg)
+    except Exception as e:
+        logger.error(f"AI-Hints: AI-update undo failed: {e}")
+        aqt_tooltip(f"AI-Hints: undo failed ({e})")
 
 def _cached_hints_for_card(card):
     key = _card_cache_key(card)
@@ -3143,6 +3394,12 @@ def on_state_shortcuts_will_change(state: str, shortcuts: list) -> None:
     def add_shortcut(shortcut_text: str, action) -> None:
         if shortcut_text and not any(existing[0] == shortcut_text for existing in shortcuts):
             shortcuts.append((shortcut_text, action))
+
+    # Step back through AI writes on the current card (replaced result ->
+    # original). Fixed binding; independent of the user's modifier scheme.
+    add_shortcut("Ctrl+Alt+Z", undo_last_ai_update)
+    # Forward again through displaced AI states.
+    add_shortcut("Ctrl+Alt+Shift+Z", redo_last_ai_update)
 
     # Register bare option keys before the add-on's legacy bare button keys.
     # Anki consumes these shortcuts at the reviewer level, so JavaScript never

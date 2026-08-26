@@ -62,9 +62,11 @@ class TestShortcuts(unittest.TestCase):
         on_state_shortcuts_will_change("review", self.shortcuts_list)
         
         # Verify the length and contents
-        self.assertEqual(len(self.shortcuts_list), 12)
+        self.assertEqual(len(self.shortcuts_list), 14)
         
         shortcut_keys = [s[0] for s in self.shortcuts_list]
+        self.assertIn("Ctrl+Alt+Z", shortcut_keys)
+        self.assertIn("Ctrl+Alt+Shift+Z", shortcut_keys)
         self.assertIn("Alt+1", shortcut_keys)
         self.assertIn("Alt+2", shortcut_keys)
         self.assertIn("Alt+3", shortcut_keys)
