@@ -30,6 +30,8 @@ aqt.gui_hooks = MagicMock()
 sys.modules['aqt.gui_hooks'] = aqt.gui_hooks
 aqt.mw = MagicMock()
 sys.modules['aqt.mw'] = aqt.mw
+# Downstream suites rely on taskman executing callbacks synchronously.
+aqt.mw.taskman.run_on_main.side_effect = lambda fn, *a, **k: fn()
 for cls in ('QDialog', 'QWidget', 'QVBoxLayout', 'QHBoxLayout', 'QLabel',
             'QSpinBox', 'QTimer', 'Qt'):
     setattr(aqt.qt, cls, MagicMock)
@@ -195,13 +197,16 @@ class AiUndoTests(unittest.TestCase):
         rh._ai_redo_stack.clear()
 
     def test_g_shortcuts_registered(self):
-        from addon.reviewer_hooks import on_state_shortcuts_will_change
-        aqt.mw.addonManager.getConfig.return_value = {
+        import addon.reviewer_hooks as rh
+        # Configure the mw instance this module actually bound at import time
+        # (other suites may have replaced sys.modules['aqt'] afterwards).
+        self.addCleanup(setattr, rh.mw.addonManager.getConfig, "return_value",
+                        rh.mw.addonManager.getConfig.return_value)
+        rh.mw.addonManager.getConfig.return_value = {
             "shortcuts": {"modifier": "alt"}
         }
-        self.addCleanup(setattr, aqt.mw.addonManager.getConfig, "return_value", {})
         shortcuts_list = []
-        on_state_shortcuts_will_change("review", shortcuts_list)
+        rh.on_state_shortcuts_will_change("review", shortcuts_list)
         keys = [s[0] for s in shortcuts_list]
         self.assertIn("Ctrl+Alt+Z", keys)
         self.assertIn("Ctrl+Alt+Shift+Z", keys)

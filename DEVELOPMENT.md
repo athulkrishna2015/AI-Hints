@@ -61,7 +61,7 @@ AI-Hints/
 │   ├── test_latex_fixer.py       # LaTeX normalization regression suite
 │   ├── test_json_repair_integration.py
 │   ├── test_card_parser.py       # Card content extraction and cloze parsing
-│   ├── (30 discovery-compatible test_*.py files total; see "Running Tests")
+│   ├── (41 discovery-compatible test_*.py files total; see "Running Tests")
 │   └── ...
 ├── scratch/                      # Temporary scripts and diagnostic outputs
 │   ├── fetch_all_models.py       # Pulls all available models from active providers
