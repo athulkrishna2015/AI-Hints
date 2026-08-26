@@ -21,6 +21,23 @@ COL_MISSING_FG = "#8a6d1a"
 COL_DEP_BG = "#ffe1e1"
 COL_DEP_FG = "#b71c1c"
 
+def _build_remove_menu(callback):
+    menu = QMenu()
+    menu.addAction("Remove Selected", lambda: callback("selected"))
+    menu.addAction("Remove Deprecated", lambda: callback("deprecated"))
+    menu.addAction("Remove No Longer Returned", lambda: callback("missing"))
+    menu.addAction("Remove Deprecated & No Longer Returned", lambda: callback("flagged"))
+    return menu
+
+
+def _build_test_menu(callback):
+    menu = QMenu()
+    menu.addAction("Test Checked", lambda: callback("checked"))
+    menu.addAction("Test Row", lambda: callback("row"))
+    menu.addAction("Test All", lambda: callback("all"))
+    return menu
+
+
 class ToolTipDelegate(QStyledItemDelegate):
     def helpEvent(self, event, view, option, index):
         if event.type() == QEvent.Type.ToolTip:
@@ -135,19 +152,23 @@ class FallbackOrderDialog(QDialog):
         self.set_active_btn = QPushButton("Set Active")
         self.set_active_btn.setToolTip("Set the selected model as the primary active model (moves it to the top).")
         self.set_active_btn.clicked.connect(self.set_selected_as_active)
+        self.add_btn = QPushButton("Add Model...")
+        self.add_btn.setToolTip("Add a custom model name to this provider's fallback list.")
+        self.add_btn.clicked.connect(self._add_custom_model)
         self.remove_btn = QPushButton("Remove")
         self.remove_btn.setToolTip("Remove models from the list. Choose which type to remove from the dropdown.")
-        self.remove_btn.setMenu(self._build_remove_menu(self.remove_models))
+        self.remove_btn.setMenu(_build_remove_menu(self.remove_models))
         
         row1_layout.addWidget(self.up_btn)
         row1_layout.addWidget(self.down_btn)
         row1_layout.addWidget(self.set_active_btn)
+        row1_layout.addWidget(self.add_btn)
         row1_layout.addWidget(self.remove_btn)
         
         row2_layout = QHBoxLayout()
         self.list_test_btn = QPushButton("Test")
         self.list_test_btn.setToolTip("Test models from the list. Choose which mode from the dropdown.")
-        self.list_test_btn.setMenu(self._build_test_menu(self.on_test_from_list))
+        self.list_test_btn.setMenu(_build_test_menu(self.on_test_from_list))
         self.sort_selected_btn = QPushButton("Rank Checked First")
         self.sort_selected_btn.clicked.connect(self.rank_selected_first)
         
@@ -690,6 +711,33 @@ class FallbackOrderDialog(QDialog):
             self.table.setCurrentCell(0, 0)
             self.update_item_labels()
 
+    def _add_custom_model(self):
+        existing = {
+            self.table.item(i, 0).data(Qt.ItemDataRole.UserRole)
+            for i in range(self.table.rowCount())
+            if self.table.item(i, 0)
+        }
+        name, ok = QInputDialog.getText(
+            self, "Add Custom Model",
+            f"Model name for {self.provider.capitalize()}:",
+        )
+        if not ok:
+            return
+        name = name.strip()
+        if not name:
+            tooltip("Model name cannot be empty.")
+            return
+        if name in existing:
+            tooltip(f"Model '{name}' is already in the list.")
+            return
+        self.table.blockSignals(True)
+        try:
+            self._add_model_row(name, checked=True)
+        finally:
+            self.table.blockSignals(False)
+        self.update_item_labels()
+        tooltip(f"Added '{name}' to the list.")
+
     def move_item(self, delta):
         curr_row = self.table.currentRow()
         if curr_row == -1: return
@@ -698,23 +746,6 @@ class FallbackOrderDialog(QDialog):
             self._swap_rows(curr_row, target_row)
             self.table.setCurrentCell(target_row, 0)
             self.update_item_labels()
-
-    @staticmethod
-    def _build_remove_menu(callback):
-        menu = QMenu()
-        menu.addAction("Remove Selected", lambda: callback("selected"))
-        menu.addAction("Remove Deprecated", lambda: callback("deprecated"))
-        menu.addAction("Remove No Longer Returned", lambda: callback("missing"))
-        menu.addAction("Remove Deprecated & No Longer Returned", lambda: callback("flagged"))
-        return menu
-
-    @staticmethod
-    def _build_test_menu(callback):
-        menu = QMenu()
-        menu.addAction("Test Checked", lambda: callback("checked"))
-        menu.addAction("Test Row", lambda: callback("row"))
-        menu.addAction("Test All", lambda: callback("all"))
-        return menu
 
     def _selected_rows(self):
         selected = {index.row() for index in self.table.selectionModel().selectedRows()}
@@ -951,7 +982,7 @@ class GlobalFallbackOrderDialog(QDialog):
         self.add_btn.clicked.connect(self.add_model_prompt)
         self.remove_btn = QPushButton("Remove")
         self.remove_btn.setToolTip("Remove models from the list. Choose which type to remove from the dropdown.")
-        self.remove_btn.setMenu(self._build_remove_menu(self.remove_models))
+        self.remove_btn.setMenu(_build_remove_menu(self.remove_models))
         
         row1_layout.addWidget(self.up_btn)
         row1_layout.addWidget(self.down_btn)
@@ -961,7 +992,7 @@ class GlobalFallbackOrderDialog(QDialog):
         row2_layout = QHBoxLayout()
         self.list_test_btn = QPushButton("Test")
         self.list_test_btn.setToolTip("Test models from the list. Choose which mode from the dropdown.")
-        self.list_test_btn.setMenu(self._build_test_menu(self.on_test_all))
+        self.list_test_btn.setMenu(_build_test_menu(self.on_test_all))
         self.sort_selected_btn = QPushButton("Rank Selected First")
         self.sort_selected_btn.clicked.connect(self.rank_selected_first)
         
