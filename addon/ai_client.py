@@ -830,6 +830,7 @@ class AIClient:
                 if linger_pool:
                     early = linger_pool.claim_ready(max_order=gi)
                     if early:
+                        self._notify_status(None)
                         logger.info(f"AI-Hints Linger: using late result from {early['provider']}/{early['model']} instead of continuing down the list.")
                         try:
                             return self._finalize_result(early["result"], back, hints_enabled, options_enabled, is_test)
@@ -888,6 +889,7 @@ class AIClient:
                         # Keep this slow request alive in the background while
                         # the remaining candidates are tried.
                         linger_pool.spawn(gi, provider, model)
+                        self._notify_status("Lingering")
                     if self._is_network_or_timeout_error(e):
                         network_failed_providers.add(provider)
                         if not _check_network_online():
@@ -945,6 +947,7 @@ class AIClient:
             if linger_pool:
                 early = linger_pool.claim_ready(max_order=pi)
                 if early:
+                    self._notify_status(None)
                     logger.info(f"AI-Hints Linger: using late result from {early['provider']}/{early['model']} instead of continuing down the list.")
                     try:
                         return self._finalize_result(early["result"], back, hints_enabled, options_enabled, is_test)
@@ -985,9 +988,10 @@ class AIClient:
                 last_exception = e
                 logger.error(f"Provider {provider} failed: {e}")
                 if linger_pool and self._is_read_timeout_error(e):
-                    # Keep this slow request alive in the background while the
-                    # remaining providers are tried.
+                    # Keep this slow request alive in the background while
+                    # the remaining providers are tried.
                     linger_pool.spawn(pi, provider, override_model or "")
+                    self._notify_status("Lingering")
                 if self._is_network_or_timeout_error(e):
                     network_failed_providers.add(provider)
                     if not _check_network_online():
@@ -1291,6 +1295,7 @@ class AIClient:
                 hook = self._active_linger
                 if hook is not None:
                     hook[0].spawn(hook[1], provider_name, model)
+                    self._notify_status("Lingering")
                 if timeouts_count >= 2:
                     raise TimeoutError(f"Multiple read timeouts for provider {provider_name}")
 
@@ -1507,6 +1512,7 @@ class AIClient:
                 hook = self._active_linger
                 if hook is not None:
                     hook[0].spawn(hook[1], provider, model)
+                    self._notify_status("Lingering")
                 if timeouts_count >= 2:
                     raise TimeoutError(f"Multiple read timeouts for provider {provider}")
 
@@ -1605,6 +1611,7 @@ class AIClient:
                 hook = self._active_linger
                 if hook is not None:
                     hook[0].spawn(hook[1], "anthropic", model)
+                    self._notify_status("Lingering")
                 if timeouts_count >= 2:
                     raise TimeoutError("Multiple read timeouts for provider anthropic")
 
@@ -1719,6 +1726,7 @@ class AIClient:
                 hook = self._active_linger
                 if hook is not None:
                     hook[0].spawn(hook[1], "gemini", model)
+                    self._notify_status("Lingering")
                 if timeouts_count >= 2:
                     raise TimeoutError("Multiple read timeouts for provider gemini")
 

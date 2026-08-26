@@ -89,7 +89,7 @@ Example:
 | `linger_on_timeout` | `true` | Keep timed-out requests alive in a background thread while fallback continues; use the slow result if it arrives first. |
 | `timeout_linger_seconds` | `0` | Extended deadline (seconds) for lingering background attempts. `0` = auto: 3x request timeout, clamped to 180–900s. |
 | `linger_race_policy` | `priority` | Who wins when a lower-priority candidate succeeds while a higher-priority lingering attempt is still running. `priority`: wait out the lingered attempt's deadline and prefer its result (usually the smarter model; the card button shows an amber "Waiting for higher-priority model…" state). `first`: first usable result wins immediately. |
-| `batch_request_timeout` | `120` | Per-request base timeout (seconds) for background batch-generation workers. Independent of `request_timeout` — batch runs unattended, so slow models get more headroom. Per-model / per-provider overrides still apply, but only when greater than this value (extend-only). |
+| `batch_request_timeout` | `120` | Per-request base timeout (seconds) for background batch-generation workers. Configurable in **Advanced tab → Batch Timeout (seconds)**. Per-model / per-provider overrides still apply, but only when greater than this value (extend-only). |
 | `manual_show_hints` | `true` | Auto-show hints after manual generation. |
 | `manual_show_options` | `false` | Auto-show options after manual generation. |
 

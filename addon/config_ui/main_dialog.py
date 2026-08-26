@@ -408,6 +408,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             
         if hasattr(self, "pregen_timeout_spin"):
             self.pregen_timeout_spin.setValue(c.get("pregen_request_timeout", 60))
+        if hasattr(self, "batch_timeout_spin"):
+            self.batch_timeout_spin.setValue(c.get("batch_request_timeout", 120))
         if hasattr(self, "provider_timeout_spins"):
             for provider, spin in self.provider_timeout_spins.items():
                 spin.setValue(int((c.get("provider_timeouts", {}) or {}).get(provider, 0) or 0))
@@ -1244,6 +1246,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 
             if hasattr(self, "pregen_timeout_spin"):
                 new_config["pregen_request_timeout"] = self.pregen_timeout_spin.value()
+            if hasattr(self, "batch_timeout_spin"):
+                new_config["batch_request_timeout"] = self.batch_timeout_spin.value()
             if hasattr(self, "provider_timeout_spins"):
                 new_config["provider_timeouts"] = {
                     provider: spin.value()
@@ -1386,6 +1390,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("debug_logging", False)
         config.setdefault("request_timeout", 60)
         config.setdefault("pregen_request_timeout", 60)
+        config.setdefault("batch_request_timeout", 120)
         config.setdefault("provider_timeouts", {})
         config.setdefault("auto_generate_new", False)
         config.setdefault("auto_regenerate_if_modified", False)

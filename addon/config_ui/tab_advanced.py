@@ -70,7 +70,13 @@ class AdvancedTabMixin:
         self.pregen_timeout_spin.setRange(1, 300)
         self.pregen_timeout_spin.setToolTip("Set the timeout limit (in seconds) for background pre-generation requests.")
         timeout_row.addWidget(self.pregen_timeout_spin)
-        
+
+        timeout_row.addWidget(QLabel("Batch Timeout (seconds):"))
+        self.batch_timeout_spin = QSpinBox()
+        self.batch_timeout_spin.setRange(1, 900)
+        self.batch_timeout_spin.setToolTip("Set the timeout limit (in seconds) for background batch-generation requests. Runs unattended, so it can safely be more generous than the review timeout.")
+        timeout_row.addWidget(self.batch_timeout_spin)
+
         timeout_row.addStretch()
         blacklist_layout.addLayout(timeout_row)
 

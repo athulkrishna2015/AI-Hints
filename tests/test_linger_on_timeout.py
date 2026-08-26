@@ -221,7 +221,9 @@ class LingerOnTimeoutTests(unittest.TestCase):
         self.assertEqual(res.get("_model"), "m-b")
         self.assertEqual(res.get("_provider"), "anthropic")
         self.assertLess(elapsed, 2.0, f"'first' policy waited anyway: {elapsed:.1f}s")
-        self.assertNotIn("Lingering", events)
+        # Spawn still announces itself, but no blocking wait cycle runs
+        # (a wait always emits a trailing None when it finishes).
+        self.assertNotIn(None, events)
 
     def test_h_pending_tracking_and_policy_helper(self):
         pool = _LingerPool(base_config(), 900, "sys", "prompt")

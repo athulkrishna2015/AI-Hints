@@ -2635,12 +2635,20 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
         # Surface linger waits on this card's own animation slot: while the
         # fallback walk blocks on a higher-priority lingering retry, the button
         # swaps to the distinct amber "waiting" style, and back on exit.
+        # NOTE: generate_options runs on a background thread, so every push
+        # MUST be marshalled to the main loop — touching the webview from a
+        # non-GUI thread hard-crashes Qt.
         def _linger_status_cb(status, _web=web, _cid=card_id, _pregen=is_pregen):
+            def _push():
+                try:
+                    if status:
+                        _set_frontend_generating(_web, True, _cid, _pregen, "Lingering")
+                    else:
+                        _set_frontend_generating(_web, True, _cid, _pregen)
+                except Exception:
+                    pass
             try:
-                if status:
-                    _set_frontend_generating(_web, True, _cid, _pregen, "Lingering")
-                else:
-                    _set_frontend_generating(_web, True, _cid, _pregen)
+                mw.taskman.run_on_main(_push)
             except Exception:
                 pass
         client.status_cb = _linger_status_cb
