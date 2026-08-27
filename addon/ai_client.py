@@ -287,163 +287,24 @@ PROVIDER_ORDER = [
     "cerebras",
 ]
 
-# No hardcoded default model names: providers change their model lists
-# frequently, so stale defaults would only produce 404s. The active model for
-# every built-in provider comes from Fetch (or is typed by the user) and is
-# persisted in config["models"]. Custom providers always carry their own model.
+# No hardcoded model names of any kind: providers change their model lists
+# frequently, so any pre-shipped active model, UI suggestion, fallback chain,
+# or legacy remap only goes stale and produces 404s. The active model and
+# fallback lists for built-in providers come only from Fetch Models (or are
+# typed by the user) and are persisted in config["models"] /
+# config["model_fallbacks"]. Custom providers always carry their own model.
+# Stale legacy names simply pass through and are caught by the provider's own
+# API deprecation flags and the "deprecated"/"legacy" substring checks.
 DEFAULT_MODELS = {}
 
-# Popular model suggestions for the UI dropdowns
-MODEL_SUGGESTIONS = {
-    "openai": [
-        "gpt-4o-mini",
-        "gpt-4o",
-        "o1-mini",
-        "o3-mini",
-    ],
-    "anthropic": [
-        "claude-3-5-haiku-latest",
-        "claude-3-5-sonnet-latest",
-        "claude-3-7-sonnet-latest",
-    ],
-    "gemini": [
-        "gemini-3.5-flash",
-        "gemini-3.1-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-3.1-flash-lite-preview",
-        "gemini-2.5-flash-lite",
-        "gemma-4-31b-it",
-        "gemini-3.1-pro-preview",
-        "gemini-3-pro-preview",
-        "gemini-2.5-pro",
-        "gemini-pro-latest",
-        "gemini-3-flash-preview",
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-flash-latest",
-        "gemini-2.0-flash-lite",
-    ],
-    "groq": [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "llama-3.1-70b-versatile",
-        "mixtral-8x7b-32768",
-        "deepseek-r1-distill-llama-70b",
-    ],
-    "openrouter": [
-        "google/gemini-2.0-flash-001",
-        "google/gemini-2.0-flash-lite-001",
-        "openai/gpt-4o-mini",
-        "anthropic/claude-3.5-haiku",
-        "deepseek/deepseek-chat",
-        "meta-llama/llama-3.3-70b-instruct",
-    ],
-    "deepseek": [
-        "deepseek-chat",
-        "deepseek-reasoner",
-    ],
-    "mistral": [
-        "mistral-small-latest",
-        "mistral-medium-latest",
-        "mistral-large-latest",
-        "pixtral-12b-2409",
-    ],
-    "sambanova": [
-        "Meta-Llama-3.3-70B-Instruct",
-    ],
-    "cerebras": [
-        "llama-3.3-70b",
-        "llama3.1-8b",
-    ],
-    "huggingface": [
-        "deepseek-ai/DeepSeek-V3",
-        "meta-llama/Llama-3.3-70B-Instruct",
-        "Qwen/Qwen2.5-72B-Instruct",
-    ],
-}
+# Intentionally empty - choices come from config and per-API fetches.
+MODEL_SUGGESTIONS = {}
 
-LEGACY_MODEL_REPLACEMENTS = {
-    ("anthropic", "claude-3-haiku-20240307"): "claude-3-5-haiku-latest",
-    ("gemini", "gemini-1.5-flash"): "gemini-2.0-flash",
-    ("gemini", "models/gemini-1.5-flash"): "gemini-2.0-flash",
-    ("gemini", "models/gemini-2.0-flash-exp"): "gemini-2.0-flash",
-    ("gemini", "gemini-1.5-pro"): "gemini-pro-latest",
-    ("gemini", "gemini-2.0-pro-exp-02-05"): "gemini-2.5-pro",
-    ("gemini", "gemini-3.1-flash-lite-preview"): "gemini-3.1-flash-lite",
-    ("groq", "llama3-8b-8192"): "llama-3.1-8b-instant",
-    ("groq", "llama3-70b-8192"): "llama-3.3-70b-versatile",
-    ("grok", "grok-1"): "grok-2-1212",
-    ("huggingface", "meta-llama/Meta-Llama-3-8B-Instruct"): "meta-llama/Llama-3.1-8B-Instruct",
-    ("nvidia", "meta/llama3-8b-instruct"): "meta/llama-3.1-8b-instruct",
-    ("openrouter", "meta-llama/llama-3-8b-instruct"): "meta-llama/llama-3.1-8b-instruct",
-    ("openrouter", "google/gemini-3.1-flash"): "google/gemini-2.0-flash-001",
-    ("openrouter", "google/gemini-2.0-flash-exp:free"): "google/gemini-2.0-flash-001",
-    ("sambanova", "Meta-Llama-3.1-8B-Instruct"): "Meta-Llama-3.3-70B-Instruct",
-    ("cerebras", "llama3.1-8b"): "llama-3.1-8b",
-    ("cerebras", "llama3.1-70b"): "llama-3.3-70b",
-}
+# Intentionally empty - stale legacy remaps rotted faster than they helped.
+LEGACY_MODEL_REPLACEMENTS = {}
 
-MODEL_FALLBACKS = {
-    "anthropic": [
-        "claude-3-7-sonnet-latest",
-        "claude-3-5-sonnet-latest",
-        "claude-3-5-haiku-latest",
-    ],
-    "gemini": [
-        "gemini-3.5-flash",
-        "gemini-3.1-flash-lite",
-        "gemini-flash-lite-latest",
-        "gemini-3.1-flash-lite-preview",
-        "gemini-2.5-flash-lite",
-        "gemini-3.1-pro-preview",
-        "gemini-3-pro-preview",
-        "gemini-2.5-pro",
-        "gemini-pro-latest",
-        "gemini-3-flash-preview",
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-flash-latest",
-        "gemini-2.0-flash-lite",
-    ],
-    "groq": [
-        "llama-3.3-70b-versatile",
-        "mixtral-8x7b-32768",
-        "llama-3.1-8b-instant",
-    ],
-    "grok": [
-        "grok-2-1212",
-    ],
-    "huggingface": [
-        "deepseek-ai/DeepSeek-V3",
-        "meta-llama/Llama-3.3-70B-Instruct",
-        "Qwen/Qwen2.5-72B-Instruct",
-    ],
-    "openai": [
-        "gpt-4o",
-        "o1-mini",
-        "gpt-4o-mini",
-    ],
-    "nvidia": [
-        "meta/llama-3.3-70b-instruct",
-        "meta/llama-3.1-8b-instruct",
-    ],
-    "openrouter": [
-        "google/gemini-2.0-flash-001",
-        "google/gemini-2.0-flash-lite-001",
-        "anthropic/claude-3.5-sonnet",
-        "openai/gpt-4o",
-        "deepseek/deepseek-chat",
-        "meta-llama/llama-3.3-70b-instruct",
-        "openrouter/auto",
-    ],
-    "sambanova": [
-        "Meta-Llama-3.3-70B-Instruct",
-    ],
-    "cerebras": [
-        "llama-3.3-70b",
-        "llama-3.1-8b",
-    ],
-}
+# Intentionally empty - fallback chains come from config["model_fallbacks"].
+MODEL_FALLBACKS = {}
 
 # Cache of models flagged as deprecated by the provider's own API response
 # during the most recent fetch_models() call. Populated online per provider.
