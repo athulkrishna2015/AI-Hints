@@ -452,14 +452,6 @@ MODEL_FALLBACKS = {
         "llama-3.3-70b",
         "llama-3.1-8b",
     ],
-    "antigravity": [
-        "gemini-3.5-flash",
-        "gemini-3.1-flash-lite",
-        "gemini-3-flash",
-        "gemini-2.5-flash",
-        "gemini-2-flash",
-        "gemini-2.5-pro",
-    ],
 }
 
 # Cache of models flagged as deprecated by the provider's own API response
@@ -1080,14 +1072,6 @@ class AIClient:
                 return True
             return bool(self._local_provider_configs())
 
-        if provider == "antigravity":
-            ag_cfg = self.config.get("antigravity_proxy") or {}
-            if not isinstance(ag_cfg, dict):
-                ag_cfg = {}
-            if primary:
-                return True
-            return bool(ag_cfg.get("enabled", False))
-
         custom_providers = self.config.get("custom_providers") or {}
         if not isinstance(custom_providers, dict):
             custom_providers = {}
@@ -1321,13 +1305,6 @@ class AIClient:
                 local_cfg = {}
             base_url = local_cfg.get("base_url", local_cfg.get("url", "http://localhost:11434/v1"))
             models = [override_model] if override_model else self._models_for_provider(provider, local_cfg.get("model", "") or DEFAULT_MODELS.get("local", "llama3.3"))
-        elif provider == "antigravity":
-            ag_cfg = self.config.get("antigravity_proxy") or {}
-            if not isinstance(ag_cfg, dict):
-                ag_cfg = {}
-            port = ag_cfg.get("port", 3000)
-            base_url = f"http://localhost:{port}/v1"
-            models = [override_model] if override_model else self._models_for_provider(provider, DEFAULT_MODELS["antigravity"])
         elif provider == "mistral":
             base_url = "https://api.mistral.ai/v1"
         elif provider == "huggingface":
@@ -1366,8 +1343,6 @@ class AIClient:
 
             keys = self._available_api_keys(provider)
             if provider == "local" or is_named_local:
-                keys = [""]
-            elif not keys and provider in ["antigravity"]:
                 keys = [""]
             elif not keys:
                 continue
@@ -1443,8 +1418,6 @@ class AIClient:
                                 logger.error(f"AI-Hints Error ({provider}, model {local_model_name}): {e}")
                                 self._mark_combo_failed(provider, local_model_name, api_key)
                     continue
-                elif provider == "antigravity":
-                    actual_key = "antigravity"
                 else:
                     actual_key = api_key
 
@@ -2578,19 +2551,16 @@ class AIClient:
             if last_err:
                 raise last_err
             return []
-        if provider in ["antigravity"]:
-            keys = [""]
-        else:
-            keys = self._available_api_keys(provider)
-            custom_providers = self.config.get("custom_providers", {}) or {}
-            if provider in custom_providers:
-                custom_keys = self._api_keys_for_custom(provider, custom_providers[provider])
-                if custom_keys:
-                    keys = custom_keys
-                elif not keys:
-                    keys = [""]
-            if not keys:
-                return []
+        keys = self._available_api_keys(provider)
+        custom_providers = self.config.get("custom_providers", {}) or {}
+        if provider in custom_providers:
+            custom_keys = self._api_keys_for_custom(provider, custom_providers[provider])
+            if custom_keys:
+                keys = custom_keys
+            elif not keys:
+                keys = [""]
+        if not keys:
+            return []
 
         last_err = None
         for api_key in keys:
@@ -2656,14 +2626,6 @@ class AIClient:
                     base_url = str(local_cfg.get("base_url", "http://localhost:11434/v1")).rstrip("/")
                     url = f"{base_url}/models"
                     headers = self._json_headers(local_cfg.get("api_key", ""))
-                    result = self._get_json(url, headers)
-                    return [m.get("id") for m in result.get("data", []) if m.get("id")]
-
-                elif provider == "antigravity":
-                    ag_cfg = self.config.get("antigravity_proxy") or {}
-                    port = ag_cfg.get("port", 3000)
-                    url = f"http://localhost:{port}/v1/models"
-                    headers = self._json_headers("antigravity")
                     result = self._get_json(url, headers)
                     return [m.get("id") for m in result.get("data", []) if m.get("id")]
 

@@ -119,7 +119,7 @@ Structure (new nested format):
 - **Rotation**: 4 files total — `ai_hints.log`, `ai_hints.log.1`, `ai_hints.log.2`, `ai_hints.log.3`. A rollover happens when the profile opens so each session starts with a fresh log and three prior sessions are preserved.
 - **Clear on startup**: with `auto_clear_logs` enabled (the default) only the current `ai_hints.log` is deleted on startup; the rotated backups remain available.
 - **Format**: `%(asctime)s - %(levelname)s - %(message)s`.
-- **Viewable** live in the **Logs** tab, which offers **Level** (DEBUG/INFO/WARNING/ERROR) and **Source** filters (Antigravity Proxy, Batch Processing, Pre-generation, Model Testing, **Lingering** — the `AI-Hints Linger: ...` background-timeout lines — and Standard Addon) plus free-text search; configurable via **Clear on startup** and **Debug logging**.
+- **Viewable** live in the **Logs** tab, which offers **Level** (DEBUG/INFO/WARNING/ERROR) and **Source** filters (Batch Processing, Pre-generation, Model Testing, **Lingering** — the `AI-Hints Linger: ...` background-timeout lines — and Standard Addon) plus free-text search; configurable via **Clear on startup** and **Debug logging**.
 
 ## 6. In-Note JSON Block
 

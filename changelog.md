@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## Unreleased
+- **Built-in Antigravity Provider & Proxy Fully Removed**: `proxy_manager.py` (start/stop/download lifecycle), the built-in `antigravity` provider branches in `ai_client.py` (models list, readiness, chat call, key handling, model fetch), the orphaned Antigravity UI widgets/handlers, the packaging exclusions for `antigravity-proxy-*` binaries, the `addon/bin/` proxy layout, and the dead **Antigravity Proxy** Logs-tab source filter are all gone. Antigravity-style local endpoints keep working through **Custom Providers**. Leftover `antigravity_proxy` values in existing `meta.json` files are inert.
+
 ## 7.0.4 (2026-08-27)
 - **Reasoning-Model Responses Recovered (Cline BYOK & Minimax)**: The Cline BYOK gateway (`api.cline.bot`) wraps every chat completion in a top-level `{"data": {...}, "success": true}` envelope, so `_extract_content` / `_reasoning_texts` looked for `choices` at the wrong level and reported "returned no parseable hints/options" even when `message.content` held valid hints JSON. Both now unwrap a top-level `data` dict that contains `choices`. Additionally, reasoning models frequently leave `content` empty or blank and carry the JSON in `message.reasoning` / `message.reasoning_details[*].text`; `_extract_content` and a new `_parse_generation_result` fall back to those reasoning blocks when the primary content yields nothing. Wired into all four provider paths (custom, OpenAI-compatible, Anthropic, Gemini); non-reasoning providers are unchanged (content still wins).
 - **New "Lingering" Logs Tab Filter**: The Logs tab Source dropdown now has a **Lingering** filter that isolates the `AI-Hints Linger: ...` lines (late-arriving results, higher-priority race wins, and total-failure rescue) without mixing them into Standard Addon or relying on a manual search.

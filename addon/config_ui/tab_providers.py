@@ -1613,15 +1613,6 @@ class ProvidersTabMixin:
         
         self.api_key_edits = {}
         self.model_edits = {}
-        self.ag_model_edit = QComboBox()
-        self.ag_enable_cb = QCheckBox()
-        self.ag_status_label = QLabel()
-        self.ag_path_label = QLabel()
-        self.ag_fetch_btn = QPushButton()
-        self.ag_dashboard_btn = QPushButton()
-        self.ag_delete_btn = QPushButton()
-        self.ag_dl_progress = QProgressBar()
-        self.ag_dl_status = QLabel()
 
         model_group = QGroupBox("Model Names & Fallback Priority")
         model_main_layout = QVBoxLayout()

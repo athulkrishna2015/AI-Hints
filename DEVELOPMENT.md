@@ -17,10 +17,9 @@ This repository contains the source code for the **AI-Hints** Anki add-on.
 ```
 AI-Hints/
 ├── addon/                        # Core add-on package (this is what Anki loads)
-│   ├── __init__.py               # Entry point: registers hooks, config migration, proxy start
+│   ├── __init__.py               # Entry point: registers hooks, config migration
 │   ├── ai_client.py              # Multi-provider AI client + fallback engine
 │   ├── reviewer_hooks.py         # Review-time hint generation and UI injection
-│   ├── proxy_manager.py          # Antigravity Proxy lifecycle (start/stop/download)
 │   ├── batch_manager.py          # Batch generation queue and async job tracking
 │   ├── card_parser.py            # Card content extraction and cloze parsing
 │   ├── logger.py                 # Shared logging setup (file + Anki log)
@@ -43,9 +42,6 @@ AI-Hints/
 │   ├── web/                      # Frontend reviewer assets
 │   │   └── template.js           # Reviewer UI/injection script (synced to media)
 │   ├── Support/                  # Support assets (donation images, accounts)
-│   ├── bin/                      # Runtime-only assets (not full source)
-│   │   ├── config.json           # ✅ Proxy daemon static configuration (tracked in git)
-│   │   └── runtime assets        # ❌ OS-specific binaries / tokens are not tracked
 │   ├── latex_fixer/              # Git submodule: ai-latex-fixer library
 │   ├── json_repair/              # Vendored: json_repair library
 │   ├── manifest.json             # Add-on manifest (version, min version, name)
@@ -61,14 +57,14 @@ AI-Hints/
 │   ├── test_latex_fixer.py       # LaTeX normalization regression suite
 │   ├── test_json_repair_integration.py
 │   ├── test_card_parser.py       # Card content extraction and cloze parsing
-│   ├── (41 discovery-compatible test_*.py files total; see "Running Tests")
+│   ├── (42 discovery-compatible test_*.py files total; see "Running Tests")
 │   └── ...
 ├── scratch/                      # Temporary scripts and diagnostic outputs
 │   ├── fetch_all_models.py       # Pulls all available models from active providers
 │   └── all_available_models.json # Diagnostic output from fetch_all_models.py
 ├── make_ankiaddon.py             # Packaging script → produces .ankiaddon file
 ├── bump.py                       # Version auto-increment script
-└── update_deps.py                # Refreshes vendored dependencies (json_repair, latex_fixer, proxy config)
+└── update_deps.py                # Refreshes vendored dependencies (json_repair, latex_fixer)
 ```
 
 ---
@@ -199,7 +195,6 @@ Existing `.ankiaddon` packages are preserved by default. Add `--clean` when you 
 
 **What gets included in the package:**
 - All Python source files under `addon/`
-- `addon/bin/config.json` (proxy static config)
 - `addon/latex_fixer/` (submodule source)
 - `addon/json_repair/` (vendored source)
 - `addon/config.json` (default config)

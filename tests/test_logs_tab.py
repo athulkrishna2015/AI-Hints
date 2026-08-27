@@ -158,7 +158,6 @@ class ProcessLogFileTests(unittest.TestCase):
     def test_level_source_search_filters(self):
         self._write([
             _line("DEBUG", "verbose detail"),
-            _line("INFO", "[Proxy] antigravity call done"),          # proxy source
             _line("INFO", "Batch queue advanced to card 1234567890123"),
             _line("WARNING", "pregen queue skipped a card"),
             _line("ERROR", "provider exploded"),
@@ -166,8 +165,8 @@ class ProcessLogFileTests(unittest.TestCase):
             _line("INFO", "AI-Hints Linger: late result arrived from gemini/gemini-3.6-flash (candidate #2)."),
         ])
         res = process_log_file(self.path, "ALL", "ALL", "")
-        self.assertEqual(res["total"], 7)
-        self.assertEqual(res["matched_total"], 7)
+        self.assertEqual(res["total"], 6)
+        self.assertEqual(res["matched_total"], 6)
         self.assertFalse(res["truncated"])
 
         err_only = process_log_file(self.path, "ERROR", "ALL", "")
@@ -177,9 +176,6 @@ class ProcessLogFileTests(unittest.TestCase):
         batch_only = process_log_file(self.path, "ALL", "Batch Processing", "")
         self.assertEqual(batch_only["matched_total"], 1)
         self.assertIn("Batch queue", batch_only["content_plain"])
-
-        proxy_only = process_log_file(self.path, "ALL", "Antigravity Proxy", "")
-        self.assertEqual(proxy_only["matched_total"], 1)
 
         pregen = process_log_file(self.path, "ALL", "Pre-generation", "")
         self.assertEqual(pregen["matched_total"], 1)
@@ -192,7 +188,7 @@ class ProcessLogFileTests(unittest.TestCase):
         self.assertIn("AI-Hints Linger", linger["content_plain"])
 
         std = process_log_file(self.path, "ALL", "Standard Addon", "")
-        self.assertEqual(std["matched_total"], 5)  # excludes Proxy + MODEL_TEST
+        self.assertEqual(std["matched_total"], 5)  # excludes MODEL_TEST
 
         search = process_log_file(self.path, "ALL", "ALL", "EXPLODED")  # case-insensitive
         self.assertEqual(search["matched_total"], 1)

@@ -215,7 +215,7 @@ These exist in code/config for backward compatibility but are not exposed in the
 |-----|-------|
 | `show_in_popup` | Legacy; no longer shown. |
 | `local_providers`, `local_endpoint`, `local_provider_override` | Legacy local-AI UI; not constructed. |
-| `antigravity_proxy`, `antigravity_accounts` | Antigravity proxy removed from the UI; the accounts-file backup/restore sync was also removed from the code. |
+| `antigravity_proxy`, `antigravity_accounts` | The built-in Antigravity provider and its local proxy were fully removed (v7.0.3/v7.0.4). Leftover values in existing `meta.json` files are inert and can be deleted. Use a **Custom Provider** instead if you need a local OpenAI-compatible endpoint. |
 
 ---
 

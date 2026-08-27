@@ -493,10 +493,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 self.models_layout.addWidget(w)
             self.provider_timeout_spins = {p: w.timeout_spin for p, w in self.provider_widgets.items()}
             
-    def on_fetch_binary(self):
-        from aqt.utils import showWarning
-        showWarning("Antigravity support has been removed from the AI Providers tab.")
-
     def _on_tab_changed_tracker(self, index):
         global LAST_ACTIVE_TAB_INDEX
         LAST_ACTIVE_TAB_INDEX = index
@@ -510,24 +506,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
              except Exception: pass
 
     def on_delete_binary(self):
-        if not askUser("Are you sure you want to delete the Antigravity Proxy binary from your drive?\n\nThis will not delete your saved configuration, but disables the proxy until re-downloaded."):
-            return
-        try:
-            from ..proxy_manager import proxy_manager
-            proxy_manager.stop()
-            if os.path.exists(proxy_manager.executable):
-                os.remove(proxy_manager.executable)
-            self.ag_fetch_btn.setEnabled(True)
-            self.ag_dashboard_btn.setEnabled(False)
-            self.ag_enable_cb.setEnabled(False)
-            self.ag_enable_cb.setChecked(False)
-            self.ag_delete_btn.setEnabled(False)
-            self.ag_dl_status.setVisible(True)
-            self.ag_dl_status.setText("🗑️ Native binary successfully removed from disk.")
-            self.ag_dl_progress.setVisible(False)
-        except Exception as e:
-            from aqt.utils import showWarning
-            showWarning(f"Deletion failed: {e}")
+        pass
 
     def on_fetch_all_models(self):
         if getattr(self, "batch_fetch_active", False):
@@ -763,9 +742,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         # 2. Local AI widget
         if hasattr(self, 'local_model_edit') and hasattr(self, 'local_test_status_label'):
             targets.append(("local", self.local_model_edit, self.local_test_status_label))
-        
-        # Antigravity is handled under step 1 (Standard provider priority list row)
-        
+
         # Run tests sequentially in a background thread
         import threading
         def _runner():
@@ -1309,9 +1286,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             GLOBAL_NEWLY_ADDED_MODELS.clear()
             GLOBAL_MISSING_FROM_FETCH.clear()
             try:
-                from ..proxy_manager import proxy_manager
                 from ..mobile_sync import auto_update_mobile_setup
-                proxy_manager.start(new_config)
                 auto_update_mobile_setup() # Silently update if setup was already completed
             except Exception: pass
             # Apply debug_logging level change immediately (no restart needed)

@@ -66,10 +66,7 @@ def _line_to_html(line: str) -> str:
 def _line_matches(line: str, level_filter: str, source_filter: str, search_lower: str) -> bool:
     if level_filter != "ALL" and f" - {level_filter} - " not in line:
         return False
-    if source_filter == "Antigravity Proxy":
-        if "[Proxy]" not in line:
-            return False
-    elif source_filter == "Batch Processing":
+    if source_filter == "Batch Processing":
         if "Batch" not in line and "Queue" not in line:
             return False
     elif source_filter == "Pre-generation":
@@ -83,7 +80,7 @@ def _line_matches(line: str, level_filter: str, source_filter: str, search_lower
         if "AI-Hints Linger" not in line:
             return False
     elif source_filter == "Standard Addon":
-        if "[Proxy]" in line or "[MODEL_TEST]" in line:
+        if "[MODEL_TEST]" in line:
             return False
     if search_lower and search_lower not in line.lower():
         return False
@@ -154,7 +151,7 @@ class LogTabMixin:
         
         filter_layout.addWidget(QLabel(" Source:"))
         self.log_source_cb = QComboBox()
-        self.log_source_cb.addItems(["ALL", "Antigravity Proxy", "Batch Processing", "Pre-generation", "Model Testing", "Lingering", "Standard Addon"])
+        self.log_source_cb.addItems(["ALL", "Batch Processing", "Pre-generation", "Model Testing", "Lingering", "Standard Addon"])
         self.log_source_cb.currentIndexChanged.connect(self.load_log)
         filter_layout.addWidget(self.log_source_cb)
         
