@@ -1293,7 +1293,7 @@ class AIClient:
             if model_timed_out:
                 timeouts_count += 1
                 hook = self._active_linger
-                if hook is not None:
+                if hook is not None and hook[0] is not None:
                     hook[0].spawn(hook[1], provider_name, model)
                     self._notify_status("Lingering")
                 if timeouts_count >= 2:
@@ -1511,7 +1511,7 @@ class AIClient:
             if model_timed_out:
                 timeouts_count += 1
                 hook = self._active_linger
-                if hook is not None:
+                if hook is not None and hook[0] is not None:
                     hook[0].spawn(hook[1], provider, model)
                     self._notify_status("Lingering")
                 if timeouts_count >= 2:
@@ -1610,7 +1610,7 @@ class AIClient:
             if model_timed_out:
                 timeouts_count += 1
                 hook = self._active_linger
-                if hook is not None:
+                if hook is not None and hook[0] is not None:
                     hook[0].spawn(hook[1], "anthropic", model)
                     self._notify_status("Lingering")
                 if timeouts_count >= 2:
@@ -1725,7 +1725,7 @@ class AIClient:
             if model_timed_out:
                 timeouts_count += 1
                 hook = self._active_linger
-                if hook is not None:
+                if hook is not None and hook[0] is not None:
                     hook[0].spawn(hook[1], "gemini", model)
                     self._notify_status("Lingering")
                 if timeouts_count >= 2:
@@ -2458,6 +2458,26 @@ class AIClient:
             return value
         return []
 
+    # Substrings that identify non-chat models (embeddings, OCR, moderation,
+    # TTS/transcription, realtime audio, experimental "labs" models). These can
+    # never answer a chat/completions prompt, so they should never be offered as
+    # fallback candidates or tested as if they were chat models.
+    _NON_CHAT_MODEL_HINTS = (
+        "embed", "ocr", "moderation", "-tts", "tts-", "/tts",
+        "transcribe", "realtime", "labs-", "/labs", "/stt", "-stt",
+    )
+
+    def _is_non_chat_model(self, model_id: str) -> bool:
+        mid = (model_id or "").lower()
+        return any(hint in mid for hint in self._NON_CHAT_MODEL_HINTS)
+
+    def _chat_only_models(self, model_ids: List[str]) -> List[str]:
+        out = []
+        for m in model_ids:
+            if m and not self._is_non_chat_model(m):
+                out.append(m)
+        return out
+
     def _log_model_attempt(self, provider: str, model: str, models: List[str]) -> None:
         if models and model != models[0]:
             logger.debug(f"AI-Hints: Trying fallback model for {provider}: {model}")
@@ -2545,15 +2565,15 @@ class AIClient:
                         headers.update(custom_headers)
                     result = self._get_json(models_url, headers)
                     FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
-                    return [m.get("id") for m in result.get("data", []) if m.get("id")]
+                    return self._chat_only_models([m.get("id") for m in result.get("data", []) if m.get("id")])
 
                 if provider == "openrouter":
                     url = "https://openrouter.ai/api/v1/models"
                     headers = self._json_headers(api_key)
                     result = self._get_json(url, headers)
                     FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
-                    return [m.get("id") for m in result.get("data", []) if m.get("id")]
-                
+                    return self._chat_only_models([m.get("id") for m in result.get("data", []) if m.get("id")])
+
                 elif provider == "gemini":
                     # Pass the key via header, never the URL query string —
                     # URLs end up in proxy/server access logs.
@@ -2573,13 +2593,13 @@ class AIClient:
                             if dep_name:
                                 deprecated.add(dep_name)
                     FETCHED_DEPRECATED_MODELS[provider] = deprecated
-                    return models
+                    return self._chat_only_models(models)
 
                 elif provider == "groq":
                     url = "https://api.groq.com/openai/v1/models"
                     headers = self._json_headers(api_key)
                     result = self._get_json(url, headers)
-                    return [m.get("id") for m in result.get("data", []) if m.get("id")]
+                    return self._chat_only_models([m.get("id") for m in result.get("data", []) if m.get("id")])
 
                 elif provider == "local":
                     local_cfg = self.config.get("local_endpoint") or {}
@@ -2613,7 +2633,7 @@ class AIClient:
                     if url:
                         headers = self._json_headers(api_key)
                         result = self._get_json(url, headers)
-                        return [m.get("id") for m in result.get("data", []) if m.get("id")]
+                        return self._chat_only_models([m.get("id") for m in result.get("data", []) if m.get("id")])
 
                 elif provider == "huggingface":
                     return MODEL_SUGGESTIONS.get("huggingface", [])

@@ -12,6 +12,16 @@ DEFAULT_TEST_ANSWER = "Due to Faraday's law of induction and Lenz's law, the fal
 
 TEST_CANCELLATIONS = {}
 
+
+def cancel_other_model_tests(keep_key):
+    """Cancel every other in-flight model-test run so two tests from different
+    dialogs (e.g. a per-provider fallback test and the global priority test)
+    never run at the same time and interleave their log output."""
+    for k in list(TEST_CANCELLATIONS.keys()):
+        if k != keep_key:
+            TEST_CANCELLATIONS[k] = True
+
+
 # Highlight colours for newly added vs missing vs deprecated models in fallback lists.
 # Kept as hex strings and resolved lazily so imports stay safe in headless tests.
 COL_NEW_BG = "#d9f2cd"
@@ -203,6 +213,18 @@ class FallbackOrderDialog(QDialog):
         is_dep = is_model_deprecated(self.provider, model_name)
         is_missing = model_name in MISSING_FROM_FETCH.get(self.provider, ())
         return is_new, is_dep, is_missing
+
+    def _cancel_own_test(self):
+        """Stop this dialog's model-test loop if it is still running in the
+        background. Called when the dialog is closed so a test never keeps
+        running (and logging) after its window disappears."""
+        test_key = f"{self.provider}_test"
+        if test_key in TEST_CANCELLATIONS:
+            TEST_CANCELLATIONS[test_key] = True
+
+    def closeEvent(self, event):
+        self._cancel_own_test()
+        super().closeEvent(event)
 
     def _apply_model_highlight(self, item, model_name):
         """Colour a fallback table row based on new/missing/deprecated status."""
@@ -476,31 +498,38 @@ class FallbackOrderDialog(QDialog):
             tooltip("Testing cancelled.")
             return
 
+        cancel_other_model_tests(test_key)
         TEST_CANCELLATIONS[test_key] = False
         self.list_test_btn.setText("Stop Test")
         self.restore_btn.setEnabled(False)
         self.up_btn.setEnabled(False)
         self.down_btn.setEnabled(False)
         self.remove_btn.setEnabled(False)
-        
+
         # Collect models based on mode
         models = []
         model_indices = []
+        seen_models = set()
         for i in range(self.table.rowCount()):
             item = self.table.item(i, 0)
             if not item:
                 continue
             model_name = item.data(Qt.ItemDataRole.UserRole)
+            if model_name in seen_models:
+                continue
             if mode == "all":
                 models.append(model_name)
                 model_indices.append(i)
+                seen_models.add(model_name)
             elif mode == "checked" and item.checkState() == Qt.CheckState.Checked:
                 models.append(model_name)
                 model_indices.append(i)
+                seen_models.add(model_name)
             elif mode == "row" and self.table.item(i, 0) and self.table.item(i, 0).isSelected():
                 models.append(model_name)
                 model_indices.append(i)
-        
+                seen_models.add(model_name)
+
         if not models:
             tooltip("No models match the selected test mode.")
             self._test_done(test_key)
@@ -1015,6 +1044,18 @@ class GlobalFallbackOrderDialog(QDialog):
         dlg_btns.rejected.connect(self.reject)
         layout.addWidget(dlg_btns)
 
+    def _cancel_own_test(self):
+        """Stop this dialog's model-test loop if it is still running in the
+        background. Called when the dialog is closed so a test never keeps
+        running (and logging) after its window disappears."""
+        test_key = "global_fallback_test"
+        if test_key in TEST_CANCELLATIONS:
+            TEST_CANCELLATIONS[test_key] = True
+
+    def closeEvent(self, event):
+        self._cancel_own_test()
+        super().closeEvent(event)
+
     def _provider_display(self, provider):
         if hasattr(self.main_dialog, "custom_providers_data") and provider in self.main_dialog.custom_providers_data:
             return provider
@@ -1332,6 +1373,7 @@ class GlobalFallbackOrderDialog(QDialog):
             tooltip("Testing cancelled.")
             return
 
+        cancel_other_model_tests(test_key)
         TEST_CANCELLATIONS[test_key] = False
         self.list_test_btn.setText("Stop Test")
         self.restore_btn.setEnabled(False)
@@ -1348,12 +1390,17 @@ class GlobalFallbackOrderDialog(QDialog):
                 return item.checkState() == Qt.CheckState.Checked
             return True
 
-        items_data = [
-            self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)
-            for i in range(self.list_widget.count())
-            if _test_includes(i)
-        ]
-        
+        items_data = []
+        seen_items = set()
+        for i in range(self.list_widget.count()):
+            if not _test_includes(i):
+                continue
+            data = self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)
+            if data in seen_items:
+                continue
+            seen_items.add(data)
+            items_data.append(data)
+
         import threading
         from ..ai_client import AIClient
         

@@ -26,6 +26,7 @@ from .tab_mobile import MobileTabMixin
 
 # Import Support Widgets
 from .widgets import CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS, NEWLY_ADDED_MODELS, MISSING_FROM_FETCH
+from .tab_providers import cancel_other_model_tests, TEST_CANCELLATIONS
 from ..config_io import write_pretty_config_preserve_keys
 
 LAST_ACTIVE_TAB_INDEX = 7  # Fallback static state
@@ -736,6 +737,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
     def on_test_all_models(self):
         """Runs test checks sequentially for all provider rows that are configured or enabled."""
+        test_key = "batch_model_test"
+        cancel_other_model_tests(test_key)
+        TEST_CANCELLATIONS[test_key] = False
         tooltip("Starting batch model testing...")
         
         # Collect all rows (providers) and their associated widgets
@@ -762,6 +766,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             from ..logger import log_context
             log_context.source = "model_test"
             for provider, combobox, status_label in targets:
+                if TEST_CANCELLATIONS.get(test_key):
+                    break
                 # Only test if configured/enabled
                 api_key = self.api_key_edits[provider].text().strip() if provider in self.api_key_edits else ""
                 local_providers = self.local_providers_data or {}
@@ -840,6 +846,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 
             def _done_all():
                 tooltip("Finished batch model testing.")
+                TEST_CANCELLATIONS.pop(test_key, None)
             mw.taskman.run_on_main(_done_all)
             
         threading.Thread(target=_runner, daemon=True).start()
