@@ -5,7 +5,9 @@ from aqt.qt import *
 from ..logger import info, tooltip
 from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS, MODEL_FALLBACKS, PROVIDER_ORDER
 from ..ai_client import is_model_blacklisted, is_model_deprecated
-from .widgets import CustomProviderDialog, ProviderRowWidget, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS, NEWLY_ADDED_MODELS, MISSING_FROM_FETCH
+from .widgets import (CustomProviderDialog, ProviderRowWidget, PERSISTENT_TEST_STATUSES,
+                      FETCH_CANCELLATIONS, NEWLY_ADDED_MODELS, MISSING_FROM_FETCH,
+                      GLOBAL_NEWLY_ADDED_MODELS, GLOBAL_MISSING_FROM_FETCH)
 
 DEFAULT_TEST_QUESTION = "Why does a rotating magnet fall slower through a copper tube than a non-magnetic mass of the same size?"
 DEFAULT_TEST_ANSWER = "Due to Faraday's law of induction and Lenz's law, the falling magnet induces eddy currents in the copper tube, creating an opposing magnetic field that exerts an upward electromagnetic braking force."
@@ -430,7 +432,7 @@ class FallbackOrderDialog(QDialog):
                         for m in models_clean:
                             if m and m not in existing_set:
                                 newly.add(m)
-                                self._add_model_row(m, True)
+                                self._add_model_row(m, False)
                                 added_count += 1
                         
                         self.update_item_labels()
@@ -1066,8 +1068,9 @@ class GlobalFallbackOrderDialog(QDialog):
         global_statuses = PERSISTENT_TEST_STATUSES.get("global_fallback_statuses", {})
         global_tooltips = PERSISTENT_TEST_STATUSES.get("global_fallback_tooltips", {})
         
-        # Get currently disabled models map
-        disabled_map = self.main_dialog.disabled_fallback_models_data if hasattr(self.main_dialog, "disabled_fallback_models_data") else {}
+        # Global checkbox state is independent from per-provider fallback state.
+        disabled_map = getattr(self.main_dialog, "disabled_global_model_priority_data", [])
+        disabled_map = set(tuple(item) for item in disabled_map if isinstance(item, (list, tuple)) and len(item) == 2)
 
         self.list_widget.setUpdatesEnabled(False)
         try:
@@ -1085,8 +1088,7 @@ class GlobalFallbackOrderDialog(QDialog):
                 item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsUserCheckable)
             
                 # Set check state based on global disabled map
-                provider_disabled = disabled_map.get(provider, [])
-                item.setCheckState(Qt.CheckState.Unchecked if model in provider_disabled else Qt.CheckState.Checked)
+                item.setCheckState(Qt.CheckState.Unchecked if (provider, model) in disabled_map else Qt.CheckState.Checked)
 
                 tt = global_tooltips.get((provider, model))
                 if tt:
@@ -1103,9 +1105,9 @@ class GlobalFallbackOrderDialog(QDialog):
 
     def _global_marks(self, provider, model):
         """Returns (new_mark, dep_mark, missing_mark, is_new, is_deprecated, is_missing)."""
-        is_new = model in NEWLY_ADDED_MODELS.get(provider, ())
+        is_new = model in GLOBAL_NEWLY_ADDED_MODELS.get(provider, ())
         is_dep = is_model_deprecated(provider, model)
-        is_missing = model in MISSING_FROM_FETCH.get(provider, ())
+        is_missing = model in GLOBAL_MISSING_FROM_FETCH.get(provider, ())
         return ("🆕 " if is_new else "",
                 " | ⚠️ Deprecated" if is_dep else "",
                 " | ⚠️ No Longer Returned" if (is_missing and not is_dep) else "",
@@ -1199,14 +1201,14 @@ class GlobalFallbackOrderDialog(QDialog):
             to_remove = [
                 i for i in range(self.list_widget.count())
                 if self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)[1]
-                in MISSING_FROM_FETCH.get(self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)[0], set())
+                in GLOBAL_MISSING_FROM_FETCH.get(self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)[0], set())
             ]
             label = "no-longer-returned"
         else:
             to_remove = []
             for i in range(self.list_widget.count()):
                 provider, model = self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)
-                if is_model_deprecated(provider, model) or model in MISSING_FROM_FETCH.get(provider, set()):
+                if is_model_deprecated(provider, model) or model in GLOBAL_MISSING_FROM_FETCH.get(provider, set()):
                     to_remove.append(i)
             label = "deprecated/no-longer-returned"
 
@@ -1328,22 +1330,22 @@ class GlobalFallbackOrderDialog(QDialog):
                             existing_set = set(existing)
                             
                             added_count = 0
-                            newly = NEWLY_ADDED_MODELS.setdefault(p, set())
+                            newly = GLOBAL_NEWLY_ADDED_MODELS.setdefault(p, set())
                             for m in sorted(list(set(ms))):
                                 if m and (p, m) not in existing_set:
                                     newly.add(m)
                                     item = QListWidgetItem()
                                     item.setData(Qt.ItemDataRole.UserRole, (p, m))
                                     item.setText(f"[{self._provider_display(p)}] {m}")
-                                    item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsUserCheckable)
-                                    item.setCheckState(Qt.CheckState.Checked)
+                                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                                    item.setCheckState(Qt.CheckState.Unchecked)
                                     self.list_widget.addItem(item)
                                     added_count += 1
                             
                             fetched_set = set(ms)
                             missed = {m for (pr, m) in existing if pr == p and m not in fetched_set}
                             if missed:
-                                MISSING_FROM_FETCH[p] = missed
+                                GLOBAL_MISSING_FROM_FETCH[p] = missed
                             
                             self.refresh_statuses()
                             if added_count > 0:
@@ -1591,26 +1593,9 @@ class ProvidersTabMixin:
             if dlg.exec():
                 self.global_model_priority_data = dlg.get_ordered_list()
                 
-                # Sync disabled fallback models based on checkbox states in the dialog
-                if not hasattr(self, "disabled_fallback_models_data"):
-                    self.disabled_fallback_models_data = self.config.get("disabled_fallback_models", {})
-
-                for i in range(dlg.list_widget.count()):
-                    item = dlg.list_widget.item(i)
-                    provider, model = item.data(Qt.ItemDataRole.UserRole)
-                    is_disabled = (item.checkState() == Qt.CheckState.Unchecked)
-                    
-                    if provider not in self.disabled_fallback_models_data:
-                        self.disabled_fallback_models_data[provider] = []
-                    
-                    current_disabled = self.disabled_fallback_models_data[provider]
-                    if is_disabled:
-                        if model not in current_disabled:
-                            current_disabled.append(model)
-                    else:
-                        if model in current_disabled:
-                            while model in current_disabled:
-                                current_disabled.remove(model)
+                # Keep global checkbox state separate from per-provider fallback
+                # checkbox state. A global edit must never rewrite provider lists.
+                self.disabled_global_model_priority_data = dlg.get_disabled_list()
                 
                 tooltip("Advanced fallback priority and disabled states updated. Click Save to apply.")
         finally:

@@ -88,14 +88,14 @@ Each card resets to these defaults on a fresh show (including relearn/retries), 
 
 Top row buttons:
 
-- **Fetch All** — fetch the latest models for all providers that have API keys.
+- **Fetch All** — fetch the latest models for all providers that have API keys. When used in the Advanced Global Fallback dialog, it only updates the global list state and does not rewrite per-provider fallback checkboxes or ordering.
 - **Test All** — test all configured/enabled providers sequentially.
 - **Restore Defaults** — restore model names to factory defaults.
 
 Global fallback controls:
 
 - **Enable Advanced Fallback Priority (Global List)** — use a global priority list instead of per-provider nested fallbacks.
-- **Advanced Fallback Priority...** — open the global priority dialog (drag & drop cross-provider ordering).
+- **Advanced Fallback Priority...** — open the global priority dialog (drag & drop cross-provider ordering). Its enabled/disabled state is stored separately from the per-provider fallback lists.
 
 ### Per-Provider Rows
 
@@ -119,8 +119,9 @@ Each provider in your priority order has a row with:
 
 - Search field to filter models.
 - Table with **Model Name**, **Thinking Level** (`off`/`low`/`medium`/`high`), and **Timeout (s)** per model.
-- Status markers: ⭐ active, 🆕 newly fetched (green), ⚠️ deprecated (red), ⚠️ no longer returned (amber).
+- Status markers: ⭐ active, 🆕 newly fetched (green), ⚠️ deprecated (red), ⚠️ no longer returned (amber). These markers are independent from the Advanced Global Fallback dialog.
 - Buttons: **Move Up / Move Down / Set Active**, **Remove** (Selected / Deprecated / No Longer Returned / both), **Test** (Checked / Row / All), **Rank Checked First**, **Fetch All**, **Restore Defaults**.
+- Fetching models in this dialog preserves the current checked state for rows that already exist; newly fetched rows stay unchecked until you enable them.
 
 ### Model Testing Prompt Settings
 

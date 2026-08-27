@@ -10,8 +10,8 @@ This page documents **where** AI-Hints stores data, **what** files it creates, a
 | Anki profile config (via `meta.json` / Anki add-on manager) | Your **live** configuration, including user data like blacklist state and scan cursors. |
 | Anki profile `ai_hints_bin/pregen_cache.json` | Pre-generated hint cache (disk-backed; legacy fallback: `addon/pregen_cache.json`). |
 | Anki profile `ai_hints_bin/ai_hints_batch_state.json` | Persistent batch queue state (fallback: `addon/batch_state.json`). |
-| Anki profile `ai_hints_bin/ai_hints.log`, `.1`, `.2` | Rotating log files (3 levels, 5 MB each); resolved via `logger._log_path()`. |
-| `addon/meta.json.bak` | Startup copy of the previous addon metadata file, made when an Anki profile opens before config migration or writes. |
+| Anki profile `ai_hints_bin/ai_hints.log`, `.1`, `.2`, `.3` | Rotating log files (current session plus three backups, 5 MB each); resolved via `logger._log_path()`. |
+| `addon/meta.json.bak`, `.bak.1`, `.bak.2` | Startup copies of the previous addon metadata file, rotated once when an Anki profile opens. |
 | In-note hidden JSON block | Per-card generated data (see [Data & Storage Format](data-format.md)). |
 | `addon/manifest.json`, `addon/VERSION` | Package metadata and version string. |
 | `_ai_hints_template.js` (media folder) | Mobile/synced frontend template script. |
@@ -57,6 +57,7 @@ In addition to the config keys, this live store also holds **runtime/user state*
 | `local_providers` | object | Legacy local-endpoint provider configs. |
 | `provider_timeouts` | object | Per-provider timeout overrides: `{ provider: seconds }`. |
 | `provider_overrides` | object | Per-provider routing overrides. |
+| `disabled_global_model_priority` | array | Check state for the Advanced Global Fallback dialog. Separate from `disabled_fallback_models`. |
 | `test_question_front` / `test_question_back` | string | The model-testing prompt. |
 | `global_model_priority` | array | The global cross-provider fallback list. |
 | `use_global_model_priority` | bool | Whether the global list is active. |
@@ -114,9 +115,9 @@ Structure (new nested format):
 ## 5. Log Files (`ai_hints.log`)
 
 - **Path**: `<profile>/ai_hints_bin/ai_hints.log` — the single canonical location shared by the file handler (`rebind_file_logging()`), the Logs tab and Clear Log.
-- **Handler**: `RotatingFileHandler`, `maxBytes=5*1024*1024`, `backupCount=2`.
-- **Rotation**: 3 levels — `ai_hints.log`, `ai_hints.log.1`, `ai_hints.log.2`. A rollover happens when the profile opens so each session starts with a fresh log.
-- **Clear on startup**: with `auto_clear_logs` enabled (the default) all three files are deleted on startup, so `.1` / `.2` backups never persist across sessions.
+- **Handler**: `RotatingFileHandler`, `maxBytes=5*1024*1024`, `backupCount=3`.
+- **Rotation**: 4 files total — `ai_hints.log`, `ai_hints.log.1`, `ai_hints.log.2`, `ai_hints.log.3`. A rollover happens when the profile opens so each session starts with a fresh log and three prior sessions are preserved.
+- **Clear on startup**: with `auto_clear_logs` enabled (the default) only the current `ai_hints.log` is deleted on startup; the rotated backups remain available.
 - **Format**: `%(asctime)s - %(levelname)s - %(message)s`.
 - **Viewable** live in the **Logs** tab; configurable via **Clear on startup** and **Debug logging**.
 

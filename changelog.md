@@ -2,6 +2,12 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 7.0.3 (2026-08-27)
+- **Independent Fallback State**: Advanced Global Fallback Priority now keeps its model enabled/disabled states and fetched-model highlights separate from each provider's fallback dialog. Fetching or saving the global list no longer resets provider fallback checkboxes, ordering, or new-model indicators, and provider fallback changes no longer alter the global list.
+- **Fetch All Preserves User Choices**: Fetch All appends newly discovered models without changing existing fallback order or enabled states. Newly fetched models remain disabled until explicitly enabled by the user.
+- **Startup-Only Three-Level Rotation**: Logs now retain the current file plus three rotated session files (`ai_hints.log.1` through `.3`), while `meta.json` retains three startup backups (`meta.json.bak`, `.bak.1`, `.bak.2`). Rotations occur once when Anki starts, not on every configuration save; auto-clear removes only the current log.
+- **Removed Addon `bin` Creation**: The proxy fallback path no longer creates `addon/bin`; profile-scoped `ai_hints_bin` storage remains available for proxy and mutable runtime data.
+
 ## 7.0.2 (2026-08-27)
 - **Model Test No Longer Crashes with `'NoneType' object has no attribute 'spawn'`**: Testing a provider/model could crash with this error after a read timeout. During a model test lingering is disabled, so the inner per-provider model loops would try to call `.spawn()` on a disabled (`None`) linger pool even though no background retry should be dispatched. All four inner loops (Gemini, OpenAI-compatible, Anthropic, custom) now only spawn the lingering retry when a linger pool actually exists — a model-test read timeout correctly surfaces the timeout instead of crashing.
 - **Model-Test Runs No Longer Overlap or Spam**: Starting any model test now cancels any other in-flight test, so running mistral's fallback test and then trustedrouter's no longer interleaves their logs ("still testing mistral"). The fallback/global "Test All" loops now dedupe `(provider, model)` pairs, so a single failing model (e.g. a misconfigured `trustedrouter/free`) is reported once instead of hundreds of times, and a test loop is cancelled when its fallback dialog is closed.

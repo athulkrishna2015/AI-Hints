@@ -218,13 +218,6 @@ def write_pretty_config(addon_package, config):
 
     target = dict(config or {})
     on_disk = read_meta_config() or {}
-    # 3-level rotation: keep .bak, .bak.1, .bak.2
-    try:
-        if os.path.exists(_meta_path()):
-            _rotate_meta_backups()
-            shutil.copyfile(_meta_path(), _meta_path() + ".bak")
-    except Exception as e:
-        logger.error(f"AI-Hints: failed to back up meta.json to .bak before write: {e}")
     try:
         mw.addonManager.writeConfig(addon_package, target)
         _log_write(addon_package, "addonManager(full-replace)", on_disk, target)
@@ -256,9 +249,9 @@ def write_pretty_config_preserve_keys(addon_package, config):
       was destroyed on 2026-08-20. Anki's ``addonManager.writeConfig`` (the
       default path) does not truncate-and-dump, and the lock removes the
       read/write interleave entirely.
-    * The previous meta.json is rotated through 3 levels (.bak, .bak.1,
-       .bak.2) before every overwrite, so any bad write is rollback-able
-       from 3 prior versions.
+    * Startup rotates meta.json through 3 levels (.bak, .bak.1, .bak.2)
+       before Anki or the addon can update it, so prior versions remain
+       available without creating a backup on every config save.
     """
     with _write_lock:
         on_disk = read_meta_config() or {}
@@ -289,13 +282,6 @@ def write_pretty_config_preserve_keys(addon_package, config):
                 if v:
                     merged_keys[p] = v
         merged["api_keys"] = merged_keys
-
-        try:
-            if os.path.exists(_meta_path()):
-                _rotate_meta_backups()
-                shutil.copyfile(_meta_path(), _meta_path() + ".bak")
-        except Exception as e:
-            logger.error(f"AI-Hints: failed to back up meta.json to .bak before write: {e}")
 
         try:
             from aqt import mw

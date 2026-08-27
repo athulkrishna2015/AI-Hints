@@ -16,6 +16,10 @@ NEWLY_ADDED_MODELS = {}
 # provider -> set of model names that were in the fallback list before the most
 # recent fetch but were NOT returned by the API (i.e. no longer available).
 MISSING_FROM_FETCH = {}
+# Global advanced-fallback fetches must not share highlighting state with the
+# per-provider fallback dialogs, even when they contain the same provider/model.
+GLOBAL_NEWLY_ADDED_MODELS = {}
+GLOBAL_MISSING_FROM_FETCH = {}
 
 class CustomProviderDialog(QDialog):
     def __init__(self, parent, name="", data=None, config=None):

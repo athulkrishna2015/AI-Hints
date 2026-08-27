@@ -17,6 +17,7 @@ This is the complete reference for every configuration key AI-Hints reads. Keys 
 | `provider_priority` | (see config) | Ordered list of providers by priority. |
 | `disabled_providers` | `[]` | Providers disabled from fallback. |
 | `disabled_fallback_models` | `{}` | Per-provider models excluded from fallback. |
+| `disabled_global_model_priority` | `[]` | Models unchecked in the Advanced Global Fallback dialog. Separate from per-provider disabled fallback models. |
 | `custom_providers` | `{}` | Map of custom OpenAI-compatible endpoint configs. |
 
 Each custom provider entry is an object with the following keys:

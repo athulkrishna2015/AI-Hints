@@ -25,7 +25,10 @@ from .tab_logs import LogTabMixin
 from .tab_mobile import MobileTabMixin
 
 # Import Support Widgets
-from .widgets import CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE, PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS, NEWLY_ADDED_MODELS, MISSING_FROM_FETCH
+from .widgets import (CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE,
+                      PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS,
+                      NEWLY_ADDED_MODELS, MISSING_FROM_FETCH,
+                      GLOBAL_NEWLY_ADDED_MODELS, GLOBAL_MISSING_FROM_FETCH)
 from .tab_providers import cancel_other_model_tests, TEST_CANCELLATIONS
 from ..config_io import write_pretty_config_preserve_keys
 
@@ -68,6 +71,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         NEWLY_ADDED_MODELS.clear()
         MISSING_FROM_FETCH.clear()
+        GLOBAL_NEWLY_ADDED_MODELS.clear()
+        GLOBAL_MISSING_FROM_FETCH.clear()
         
         self.setup_ui()
         self.load_config_into_ui()
@@ -384,6 +389,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             disabled_models = {}
         self.disabled_fallback_models_data = disabled_models.copy()
         self.global_model_priority_data = list(c.get("global_model_priority", []))
+        self.disabled_global_model_priority_data = list(c.get("disabled_global_model_priority", []))
         self.local_providers_data = (c.get("local_providers", {}) or {}).copy()
         self.custom_providers_data = (c.get("custom_providers", {}) or {}).copy()
         self.thinking_levels_data = (c.get("thinking_levels", {}) or {}).copy()
@@ -922,6 +928,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                             for m in clean_models:
                                 if m and m not in current_set:
                                     current_fallbacks.append(m)
+                                    disabled_models.append(m)
                                     newly.add(m)
                             
                             fetched_set = set(clean_models)
@@ -1136,6 +1143,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 write_pretty_config(ADDON_PACKAGE, self._normalize_config(raw_config))
                 NEWLY_ADDED_MODELS.clear()
                 MISSING_FROM_FETCH.clear()
+                GLOBAL_NEWLY_ADDED_MODELS.clear()
+                GLOBAL_MISSING_FROM_FETCH.clear()
                 self._dirty = False
                 if close: self.accept()
                 else: tooltip("Configuration saved.")
@@ -1241,6 +1250,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["thinking_levels"] = self.thinking_levels_data
             new_config["model_timeouts"] = self.model_timeouts_data
             new_config["global_model_priority"] = self.global_model_priority_data
+            new_config["disabled_global_model_priority"] = self.disabled_global_model_priority_data
             new_config["use_global_model_priority"] = self.advanced_fallback_cb.isChecked()
             new_config["test_question_front"] = self.test_question_edit.text().strip()
             new_config["test_question_back"] = self.test_answer_edit.text().strip()
@@ -1296,6 +1306,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             write_pretty_config_preserve_keys(ADDON_PACKAGE, self._normalize_config(new_config))
             NEWLY_ADDED_MODELS.clear()
             MISSING_FROM_FETCH.clear()
+            GLOBAL_NEWLY_ADDED_MODELS.clear()
+            GLOBAL_MISSING_FROM_FETCH.clear()
             try:
                 from ..proxy_manager import proxy_manager
                 from ..mobile_sync import auto_update_mobile_setup

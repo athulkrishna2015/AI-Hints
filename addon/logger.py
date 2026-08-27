@@ -132,11 +132,11 @@ state = SharedState()
 
 
 def clear_log_file():
-    """Actually clears the log files (called on startup when the option is on).
+    """Clear only the current log file (called on startup when enabled).
 
-    Previously this was a no-op that only logged a message; now it removes
-    ai_hints.log and its rotations and reinstalls a fresh handler so logging
-    keeps working afterwards.
+    Startup rotation has already moved the previous current log to ``.1``.
+    Keep ``.1`` through ``.3`` as the three session backups instead of
+    deleting them when auto-clear is enabled.
     """
     # Detach file handlers before deleting their files.
     for h in list(logger.handlers):
@@ -149,13 +149,12 @@ def clear_log_file():
 
     base = _log_path()
     removed = False
-    for p in (base, base + ".1", base + ".2", base + ".3"):
-        try:
-            if os.path.exists(p):
-                os.remove(p)
-                removed = True
-        except OSError:
-            pass
+    try:
+        if os.path.exists(base):
+            os.remove(base)
+            removed = True
+    except OSError:
+        pass
 
     try:
         logger.addHandler(_build_file_handler(base))
