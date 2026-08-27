@@ -1451,7 +1451,8 @@ class AIClient:
                 headers = self._json_headers(actual_key)
                 if provider == "openrouter":
                     headers["HTTP-Referer"] = "https://github.com/athulkrishna2015/ai-hints"
-                    headers["X-Title"] = "Anki AI-Hints"
+                    headers["X-OpenRouter-Title"] = "Anki AI-Hints"
+                    headers["X-OpenRouter-Categories"] = "ide-extension"
 
                 data = {
                     "model": model,
