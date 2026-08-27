@@ -287,20 +287,11 @@ PROVIDER_ORDER = [
     "cerebras",
 ]
 
-DEFAULT_MODELS = {
-    "openai":     "gpt-4o",
-    "anthropic":  "claude-3-7-sonnet-latest",
-    "gemini":     "gemini-3.5-flash",
-    "groq":       "llama-3.3-70b-versatile",
-    "deepseek":   "deepseek-reasoner",
-    "grok":       "grok-2-1212",
-    "mistral":    "mistral-large-latest",
-    "openrouter": "deepseek/deepseek-chat",
-    "nvidia":     "meta/llama-3.3-70b-instruct",
-    "huggingface": "deepseek-ai/DeepSeek-V3",
-    "sambanova":  "Meta-Llama-3.3-70B-Instruct",
-    "cerebras":   "llama3.1-8b",
-}
+# No hardcoded default model names: providers change their model lists
+# frequently, so stale defaults would only produce 404s. The active model for
+# every built-in provider comes from Fetch (or is typed by the user) and is
+# persisted in config["models"]. Custom providers always carry their own model.
+DEFAULT_MODELS = {}
 
 # Popular model suggestions for the UI dropdowns
 MODEL_SUGGESTIONS = {
@@ -1304,7 +1295,7 @@ class AIClient:
             if not isinstance(local_cfg, dict):
                 local_cfg = {}
             base_url = local_cfg.get("base_url", local_cfg.get("url", "http://localhost:11434/v1"))
-            models = [override_model] if override_model else self._models_for_provider(provider, local_cfg.get("model", "") or DEFAULT_MODELS.get("local", "llama3.3"))
+            models = [override_model] if override_model else self._models_for_provider(provider, local_cfg.get("model", "") or DEFAULT_MODELS.get("local", ""))
         elif provider == "mistral":
             base_url = "https://api.mistral.ai/v1"
         elif provider == "huggingface":
@@ -1373,7 +1364,7 @@ class AIClient:
                         if not isinstance(local_cfg, dict):
                             continue
                         base_url = str(local_cfg.get("base_url", local_cfg.get("url", "http://localhost:11434/v1"))).rstrip("/")
-                        local_model = str(local_cfg.get("model", "") or DEFAULT_MODELS.get("local", "llama3.3")).strip()
+                        local_model = str(local_cfg.get("model", "") or DEFAULT_MODELS.get("local", "")).strip()
                         local_models = [override_model] if override_model else self._models_for_provider(provider, local_model)
                         actual_key = str(local_cfg.get("api_key", "") or api_key).strip()
                         headers = self._json_headers(actual_key)
@@ -1816,7 +1807,7 @@ class AIClient:
         url = f"https://generativelanguage.googleapis.com/v1beta/{job_name}"
         
         models = self._models_for_provider("gemini")
-        model = models[0] if models else DEFAULT_MODELS["gemini"]
+        model = models[0] if models else DEFAULT_MODELS.get("gemini", "")
         
         available_keys = [k for k in keys if not self._is_combo_failed("gemini", model, k)]
         if not available_keys:

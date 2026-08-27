@@ -1343,7 +1343,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         derived = derive_active_provider(config)
         if derived:
             config["ai_provider"] = derived
-        local = {"enabled": False, "base_url": "http://localhost:11434/v1", "model": DEFAULT_MODELS.get("local", "llama3.3"), "api_key": ""}
+        local = {"enabled": False, "base_url": "http://localhost:11434/v1", "model": DEFAULT_MODELS.get("local", ""), "api_key": ""}
         raw_local = config.get("local_endpoint", {}) or {}
         if isinstance(raw_local, dict): local.update(raw_local)
         config["local_endpoint"] = local
@@ -1356,7 +1356,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     "url": local.get("base_url", "http://localhost:11434/v1"),
                     "base_url": local.get("base_url", "http://localhost:11434/v1"),
                     "api_key": local.get("api_key", ""),
-                    "model": local.get("model", DEFAULT_MODELS.get("local", "llama3.3")),
+                    "model": local.get("model", DEFAULT_MODELS.get("local", "")),
                     "headers": {},
                     "enabled": local.get("enabled", False),
                 }

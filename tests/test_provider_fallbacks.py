@@ -10,7 +10,6 @@ from addon.ai_client import (
     AIClient,
     FAILED_COMBOS_CACHE,
     RATE_LIMIT_STREAK,
-    DEFAULT_MODELS,
 )
 
 

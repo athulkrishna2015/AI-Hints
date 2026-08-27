@@ -3,6 +3,7 @@
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
 ## Unreleased
+- **No Hardcoded Default Model Names**: `DEFAULT_MODELS` is now empty — the add-on no longer ships a pre-filled active model (e.g. `gpt-4o`, `claude-3-7-sonnet-latest`, `grok-2-1212`) for built-in providers, because providers change their model lists frequently and stale defaults only produce 404s. Set each provider's model via **Fetch Models** or by typing it in the **AI Providers** tab; the choice is persisted in `config["models"]`. Existing installs keep their saved models. Custom providers always carry their own `model`.
 - **Built-in Antigravity Provider & Proxy Fully Removed**: `proxy_manager.py` (start/stop/download lifecycle), the built-in `antigravity` provider branches in `ai_client.py` (models list, readiness, chat call, key handling, model fetch), the orphaned Antigravity UI widgets/handlers, the packaging exclusions for `antigravity-proxy-*` binaries, the `addon/bin/` proxy layout, and the dead **Antigravity Proxy** Logs-tab source filter are all gone. Antigravity-style local endpoints keep working through **Custom Providers**. Leftover `antigravity_proxy` values in existing `meta.json` files are inert.
 
 ## 7.0.4 (2026-08-27)
