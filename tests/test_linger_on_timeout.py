@@ -335,6 +335,41 @@ class LingerOnTimeoutTests(unittest.TestCase):
         self.assertEqual(res.get("_model"), "m-a")
         self.assertTrue(res.get("hints"))
 
+    def test_l_model_test_read_timeout_with_no_linger_does_not_crash(self):
+        # Regression: during a model test the linger_pool is None, so the inner
+        # custom-provider loop's _active_linger hook is (None, order). A read
+        # timeout there must NOT call .spawn() on the None pool — previously it
+        # raised "'NoneType' object has no attribute 'spawn'".
+        from addon.logger import log_context
+        cfg = base_config(custom_providers={
+            "trustedrouter": {"url": "http://custom.api/v1", "model": "m1", "api_key": "k"},
+        })
+        client = AIClient(cfg)
+        client._active_linger = (None, 0)
+        log_context.source = "model_test"
+        try:
+            with patch.object(AIClient, "_post_json", side_effect=lambda *a, **k: (_ for _ in ()).throw(TIMEOUT)):
+                res = client._call_custom_provider("trustedrouter", "sys", "prompt")
+        finally:
+            log_context.source = None
+        self.assertEqual(res, {"hints": [], "options": []})
+
+    def test_m_openai_compatible_read_timeout_with_no_linger_does_not_crash(self):
+        # Same regression for the OpenAI-compatible loop (e.g. poolside): during
+        # a model test the linger_pool is None, so _active_linger is
+        # (None, order) — a read timeout there must NOT call .spawn() on None.
+        from addon.logger import log_context
+        cfg = base_config(api_keys={"poolside": "k"})
+        client = AIClient(cfg)
+        client._active_linger = (None, 0)
+        log_context.source = "model_test"
+        try:
+            with patch.object(AIClient, "_post_json", side_effect=lambda *a, **k: (_ for _ in ()).throw(TIMEOUT)):
+                res = client._call_openai_compatible("poolside", "sys", "prompt", override_model="m1")
+        finally:
+            log_context.source = None
+        self.assertEqual(res, {"hints": [], "options": []})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 7.0.2 (2026-08-27)
+- **Model Test No Longer Crashes with `'NoneType' object has no attribute 'spawn'`**: Testing a provider/model could crash with this error after a read timeout. During a model test lingering is disabled, so the inner per-provider model loops would try to call `.spawn()` on a disabled (`None`) linger pool even though no background retry should be dispatched. All four inner loops (Gemini, OpenAI-compatible, Anthropic, custom) now only spawn the lingering retry when a linger pool actually exists — a model-test read timeout correctly surfaces the timeout instead of crashing.
+
 ## 7.0.1 (2026-08-26)
 - **Global Fallback Priority Dialog Crash Fix**: Fixed `AttributeError: 'GlobalFallbackOrderDialog' object has no attribute '_build_remove_menu'` that crashed the Advanced Global Fallback Priority dialog on open. `_build_remove_menu` and `_build_test_menu` were `@staticmethod` methods on `FallbackOrderDialog` only — moved to module-level functions shared by both dialogs.
 - **Add Custom Model to Per-Provider Fallback List**: The per-provider Fallback Priority dialog now has an **Add Model...** button that lets you type any custom model name directly into the list (useful for providers whose API doesn't support model fetching, or for manually adding models not yet fetched).
