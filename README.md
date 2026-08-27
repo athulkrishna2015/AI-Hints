@@ -45,6 +45,7 @@ A read timeout no longer throws the request away. The slow-but-alive request is 
 - **First-timeout coverage**: even a timeout on the *first* model of a provider spawns the background retry (pure read timeouts are also never blacklisted — slow ≠ broken).
 - **Priority wins races**: if a lower-priority candidate succeeds while a higher-priority lingering attempt is still running, generation waits out its extended deadline and prefers the smarter result (`linger_race_policy: "priority"`, default — the button shows an amber **"⏳ Waiting for higher-priority model…"** state). Set `"first"` to make the first usable result win instantly instead.
 - **Rescue on total failure**: if every foreground candidate fails, generation waits out the lingering attempts instead of returning empty.
+- **Reasoning-model responses recovered**: gateways like the Cline BYOK API wrap completions in a top-level `data` envelope, and reasoning models (e.g. some Minimax models) often return the JSON in `message.reasoning` / `reasoning_details` instead of `content`. Responses are now unwrapped and parsed from those fields too, so a good but unusually-shaped reply is no longer reported as "no parseable hints/options".
 - Works everywhere: explicit review, pre-generation, and batch (`linger_on_timeout: false` disables it).
 
 ### Per-Flow Timeouts
@@ -152,7 +153,7 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
 - **Shortcuts Tab**: Customize AI-Hints action keys and the modifier used on the answer side. The front side also accepts the action keys without the modifier for faster review.
 - **Advanced Tab**: Customize your system prompt, tune per-flow API request timeouts (active-review, pregeneration, batch — custom per-model/per-provider values extend any flow), toggle Linger-on-Timeout behavior (`linger_on_timeout`, `timeout_linger_seconds`, `linger_race_policy` via raw config), migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist**.
-- **Logs Tab**: View, filter, search, and copy real-time addon logs. Includes a **Debug logging** toggle to enable verbose `DEBUG`-level output instantly (no restart needed), and a **Clear on startup** option.
+- **Logs Tab**: View, filter, search, and copy real-time addon logs with Level and Source filters (including **Lingering**, which isolates the background linger-on-timeout lines). Includes a **Debug logging** toggle to enable verbose `DEBUG`-level output instantly (no restart needed), and a **Clear on startup** option.
 - **Scrollbar Support**: Smooth scrollbars automatically wrap the Advanced, Mobile, and Batch tabs, ensuring the GUI scales perfectly to fit compact laptops and high-DPI screens.
 
 ## Get Your API Keys

@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 7.0.4 (2026-08-27)
+- **Reasoning-Model Responses Recovered (Cline BYOK & Minimax)**: The Cline BYOK gateway (`api.cline.bot`) wraps every chat completion in a top-level `{"data": {...}, "success": true}` envelope, so `_extract_content` / `_reasoning_texts` looked for `choices` at the wrong level and reported "returned no parseable hints/options" even when `message.content` held valid hints JSON. Both now unwrap a top-level `data` dict that contains `choices`. Additionally, reasoning models frequently leave `content` empty or blank and carry the JSON in `message.reasoning` / `message.reasoning_details[*].text`; `_extract_content` and a new `_parse_generation_result` fall back to those reasoning blocks when the primary content yields nothing. Wired into all four provider paths (custom, OpenAI-compatible, Anthropic, Gemini); non-reasoning providers are unchanged (content still wins).
+- **New "Lingering" Logs Tab Filter**: The Logs tab Source dropdown now has a **Lingering** filter that isolates the `AI-Hints Linger: ...` lines (late-arriving results, higher-priority race wins, and total-failure rescue) without mixing them into Standard Addon or relying on a manual search.
+
 ## 7.0.3 (2026-08-27)
 - **Independent Fallback State**: Advanced Global Fallback Priority now keeps its model enabled/disabled states and fetched-model highlights separate from each provider's fallback dialog. Fetching or saving the global list no longer resets provider fallback checkboxes, ordering, or new-model indicators, and provider fallback changes no longer alter the global list.
 - **Fetch All Preserves User Choices**: Fetch All appends newly discovered models without changing existing fallback order or enabled states. Newly fetched models remain disabled until explicitly enabled by the user.
