@@ -79,6 +79,9 @@ def _line_matches(line: str, level_filter: str, source_filter: str, search_lower
     elif source_filter == "Model Testing":
         if "[MODEL_TEST]" not in line:
             return False
+    elif source_filter == "Lingering":
+        if "AI-Hints Linger" not in line:
+            return False
     elif source_filter == "Standard Addon":
         if "[Proxy]" in line or "[MODEL_TEST]" in line:
             return False
@@ -151,7 +154,7 @@ class LogTabMixin:
         
         filter_layout.addWidget(QLabel(" Source:"))
         self.log_source_cb = QComboBox()
-        self.log_source_cb.addItems(["ALL", "Antigravity Proxy", "Batch Processing", "Pre-generation", "Model Testing", "Standard Addon"])
+        self.log_source_cb.addItems(["ALL", "Antigravity Proxy", "Batch Processing", "Pre-generation", "Model Testing", "Lingering", "Standard Addon"])
         self.log_source_cb.currentIndexChanged.connect(self.load_log)
         filter_layout.addWidget(self.log_source_cb)
         

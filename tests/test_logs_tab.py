@@ -163,10 +163,11 @@ class ProcessLogFileTests(unittest.TestCase):
             _line("WARNING", "pregen queue skipped a card"),
             _line("ERROR", "provider exploded"),
             _line("INFO", "[MODEL_TEST] test row ok"),
+            _line("INFO", "AI-Hints Linger: late result arrived from gemini/gemini-3.6-flash (candidate #2)."),
         ])
         res = process_log_file(self.path, "ALL", "ALL", "")
-        self.assertEqual(res["total"], 6)
-        self.assertEqual(res["matched_total"], 6)
+        self.assertEqual(res["total"], 7)
+        self.assertEqual(res["matched_total"], 7)
         self.assertFalse(res["truncated"])
 
         err_only = process_log_file(self.path, "ERROR", "ALL", "")
@@ -186,8 +187,12 @@ class ProcessLogFileTests(unittest.TestCase):
         model_test = process_log_file(self.path, "ALL", "Model Testing", "")
         self.assertEqual(model_test["matched_total"], 1)
 
+        linger = process_log_file(self.path, "ALL", "Lingering", "")
+        self.assertEqual(linger["matched_total"], 1)
+        self.assertIn("AI-Hints Linger", linger["content_plain"])
+
         std = process_log_file(self.path, "ALL", "Standard Addon", "")
-        self.assertEqual(std["matched_total"], 4)  # excludes Proxy + MODEL_TEST
+        self.assertEqual(std["matched_total"], 5)  # excludes Proxy + MODEL_TEST
 
         search = process_log_file(self.path, "ALL", "ALL", "EXPLODED")  # case-insensitive
         self.assertEqual(search["matched_total"], 1)
