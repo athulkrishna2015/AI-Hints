@@ -1254,7 +1254,7 @@ class AIClient:
                     content = self._extract_content(result)
                     logger.debug(f"AI-Hints Custom {provider_name}/{model} response: {content[:2000]}")
                     _log_full_response(provider_name, model, content)
-                    parsed = self._parse_json_result(content)
+                    parsed = self._parse_generation_result(result)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success(provider_name, model, api_key)
                         parsed["_provider"] = provider_name
@@ -1472,7 +1472,7 @@ class AIClient:
                     content = self._extract_content(result)
                     logger.debug(f"AI-Hints {provider}/{model} response: {content[:2000]}")
                     _log_full_response(provider, model, content)
-                    parsed = self._parse_json_result(content)
+                    parsed = self._parse_generation_result(result)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success(provider, model, api_key)
                         parsed["_provider"] = provider
@@ -1571,7 +1571,7 @@ class AIClient:
                     result = self._post_json(url, data, headers)
                     content = self._extract_content(result)
                     _log_full_response("anthropic", model, content)
-                    parsed = self._parse_json_result(content)
+                    parsed = self._parse_generation_result(result)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success("anthropic", model, api_key)
                         parsed["_provider"] = "anthropic"
@@ -1686,7 +1686,7 @@ class AIClient:
                     result = self._post_json(url, data, headers)
                     content = self._extract_content(result)
                     _log_full_response("gemini", model, content)
-                    parsed = self._parse_json_result(content)
+                    parsed = self._parse_generation_result(result)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success("gemini", model, api_key)
                         parsed["_provider"] = "gemini"
@@ -1913,6 +1913,51 @@ class AIClient:
         if "distractors" in parsed:
             result["distractors"] = self._normalize_string_list(parsed["distractors"])
         return result
+    def _reasoning_texts(self, result: Any) -> List[str]:
+        """Collect candidate JSON strings from a reasoning model's extra fields.
+
+        Minimax / Cline BYOK and other reasoning gateways frequently return the
+        actual answer in ``message.reasoning`` and/or ``message.reasoning_details``
+        rather than in ``message.content``. This gathers those strings so callers
+        can try parsing them when the primary content yields nothing.
+        """
+        try:
+            choices = result.get("choices") if isinstance(result, dict) else None
+            if not choices:
+                return []
+            first = choices[0]
+            message = first.get("message", {}) if isinstance(first, dict) else {}
+            if not isinstance(message, dict):
+                return []
+            out: List[str] = []
+            reasoning = message.get("reasoning")
+            if isinstance(reasoning, str) and reasoning.strip():
+                out.append(reasoning)
+            details = message.get("reasoning_details")
+            if isinstance(details, list):
+                for part in details:
+                    if isinstance(part, dict) and part.get("text"):
+                        out.append(str(part["text"]))
+            return out
+        except Exception:
+            return []
+
+    def _parse_generation_result(self, result: Any) -> Dict[str, List[str]]:
+        """Parse a chat-completion result into hints/options.
+
+        Prefers the standard ``message.content`` text, then falls back to any
+        reasoning blocks (``message.reasoning`` / ``message.reasoning_details``)
+        which reasoning models may use to carry the JSON. Returns the first
+        parse that yields usable hints/options, or the (empty) content parse.
+        """
+        parsed = self._parse_json_result(self._extract_content(result))
+        if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
+            return parsed
+        for text in self._reasoning_texts(result):
+            candidate = self._parse_json_result(text)
+            if candidate.get("hints") or candidate.get("options") or candidate.get("distractors") or candidate.get("correct_answer"):
+                return candidate
+        return parsed
     def _finalize_result(self, result: Dict[str, Any], back: str, hints_enabled: bool, options_enabled: bool, is_test: bool = False) -> Dict[str, Any]:
         """Normalizes the LLM response and strips content per the master switch.
 
@@ -2693,11 +2738,27 @@ class AIClient:
             first = choices[0]
             message = first.get("message", {}) if isinstance(first, dict) else {}
             content = message.get("content")
-            if content is not None:
+            if content not in (None, ""):
                 return content if isinstance(content, str) else json.dumps(content)
             text = first.get("text") if isinstance(first, dict) else None
-            if text is not None:
+            if text not in (None, ""):
                 return text
+            # Reasoning models (e.g. Minimax / Cline BYOK gateway) frequently
+            # leave `content` empty or blank and put the actual answer in
+            # `message.reasoning` / `message.reasoning_details[*].text`. Falling
+            # back here lets those responses be parsed instead of surfacing as
+            # "returned no parseable hints/options".
+            reasoning = message.get("reasoning")
+            if isinstance(reasoning, str) and reasoning.strip():
+                return reasoning
+            details = message.get("reasoning_details")
+            if isinstance(details, list):
+                reasoning_texts = [
+                    p.get("text", "") for p in details
+                    if isinstance(p, dict) and p.get("text")
+                ]
+                if reasoning_texts:
+                    return "\n".join(reasoning_texts)
 
         content = result.get("content")
         if isinstance(content, list) and content:
