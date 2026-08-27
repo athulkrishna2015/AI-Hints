@@ -922,7 +922,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                             for m in clean_models:
                                 if m and m not in current_set:
                                     current_fallbacks.append(m)
-                                    disabled_models.append(m)
                                     newly.add(m)
                             
                             fetched_set = set(clean_models)

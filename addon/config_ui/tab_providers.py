@@ -430,7 +430,7 @@ class FallbackOrderDialog(QDialog):
                         for m in models_clean:
                             if m and m not in existing_set:
                                 newly.add(m)
-                                self._add_model_row(m, False)
+                                self._add_model_row(m, True)
                                 added_count += 1
                         
                         self.update_item_labels()
@@ -1335,8 +1335,8 @@ class GlobalFallbackOrderDialog(QDialog):
                                     item = QListWidgetItem()
                                     item.setData(Qt.ItemDataRole.UserRole, (p, m))
                                     item.setText(f"[{self._provider_display(p)}] {m}")
-                                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                                    item.setCheckState(Qt.CheckState.Unchecked)
+                                    item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsUserCheckable)
+                                    item.setCheckState(Qt.CheckState.Checked)
                                     self.list_widget.addItem(item)
                                     added_count += 1
                             

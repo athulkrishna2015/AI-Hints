@@ -26,11 +26,15 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
             logger.error(f"AI-Hints: Failed to bind log file handler: {e}")
 
         # Preserve the previous metadata before Anki or the addon can update it.
+        # 3-level rotation: .bak, .bak.1, .bak.2
         try:
+            from .config_io import _rotate_meta_backups
+
             addon_dir = os.path.dirname(os.path.abspath(__file__))
             meta_path = os.path.join(addon_dir, "meta.json")
             meta_backup_path = os.path.join(addon_dir, "meta.json.bak")
             if os.path.exists(meta_path):
+                _rotate_meta_backups()
                 shutil.copyfile(meta_path, meta_backup_path)
         except Exception as e:
             logger.error(f"AI-Hints: Failed to back up meta.json on startup: {e}")

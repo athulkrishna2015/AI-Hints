@@ -27,9 +27,9 @@ def _log_path() -> str:
 
 
 def _build_file_handler(log_file: str) -> RotatingFileHandler:
-    # 3 levels: ai_hints.log, ai_hints.log.1, ai_hints.log.2
+    # 3 rotations: ai_hints.log, ai_hints.log.1, ai_hints.log.2, ai_hints.log.3 (4 files total)
     handler = RotatingFileHandler(
-        log_file, maxBytes=5 * 1024 * 1024, backupCount=2, encoding="utf-8"
+        log_file, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
     )
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
@@ -149,7 +149,7 @@ def clear_log_file():
 
     base = _log_path()
     removed = False
-    for p in (base, base + ".1", base + ".2"):
+    for p in (base, base + ".1", base + ".2", base + ".3"):
         try:
             if os.path.exists(p):
                 os.remove(p)

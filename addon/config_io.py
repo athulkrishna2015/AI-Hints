@@ -17,6 +17,41 @@ def _meta_path():
     return os.path.join(_ADDON_DIR, "meta.json")
 
 
+def _rotate_meta_backups():
+    """Rotate meta.json backups to keep 3 levels: .bak, .bak.1, .bak.2.
+
+    Newest backup is always .bak, oldest is .bak.2. Called before creating
+    a new .bak so the previous 3 are preserved.
+    """
+    base = _meta_path()
+    bak = base + ".bak"
+    bak1 = base + ".bak.1"
+    bak2 = base + ".bak.2"
+    try:
+        # Remove oldest
+        if os.path.exists(bak2):
+            try:
+                os.remove(bak2)
+            except Exception:
+                pass
+        # Shift
+        if os.path.exists(bak1):
+            try:
+                shutil.move(bak1, bak2)
+            except Exception:
+                pass
+        if os.path.exists(bak):
+            try:
+                shutil.move(bak, bak1)
+            except Exception:
+                pass
+    except Exception as e:
+        try:
+            logger.error(f"AI-Hints: failed to rotate meta backups: {e}")
+        except Exception:
+            pass
+
+
 def addon_data_dir() -> str:
     """Directory for mutable state files (blacklist, pregen cache, logs...).
 
@@ -183,6 +218,13 @@ def write_pretty_config(addon_package, config):
 
     target = dict(config or {})
     on_disk = read_meta_config() or {}
+    # 3-level rotation: keep .bak, .bak.1, .bak.2
+    try:
+        if os.path.exists(_meta_path()):
+            _rotate_meta_backups()
+            shutil.copyfile(_meta_path(), _meta_path() + ".bak")
+    except Exception as e:
+        logger.error(f"AI-Hints: failed to back up meta.json to .bak before write: {e}")
     try:
         mw.addonManager.writeConfig(addon_package, target)
         _log_write(addon_package, "addonManager(full-replace)", on_disk, target)
@@ -214,8 +256,9 @@ def write_pretty_config_preserve_keys(addon_package, config):
       was destroyed on 2026-08-20. Anki's ``addonManager.writeConfig`` (the
       default path) does not truncate-and-dump, and the lock removes the
       read/write interleave entirely.
-    * The previous meta.json is copied to meta.json.bak before every
-      overwrite, so any bad write is rollback-able.
+    * The previous meta.json is rotated through 3 levels (.bak, .bak.1,
+       .bak.2) before every overwrite, so any bad write is rollback-able
+       from 3 prior versions.
     """
     with _write_lock:
         on_disk = read_meta_config() or {}
@@ -249,6 +292,7 @@ def write_pretty_config_preserve_keys(addon_package, config):
 
         try:
             if os.path.exists(_meta_path()):
+                _rotate_meta_backups()
                 shutil.copyfile(_meta_path(), _meta_path() + ".bak")
         except Exception as e:
             logger.error(f"AI-Hints: failed to back up meta.json to .bak before write: {e}")

@@ -38,10 +38,9 @@ class ProxyManager:
         except Exception:
             pass
         # Fallback to local addon folder during import or tests
+        # (bin subfolder removed - no longer creates addon/bin)
         addon_dir = os.path.dirname(os.path.abspath(__file__))
-        p = os.path.join(addon_dir, "bin")
-        os.makedirs(p, exist_ok=True)
-        return p
+        return addon_dir
 
     @property
     def executable(self) -> str:
