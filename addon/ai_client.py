@@ -1922,6 +1922,11 @@ class AIClient:
         can try parsing them when the primary content yields nothing.
         """
         try:
+            if not isinstance(result, dict):
+                return []
+            # Same top-level `data` envelope unwrapping as _extract_content.
+            if isinstance(result.get("data"), dict) and "choices" in result["data"]:
+                result = result["data"]
             choices = result.get("choices") if isinstance(result, dict) else None
             if not choices:
                 return []
@@ -2732,6 +2737,11 @@ class AIClient:
         self._log_usage(result)
         if not isinstance(result, dict):
             return str(result)
+        # Some gateways (e.g. the Cline BYOK API) wrap the chat completion in a
+        # top-level `data` envelope: {"data": {"choices": [...]}, "success": true}.
+        # Unwrap it so content/reasoning under data.choices is actually read.
+        if isinstance(result.get("data"), dict) and "choices" in result["data"]:
+            result = result["data"]
 
         choices = result.get("choices")
         if choices:

@@ -135,6 +135,42 @@ class ReasoningExtractTests(unittest.TestCase):
         parsed = self.client._parse_generation_result(payload)
         self.assertEqual(parsed, {"hints": [], "options": []})
 
+    # --- top-level `data` envelope unwrapping (Cline BYOK gateway) ---
+
+    def _wrap_in_data(self, inner):
+        # Cline BYOK API returns {"data": {"choices": [...]}, "success": true};
+        # this mirrors what _post_json hands to _extract_content / parsing.
+        return {"data": inner, "success": True}
+
+    def test_extract_content_unwraps_data_envelope(self):
+        content_json = '{"hints":["H1","H2"],"correct_answer":"A","distractors":["D1","D2"]}'
+        message = {"role": "assistant", "content": content_json, "reasoning": "thinking"}
+        wrapped = self._wrap_in_data({"choices": [{"message": message}]})
+        extracted = self.client._extract_content(wrapped)
+        self.assertEqual(extracted, content_json)
+
+    def test_parse_generation_unwraps_data_envelope(self):
+        content_json = '{"hints":["H1","H2"],"correct_answer":"A","distractors":["D1","D2"]}'
+        message = {"role": "assistant", "content": content_json, "reasoning": "thinking"}
+        wrapped = self._wrap_in_data({"choices": [{"message": message}]})
+        parsed = self.client._parse_generation_result(wrapped)
+        self.assertEqual(parsed["hints"], ["H1", "H2"])
+        self.assertEqual(parsed["correct_answer"], "A")
+
+    def test_reasoning_texts_unwraps_data_envelope(self):
+        message = {"role": "assistant", "content": "", "reasoning": "the JSON lives here"}
+        wrapped = self._wrap_in_data({"choices": [{"message": message}]})
+        self.assertEqual(self.client._reasoning_texts(wrapped), ["the JSON lives here"])
+
+    def test_data_envelope_reasoning_fallback_full_pipeline(self):
+        # content empty inside a data-wrapped payload -> reasoning fallback fires
+        content_json = '{"hints":["H1","H2"],"options":["O1","O2","O3","O4"],"correct_answer":"O1"}'
+        message = {"role": "assistant", "content": "", "reasoning": content_json}
+        wrapped = self._wrap_in_data({"choices": [{"message": message}]})
+        parsed = self.client._parse_generation_result(wrapped)
+        self.assertEqual(parsed["hints"], ["H1", "H2"])
+        self.assertEqual(parsed["options"], ["O1", "O2", "O3", "O4"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
