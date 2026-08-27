@@ -316,6 +316,22 @@ _DEPRECATION_MARKER_KEYS = (
 )
 
 
+def _model_id(item):
+    """Extract a model identifier from a list-models response entry.
+
+    Most OpenAI-compatible providers use ``id``, but a few (e.g. aihubmix)
+    use ``model_id`` or ``name``. Return an empty string if none are present.
+    """
+    if not isinstance(item, dict):
+        return ""
+    for key in ("id", "model_id", "model", "name"):
+        val = item.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
+
+
+
 def _collect_deprecated_items(items):
     """Return the set of model IDs a provider API marked as deprecated.
 
@@ -2405,8 +2421,18 @@ class AIClient:
             return []
         keys = self._available_api_keys(provider)
         custom_providers = self.config.get("custom_providers", {}) or {}
+        if not isinstance(custom_providers, dict):
+            custom_providers = {}
+        custom_provider_match = None
         if provider in custom_providers:
-            custom_keys = self._api_keys_for_custom(provider, custom_providers[provider])
+            custom_provider_match = provider
+        else:
+            for cp_name in custom_providers:
+                if isinstance(cp_name, str) and cp_name.lower() == provider.lower():
+                    custom_provider_match = cp_name
+                    break
+        if custom_provider_match is not None:
+            custom_keys = self._api_keys_for_custom(custom_provider_match, custom_providers[custom_provider_match])
             if custom_keys:
                 keys = custom_keys
             elif not keys:
@@ -2419,7 +2445,14 @@ class AIClient:
             try:
                 # Check custom_providers first — applies to any provider
                 custom_providers = self.config.get("custom_providers", {}) or {}
-                custom_cfg = custom_providers.get(provider, {}) or {}
+                if not isinstance(custom_providers, dict):
+                    custom_providers = {}
+                custom_cfg = custom_providers.get(provider) or {}
+                if not custom_cfg:
+                    for cp_name, cp_cfg in custom_providers.items():
+                        if isinstance(cp_name, str) and cp_name.lower() == provider.lower() and isinstance(cp_cfg, dict):
+                            custom_cfg = cp_cfg
+                            break
                 custom_url = str(custom_cfg.get("url", "") or "").strip()
                 if custom_url:
                     models_url = str(custom_cfg.get("models_url", "") or "").strip()
@@ -2437,7 +2470,7 @@ class AIClient:
                         headers.update(custom_headers)
                     result = self._get_json(models_url, headers)
                     FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
-                    return self._chat_only_models([m.get("id") for m in result.get("data", []) if m.get("id")])
+                    return self._chat_only_models([_model_id(m) for m in result.get("data", []) if _model_id(m)])
 
                 if provider == "openrouter":
                     url = "https://openrouter.ai/api/v1/models"
