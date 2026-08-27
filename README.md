@@ -172,7 +172,7 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 
 ## Development
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions and technical details.
+See [docs/setup.md](docs/setup.md#install-from-github-development) for build, test, and release instructions, and [docs/architecture.md](docs/architecture.md) for the high-level architecture and per-module description.
 
 ## License
 
@@ -199,4 +199,4 @@ Full user documentation is available in the [docs](docs/index.md) folder:
 - [Mobile Support](docs/mobile-setup.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
-Developer documentation: [DEVELOPMENT.md](DEVELOPMENT.md).
+Developer documentation: [docs/architecture.md](docs/architecture.md) (architecture and code) and [docs/setup.md#install-from-github-development](docs/setup.md#install-from-github-development) (build / test / release).
