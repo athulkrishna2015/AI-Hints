@@ -29,6 +29,20 @@ Fallback providers are ranked by intelligence and reasoning capability. Default 
 
 You can reorder this list, enable/disable individual providers, or enable the **global flat priority list** for cross-provider model-level control.
 
+### Linger-on-Timeout Fallback
+
+A read timeout no longer throws the request away. The slow-but-alive request is re-dispatched in a background thread with an extended deadline while fallback continues immediately with the next candidate:
+
+- **First-timeout coverage**: even a timeout on the *first* model of a provider spawns the background retry (pure read timeouts are also never blacklisted — slow ≠ broken).
+- **Priority wins races**: if a lower-priority candidate succeeds while a higher-priority lingering attempt is still running, generation waits out its extended deadline and prefers the smarter result (`linger_race_policy: "priority"`, default). Set `"first"` to make the first usable result win instantly instead.
+- **Rescue on total failure**: if every foreground candidate fails, generation waits out the lingering attempts instead of returning empty.
+- **Reasoning-model responses recovered**: gateways like the Cline BYOK API wrap completions in a top-level `data` envelope, and reasoning models often return the JSON in `message.reasoning` / `reasoning_details` instead of `content`. Responses are unwrapped and parsed from those fields too, so a good but unusually-shaped reply is no longer reported as "no parseable hints/options".
+- Works everywhere: explicit review, pre-generation, and batch (`linger_on_timeout: false` disables it).
+
+## 🧾 Logs & Diagnostics
+
+The **Logs** tab shows real-time addon logs with **Level** (DEBUG/INFO/WARNING/ERROR) and **Source** filters — including **Lingering**, which isolates the background linger-on-timeout lines (`AI-Hints Linger: ...`). A free-text **Search** box narrows further, with match counting. **Debug logging** enables verbose `DEBUG`-level request/response output instantly (no restart needed), and **Clear on startup** keeps the current file fresh while retaining rotated backups. See [Storage → Log Files](storage.md#5-log-files-ai_hintslog) for paths and rotation.
+
 ## 🎮 Interactive Review UI
 
 ### MCQ Options

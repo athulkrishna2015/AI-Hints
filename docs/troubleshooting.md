@@ -10,6 +10,12 @@ Common issues and their fixes.
 4. **Check the model**: Some models may refuse or return empty output. Try **Fetch** to update the model list, or switch models.
 5. **View the logs**: Open the **Logs** tab and look for errors. Enable **Debug logging** for detailed request/response info.
 
+## Model Test Says "Returned No Parseable Hints/Options"
+
+- **Update to v7.0.4+** first: gateways like the Cline BYOK API (`api.cline.bot`) wrap completions in a top-level `data` envelope, and reasoning models often return the JSON in `message.reasoning` / `reasoning_details` instead of `content`. Older builds read only `message.content` and could not see valid output.
+- If it still fails, enable **Debug logging** in the **Logs** tab and check the `FULL RESPONSE` line: if the response contains neither a JSON object in `content` nor in the reasoning fields, the model simply did not produce usable output — try another model or adjust the prompt.
+- Gateways with **no model-list endpoint** (e.g. Cline's) always fail **Fetch Models** — that is expected; add models manually via **Fallbacks → Add Model...**.
+
 ## The Generate Button Does Nothing / Is Disabled
 
 - If the button is **disabled**, both **Generate Hints** and **Generate Options (MCQ)** are turned off. Re-enable at least one in the General tab.
@@ -42,8 +48,8 @@ This is fixed in v5.8.2+. Ensure your `_ai_hints_template.js` is up to date and 
 
 ## Where Are the Logs?
 
-- The **Logs** tab shows real-time logs. Enable **Debug logging** and **Clear on startup** toggles there.
-- Log files are stored in the addon folder (`ai_hints.log`) with rotation.
+- The **Logs** tab shows real-time logs with **Level** and **Source** filters — use the **Lingering** source filter to isolate the background linger-on-timeout lines (`AI-Hints Linger: ...`). Enable **Debug logging** there for full request/response payloads.
+- Log files are stored in `<profile>/ai_hints_bin/ai_hints.log` with 3-level rotation. See [Storage → Log Files](storage.md#5-log-files-ai_hintslog).
 
 ## Still Stuck?
 

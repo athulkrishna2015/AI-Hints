@@ -268,7 +268,7 @@ See [Mobile Support](mobile-setup.md) for full instructions.
 ### Filter bar
 
 - **Level** — ALL / DEBUG / INFO / WARNING / ERROR.
-- **Source** — ALL / Antigravity Proxy / Batch Processing / Pre-generation / Model Testing / Standard Addon.
+- **Source** — ALL / Antigravity Proxy / Batch Processing / Pre-generation / Model Testing / Lingering / Standard Addon. **Lingering** isolates the `AI-Hints Linger: ...` background-timeout lines (late-arriving results, higher-priority race wins, total-failure rescue).
 - **Search** — text filter (debounced).
 - Match count label.
 
