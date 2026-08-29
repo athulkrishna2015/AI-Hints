@@ -121,6 +121,7 @@ Each provider in your priority order has a row with:
 - Table with **Model Name**, **Thinking Level** (`off`/`low`/`medium`/`high`), and **Timeout (s)** per model.
 - Status markers: ⭐ active, 🆕 newly fetched (green), ⚠️ deprecated (red), ⚠️ no longer returned (amber). These markers are independent from the Advanced Global Fallback dialog.
 - Buttons: **Move Up / Move Down / Set Active**, **Remove** (Selected / Deprecated / No Longer Returned / both), **Test** (Checked / Row / All), **Rank Checked First**, **Fetch All**, **Restore Defaults**.
+  - **Move Up / Move Down** reorder the selected model(s). Multiple rows can be selected at once (Ctrl/Shift-click) and are moved as a group; the selection is preserved after the move and each row keeps its per-model thinking level, timeout, checkbox state, and status highlights.
 - Fetching models in this dialog preserves the current checked state for rows that already exist; newly fetched rows stay unchecked until you enable them.
 
 ### Model Testing Prompt Settings
@@ -129,6 +130,8 @@ Each provider in your priority order has a row with:
 - **Reset to Default** — restore the default test prompt.
 
 ### Custom Providers
+
+Built-in providers (OpenAI, Anthropic, Gemini, etc.) can also be opened with **Edit** (✏️) on their row. The edit dialog's **Restore Default** button resets the provider's name, endpoint URL, models URL, active model, API key, headers, and body params back to the values shipped in `addon/config.json` (so an in-progress edit that hasn't been saved can be fully reverted). Custom (user-added) providers have no shipped defaults; Restore Default is a no-op for them.
 
 - **Add / Edit / Remove** — manage custom OpenAI-compatible endpoints.
 - **Provider Name (ID)** — unique name.
