@@ -306,6 +306,22 @@ LEGACY_MODEL_REPLACEMENTS = {}
 # Intentionally empty - fallback chains come from config["model_fallbacks"].
 MODEL_FALLBACKS = {}
 
+# Default endpoint URLs for built-in providers, used when a built-in provider
+# is edited through the CustomProviderDialog so fetch/test can work without
+# the user manually entering the endpoint.
+BUILTIN_PROVIDER_URLS = {
+    "openai": "https://api.openai.com/v1/chat/completions",
+    "deepseek": "https://api.deepseek.com/chat/completions",
+    "groq": "https://api.groq.com/openai/v1/chat/completions",
+    "nvidia": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "grok": "https://api.x.ai/v1/chat/completions",
+    "openrouter": "https://openrouter.ai/api/v1/chat/completions",
+    "mistral": "https://api.mistral.ai/v1/chat/completions",
+    "huggingface": "https://router.huggingface.co/v1/chat/completions",
+    "sambanova": "https://api.sambanova.ai/v1/chat/completions",
+    "cerebras": "https://api.cerebras.ai/v1/chat/completions",
+}
+
 # Cache of models flagged as deprecated by the provider's own API response
 # during the most recent fetch_models() call. Populated online per provider.
 FETCHED_DEPRECATED_MODELS: Dict[str, set] = {}

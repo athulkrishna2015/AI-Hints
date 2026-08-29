@@ -3,7 +3,7 @@ import json
 from aqt import mw
 from aqt.qt import *
 from ..logger import info, tooltip
-from ..ai_client import DEFAULT_MODELS, MODEL_FALLBACKS, PROVIDER_ORDER, MODEL_SUGGESTIONS, AIClient
+from ..ai_client import DEFAULT_MODELS, MODEL_FALLBACKS, PROVIDER_ORDER, MODEL_SUGGESTIONS, AIClient, BUILTIN_PROVIDER_URLS
 
 # Resolve the top-level addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
 ADDON_PACKAGE = __name__.split(".")[0]
@@ -29,8 +29,9 @@ class CustomProviderDialog(QDialog):
         layout = QFormLayout(self)
         
         self.name_edit = QLineEdit(name)
-            
-        self.url_edit = QLineEdit(data.get("url", "") if data else "")
+        
+        default_url = BUILTIN_PROVIDER_URLS.get(name.strip(), "") if isinstance(name, str) else ""
+        self.url_edit = QLineEdit(data.get("url", default_url) if data else default_url)
         self.key_edit = QLineEdit(data.get("api_key", "") if data else "")
         self.key_edit.setPlaceholderText("Enter API Key(s)...")
         self.key_edit.setToolTip(
