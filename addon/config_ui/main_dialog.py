@@ -442,8 +442,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         tooltip("Copied to clipboard")
 
     def refresh_custom_list(self):
-        self.custom_list.clear()
-        self.custom_list.addItems(self.custom_providers_data.keys())
+        if hasattr(self, "custom_list"):
+            self.custom_list.clear()
+            self.custom_list.addItems(self.custom_providers_data.keys())
 
         # 1. Determine priority order first
         custom_names = list(self.custom_providers_data.keys())
