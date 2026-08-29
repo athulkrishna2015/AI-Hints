@@ -195,6 +195,9 @@ class FallbackOrderDialog(QDialog):
         row2_layout.addWidget(self.list_test_btn)
         row2_layout.addWidget(self.sort_selected_btn)
         row2_layout.addWidget(self.list_fetch_btn)
+        row2_layout.addWidget(self.edit_provider_btn)
+        row2_layout.addWidget(self.remove_provider_btn)
+        row2_layout.addWidget(self.add_custom_provider_btn)
         row2_layout.addWidget(self.restore_btn)
         
         btn_layout.addLayout(row1_layout)
@@ -1415,11 +1418,13 @@ class GlobalFallbackOrderDialog(QDialog):
 
         # Also fetch for custom API providers (OpenAI-compatible custom providers)
         if hasattr(self.main_dialog, "custom_providers_data"):
+        # Also fetch for custom API providers (OpenAI-compatible custom providers)
+        if hasattr(self.main_dialog, "custom_providers_data"):
             for cp, cp_data in (self.main_dialog.custom_providers_data or {}).items():
                 if cp_data and isinstance(cp_data, dict) and str(cp_data.get("url", "") or "").strip():
                     if cp not in providers_to_fetch:
                         providers_to_fetch.append(cp)
-
+        
         if not providers_to_fetch:
             tooltip("No providers configured to fetch.")
             self.list_fetch_btn.setText("Fetch All")
@@ -1449,7 +1454,7 @@ class GlobalFallbackOrderDialog(QDialog):
                         temp_config["api_keys"][provider] = api_key
                         if provider == "local":
                             temp_config["local_endpoint"] = self.main_dialog._local_endpoint_for()
-
+                        
                         client = AIClient(temp_config)
                         models = client.fetch_models(provider)
                     except Exception as e:
@@ -1709,6 +1714,24 @@ class ProvidersTabMixin:
         for w in unchecked:
             self.models_layout.addWidget(w)
         tooltip("Ranked checked providers first.")
+    
+    def on_add_custom_provider(self):
+        from .widgets import CustomProviderDialog
+        dlg = CustomProviderDialog(self, config=self.config)
+        if dlg.exec():
+            data = dlg.get_data()
+            name = dlg.name_edit.text().strip()
+            if not name:
+                return
+            if not hasattr(self, "custom_providers_data"):
+                self.custom_providers_data = {}
+            self.custom_providers_data[name] = data
+            if data.get("api_key"):
+                if "api_keys" not in self.config:
+                    self.config["api_keys"] = {}
+                self.config["api_keys"][name] = data["api_key"]
+            self.refresh_custom_list()
+            tooltip(f"Added custom provider: {name}")
                     
     def update_special_blacklist_status(self, provider, combobox, status_label):
         model = combobox.currentText().strip()
@@ -1814,6 +1837,15 @@ class ProvidersTabMixin:
         
         self.models_layout = QVBoxLayout()
         model_main_layout.addLayout(self.models_layout)
+        
+        # Add Custom Provider button
+        add_layout = QHBoxLayout()
+        add_layout.addStretch()
+        self.add_custom_provider_btn = QPushButton("+ Custom Provider")
+        self.add_custom_provider_btn.setToolTip("Add a new custom provider.")
+        self.add_custom_provider_btn.clicked.connect(self.on_add_custom_provider)
+        add_layout.addWidget(self.add_custom_provider_btn)
+        model_main_layout.addLayout(add_layout)
 
         model_group.setLayout(model_main_layout)
         self.prov_layout.addRow(model_group)
@@ -1839,29 +1871,6 @@ class ProvidersTabMixin:
         testing_group.setLayout(testing_layout)
         self.prov_layout.addRow(testing_group)
         
-        # Custom Providers Group
-        custom_group = QGroupBox("Custom Providers")
-        custom_layout = QVBoxLayout()
-        
-        self.custom_list = QListWidget()
-        custom_layout.addWidget(self.custom_list)
-        
-        cbtn_layout = QHBoxLayout()
-        self.add_custom_btn = QPushButton("Add")
-        self.add_custom_btn.clicked.connect(self.on_add_custom)
-        self.edit_custom_btn = QPushButton("Edit")
-        self.edit_custom_btn.clicked.connect(self.on_edit_custom)
-        self.remove_custom_btn = QPushButton("Remove")
-        self.remove_custom_btn.clicked.connect(self.on_remove_custom)
-        
-        cbtn_layout.addWidget(self.add_custom_btn)
-        cbtn_layout.addWidget(self.edit_custom_btn)
-        cbtn_layout.addWidget(self.remove_custom_btn)
-        custom_layout.addLayout(cbtn_layout)
-        
-        custom_group.setLayout(custom_layout)
-        self.prov_layout.addRow(custom_group)
-
         prov_scroll.setWidget(prov_content)
         prov_main_layout.addWidget(prov_scroll)
         

@@ -251,6 +251,22 @@ class ProviderRowWidget(QWidget):
         self.label.setMinimumWidth(80)
         top_layout.addWidget(self.label)
         
+        # Edit Provider button
+        self.edit_provider_btn = QPushButton("✏️")
+        self.edit_provider_btn.setToolTip(f"Edit {provider.capitalize()} provider settings (endpoint, key, model, headers, body params)")
+        self.edit_provider_btn.setFixedWidth(30)
+        self.edit_provider_btn.setStyleSheet("padding: 2px;")
+        self.edit_provider_btn.clicked.connect(self.on_edit_provider)
+        top_layout.addWidget(self.edit_provider_btn)
+        
+        # Remove Provider button
+        self.remove_provider_btn = QPushButton("🗑️")
+        self.remove_provider_btn.setToolTip(f"Remove {provider.capitalize()} provider")
+        self.remove_provider_btn.setFixedWidth(30)
+        self.remove_provider_btn.setStyleSheet("padding: 2px;")
+        self.remove_provider_btn.clicked.connect(self.on_remove_provider)
+        top_layout.addWidget(self.remove_provider_btn)
+        
         # API Key Label (Clickable link if URL exists)
         url = PROVIDER_URLS.get(provider)
         if url:
@@ -413,6 +429,71 @@ class ProviderRowWidget(QWidget):
         self.down_btn.setEnabled(checked)
         self.fallbacks_btn.setEnabled(checked)
         self.timeout_spin.setEnabled(checked)
+        self.edit_provider_btn.setEnabled(checked)
+        self.remove_provider_btn.setEnabled(checked)
+
+    def on_edit_provider(self):
+        from .tab_providers import CustomProviderDialog
+        custom_providers = getattr(self.parent_dialog, "custom_providers_data", {}) or {}
+        cp_data = custom_providers.get(self.provider)
+        if not cp_data:
+            cp_data = {
+                "url": "",
+                "models_url": "",
+                "api_key": self.parent_dialog.config.get("api_keys", {}).get(self.provider, ""),
+                "model": self.edit.currentText().strip(),
+                "headers": {},
+                "body_params": {},
+            }
+        dlg = CustomProviderDialog(self, name=self.provider, data=cp_data, config=self.parent_dialog.config)
+        if dlg.exec():
+            new_data = dlg.get_data()
+            new_name = dlg.name_edit.text().strip()
+            if not new_name:
+                return
+            if new_name != self.provider:
+                if self.provider in custom_providers:
+                    del custom_providers[self.provider]
+                custom_providers[new_name] = new_data
+                if not hasattr(self.parent_dialog, "custom_providers_data"):
+                    self.parent_dialog.custom_providers_data = {}
+                self.parent_dialog.custom_providers_data.update(custom_providers)
+                if hasattr(self.parent_dialog, "api_key_edits") and self.provider in self.parent_dialog.api_key_edits:
+                    del self.parent_dialog.api_key_edits[self.provider]
+                self.provider = new_name
+                self.label.setText(f"<b>{new_name.capitalize()}</b>")
+                self.parent_dialog.api_key_edits[new_name] = self.key_edit
+            else:
+                custom_providers[self.provider] = new_data
+                if not hasattr(self.parent_dialog, "custom_providers_data"):
+                    self.parent_dialog.custom_providers_data = {}
+                self.parent_dialog.custom_providers_data[self.provider] = new_data
+            if new_data.get("api_key"):
+                if "api_keys" not in self.parent_dialog.config:
+                    self.parent_dialog.config["api_keys"] = {}
+                self.parent_dialog.config["api_keys"][new_name] = new_data["api_key"]
+                self.key_edit.setText(new_data["api_key"])
+            tooltip(f"Updated provider: {new_name}")
+            if hasattr(self.parent_dialog, "refresh_custom_list"):
+                self.parent_dialog.refresh_custom_list()
+
+    def on_remove_provider(self):
+        if self.provider in ("local", "openai", "anthropic", "gemini", "groq", "deepseek", "grok", "openrouter", "mistral", "nvidia", "sambanova", "cerebras", "huggingface"):
+            tooltip("Cannot remove built-in providers.")
+            return
+        if not askUser(f"Remove provider '{self.provider.capitalize()}' and all its models?"):
+            return
+        custom_providers = getattr(self.parent_dialog, "custom_providers_data", {}) or {}
+        custom_providers.pop(self.provider, None)
+        if hasattr(self.parent_dialog, "custom_providers_data"):
+            self.parent_dialog.custom_providers_data = custom_providers
+        self.parent_dialog.config.get("api_keys", {}).pop(self.provider, None)
+        if hasattr(self.parent_dialog, "api_key_edits") and self.provider in self.parent_dialog.api_key_edits:
+            del self.parent_dialog.api_key_edits[self.provider]
+        self.setParent(None)
+        self.deleteLater()
+        if hasattr(self.parent_dialog, "refresh_custom_list"):
+            self.parent_dialog.refresh_custom_list()
 
     def on_manage_keys(self):
         dlg = ManageKeysDialog(self.provider, self, self.key_edit.text().strip())
