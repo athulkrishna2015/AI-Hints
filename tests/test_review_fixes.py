@@ -453,7 +453,11 @@ class TestM10ClearLogFile(unittest.TestCase):
         with patch.object(logmod, "_log_path", return_value=base):
             logmod.clear_log_file()
 
-        self.assertFalse(os.path.exists(base + ".1"), "rotation must be removed")
+        self.assertTrue(os.path.exists(base + ".1"), "rotation must be preserved")
+        self.assertTrue(os.path.exists(base), "current log must be re-created")
+        with open(base) as f:
+            content = f.read()
+        self.assertNotIn("old content", content, "old content must be cleared")
         # handler re-installed and usable
         file_handlers = [x for x in logger.handlers if isinstance(x, RotatingFileHandler)]
         self.assertEqual(len(file_handlers), 1)
