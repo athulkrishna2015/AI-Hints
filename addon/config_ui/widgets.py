@@ -41,8 +41,8 @@ class CustomProviderDialog(QDialog):
             "body_params": data.get("body_params", {}) if data else {},
         }
         current_data = data if data else {}
-        self.url_edit = QLineEdit(current_data.get("url") or default_url)
-        self.key_edit = QLineEdit(current_data.get("api_key") or self.default_data["api_key"])
+        self.url_edit = QLineEdit((current_data.get("url") or "").strip() or default_url)
+        self.key_edit = QLineEdit((current_data.get("api_key") or "").strip() or self.default_data["api_key"])
         self.key_edit.setPlaceholderText("Enter API Key(s)...")
         self.key_edit.setToolTip(
             "Enter one or more API keys separated by commas, semicolons, or newlines.\n"

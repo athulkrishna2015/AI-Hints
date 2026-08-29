@@ -320,6 +320,8 @@ BUILTIN_PROVIDER_URLS = {
     "huggingface": "https://router.huggingface.co/v1/chat/completions",
     "sambanova": "https://api.sambanova.ai/v1/chat/completions",
     "cerebras": "https://api.cerebras.ai/v1/chat/completions",
+    "anthropic": "https://api.anthropic.com/v1/messages",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/models",
 }
 
 # Cache of models flagged as deprecated by the provider's own API response
