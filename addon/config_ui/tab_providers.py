@@ -195,9 +195,6 @@ class FallbackOrderDialog(QDialog):
         row2_layout.addWidget(self.list_test_btn)
         row2_layout.addWidget(self.sort_selected_btn)
         row2_layout.addWidget(self.list_fetch_btn)
-        row2_layout.addWidget(self.edit_provider_btn)
-        row2_layout.addWidget(self.remove_provider_btn)
-        row2_layout.addWidget(self.add_custom_provider_btn)
         row2_layout.addWidget(self.restore_btn)
         
         btn_layout.addLayout(row1_layout)
