@@ -1418,8 +1418,6 @@ class GlobalFallbackOrderDialog(QDialog):
 
         # Also fetch for custom API providers (OpenAI-compatible custom providers)
         if hasattr(self.main_dialog, "custom_providers_data"):
-        # Also fetch for custom API providers (OpenAI-compatible custom providers)
-        if hasattr(self.main_dialog, "custom_providers_data"):
             for cp, cp_data in (self.main_dialog.custom_providers_data or {}).items():
                 if cp_data and isinstance(cp_data, dict) and str(cp_data.get("url", "") or "").strip():
                     if cp not in providers_to_fetch:
