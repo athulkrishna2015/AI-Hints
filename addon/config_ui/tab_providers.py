@@ -1042,6 +1042,18 @@ class GlobalFallbackOrderDialog(QDialog):
         self.list_fetch_btn.setToolTip("Fetch available models for all providers.")
         self.list_fetch_btn.clicked.connect(self.on_fetch_all)
         
+        self.edit_provider_btn = QPushButton("✏️")
+        self.edit_provider_btn.setToolTip("Edit the selected provider's endpoint, key, model, headers, and body params.")
+        self.edit_provider_btn.clicked.connect(self.on_edit_selected_provider)
+        
+        self.remove_provider_btn = QPushButton("🗑️")
+        self.remove_provider_btn.setToolTip("Remove all models belonging to the selected provider from this list.")
+        self.remove_provider_btn.clicked.connect(self.on_remove_selected_provider)
+        
+        self.add_custom_provider_btn = QPushButton("+ Custom Provider")
+        self.add_custom_provider_btn.setToolTip("Add a new custom provider by opening the Custom Provider dialog.")
+        self.add_custom_provider_btn.clicked.connect(self.on_add_custom_provider)
+        
         self.restore_btn = QPushButton("Restore Defaults")
         self.restore_btn.setToolTip("Reset global fallback priority to default provider-based models.")
         self.restore_btn.clicked.connect(self.restore_defaults)
@@ -1049,6 +1061,9 @@ class GlobalFallbackOrderDialog(QDialog):
         row2_layout.addWidget(self.list_test_btn)
         row2_layout.addWidget(self.sort_selected_btn)
         row2_layout.addWidget(self.list_fetch_btn)
+        row2_layout.addWidget(self.edit_provider_btn)
+        row2_layout.addWidget(self.remove_provider_btn)
+        row2_layout.addWidget(self.add_custom_provider_btn)
         row2_layout.addWidget(self.restore_btn)
         
         btn_layout.addLayout(row1_layout)
@@ -1205,7 +1220,104 @@ class GlobalFallbackOrderDialog(QDialog):
         for i in range(len(items)):
             self.list_widget.item(top + i).setSelected(True)
         self.list_widget.setCurrentRow(top)
-            
+
+    def on_edit_selected_provider(self):
+        row = self.list_widget.currentRow()
+        if row < 0:
+            tooltip("Select a provider/model row first.")
+            return
+        item = self.list_widget.item(row)
+        provider, model = item.data(Qt.ItemDataRole.UserRole)
+        custom_providers = getattr(self.main_dialog, "custom_providers_data", {}) or {}
+        cp_data = custom_providers.get(provider)
+        if not cp_data:
+            cp_data = {
+                "url": "",
+                "models_url": "",
+                "api_key": self.main_dialog.config.get("api_keys", {}).get(provider, ""),
+                "model": model,
+                "headers": {},
+                "body_params": {},
+            }
+        dlg = CustomProviderDialog(self, name=provider, data=cp_data, config=self.main_dialog.config)
+        if dlg.exec():
+            new_data = dlg.get_data()
+            new_name = dlg.name_edit.text().strip()
+            if not new_name:
+                return
+            if new_name != provider:
+                for i in range(self.list_widget.count()):
+                    it = self.list_widget.item(i)
+                    p, m = it.data(Qt.ItemDataRole.UserRole)
+                    if p == provider:
+                        it.setData(Qt.ItemDataRole.UserRole, (new_name, m))
+                        it.setText(f"[{self._provider_display(new_name)}] {m}")
+                cp_data = custom_providers.get(provider, {})
+                if cp_data and provider in custom_providers:
+                    del custom_providers[provider]
+                custom_providers[new_name] = new_data
+                if not hasattr(self.main_dialog, "custom_providers_data"):
+                    self.main_dialog.custom_providers_data = {}
+                self.main_dialog.custom_providers_data.update(custom_providers)
+            else:
+                custom_providers[provider] = new_data
+                if not hasattr(self.main_dialog, "custom_providers_data"):
+                    self.main_dialog.custom_providers_data = {}
+                self.main_dialog.custom_providers_data[provider] = new_data
+            if new_data.get("api_key") and "api_keys" in self.main_dialog.config:
+                self.main_dialog.config["api_keys"][new_name] = new_data["api_key"]
+            tooltip(f"Updated provider: {new_name}")
+
+    def on_remove_selected_provider(self):
+        row = self.list_widget.currentRow()
+        if row < 0:
+            tooltip("Select a provider/model row first.")
+            return
+        provider, _ = self.list_widget.item(row).data(Qt.ItemDataRole.UserRole)
+        to_remove = []
+        for i in range(self.list_widget.count()):
+            p, _ = self.list_widget.item(i).data(Qt.ItemDataRole.UserRole)
+            if p == provider:
+                to_remove.append(i)
+        if not to_remove:
+            return
+        for i in reversed(to_remove):
+            self.list_widget.takeItem(i)
+        tooltip(f"Removed {len(to_remove)} model(s) for {provider}.")
+
+    def on_add_custom_provider(self):
+        dlg = CustomProviderDialog(self, config=self.main_dialog.config)
+        if dlg.exec():
+            data = dlg.get_data()
+            name = dlg.name_edit.text().strip()
+            if not name:
+                return
+            if not hasattr(self.main_dialog, "custom_providers_data"):
+                self.main_dialog.custom_providers_data = {}
+            self.main_dialog.custom_providers_data[name] = data
+            if data.get("api_key"):
+                if "api_keys" not in self.main_dialog.config:
+                    self.main_dialog.config["api_keys"] = {}
+                self.main_dialog.config["api_keys"][name] = data["api_key"]
+            models = []
+            try:
+                temp_config = self.main_dialog.config.copy()
+                temp_config["custom_providers"] = self.main_dialog.custom_providers_data
+                client = AIClient(temp_config)
+                models = client.fetch_models(name)
+            except Exception:
+                pass
+            if not models and data.get("model"):
+                models = [data["model"]]
+            for m in models:
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, (name, m))
+                item.setText(f"[{self._provider_display(name)}] {m}")
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Checked)
+                self.list_widget.addItem(item)
+            tooltip(f"Added custom provider: {name}")
+
     def remove_models(self, kind):
         """Remove list rows based on the requested removal type.
 
@@ -1573,6 +1685,31 @@ class ProvidersTabMixin:
                     w.enabled_cb.setEnabled(not use_global)
                     w.fallbacks_btn.setEnabled(not use_global)
                     
+    def rank_checked_providers_first(self):
+        """Reorder provider rows so all checked/enabled providers float to the top,
+        preserving their relative order."""
+        if not hasattr(self, "models_layout") or self.models_layout is None:
+            return
+        from .widgets import ProviderRowWidget
+        checked = []
+        unchecked = []
+        for i in range(self.models_layout.count()):
+            item = self.models_layout.itemAt(i)
+            if not item:
+                continue
+            w = item.widget()
+            if isinstance(w, ProviderRowWidget):
+                (checked if w.enabled_cb.isChecked() else unchecked).append(w)
+        for w in unchecked:
+            self.models_layout.removeWidget(w)
+        for w in checked:
+            self.models_layout.removeWidget(w)
+        for w in checked:
+            self.models_layout.addWidget(w)
+        for w in unchecked:
+            self.models_layout.addWidget(w)
+        tooltip("Ranked checked providers first.")
+                    
     def update_special_blacklist_status(self, provider, combobox, status_label):
         model = combobox.currentText().strip()
         status_info = PERSISTENT_TEST_STATUSES.get(provider)
@@ -1667,6 +1804,11 @@ class ProvidersTabMixin:
         self.advanced_fallback_btn.setToolTip("Configure a global priority list to mix-and-match model fallbacks across different providers.")
         self.advanced_fallback_btn.clicked.connect(self.on_advanced_fallback_clicked)
         model_btns_layout.addWidget(self.advanced_fallback_btn)
+        
+        self.rank_checked_first_btn = QPushButton("Rank Checked First")
+        self.rank_checked_first_btn.setToolTip("Move all checked/enabled providers to the top of the list, preserving their relative order.")
+        self.rank_checked_first_btn.clicked.connect(self.rank_checked_providers_first)
+        model_btns_layout.addWidget(self.rank_checked_first_btn)
         
         model_main_layout.addLayout(model_btns_layout)
         

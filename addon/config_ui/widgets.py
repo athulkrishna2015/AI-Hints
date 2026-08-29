@@ -145,6 +145,26 @@ class CustomProviderDialog(QDialog):
         finally:
             self.fetch_btn.setEnabled(True)
 
+    def get_data(self) -> dict:
+        return {
+            "url": self.url_edit.text().strip(),
+            "models_url": self.models_url_edit.text().strip(),
+            "api_key": self.key_edit.text().strip(),
+            "model": self.model_edit.text().strip(),
+            "headers": json.loads(self.headers_edit.toPlainText() or "{}"),
+            "body_params": json.loads(self.body_params_edit.toPlainText() or "{}"),
+        }
+
+    def get_data(self) -> dict:
+        return {
+            "url": self.url_edit.text().strip(),
+            "models_url": self.models_url_edit.text().strip(),
+            "api_key": self.key_edit.text().strip(),
+            "model": self.model_edit.text().strip(),
+            "headers": json.loads(self.headers_edit.toPlainText() or "{}"),
+            "body_params": json.loads(self.body_params_edit.toPlainText() or "{}"),
+        }
+
     def validate_and_accept(self):
         if not self.name_edit.text().strip():
             info("Provider name cannot be empty.")
