@@ -41,8 +41,8 @@ class CustomProviderDialog(QDialog):
             "body_params": data.get("body_params", {}) if data else {},
         }
         current_data = data if data else {}
-        self.url_edit = QLineEdit(current_data.get("url", default_url))
-        self.key_edit = QLineEdit(current_data.get("api_key", ""))
+        self.url_edit = QLineEdit(current_data.get("url") or default_url)
+        self.key_edit = QLineEdit(current_data.get("api_key") or self.default_data["api_key"])
         self.key_edit.setPlaceholderText("Enter API Key(s)...")
         self.key_edit.setToolTip(
             "Enter one or more API keys separated by commas, semicolons, or newlines.\n"
@@ -82,7 +82,7 @@ class CustomProviderDialog(QDialog):
         layout.addRow("API Key:", key_layout)
         
         model_row = QHBoxLayout()
-        self.model_edit = QLineEdit(current_data.get("model", ""))
+        self.model_edit = QLineEdit(current_data.get("model") or self.default_data["model"])
         model_row.addWidget(self.model_edit)
         self.fetch_btn = QPushButton("Fetch")
         self.fetch_btn.setFixedWidth(50)
