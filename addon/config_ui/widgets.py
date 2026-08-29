@@ -25,14 +25,24 @@ class CustomProviderDialog(QDialog):
     def __init__(self, parent, name="", data=None, config=None):
         super().__init__(parent)
         self.config = config or {}
+        self.original_name = name.strip() if isinstance(name, str) else ""
         self.setWindowTitle("Custom Provider")
         layout = QFormLayout(self)
         
         self.name_edit = QLineEdit(name)
         
-        default_url = BUILTIN_PROVIDER_URLS.get(name.strip(), "") if isinstance(name, str) else ""
-        self.url_edit = QLineEdit(data.get("url", default_url) if data else default_url)
-        self.key_edit = QLineEdit(data.get("api_key", "") if data else "")
+        default_url = BUILTIN_PROVIDER_URLS.get(self.original_name, "") if self.original_name else ""
+        self.default_data = {
+            "url": default_url,
+            "models_url": "",
+            "api_key": data.get("api_key", "") if data else "",
+            "model": data.get("model", "") if data else "",
+            "headers": data.get("headers", {}) if data else {},
+            "body_params": data.get("body_params", {}) if data else {},
+        }
+        current_data = data if data else {}
+        self.url_edit = QLineEdit(current_data.get("url", default_url))
+        self.key_edit = QLineEdit(current_data.get("api_key", ""))
         self.key_edit.setPlaceholderText("Enter API Key(s)...")
         self.key_edit.setToolTip(
             "Enter one or more API keys separated by commas, semicolons, or newlines.\n"
@@ -51,15 +61,15 @@ class CustomProviderDialog(QDialog):
         key_layout.addWidget(self.key_edit, 1)
         key_layout.addWidget(self.manage_keys_btn)
 
-        self.model_edit = QLineEdit(data.get("model", "") if data else "")
-        self.models_url_edit = QLineEdit(data.get("models_url", "") if data else "")
+        self.model_edit = QLineEdit(current_data.get("model", ""))
+        self.models_url_edit = QLineEdit(current_data.get("models_url", ""))
         self.models_url_edit.setPlaceholderText("Optional: URL to fetch models list (defaults to endpoint + /models)")
         self.headers_edit = QTextEdit()
-        self.headers_edit.setPlainText(json.dumps(data.get("headers", {}), indent=2) if data else "{}")
+        self.headers_edit.setPlainText(json.dumps(current_data.get("headers", {}), indent=2))
         self.headers_edit.setMaximumHeight(60)
 
         self.body_params_edit = QTextEdit()
-        self.body_params_edit.setPlainText(json.dumps(data.get("body_params", {}), indent=2) if data else "{}")
+        self.body_params_edit.setPlainText(json.dumps(current_data.get("body_params", {}), indent=2))
         self.body_params_edit.setMaximumHeight(60)
         self.body_params_edit.setToolTip(
             "Extra JSON fields to include in the request body.\n"
@@ -72,7 +82,7 @@ class CustomProviderDialog(QDialog):
         layout.addRow("API Key:", key_layout)
         
         model_row = QHBoxLayout()
-        self.model_edit = QLineEdit(data.get("model", "") if data else "")
+        self.model_edit = QLineEdit(current_data.get("model", ""))
         model_row.addWidget(self.model_edit)
         self.fetch_btn = QPushButton("Fetch")
         self.fetch_btn.setFixedWidth(50)
@@ -87,6 +97,11 @@ class CustomProviderDialog(QDialog):
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(self.validate_and_accept)
         btns.rejected.connect(self.reject)
+        
+        restore_btn = QPushButton("Restore Default")
+        restore_btn.clicked.connect(self.on_restore_default)
+        btns.addButton(restore_btn, QDialogButtonBox.ButtonRole.ResetRole)
+        
         layout.addRow(btns)
 
     def on_manage_keys(self):
@@ -165,6 +180,18 @@ class CustomProviderDialog(QDialog):
             "headers": json.loads(self.headers_edit.toPlainText() or "{}"),
             "body_params": json.loads(self.body_params_edit.toPlainText() or "{}"),
         }
+
+    def on_restore_default(self):
+        if not self.original_name or self.original_name not in BUILTIN_PROVIDER_URLS:
+            return
+        self.name_edit.setText(self.original_name)
+        self.url_edit.setText(self.default_data["url"])
+        self.models_url_edit.setText(self.default_data["models_url"])
+        self.key_edit.setText(self.default_data["api_key"])
+        self.model_edit.setText(self.default_data["model"])
+        self.headers_edit.setPlainText(json.dumps(self.default_data["headers"], indent=2))
+        self.body_params_edit.setPlainText(json.dumps(self.default_data["body_params"], indent=2))
+        tooltip("Restored built-in provider defaults.")
 
     def validate_and_accept(self):
         if not self.name_edit.text().strip():
