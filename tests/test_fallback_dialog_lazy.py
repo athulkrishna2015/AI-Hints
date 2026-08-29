@@ -27,12 +27,15 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 aqt_mod = types.ModuleType("aqt")
 aqt_mod.mw = MagicMock()
 qt_mod = types.ModuleType("aqt.qt")
+utils_mod = types.ModuleType("aqt.utils")
+utils_mod.tooltip = lambda *args, **kwargs: None
 for mod in (QtCore, QtGui, QtWidgets):
     for name in dir(mod):
         if not name.startswith("_"):
             setattr(qt_mod, name, getattr(mod, name))
 sys.modules["aqt"] = aqt_mod
 sys.modules["aqt.qt"] = qt_mod
+sys.modules["aqt.utils"] = utils_mod
 
 pkg = types.ModuleType("addon")
 pkg.__path__ = [os.path.join(PROJECT_ROOT, "addon")]
@@ -44,6 +47,7 @@ for k in list(sys.modules):
 sys.modules["addon"] = pkg
 
 from addon.config_ui.tab_providers import FallbackOrderDialog  # noqa: E402
+from addon.config_ui.widgets import CustomProviderDialog  # noqa: E402
 
 Qt = qt_mod.Qt  # noqa: E402
 
@@ -71,6 +75,27 @@ def count_widgets(dlg):
 
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+# Built-in provider editing must restore shipped defaults, not the values from
+# the currently edited custom override.
+restore_parent = QtWidgets.QWidget()
+restore_dlg = CustomProviderDialog(
+    restore_parent,
+    name="openai",
+    data={
+        "url": "https://example.invalid/chat",
+        "api_key": "old-key",
+        "model": "old-model",
+        "headers": {"X-Old": "1"},
+        "body_params": {"old": True},
+    },
+)
+restore_dlg.on_restore_default()
+restored = restore_dlg.get_data()
+assert restored["url"] == "https://api.openai.com/v1/chat/completions"
+assert restored["model"] == "gpt-4o"
+assert restored["api_key"] == ""
+assert restored["headers"] == {} and restored["body_params"] == {}
 
 dlg, dt = make_dialog()
 print(f"construct(400 rows): {dt * 1000:.0f} ms, initial widgets: {count_widgets(dlg)}")
@@ -108,6 +133,25 @@ assert dlg.table.item(1, 0).data(Qt.ItemDataRole.UserRole) == "model-000"
 levels2 = dlg.get_thinking_levels()
 assert levels2["model-001"] == "off" or levels2["model-001"] == levels["model-001"]
 assert levels2["model-005"] == "high"
+
+# Moving multiple selected rows must move them as a group. In particular,
+# selectRow() is not additive, so verify the selection survives the move too.
+selection_model = dlg.table.selectionModel()
+selection_model.clearSelection()
+for row in (1, 2):
+    index = dlg.table.model().index(row, 0)
+    selection_model.select(
+        index,
+        QtCore.QItemSelectionModel.SelectionFlag.Select
+        | QtCore.QItemSelectionModel.SelectionFlag.Rows,
+    )
+names_before = [dlg.table.item(i, 0).data(Qt.ItemDataRole.UserRole) for i in range(4)]
+dlg.move_item(-1)
+names_after = [dlg.table.item(i, 0).data(Qt.ItemDataRole.UserRole) for i in range(4)]
+assert names_after[:4] == [names_before[1], names_before[2], names_before[0], names_before[3]]
+assert sorted(index.row() for index in dlg.table.selectionModel().selectedRows()) == [0, 1]
+assert dlg.get_thinking_levels()["model-005"] == "high"
+assert dlg.get_model_timeouts()["model-007"] == 42
 
 # Search filter hides rows; ensure does not choke.
 dlg.filter_models("model-39")

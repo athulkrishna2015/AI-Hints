@@ -28,6 +28,17 @@ class CustomProviderDialog(QDialog):
         self.original_name = name.strip() if isinstance(name, str) else ""
         self.setWindowTitle("Custom Provider")
         layout = QFormLayout(self)
+
+        builtin_defaults = {}
+        if self.original_name in BUILTIN_PROVIDER_URLS:
+            try:
+                with open(os.path.join(os.path.dirname(__file__), "..", "config.json"), "r", encoding="utf-8") as f:
+                    shipped_config = json.load(f)
+                builtin_defaults = {
+                    "model": (shipped_config.get("models", {}) or {}).get(self.original_name, ""),
+                }
+            except Exception:
+                pass
         
         self.name_edit = QLineEdit(name)
         
@@ -35,10 +46,10 @@ class CustomProviderDialog(QDialog):
         self.default_data = {
             "url": default_url,
             "models_url": "",
-            "api_key": data.get("api_key", "") if data else "",
-            "model": data.get("model", "") if data else "",
-            "headers": data.get("headers", {}) if data else {},
-            "body_params": data.get("body_params", {}) if data else {},
+            "api_key": "",
+            "model": builtin_defaults.get("model", ""),
+            "headers": {},
+            "body_params": {},
         }
         current_data = data if data else {}
         self.url_edit = QLineEdit((current_data.get("url") or "").strip() or default_url)

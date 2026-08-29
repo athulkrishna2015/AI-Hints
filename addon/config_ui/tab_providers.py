@@ -769,23 +769,37 @@ class FallbackOrderDialog(QDialog):
         rows = self._selected_rows()
         if not rows:
             return
-        top = rows[0] + delta
-        bottom = rows[-1] + delta
-        if top < 0 or bottom >= self.table.rowCount():
-            return
-        self._harvest_widgets()
-        saved = [self._row_data(r) for r in rows]
-        for r in reversed(rows):
-            self.table.removeRow(r)
-        for i, data in enumerate(saved):
-            self.table.insertRow(top + i)
-            self._add_model_row(data["name"], data["checked"], row=top + i)
-            self._thinking_levels[data["name"]] = data["think"]
-            self._model_timeouts[data["name"]] = data["timeout"]
-            self._refresh_row_widgets(top + i)
+        selected = set(rows)
+        moved = set(rows)
+
+        # Swap with the adjacent row instead of removing/recreating selected
+        # rows. This handles non-contiguous selections and keeps every row's
+        # lazily-created controls attached to its model.
+        if delta < 0:
+            candidates = rows
+        else:
+            candidates = reversed(rows)
+        for row in candidates:
+            neighbor = row + delta
+            if neighbor < 0 or neighbor >= self.table.rowCount() or neighbor in selected:
+                continue
+            self._swap_rows(row, neighbor)
+            moved.discard(row)
+            moved.add(neighbor)
+            selected.discard(row)
+            selected.add(neighbor)
+
         self.table.clearSelection()
-        for i in range(len(saved)):
-            self.table.selectRow(top + i)
+        selection_model = self.table.selectionModel()
+        if moved:
+            self.table.setCurrentCell(min(moved), 0)
+        for row in sorted(moved):
+            index = self.table.model().index(row, 0)
+            selection_model.select(
+                index,
+                QItemSelectionModel.SelectionFlag.Select
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
         self.update_item_labels()
 
     def _selected_rows(self):
