@@ -2,7 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
-## Unreleased
+## 7.1.0 (2026-08-29)
+- **Fallback Priority Dialog Moves Preserve Selection and All Models**: Moving multiple selected models up/down in a provider's Fallback Priority dialog no longer collapses the selection to a single row or drops sibling model entries from the list. The move now swaps selected rows with their neighbors in place (preserving each row's thinking level, timeout, checkbox state, and status highlights) and restores the full multi-row selection afterward. The same non-destructive, selection-preserving behavior applies to Rank Checked First.
+- **Built-in Provider Restore Default Now Resets All Fields**: The Restore Default button in the built-in provider edit dialog now resets the provider's name, endpoint URL, models URL, model name, API key, headers, and body params to their original shipped defaults (previously it preserved the in-progress edited values for the model/key/headers/body fields, so changes were not actually reverted).
+- **Global Fallback Priority Move Preserves Selection**: Reordering checked rows in the Advanced Global Fallback Priority dialog keeps the full multi-row selection intact instead of selecting only the first moved item.
 
 ## 7.0.5 (2026-08-28)
 - **Custom Provider Fetch Now Tolerates Non-`id` Model Fields & Casing Mismatches**: `fetch_models` now resolves a custom provider regardless of the casing used to look it up (so a provider stored as `aihubmix` is found when addressed as `Aihubmix`, `AIHubMix`, etc.), and a small `_model_id` helper accepts `id`, `model_id`, `model`, or `name` from the list-models response. Providers like **AIHubMix** — whose `/api/v1/models` returns objects keyed by `model_id` — were previously parsed as zero models and silently reported "No models found", even when the custom URL was configured correctly. Chat completions were never affected; only the Fetch Models step.
