@@ -481,7 +481,11 @@ class ProviderRowWidget(QWidget):
         if self.provider in ("local", "openai", "anthropic", "gemini", "groq", "deepseek", "grok", "openrouter", "mistral", "nvidia", "sambanova", "cerebras", "huggingface"):
             tooltip("Cannot remove built-in providers.")
             return
-        if not askUser(f"Remove provider '{self.provider.capitalize()}' and all its models?"):
+        if not QMessageBox.question(
+            self,
+            "Remove provider",
+            f"Remove provider '{self.provider.capitalize()}' and all its models?",
+        ) == QMessageBox.StandardButton.Yes:
             return
         custom_providers = getattr(self.parent_dialog, "custom_providers_data", {}) or {}
         custom_providers.pop(self.provider, None)
