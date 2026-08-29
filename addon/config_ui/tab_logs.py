@@ -209,6 +209,7 @@ class LogTabMixin:
         self.log_view = QTextBrowser()
         self.log_view.setReadOnly(True)
         self.log_view.setOpenExternalLinks(False)
+        self.log_view.setOpenLinks(False)
         self.log_view.anchorClicked.connect(self._on_log_anchor_clicked)
         self.log_view.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse | 
