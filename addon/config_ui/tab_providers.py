@@ -766,13 +766,27 @@ class FallbackOrderDialog(QDialog):
         tooltip(f"Added '{name}' to the list.")
 
     def move_item(self, delta):
-        curr_row = self.table.currentRow()
-        if curr_row == -1: return
-        target_row = curr_row + delta
-        if 0 <= target_row < self.table.rowCount():
-            self._swap_rows(curr_row, target_row)
-            self.table.setCurrentCell(target_row, 0)
-            self.update_item_labels()
+        rows = self._selected_rows()
+        if not rows:
+            return
+        top = rows[0] + delta
+        bottom = rows[-1] + delta
+        if top < 0 or bottom >= self.table.rowCount():
+            return
+        self._harvest_widgets()
+        saved = [self._row_data(r) for r in rows]
+        for r in reversed(rows):
+            self.table.removeRow(r)
+        for i, data in enumerate(saved):
+            self.table.insertRow(top + i)
+            self._add_model_row(data["name"], data["checked"], row=top + i)
+            self._thinking_levels[data["name"]] = data["think"]
+            self._model_timeouts[data["name"]] = data["timeout"]
+            self._refresh_row_widgets(top + i)
+        self.table.clearSelection()
+        for i in range(len(saved)):
+            self.table.selectRow(top + i)
+        self.update_item_labels()
 
     def _selected_rows(self):
         selected = {index.row() for index in self.table.selectionModel().selectedRows()}
@@ -989,6 +1003,7 @@ class GlobalFallbackOrderDialog(QDialog):
         self.list_widget.setAcceptDrops(True)
         self.list_widget.setDropIndicatorShown(True)
         self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         
         self.tooltip_delegate = ToolTipDelegate(self.list_widget)
         self.list_widget.setItemDelegate(self.tooltip_delegate)
@@ -1175,13 +1190,21 @@ class GlobalFallbackOrderDialog(QDialog):
                 self.list_widget.addItem(item)
                 
     def move_item(self, delta):
-        curr_row = self.list_widget.currentRow()
-        if curr_row == -1: return
-        target_row = curr_row + delta
-        if 0 <= target_row < self.list_widget.count():
-            item = self.list_widget.takeItem(curr_row)
-            self.list_widget.insertItem(target_row, item)
-            self.list_widget.setCurrentRow(target_row)
+        rows = sorted([i for i in range(self.list_widget.count()) if self.list_widget.item(i).isSelected()])
+        if not rows:
+            return
+        top = rows[0] + delta
+        bottom = rows[-1] + delta
+        if top < 0 or bottom >= self.list_widget.count():
+            return
+        items = []
+        for r in reversed(rows):
+            items.insert(0, self.list_widget.takeItem(r))
+        for i, item in enumerate(items):
+            self.list_widget.insertItem(top + i, item)
+        for i in range(len(items)):
+            self.list_widget.item(top + i).setSelected(True)
+        self.list_widget.setCurrentRow(top)
             
     def remove_models(self, kind):
         """Remove list rows based on the requested removal type.
