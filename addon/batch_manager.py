@@ -12,6 +12,17 @@ from .config_io import atomic_write_json
 
 ADDON_PATH = os.path.dirname(__file__)
 
+def _fmt_elapsed(sec: float) -> str:
+    """Format a monotonic elapsed seconds value as a human-friendly duration."""
+    sec = max(0, int(sec))
+    m, s = divmod(sec, 60)
+    if m >= 60:
+        h, m = divmod(m, 60)
+        return f"{h}h {m}m {s}s"
+    if m:
+        return f"{m}m {s:02d}s"
+    return f"{s}s"
+
 class BatchManager:
     def __init__(self):
         self.jobs = {} # Format: { job_name: { "created_at": time, "card_ids": [] } }
@@ -284,8 +295,17 @@ class BatchManager:
                  html_parts.append("<div style='margin-top:6px; font-size:11px;'>")
                  html_parts.append("<b>Active Concurrent Threads:</b><br/>")
                  for prov, info in active_threads.items():
-                      cid_link = f"<a href='browse:cid:{info['cid']}' style='color: #007bff;'>[Card {info['cid']}]</a>" if info['cid'] else "None"
-                      html_parts.append(f"• 🔌 <b>{_html.escape(str(prov).capitalize())}</b> ({_html.escape(str(info.get('model', '?')))}): Processing {cid_link}<br/>")
+                      cid_link = f"<a href='browse:cid:{info['cid']}' style='color: #007bff;'>[Card {info['cid']}]</a>" if info['cid'] else ""
+                      status_txt = str(info.get('status', '?'))
+                      since = info.get("since")
+                      if info.get("cid") is not None and since is not None:
+                           elapsed = time.monotonic() - float(since)
+                           status_txt = f"{status_txt} ({_fmt_elapsed(elapsed)})"
+                      html_parts.append(
+                          f"• 🔌 <b>{_html.escape(str(prov).capitalize())}</b> "
+                          f"({_html.escape(str(info.get('model', '?')))}): "
+                          f"{_html.escape(status_txt)} {cid_link}<br/>"
+                      )
                  html_parts.append("</div>")
             else:
                  if getattr(self, "current_local_provider", None):
@@ -925,11 +945,16 @@ class BatchManager:
                      
                 # Watchdog: don't let a single hung provider thread hold the whole
                 # pass hostage. Once every card has been dispatched (queue empty)
-                # and only one stuck thread remains, give it a short grace period to
-                # finish its in-flight request, then release the pass. The leftover
-                # daemon thread exits on its own once its HTTP call times out, and
-                # the Verification Pass below re-queues any card it hadn't finished.
-                grace_until = time.time() + 45
+                # and only one thread remains, give it a grace period measured from
+                # the moment it became the lone survivor (not from pass start — a
+                # fixed start-anchored deadline lapses during any normal run and
+                # turns benign "Waiting for peers" threads into false "hung" hits,
+                # and can abort a legitimately slow last request before it lands).
+                # After that grace the pass is released; the leftover daemon thread
+                # still lands its result (it exits on its own once the HTTP call
+                # times out), and the Verification Pass below re-queues any card it
+                # hadn't finished.
+                drained_since = None
                 while True:
                     alive = [t for t in threads if t.is_alive()]
                     if not alive:
@@ -938,17 +963,48 @@ class BatchManager:
                         break
                     with self._db_lock:
                         queue_empty = not self.local_queue
-                    if queue_empty and len(alive) <= 1 and time.time() >= grace_until:
-                        logger.warning(
-                            f"Local Queue watchdog: releasing pass; hung thread(s) "
-                            f"{[t.name for t in alive]} still busy with an empty queue."
-                        )
-                        self._abort_threads.set()
-                        break
+                    if queue_empty and len(alive) == 1:
+                        now = time.time()
+                        if drained_since is None:
+                            drained_since = now
+                        elif now - drained_since >= 45:
+                            # Distinguish a genuinely busy request from an idle
+                            # waiter so a normal "waiting for peers" thread isn't
+                            # mislabeled as hung (such threads self-exit within ~2s).
+                            with self._db_lock:
+                                hung_state = any(
+                                    info.get("cid") is not None
+                                    and info.get("status") == "Processing"
+                                    for info in dict(self.active_threads_status).values()
+                                )
+                            detail = (
+                                f"still busy with an empty queue"
+                                if hung_state else
+                                f"lingered idle with an empty queue"
+                            )
+                            logger.warning(
+                                f"Local Queue watchdog: releasing pass; lone thread "
+                                f"{alive[0].name} {detail}."
+                            )
+                            self._abort_threads.set()
+                            break
+                    else:
+                        drained_since = None
                     time.sleep(1)
                 
                 for t in threads:
                      t.join(timeout=1)
+
+                # A released mid-request thread cannot be interrupted mid-HTTP; it
+                # only stops at the next loop-top abort check after its request
+                # resolves. Wait a bounded window for those to land so verification
+                # sees the final state (no duplicate generation, no phantom errors).
+                # In the normal path all threads have already exited, so this is
+                # almost always a no-op.
+                self._await_workers_settled(
+                    threads,
+                    int(self.saved_config.get("batch_request_timeout", 120)) + 20,
+                )
                 
                 # --- Verification Pass Logic ---
                 if not self.local_queue_active:
@@ -960,7 +1016,29 @@ class BatchManager:
                 # Check if any cards from the original request are still missing hints
                 # (collection access is marshalled to the main thread).
                 missing_cids = self._missing_hint_cids_on_main(original_request)
-                
+
+                # Don't requeue cards whose request is STILL in flight on a released
+                # worker thread. Such a thread cannot be interrupted and will apply
+                # its result when the HTTP call resolves (or requeue the card itself
+                # on failure). Requeuing now would trigger a duplicate (and billed)
+                # generation of the same card.
+                with self._db_lock:
+                    in_flight_cids = {
+                        info.get("cid")
+                        for info in dict(self.active_threads_status).values()
+                        if info.get("cid") is not None
+                        and info.get("status") == "Processing"
+                    }
+                if in_flight_cids:
+                    in_flight_missing = [c for c in missing_cids if c in in_flight_cids]
+                    if in_flight_missing:
+                        logger.info(
+                            f"Verification Pass: {len(in_flight_missing)} card(s) still "
+                            f"in flight on a worker thread; not requeueing (they will "
+                            f"land on their own or be requeued on failure)."
+                        )
+                        missing_cids = [c for c in missing_cids if c not in in_flight_cids]
+
                 if not missing_cids:
                     logger.info(f"Verification Pass: All {len(original_request)} cards successfully have hints now.")
                     break
@@ -1033,6 +1111,31 @@ class BatchManager:
                 logger.info(f"Card {cid} failed on {provider}. Requeuing for other providers to try.")
                 self.local_queue.insert(0, cid)
                 self.save_state()
+
+    def _await_workers_settled(self, threads, wait: float):
+        """Block up to `wait` seconds for the given worker threads to exit.
+
+        Worker threads cannot be interrupted mid-HTTP by the watchdog — the abort
+        flag is only checked at the top of each loop, so a released mid-request
+        thread keeps running until its request resolves. Waiting a bounded window
+        here lets in-flight results land (and be applied) before the Verification
+        Pass runs, avoiding duplicate generation and phantom error counts. A truly
+        hung request is bounded by the batch read timeout, and the pass force-
+        proceeds after this cap regardless.
+        """
+        deadline = time.monotonic() + max(wait, 0)
+        while time.monotonic() < deadline:
+            if not any(t.is_alive() for t in threads):
+                return
+            time.sleep(1)
+        lingering = [t.name for t in threads if t.is_alive()]
+        if lingering:
+            logger.warning(
+                f"Local Queue watchdog: {len(lingering)} worker thread(s) did not "
+                f"settle within {int(wait)}s: {lingering}. Proceeding with the "
+                f"Verification Pass; any still-running requests will be requeued if "
+                f"their cards remain without hints."
+            )
 
     def _run_local_queue_thread(self, provider: str, parser: CardParser, config: Dict):
         from .reviewer_hooks import _get_card_from_collection
@@ -1147,7 +1250,8 @@ class BatchManager:
             self.active_threads_status[provider] = {
                 "model": current_model,
                 "cid": cid,
-                "status": "Processing"
+                "status": "Processing",
+                "since": time.monotonic()
             }
 
             try:

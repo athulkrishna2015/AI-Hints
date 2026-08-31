@@ -245,10 +245,11 @@ class TestBatchManager(unittest.TestCase):
             self.assertFalse(should_break)
             self.assertTrue(should_sleep)
 
+    @patch('addon.batch_manager.AIClient')
     @patch('time.sleep')
     @patch('addon.reviewer_hooks._get_card_from_collection')
     @patch('addon.batch_manager.mw')
-    def test_empty_card_skip_behavior(self, mock_mw, mock_get_card, mock_sleep):
+    def test_empty_card_skip_behavior(self, mock_mw, mock_get_card, mock_sleep, mock_ai_client):
         """Test that a card with empty front and back (e.g. missing cloze) is skipped and marked as skipped in DB."""
         # Setup manager
         manager = BatchManager()
@@ -263,7 +264,9 @@ class TestBatchManager(unittest.TestCase):
         mock_get_card.return_value = mock_card
         
         mock_client = MagicMock()
-        mock_client._models_for_provider.return_value = ["gemini-flash"]
+        mock_client._provider_models.return_value = ["gemini-flash"]
+        mock_client.is_network_available.return_value = True
+        mock_ai_client.return_value = mock_client
         
         mock_parser = MagicMock()
         mock_parser.get_note_content.return_value = ("", "")

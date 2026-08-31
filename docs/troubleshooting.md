@@ -16,6 +16,12 @@ Common issues and their fixes.
 - If it still fails, enable **Debug logging** in the **Logs** tab and check the `FULL RESPONSE` line: if the response contains neither a JSON object in `content` nor in the reasoning fields, the model simply did not produce usable output — try another model or adjust the prompt.
 - Gateways with **no model-list endpoint** (e.g. Cline's) always fail **Fetch Models** — that is expected; add models manually via **Fallbacks → Add Model...**.
 
+## Garbled / Corrupted Generated Text
+
+- If generated hints/options come back as mixed-script garbage (for example Malayalam interleaved with CJK or Devanagari characters), the on-wire text contains `U+FFFD` replacement characters — a sign of a **broken model or tokenizer** on the provider side, not an add-on encoding bug. The add-on sends and receives clean UTF-8.
+- AI-Hints now detects any generated text containing `U+FFFD` and **discards that generation**, logging a warning (`AI-Hints: discarding corrupt model output containing U+FFFD replacement characters...`) and falling back to the next model in the priority list. A corrupt card therefore fails over gracefully instead of committing garbage hints to your notes.
+- If you see this repeatedly for a specific model, prefer another model — the offending one is being rejected as unusable.
+
 ## The Generate Button Does Nothing / Is Disabled
 
 - If the button is **disabled**, both **Generate Hints** and **Generate Options (MCQ)** are turned off. Re-enable at least one in the General tab.

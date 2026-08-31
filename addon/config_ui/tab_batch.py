@@ -281,6 +281,13 @@ class BatchTabMixin:
         self.batch_run_btn.clicked.connect(self.on_batch_control_clicked)
         batch_btn_row.addWidget(self.batch_run_btn)
 
+        self.pause_local_btn = QPushButton("⏸️ Pause Queue")
+        self.pause_local_btn.setAutoDefault(False)
+        self.pause_local_btn.setMinimumHeight(30)
+        self.pause_local_btn.setVisible(False)
+        self.pause_local_btn.clicked.connect(self.on_toggle_pause_local_queue)
+        batch_btn_row.addWidget(self.pause_local_btn)
+
         self.stop_local_btn = QPushButton("🛑 Stop & Discard Queue")
         self.stop_local_btn.setAutoDefault(False)
         self.stop_local_btn.setMinimumHeight(30)
@@ -360,31 +367,45 @@ class BatchTabMixin:
         if is_cloud:
             self.batch_desc_label.setText("⚠️ Uses Cloud Native API. Requires **PAID ACCOUNT** / linked billing. Currently ONLY Gemini supports this schema. Closes fast.")
             self.batch_desc_label.setStyleSheet("color: #dc3545; font-weight: bold; font-size: 11px; margin-bottom: 5px;")
+            self.pause_local_btn.setVisible(False)
+            self.batch_run_btn.setEnabled(True)
             self.batch_run_btn.setText("🚀 Submit Cloud Batch")
             self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #0d6efd; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
             return
 
-        # Local Queue Logic
+        # Local Queue Logic: the Initiate/Resume button and the Pause button are
+        # separate controls. Initiating is always allowed — while a queue is running
+        # or paused it adds another batch to the job list (processed in order), and
+        # the Pause button is the only pause/resume toggle.
         if is_active:
+            self.batch_run_btn.setEnabled(True)
+            self.batch_run_btn.setText("🚀 Initiate Queue")
+            self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+            self.batch_run_btn.setToolTip("Starts another batch and appends it to the running queue; it is processed after the current work finishes.")
+            self.pause_local_btn.setVisible(True)
             if is_paused:
-                self.batch_run_btn.setText("▶️ Resume Queue")
-                self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #ffc107; color: black; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+                self.pause_local_btn.setText("▶️ Resume Queue")
+                self.pause_local_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
             else:
-                self.batch_run_btn.setText("⏸️ Pause Queue")
-                self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #e9ecef; color: black; border-radius: 4px; border: 1px solid #ced4da; padding-left: 10px; padding-right: 10px;")
+                self.pause_local_btn.setText("⏸️ Pause Queue")
+                self.pause_local_btn.setStyleSheet("font-weight: bold; background-color: #ffc107; color: black; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
             
             self.batch_desc_label.setText("💡 Uses standard local background loop. Perfectly respects your fallback tree, works on all free keys! (Anki must stay open)")
             self.batch_desc_label.setStyleSheet("color: #6c757d; font-style: italic; font-size: 11px; margin-bottom: 5px;")
         
         elif has_saved:
+            self.batch_run_btn.setEnabled(True)
             self.batch_run_btn.setText("⏯️ Resume Saved Queue")
             self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #fd7e14; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+            self.pause_local_btn.setVisible(False)
             self.batch_desc_label.setText("💾 Found an unfinished offline batch from a previous session! Click below to Resume.")
             self.batch_desc_label.setStyleSheet("color: #6c757d; font-style: italic; font-size: 11px; margin-bottom: 5px;")
         
         else:
+            self.batch_run_btn.setEnabled(True)
             self.batch_run_btn.setText("🚀 Initiate Queue")
             self.batch_run_btn.setStyleSheet("font-weight: bold; background-color: #198754; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+            self.pause_local_btn.setVisible(False)
             self.batch_desc_label.setText("💡 Uses standard local background loop. Perfectly respects your fallback tree, works on all free keys! (Anki must stay open)")
             self.batch_desc_label.setStyleSheet("color: #6c757d; font-style: italic; font-size: 11px; margin-bottom: 5px;")
 
@@ -520,18 +541,20 @@ class BatchTabMixin:
                   logger.error(f"Failed to clear all queued jobs: {e}")
 
     def on_batch_control_clicked(self):
+        # Start/resume always works — while a queue is running or paused clicking
+        # Initiate appends a new batch to the job list. Pause/resume lives on the
+        # dedicated pause button.
+        self.on_start_config_batch()
+
+    def on_toggle_pause_local_queue(self):
         from ..batch_manager import batch_manager
         
-        # 1. If active local queue, toggle pause
-        if not self.rb_native_async.isChecked() and batch_manager.local_queue_active:
-            new_pause = not batch_manager.local_queue_paused
-            batch_manager.set_pause_local_queue(new_pause)
-            tooltip("⏸️ Local Queue Paused" if new_pause else "▶️ Local Queue Resumed")
-            self._refresh_batch_controls()
+        if self.rb_native_async.isChecked() or not batch_manager.local_queue_active:
             return
-            
-        # 2. Otherwise, delegate to start logic
-        self.on_start_config_batch()
+        new_pause = not batch_manager.local_queue_paused
+        batch_manager.set_pause_local_queue(new_pause)
+        tooltip("⏸️ Local Queue Paused" if new_pause else "▶️ Local Queue Resumed")
+        self._refresh_batch_controls()
 
     def on_stop_local_queue(self):
         from ..batch_manager import batch_manager

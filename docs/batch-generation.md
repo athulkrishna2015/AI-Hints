@@ -41,7 +41,7 @@ The cursor only advances after a **full, eligible pass** (no cards dropped to th
 
 ## Multiple Queued Jobs
 
-You can add another deck, browser selection, or sidebar group while a batch is already running:
+You can add another deck, browser selection, or sidebar group while a batch is already running (the **🚀 Initiate Queue** button stays enabled during a run or a pause and appends the new job):
 
 - **Reorder** pending jobs.
 - **Cancel** or **clear** pending jobs.
@@ -53,7 +53,7 @@ You can add another deck, browser selection, or sidebar group while a batch is a
 - **Accidental quit protection**: close Anki or crash mid-batch and your progress is preserved; queues resume on restart.
 - **Concurrent multi-provider**: use multiple providers in parallel with independent fallback queues.
 - **Automatic verification passes**: the system automatically retries cards that failed to generate (up to 10 sequential passes).
-- **Hung-provider watchdog**: If all cards have been dispatched but one provider thread remains stuck, the pass is released after a grace period and verification requeues unfinished cards.
+- **Hung-provider watchdog**: If all cards have been dispatched but one provider thread remains, the pass is released after a 45-second grace period measured from the moment that thread becomes the lone survivor (not from pass start). The log distinguishes a genuinely busy request (`still busy with an empty queue`) from an idle waiter (`lingered idle with an empty queue`), and the leftover thread still lands its result once its HTTP call resolves. In-flight cards are not requeued by the verification pass while their request is still running, so a released thread never triggers a duplicate (billed) generation.
 
 ## Starting from the Deck Browser
 

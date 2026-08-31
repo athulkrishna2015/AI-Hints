@@ -225,12 +225,19 @@ def register_network_state_callback(callback):
 def _check_network_online() -> bool:
     """Internal helper to perform a quick connectivity check."""
     previous_state = _NETWORK_STATE["online"]
+    sock = None
     try:
         # Check Cloudflare DNS (1.1.1.1) on port 53 (DNS)
-        socket.create_connection(("1.1.1.1", 53), timeout=1.5)
+        sock = socket.create_connection(("1.1.1.1", 53), timeout=1.5)
         _NETWORK_STATE["online"] = True
     except OSError:
         _NETWORK_STATE["online"] = False
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
     _NETWORK_STATE["last_check"] = time.time()
     if previous_state is not None and previous_state != _NETWORK_STATE["online"]:
         logger.info(
@@ -251,9 +258,10 @@ def _start_network_monitor():
         return
 
     def monitor():
+        _sleep_event = threading.Event()
         while True:
             _check_network_online()
-            time.sleep(30)
+            _sleep_event.wait(30)
 
     _monitor_thread = threading.Thread(target=monitor, daemon=True)
     _monitor_thread.name = "AI-Hints-NetworkMonitor"
@@ -1285,7 +1293,9 @@ class AIClient:
                                 logger.debug(f"AI-Hints {provider}/{local_model_name} response: {content[:2000]}")
                                 _log_full_response(provider, local_model_name, content)
                                 parsed = self._parse_json_result(content)
-                                if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
+                                if self._result_is_corrupt(parsed):
+                                    logger.warning(f"AI-Hints: discarding corrupt {provider} model '{local_model_name}' output containing U+FFFD replacement characters.")
+                                if not self._result_is_corrupt(parsed) and (parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer")):
                                     self._on_combo_success(provider, local_model_name, api_key)
                                     parsed["_provider"] = provider
                                     parsed["_model"] = local_model_name
@@ -1806,6 +1816,31 @@ class AIClient:
         except Exception:
             return []
 
+    @staticmethod
+    def _result_is_corrupt(parsed: Dict[str, Any]) -> bool:
+        """True if any generated text contains a U+FFFD replacement character.
+
+        A valid LLM response never contains U+FFFD; a lone replacement char is
+        the universal on-wire corruption marker (bad tokenizer / broken model
+        output — e.g. some Ollama cloud models mixing scripts). Treating such
+        generations as failures lets the fallback/retry loop pick a working
+        model instead of silently committing garbage hints to cards.
+        """
+        if not isinstance(parsed, dict):
+            return False
+        for key in ("hints", "options", "distractors"):
+            val = parsed.get(key)
+            if isinstance(val, list):
+                for item in val:
+                    if isinstance(item, str) and "\ufffd" in item:
+                        return True
+            elif isinstance(val, str) and "\ufffd" in val:
+                return True
+        ca = parsed.get("correct_answer")
+        if isinstance(ca, str) and "\ufffd" in ca:
+            return True
+        return False
+
     def _parse_generation_result(self, result: Any) -> Dict[str, List[str]]:
         """Parse a chat-completion result into hints/options.
 
@@ -1815,12 +1850,21 @@ class AIClient:
         parse that yields usable hints/options, or the (empty) content parse.
         """
         parsed = self._parse_json_result(self._extract_content(result))
-        if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
+        if self._result_is_corrupt(parsed):
+            logger.warning("AI-Hints: discarding corrupt model output containing U+FFFD replacement characters; will retry with a fallback model.")
+        elif parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
             return parsed
         for text in self._reasoning_texts(result):
             candidate = self._parse_json_result(text)
-            if candidate.get("hints") or candidate.get("options") or candidate.get("distractors") or candidate.get("correct_answer"):
+            if self._result_is_corrupt(candidate):
+                logger.warning("AI-Hints: discarding corrupt reasoning block containing U+FFFD replacement characters.")
+            elif candidate.get("hints") or candidate.get("options") or candidate.get("distractors") or candidate.get("correct_answer"):
                 return candidate
+        # A corrupt primary parse is discarded; fall back to reasoning blocks
+        # and, if none are clean/usable, return an empty result so callers treat
+        # the generation as "no parseable hints/options" and retry another model.
+        if self._result_is_corrupt(parsed):
+            return {"hints": [], "options": []}
         return parsed
     def _finalize_result(self, result: Dict[str, Any], back: str, hints_enabled: bool, options_enabled: bool, is_test: bool = False) -> Dict[str, Any]:
         """Normalizes the LLM response and strips content per the master switch.

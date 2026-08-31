@@ -43,7 +43,6 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from anki.errors import NotFoundError
 from addon.card_parser import CardParser
 from addon import reviewer_hooks
 from addon.reviewer_hooks import (
@@ -155,7 +154,7 @@ class GetCardFromCollectionTests(unittest.TestCase):
         self.assertIs(_get_card_from_collection(123), mock_card)
 
     def test_deleted_card_returns_none(self):
-        with patch.object(self.mw.col, "get_card", side_effect=NotFoundError("No such card", None, None, None)):
+        with patch.object(self.mw.col, "get_card", side_effect=reviewer_hooks.NotFoundError("No such card", None, None, None)):
             self.assertIsNone(_get_card_from_collection(1787254061415))
 
     def test_missing_collection_returns_none(self):
@@ -176,6 +175,7 @@ class PregenDeletedCardTests(unittest.TestCase):
         self._original_config = self.mw.addonManager.getConfig.return_value
         self.mw.col = MagicMock()
         self.mw.reviewer = MagicMock()
+        self.mw.taskman.run_on_main.side_effect = None
         self.mw.addonManager.getConfig.return_value = {
             "auto_generate_new": True,
             "pre_generate_next": True,
@@ -202,7 +202,7 @@ class PregenDeletedCardTests(unittest.TestCase):
 
         def get_card_side_effect(cid):
             if cid == 555:
-                raise NotFoundError("No such card", None, None, None)
+                raise reviewer_hooks.NotFoundError("No such card", None, None, None)
             return next_card
 
         self.mw.reviewer.card.id = 111
@@ -231,7 +231,7 @@ class PregenDeletedCardTests(unittest.TestCase):
         self.mw.reviewer.card.id = 111
 
         with patch.object(self.mw.col.sched, "get_queued_cards", return_value=queued), \
-             patch.object(self.mw.col, "get_card", side_effect=NotFoundError("No such card", None, None, None)), \
+             patch.object(self.mw.col, "get_card", side_effect=reviewer_hooks.NotFoundError("No such card", None, None, None)), \
              patch.object(self.mw.taskman, "run_on_main", side_effect=lambda fn: fn()), \
              patch('addon.reviewer_hooks.generate_hints') as mock_generate, \
              patch('addon.reviewer_hooks.AIClient'), \

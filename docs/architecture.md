@@ -89,7 +89,7 @@ The longest file. Owns:
 ### `addon/batch_manager.py`
 
 - Persistent batch queue (`ai_hints_batch_state.json`).
-- **Watchdog** — releases a batch pass when a provider thread hangs after all queued cards have been dispatched so verification can requeue unfinished cards.
+- **Watchdog** — releases a batch pass when a provider thread lingers after all queued cards have been dispatched. Its 45s grace period is measured from the moment a thread becomes the lone survivor (not from pass start), so a normal "waiting for peers" thread is not mislabeled as hung. After release the pass waits a bounded window for still-in-flight requests to land (`_await_workers_settled`), and verification does not requeue cards whose request is still running — preventing duplicate (billed) generations.
 - **Multithreaded workers** — `multithread_providers` (default ON) gives each provider worker its own `AIClient`; per-worker `AIClient` is mandatory.
 - **Per-deck fast-scan cursor** — `deck_last_scan_nid` is a `deck_name -> max note id` cursor advanced only after a full, eligible pass (no cards dropped to the safety limit and not a "Selected Cards" selection). New note ids are resolved in Python and queried via the valid `nid:1,2,3` comma-list form because Anki's `nid:>` / `nid:1-5` syntax is rejected on 26.x.
 - **Linger / rate-limit integration** — uses the same `_mark_combo_failed` rules, but uses `is_batch = True` so the longer `batch_request_timeout` base budget is honored and per-model/per-provider overrides only extend, never shrink.
@@ -159,7 +159,7 @@ This means every mixin method shares the same `self` (including `self.config`, `
 | `tab_providers.py` | AI Providers | API keys, Fetch / Fetch All, per-provider model + fallback list, Local provider, global Advanced Global Fallback Priority. |
 | `tab_advanced.py` | Advanced | Per-deck scanning controls, additional system instructions, raw JSON editor, internal state JSON. |
 | `tab_shortcuts.py` | Shortcuts | Keyboard shortcut bindings. |
-| `tab_batch.py` | Batch | Batch tab — start/pause/resume queue, per-deck source, force-full-scan checkbox, multithread toggle, batch logs, batch status table, per-job progress. |
+| `tab_batch.py` | Batch | Batch tab — initiate queue, dedicated pause/resume toggle, per-deck source, force-full-scan checkbox, multithread toggle, batch logs, batch status table, per-job progress. |
 | `tab_mobile.py` | Mobile | One-click mobile install/remove, mobile config (auto-show, font size, emojis, extra buttons), test card. |
 | `tab_support.py` | Support | About / donation links. |
 | `tab_logs.py` | Logs | Live log viewer — streamed from `ai_hints.log` in a background thread; Level + Source + free-text filters; matched / total line counts; Clear Log. |

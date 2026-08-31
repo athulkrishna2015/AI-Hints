@@ -40,7 +40,7 @@ sys.modules["aqt.utils"] = utils_mod
 pkg = types.ModuleType("addon")
 pkg.__path__ = [os.path.join(PROJECT_ROOT, "addon")]
 pkg.__package__ = "addon"
-saved = {k: sys.modules.get(k) for k in ("addon",)}
+saved = {k: sys.modules.get(k) for k in list(sys.modules) if k == "addon" or k.startswith("addon.")}
 for k in list(sys.modules):
     if k.startswith("addon."):
         del sys.modules[k]
@@ -166,6 +166,9 @@ assert dlg.get_thinking_levels()["model-005"] == "high"
 
 print("ALL LAZY-FALLBACK CHECKS PASSED")
 
+for k in list(sys.modules):
+    if k == "addon" or k.startswith("addon."):
+        del sys.modules[k]
 for k, v in saved.items():
     if v is not None:
         sys.modules[k] = v

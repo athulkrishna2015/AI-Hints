@@ -76,6 +76,11 @@ class TestPregeneration(unittest.TestCase):
         self.mock_mw = reviewer_hooks.mw
         self.mock_mw.col = MagicMock()
         self.mock_mw.reviewer = MagicMock()
+        # A prior suite may have set a synchronous taskman.run_on_main side
+        # effect on the shared aqt.mw mock; that would run on_done inline and
+        # discard the card from _generating_card_ids before our assertions.
+        # Reset it so generation callbacks are no-ops (deterministic isolation).
+        self.mock_mw.taskman.run_on_main.side_effect = None
         
         # Mock config
         self.config = {

@@ -33,9 +33,6 @@ for cls in classes:
 
 from aqt import mw
 
-# Mock ADDON_PACKAGE
-sys.modules['addon.logger'] = MagicMock()
-
 # Now import the target module
 from addon.reviewer_hooks import on_state_shortcuts_will_change
 

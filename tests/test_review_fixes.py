@@ -284,9 +284,8 @@ class TestLowJsEscaping(unittest.TestCase):
         web.eval.side_effect = lambda s: captured.setdefault("js", s)
         mw_mock = MagicMock()
         mw_mock.reviewer.web = web
-        # _safe_web_eval consults sip.isdeleted; force "not deleted"
-        sys.modules["aqt"].qt.sip.isdeleted.return_value = False
-        with patch.object(reviewer_hooks, "mw", mw_mock):
+        with patch.object(reviewer_hooks, "_qt_object_is_deleted", return_value=False), \
+             patch.object(reviewer_hooks, "mw", mw_mock):
             reviewer_hooks.trigger_js_click('Op"); alert(1); //', "🎯")
         js = captured["js"]
         self.assertIn('\\");', js, "needle must be json.dumps-escaped into the script")

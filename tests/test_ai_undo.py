@@ -37,8 +37,6 @@ for cls in ('QDialog', 'QWidget', 'QVBoxLayout', 'QHBoxLayout', 'QLabel',
     setattr(aqt.qt, cls, MagicMock)
 aqt.mw.addonManager.getConfig.return_value = {}
 
-sys.modules['addon.logger'] = MagicMock()
-
 from addon.reviewer_hooks import (  # noqa: E402
     _capture_ai_snapshot, _apply_restore_to_fields,
     _push_ai_undo, _pop_ai_undo_for_card, _ai_undo_stack, MAX_AI_UNDO_STACK,

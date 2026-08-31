@@ -234,10 +234,11 @@ Two bindings are independent of the modifier scheme above:
 
 ### Running & Pending Batches
 
-- **🚀 Initiate Queue** — start/pause/resume the batch.
+- **🚀 Initiate Queue** — start a batch. Can be clicked anytime: while a queue is running or paused it appends another batch to the job list (processed in order after the current work).
+- **⏸️ Pause Queue / ▶️ Resume Queue** — shown while a local queue is running; toggles pause without losing queued cards.
 - **🛑 Stop & Discard Queue** — stop and clear.
 - **🔄 Refresh Status** — refresh the view (auto-refreshes every 5s).
-- Live status log with clickable card links, discard buttons, and job reordering.
+- Live status log with clickable card links, discard buttons, and job reordering. The Active Concurrent Threads list shows how long each in-flight request has been running (e.g. `Processing [Card 1234] (1m 20s)`), so a slow provider call is visibly alive instead of looking stuck.
 
 ---
 
