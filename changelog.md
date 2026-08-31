@@ -2,7 +2,7 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
-## Unreleased
+## 7.1.1 (2026-08-31)
 - **Batch Watchdog Grace Fix + No-Duplicate Requeue**: The local sequential queue watchdog now measures its grace period from the moment a single worker becomes the lone survivor (instead of a deadline anchored to pass start, which lapsed during any normal run and mislabeled benign "Waiting for peers" threads as hung — see the `Local Queue watchdog ... lingered idle` log). A released mid-request thread is given a bounded window to land its result before the Verification Pass, and cards still in flight are no longer requeued, preventing duplicate (billed) generations and phantom error counts. The watchdog log now distinguishes a genuinely busy request (`still busy with an empty queue`) from an idle waiter (`lingered idle with an empty queue`).
 - **Batch Status Shows Request Elapsed Time**: The batch dialog's Active Concurrent Threads list now shows how long each in-flight request has been running (e.g. `Processing [Card 1788091538494] (1m 20s)`), so a slow provider call is visibly alive instead of looking stuck.
 - **Separate Initiate and Pause Buttons**: The batch tab's **🚀 Initiate Queue** and **⏸️ Pause/▶️ Resume** are now independent controls. Initiate stays enabled while a queue is running or paused and appends the new batch to the job list (processed in order), while Pause/Resume is a dedicated button shown only while a local queue is active.
