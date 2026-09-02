@@ -58,7 +58,16 @@ def addon_data_dir() -> str:
     Lives in the active PROFILE folder so it survives addon updates (files in
     the addon folder are wiped on every update). Falls back to the addon
     directory when no Anki profile is available (tests, headless import).
+
+    Tests can redirect every state file to a throwaway directory by setting
+    ``AIHINTS_DATA_DIR``; this keeps the live on-disk blacklist/caches out of
+    the test run and survives module reloads (it is read at call time).
     """
+    override = os.environ.get("AIHINTS_DATA_DIR")
+    if override:
+        d = os.path.join(override, "ai_hints_bin")
+        os.makedirs(d, exist_ok=True)
+        return d
     try:
         from aqt import mw
         if (

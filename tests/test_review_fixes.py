@@ -18,6 +18,9 @@ from unittest.mock import MagicMock, patch
 sys.dont_write_bytecode = True
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from blacklist_helpers import isolate_blacklist
 
 
 def _install_aqt_mocks():
@@ -87,6 +90,7 @@ class TestH4RateLimitStreak(unittest.TestCase):
     """H4: a 429 must advance the streak exactly once per failure."""
 
     def setUp(self):
+        isolate_blacklist(self)
         RATE_LIMIT_STREAK.clear()
         self.client = AIClient({"model_cooldown_minutes": 10})
 
@@ -252,7 +256,12 @@ class TestM11ProfileDataMigration(unittest.TestCase):
 
         try:
             with patch.dict(sys.modules, {"aqt": MagicMock(mw=FakeAnkiMW())}):
-                new_path = config_io.resolve_data_file(fname)
+                saved_aihints = os.environ.pop("AIHINTS_DATA_DIR", None)
+                try:
+                    new_path = config_io.resolve_data_file(fname)
+                finally:
+                    if saved_aihints is not None:
+                        os.environ["AIHINTS_DATA_DIR"] = saved_aihints
             self.assertEqual(os.path.basename(os.path.dirname(new_path)), "ai_hints_bin")
             self.assertEqual(os.path.dirname(os.path.dirname(new_path)), tmp_profile)
             self.assertTrue(os.path.exists(new_path))

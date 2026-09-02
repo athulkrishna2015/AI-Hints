@@ -21,6 +21,13 @@ sys.dont_write_bytecode = True
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+# Redirect every mutable state file (blacklist, caches) to a dedicated test
+# folder so the live addon/profile data dir is never touched by the suite.
+os.environ.setdefault(
+    "AIHINTS_DATA_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), ".aihints_data"),
+)
+
 # ---- Stub `aqt` while keeping real PyQt6 for aqt.qt -----------------------
 from PyQt6 import QtCore, QtGui, QtWidgets
 
@@ -48,6 +55,14 @@ sys.modules["addon"] = pkg
 
 from addon.config_ui.tab_providers import FallbackOrderDialog  # noqa: E402
 from addon.config_ui.widgets import CustomProviderDialog  # noqa: E402
+
+import addon.ai_client as _ai_client
+import shutil as _shutil
+import tempfile as _tempfile
+_ai_client._bl_tmpdir = _tempfile.mkdtemp(prefix="aihints-bl-")
+_ai_client.BLACKLIST_FILE = os.path.join(_ai_client._bl_tmpdir, "blacklist.json")
+_ai_client._blacklist_path_resolved = True
+_ai_client._BLACKLIST_LOADED = False
 
 Qt = qt_mod.Qt  # noqa: E402
 
@@ -172,3 +187,5 @@ for k in list(sys.modules):
 for k, v in saved.items():
     if v is not None:
         sys.modules[k] = v
+if hasattr(_ai_client, "_bl_tmpdir"):
+    _shutil.rmtree(_ai_client._bl_tmpdir, ignore_errors=True)

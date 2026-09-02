@@ -21,6 +21,7 @@ from unittest.mock import MagicMock, patch
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Neutralize logger references before importing the addon.
 mock_logger = MagicMock()
@@ -28,6 +29,7 @@ sys.modules["logger"] = mock_logger
 sys.modules[".logger"] = mock_logger
 
 from addon.ai_client import AIClient
+from blacklist_helpers import isolate_blacklist
 
 MALAYALAM_HINTS = [
     "ക്ഷതം എന്ന വാക്കിന്റെ അർത്ഥം മുറിവ് എന്നാണ്",
@@ -66,6 +68,7 @@ def _completion(content):
 
 class OllamaUnicodeTests(unittest.TestCase):
     def setUp(self):
+        isolate_blacklist(self)
         self.client = AIClient(_config())
         self.client._on_combo_success = MagicMock()
         self.client._mark_combo_failed = MagicMock()

@@ -25,9 +25,11 @@ from unittest.mock import patch
 sys.dont_write_bytecode = True
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from addon import ai_client as ai_mod
 from addon.ai_client import AIClient, _LingerPool, state
+from blacklist_helpers import isolate_blacklist
 
 GOOD = {"hints": ["h1", "h2", "h3"], "options": ["opt1", "opt2", "opt3", "opt4"], "correct_answer": "opt1"}
 
@@ -78,6 +80,7 @@ BOOM = ValueError("generic provider error")
 
 class LingerOnTimeoutTests(unittest.TestCase):
     def setUp(self):
+        isolate_blacklist(self)
         state.GLOBAL_STOP = False
         # Never probe the real network during these tests, and pin the shared
         # network state to online: the background monitor thread may otherwise
