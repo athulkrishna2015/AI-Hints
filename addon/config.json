@@ -161,6 +161,7 @@
   "thinking_levels": {},
   "model_timeouts": {},
   "model_cooldown_minutes": 10,
+  "rate_limit_backoff_seconds": 2,
   "request_timeout": 60,
   "pregen_request_timeout": 120,
   "linger_on_timeout": true,

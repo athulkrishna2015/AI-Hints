@@ -57,6 +57,19 @@ class AdvancedTabMixin:
         cooldown_row.addStretch()
         blacklist_layout.addLayout(cooldown_row)
         
+        # Inter-key backoff on rate limit
+        backoff_row = QHBoxLayout()
+        backoff_row.addWidget(QLabel("Key Retry Delay after 429 (seconds):"))
+        self.backoff_spin = QDoubleSpinBox()
+        self.backoff_spin.setRange(0, 60)
+        self.backoff_spin.setDecimals(1)
+        self.backoff_spin.setSingleStep(0.5)
+        self.backoff_spin.setValue(2.0)
+        self.backoff_spin.setToolTip("Time to pause before trying the next API key after a rate-limit (429) response. A small delay prevents a rapid burst that can cascade into rate limits across all keys.")
+        backoff_row.addWidget(self.backoff_spin)
+        backoff_row.addStretch()
+        blacklist_layout.addLayout(backoff_row)
+        
         # Request Timeout setting
         timeout_row = QHBoxLayout()
         timeout_row.addWidget(QLabel("API Request Timeout (seconds):"))

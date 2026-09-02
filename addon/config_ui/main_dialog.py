@@ -410,6 +410,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if hasattr(self, "cooldown_spin"):
             self.cooldown_spin.setValue(c.get("model_cooldown_minutes", 10))
             
+        if hasattr(self, "backoff_spin"):
+            self.backoff_spin.setValue(c.get("rate_limit_backoff_seconds", 2))
+            
         if hasattr(self, "timeout_spin"):
             self.timeout_spin.setValue(c.get("request_timeout", 60))
             
@@ -1234,6 +1237,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["test_question_back"] = self.test_answer_edit.text().strip()
             if hasattr(self, "cooldown_spin"):
                 new_config["model_cooldown_minutes"] = self.cooldown_spin.value()
+                
+            if hasattr(self, "backoff_spin"):
+                new_config["rate_limit_backoff_seconds"] = self.backoff_spin.value()
                 
             if hasattr(self, "timeout_spin"):
                 new_config["request_timeout"] = self.timeout_spin.value()

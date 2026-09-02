@@ -27,7 +27,8 @@ class TestKeyRotation(unittest.TestCase):
                 "anthropic": "claude-3-5-sonnet-latest",
                 "gemini": "gemini-flash-latest"
             },
-            "model_cooldown_minutes": 10
+            "model_cooldown_minutes": 10,
+            "rate_limit_backoff_seconds": 0
         }
         self.client = AIClient(self.config)
         RATE_LIMIT_STREAK.clear()

@@ -1157,6 +1157,8 @@ class AIClient:
                     if e.code in (408, 504):
                         model_timed_out = True
                         break
+                    if e.code == 429:
+                        time.sleep(max(0.0, self._rate_limit_backoff_seconds()))
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Custom Provider {provider_name}, model {model}): {e}")
                     if self._is_read_timeout_error(e):
@@ -1366,6 +1368,8 @@ class AIClient:
                     if e.code in (408, 504):
                         model_timed_out = True
                         break
+                    if e.code == 429:
+                        time.sleep(max(0.0, self._rate_limit_backoff_seconds()))
                 except Exception as e:
                     logger.error(f"AI-Hints Error ({provider}, model {model}): {e}")
                     if self._is_read_timeout_error(e):
@@ -1465,6 +1469,8 @@ class AIClient:
                     if e.code in (408, 504):
                         model_timed_out = True
                         break
+                    if e.code == 429:
+                        time.sleep(max(0.0, self._rate_limit_backoff_seconds()))
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Anthropic, model {model}): {e}")
                     if self._is_read_timeout_error(e):
@@ -1580,6 +1586,8 @@ class AIClient:
                     if e.code in (408, 504):
                         model_timed_out = True
                         break
+                    if e.code == 429:
+                        time.sleep(max(0.0, self._rate_limit_backoff_seconds()))
                 except Exception as e:
                     logger.error(f"AI-Hints Error (Gemini, model {model}): {e}")
                     if self._is_read_timeout_error(e):
@@ -2222,6 +2230,12 @@ class AIClient:
             return float(self.config.get("model_cooldown_minutes", 10) or 10) * 60
         except (TypeError, ValueError):
             return 10 * 60
+
+    def _rate_limit_backoff_seconds(self) -> float:
+        try:
+            return float(self.config.get("rate_limit_backoff_seconds", 2) or 0)
+        except (TypeError, ValueError):
+            return 2
 
     def _save_blacklist(self):
         """Persists the FAILED_COMBOS_CACHE and RATE_LIMIT_STREAK to blacklist.json.
