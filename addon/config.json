@@ -160,6 +160,8 @@
   "disabled_fallback_models": {},
   "thinking_levels": {},
   "model_timeouts": {},
+  "global_thinking_levels": {},
+  "global_model_timeouts": {},
   "model_cooldown_minutes": 10,
   "rate_limit_backoff_seconds": 2,
   "request_timeout": 60,

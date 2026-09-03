@@ -1,10 +1,12 @@
 import unittest
 import os
 import sys
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from addon import ai_client as ai_mod
 from addon.ai_client import AIClient
 from blacklist_helpers import isolate_blacklist
 
@@ -12,6 +14,12 @@ from blacklist_helpers import isolate_blacklist
 class TestModelFiltering(unittest.TestCase):
     def setUp(self):
         isolate_blacklist(self)
+        self._net_patch = patch.object(ai_mod, "_check_network_online", lambda: True)
+        self._net_patch.start()
+        self._netstate_patch = patch.object(ai_mod, "_NETWORK_STATE", {"online": True})
+        self._netstate_patch.start()
+        self.addCleanup(self._net_patch.stop)
+        self.addCleanup(self._netstate_patch.stop)
         self.client = AIClient({}, is_pregen=False, is_batch=False)
 
     def test_non_chat_detection(self):
@@ -99,6 +107,15 @@ class TestOverrideModelRestrictsTest(unittest.TestCase):
     """Regression: passing override_model to generate_options must test ONLY that
     model, not re-run the provider's whole enabled fallback chain (which would
     make a "Test All" loop appear to only ever check the active model)."""
+
+    def setUp(self):
+        isolate_blacklist(self)
+        self._net_patch = patch.object(ai_mod, "_check_network_online", lambda: True)
+        self._net_patch.start()
+        self._netstate_patch = patch.object(ai_mod, "_NETWORK_STATE", {"online": True})
+        self._netstate_patch.start()
+        self.addCleanup(self._net_patch.stop)
+        self.addCleanup(self._netstate_patch.stop)
 
     def test_generate_options_with_override_model_tries_only_that_model(self):
         from unittest.mock import patch

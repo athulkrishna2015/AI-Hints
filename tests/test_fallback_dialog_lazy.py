@@ -173,9 +173,11 @@ dlg.filter_models("model-39")
 hidden = sum(1 for i in range(400) if dlg.table.isRowHidden(i))
 assert hidden == 400 - 10, hidden  # model-390..399
 
-# Rank checked first rebuilds the table without losing data.
+# Unchecking moves the row to Disabled; header-click sorting rebuilds the
+# table without losing data.
 dlg.table.item(50, 0).setCheckState(Qt.CheckState.Unchecked)
-dlg.rank_selected_first()
+assert dlg.disabled_table.rowCount() == 1
+dlg._on_header_clicked(0)
 assert dlg.table.item(0, 0).data(Qt.ItemDataRole.UserRole) != ""
 assert dlg.get_thinking_levels()["model-005"] == "high"
 

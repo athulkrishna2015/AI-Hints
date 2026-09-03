@@ -221,5 +221,70 @@ class TestProviderModelFallbacks(unittest.TestCase):
         self.assertEqual(client._candidate_providers("mycustom"), ["mycustom"])
 
 
+class TestGlobalModelOverrides(unittest.TestCase):
+
+    def setUp(self):
+        isolate_blacklist(self)
+        FAILED_COMBOS_CACHE.clear()
+        RATE_LIMIT_STREAK.clear()
+
+    def _client(self, **extra):
+        cfg = {
+            "api_keys": {"myprov": "k"},
+            "custom_providers": {"myprov": {"url": "http://custom.api/v1", "model": "m1"}},
+            "thinking_levels": {"myprov": {"m1": "off"}},
+            "model_timeouts": {"myprov": {"m1": 0}},
+            "model_cooldown_minutes": 10,
+        }
+        cfg.update(extra)
+        return AIClient(cfg)
+
+    def test_overlay_applies_and_restores(self):
+        client = self._client(
+            global_thinking_levels={"myprov": {"m1": "high"}},
+            global_model_timeouts={"myprov": {"m1": 120}},
+        )
+        seen = {}
+
+        def spy(client_self, provider, system_prompt, prompt, override_model=""):
+            seen["think"] = (client.config.get("thinking_levels") or {}).get("myprov", {}).get("m1")
+            seen["timeout"] = (client.config.get("model_timeouts") or {}).get("myprov", {}).get("m1")
+            return {"hints": ["h1"], "options": ["a"], "correct_answer": "a"}
+
+        with patch.object(AIClient, "_call_provider", spy):
+            with client._global_model_overrides("myprov", "m1"):
+                client._call_provider("myprov", "sys", "prompt", override_model="m1")
+        self.assertEqual(seen["think"], "high")
+        self.assertEqual(seen["timeout"], 120)
+        self.assertEqual(client.config["thinking_levels"]["myprov"]["m1"], "off")
+        self.assertEqual(client.config["model_timeouts"]["myprov"]["m1"], 0)
+
+    def test_no_override_leaves_config_untouched(self):
+        client = self._client()
+        before = {"thinking_levels": dict(client.config["thinking_levels"]),
+                  "model_timeouts": dict(client.config["model_timeouts"])}
+        with client._global_model_overrides("myprov", "m1"):
+            pass
+        self.assertEqual(client.config["thinking_levels"], before["thinking_levels"])
+        self.assertEqual(client.config["model_timeouts"], before["model_timeouts"])
+
+    def test_explicit_off_overrides_inherited_level(self):
+        client = self._client(
+            thinking_levels={"myprov": {"m1": "high"}},
+            global_thinking_levels={"myprov": {"m1": "off"}},
+        )
+        seen = {}
+
+        def spy2(client_self, provider, system_prompt, prompt, override_model=""):
+            seen["think"] = (client.config.get("thinking_levels") or {}).get("myprov", {}).get("m1")
+            return {"hints": ["h"], "options": ["a"], "correct_answer": "a"}
+
+        with patch.object(AIClient, "_call_provider", spy2):
+            with client._global_model_overrides("myprov", "m1"):
+                client._call_provider("myprov", "sys", "prompt", override_model="m1")
+        self.assertEqual(seen["think"], "off")
+        self.assertEqual(client.config["thinking_levels"]["myprov"]["m1"], "high")
+
+
 if __name__ == "__main__":
     unittest.main()

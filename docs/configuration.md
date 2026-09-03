@@ -95,7 +95,9 @@ Top row buttons:
 Global fallback controls:
 
 - **Enable Advanced Fallback Priority (Global List)** — use a global priority list instead of per-provider nested fallbacks.
-- **Advanced Fallback Priority...** — open the global priority dialog (drag & drop cross-provider ordering). Its enabled/disabled state is stored separately from the per-provider fallback lists.
+- **Advanced Fallback Priority...** — open the global priority dialog with two tables side by side in one window: **Enabled priority order** (rows actually tried, top to bottom) and **Disabled / available**. Unchecking moves a row to Disabled; checking moves it back to Enabled. Each table is a **Provider | Model | Thinking Level | Timeout (s) | Status** grid (click any column header to sort that list, click again to reverse) with its own ▲ Up / ▼ Down buttons. Each row carries its own thinking level and timeout, seeded from the per-provider values, which override the per-provider settings for that row at runtime. Newly fetched models land in Disabled.
+- **Group Same Models** (inside the dialog) — cluster rows for the same model together across providers (vendor prefixes, `:free` suffixes, case, and `-`/`.`/`_`/`@` punctuation ignored) so a model served by several providers can be ordered once; fallback still tries rows top to bottom.
+- **Sort** (inside the dialog) — alphabetically reorder rows by provider or by model name before fine-tuning priority.
 
 ### Per-Provider Rows
 
@@ -118,9 +120,10 @@ Each provider in your priority order has a row with:
 #### Fallback Priority Dialog (per provider)
 
 - Search field to filter models.
-- Table with **Model Name**, **Thinking Level** (`off`/`low`/`medium`/`high`), and **Timeout (s)** per model.
+- Two tables side by side in one window: **Enabled priority** (first row is the Active model) and **Disabled / available** — uncheck to disable (Active promotes the next row), check to re-enable; each list has its own ▲ Up / ▼ Down buttons and reorders independently.
+- Tables with **Model Name**, **Thinking Level** (`off`/`low`/`medium`/`high`), and **Timeout (s)** per model — click any header to sort by it (again to reverse).
 - Status markers: ⭐ active, 🆕 newly fetched (green), ⚠️ deprecated (red), ⚠️ no longer returned (amber). These markers are independent from the Advanced Global Fallback dialog.
-- Buttons: **Move Up / Move Down / Set Active**, **Remove** (Selected / Deprecated / No Longer Returned / both), **Test** (Checked / Row / All), **Rank Checked First**, **Fetch All**, **Restore Defaults**.
+- Buttons: **Move Up / Move Down / Set Active**, **Remove** (Selected / Deprecated / No Longer Returned / both), **Test** (Checked / Row / All), **Rank Checked First**, **Fetch All**, **Restore Defaults**. Tests linger like live generations: a timed-out model is retried in the background and a late result still counts. Every request logs its elapsed time (`request took Xs`).
   - **Move Up / Move Down** reorder the selected model(s). Multiple rows can be selected at once (Ctrl/Shift-click) and are moved as a group; the selection is preserved after the move and each row keeps its per-model thinking level, timeout, checkbox state, and status highlights.
 - Fetching models in this dialog preserves the current checked state for rows that already exist; newly fetched rows stay unchecked until you enable them.
 

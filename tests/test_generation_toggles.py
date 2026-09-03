@@ -2,7 +2,7 @@ import sys
 import os
 import json
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.dont_write_bytecode = True
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12,6 +12,7 @@ mock_logger = MagicMock()
 sys.modules["logger"] = mock_logger
 sys.modules[".logger"] = mock_logger
 
+from addon import ai_client as ai_mod
 from addon.ai_client import AIClient
 
 
@@ -23,6 +24,12 @@ class GenerationToggleTests(unittest.TestCase):
         self.back = "Paris. It is known as the City of Light."
         # Provider trace: records every call to _call_provider (network mocked out)
         self.calls = []
+        self._net_patch = patch.object(ai_mod, "_check_network_online", lambda: True)
+        self._net_patch.start()
+        self._netstate_patch = patch.object(ai_mod, "_NETWORK_STATE", {"online": True})
+        self._netstate_patch.start()
+        self.addCleanup(self._net_patch.stop)
+        self.addCleanup(self._netstate_patch.stop)
 
     def _make_client(self, **overrides):
         config = dict(self.config)

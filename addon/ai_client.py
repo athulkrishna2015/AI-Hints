@@ -1,3 +1,4 @@
+import contextlib
 import json
 import time
 import os
@@ -572,6 +573,39 @@ class AIClient:
         except Exception:
             return True
 
+    @contextlib.contextmanager
+    def _global_model_overrides(self, provider: str, model: str):
+        """Apply this global row's own thinking/timeout values for one call."""
+        restored = []
+        try:
+            pairs = (("global_thinking_levels", "thinking_levels"),
+                     ("global_model_timeouts", "model_timeouts"))
+            for global_key, live_key in pairs:
+                group = (self.config.get(global_key) or {}).get(provider, {}) or {}
+                if isinstance(group, dict) and group.get(model) not in (None, ""):
+                    live = self.config.setdefault(live_key, {})
+                    if not isinstance(live, dict):
+                        live = self.config[live_key] = {}
+                    prov = live.setdefault(provider, {})
+                    if not isinstance(prov, dict):
+                        prov = live[provider] = {}
+                    marker = object()
+                    restored.append((live_key, provider, model, prov.get(model, marker), marker))
+                    prov[model] = group[model]
+            yield
+        finally:
+            for live_key, prov_name, mod_name, old, marker in reversed(restored):
+                try:
+                    prov = (self.config.get(live_key) or {}).get(prov_name, {})
+                    if not isinstance(prov, dict):
+                        continue
+                    if old is marker:
+                        prov.pop(mod_name, None)
+                    else:
+                        prov[mod_name] = old
+                except Exception:
+                    pass
+
     def _linger_timeout(self) -> int:
         """Extended deadline for background (lingering) retry attempts.
 
@@ -740,7 +774,8 @@ class AIClient:
                     logger.info(f"AI-Hints: Calling {provider} with model: {model} (via global priority)")
                     self._active_linger = (linger_pool, gi)
                     try:
-                        result = self._call_provider(provider, system_prompt, prompt, override_model=model)
+                        with self._global_model_overrides(provider, model):
+                            result = self._call_provider(provider, system_prompt, prompt, override_model=model)
                     finally:
                         self._active_linger = None
                     if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
@@ -816,7 +851,7 @@ class AIClient:
             return {"hints": [], "options": []}
         
         last_exception = None
-        linger_pool = _LingerPool(self.config, self._linger_timeout(), system_prompt, prompt) if (self._linger_enabled() and not is_test) else None
+        linger_pool = _LingerPool(self.config, self._linger_timeout(), system_prompt, prompt) if self._linger_enabled() else None
         # Try providers in sequence
         for pi, provider in enumerate(all_potential):
             if state.GLOBAL_STOP:
@@ -1128,7 +1163,7 @@ class AIClient:
                     logger.debug(f"AI-Hints Custom {provider_name}/{model} request: {json.dumps(_compact_request_data(data))}")
                     _log_full_request(provider_name, model, data)
                     self._log_model_attempt(provider_name, model, models)
-                    result = self._post_json(url, data, headers)
+                    result = self._timed_post(url, data, headers, f"Custom {provider_name}/{model}")
                     content = self._extract_content(result)
                     logger.debug(f"AI-Hints Custom {provider_name}/{model} response: {content[:2000]}")
                     _log_full_response(provider_name, model, content)
@@ -1293,7 +1328,7 @@ class AIClient:
                                 logger.debug(f"AI-Hints {provider}/{local_model_name} request: {json.dumps(_compact_request_data(data))}")
                                 _log_full_request(provider, local_model_name, data)
                                 self._log_model_attempt(provider, local_model_name, local_models)
-                                result = self._post_json(url, data, headers)
+                                result = self._timed_post(url, data, headers, f"{provider}/{local_model_name}")
                                 content = self._extract_content(result)
                                 logger.debug(f"AI-Hints {provider}/{local_model_name} response: {content[:2000]}")
                                 _log_full_response(provider, local_model_name, content)
@@ -1342,7 +1377,7 @@ class AIClient:
                     logger.debug(f"AI-Hints {provider}/{model} request: {json.dumps(_compact_request_data(data))}")
                     _log_full_request(provider, model, data)
                     self._log_model_attempt(provider, model, models)
-                    result = self._post_json(url, data, headers)
+                    result = self._timed_post(url, data, headers, f"{provider}/{model}")
                     content = self._extract_content(result)
                     logger.debug(f"AI-Hints {provider}/{model} response: {content[:2000]}")
                     _log_full_response(provider, model, content)
@@ -1447,7 +1482,7 @@ class AIClient:
                 try:
                     self._log_model_attempt("anthropic", model, models)
                     _log_full_request("anthropic", model, data)
-                    result = self._post_json(url, data, headers)
+                    result = self._timed_post(url, data, headers, f"anthropic/{model}")
                     content = self._extract_content(result)
                     _log_full_response("anthropic", model, content)
                     parsed = self._parse_generation_result(result)
@@ -1567,7 +1602,7 @@ class AIClient:
                 try:
                     self._log_model_attempt("gemini", model, models)
                     _log_full_request("gemini", model, data)
-                    result = self._post_json(url, data, headers)
+                    result = self._timed_post(url, data, headers, f"gemini/{model}")
                     content = self._extract_content(result)
                     _log_full_response("gemini", model, content)
                     parsed = self._parse_generation_result(result)
@@ -1698,7 +1733,7 @@ class AIClient:
             headers["x-goog-api-key"] = api_key
             try:
                 _log_full_request("gemini", f"batch-{model}", payload)
-                response = self._post_json(url, payload, headers)
+                response = self._timed_post(url, payload, headers, f"gemini/batch-{model}")
                 _log_full_response("gemini", f"batch-{model}", json.dumps(response, ensure_ascii=False, default=str))
                 self._on_combo_success("gemini", model, api_key)
                 return response
@@ -2641,6 +2676,13 @@ class AIClient:
         req = urllib.request.Request(url, data=body, headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=self.timeout) as response:
             return json.loads(response.read().decode("utf-8"))
+
+    def _timed_post(self, url: str, data: Dict[str, Any], headers: Dict[str, str], label: str) -> Dict[str, Any]:
+        t0 = time.monotonic()
+        try:
+            return self._post_json(url, data, headers)
+        finally:
+            logger.info(f"AI-Hints: {label} request took {time.monotonic() - t0:.1f}s.")
 
     def _drop_none(self, value: Any) -> Any:
         if isinstance(value, dict):

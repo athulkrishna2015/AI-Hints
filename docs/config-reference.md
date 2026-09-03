@@ -59,6 +59,8 @@ Example:
 |-----|---------|---------|
 | `thinking_levels` | `{}` | Per-model thinking level (`off`/`low`/`medium`/`high`). |
 | `model_timeouts` | `{}` | Per-model request timeout overrides (seconds). |
+| `global_thinking_levels` | `{}` | Per-row thinking level for Advanced Global Fallback entries; overrides `thinking_levels` for that row at runtime (explicit `off` included). |
+| `global_model_timeouts` | `{}` | Per-row timeout for Advanced Global Fallback entries; overrides `model_timeouts` for that row at runtime. |
 | `provider_timeouts` | `{}` | Per-provider request timeout (0 = use global). |
 | `request_timeout` | `60` | Global active-review request timeout (seconds). |
 | `pregen_request_timeout` | `120` | Pre-generation request timeout (seconds). |

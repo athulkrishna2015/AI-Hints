@@ -373,6 +373,33 @@ class LingerOnTimeoutTests(unittest.TestCase):
             log_context.source = None
         self.assertEqual(res, {"hints": [], "options": []})
 
+    def test_n_model_test_timeout_is_lingered_and_rescued(self):
+        # Fallback-priority Test buttons run with log_context.source =
+        # "model_test". A foreground read timeout there must still spawn a
+        # lingering retry, and the late result must rescue the test instead of
+        # reporting a bare timeout.
+        from addon.logger import log_context
+        raw = {"candidates": [{"content": {"parts": [{"text": '{"hints": ["h1", "h2", "h3"], "options": ["a", "b", "c", "d"], "correct_answer": "a"}'}]}}]}
+        cfg = base_config(api_keys={"gemini": "k-g"})
+        client = AIClient(cfg)
+        log_context.source = "model_test"
+        try:
+            with patch.object(AIClient, "_post_json", side_effect=[TIMEOUT, raw]):
+                res = client.generate_options("Front", "Back", override_provider="gemini",
+                                              only_this_provider=True, override_model="m1")
+        finally:
+            log_context.source = None
+        self.assertTrue(res.get("hints"))
+
+    def test_o_timed_post_logs_elapsed(self):
+        client = AIClient(base_config())
+        with patch.object(AIClient, "_post_json", return_value={"ok": True}) as mock_post:
+            with patch.object(ai_mod, "logger") as mock_logger:
+                self.assertEqual(client._timed_post("http://x", {}, {}, "gemini/m1"), {"ok": True})
+        mock_post.assert_called_once()
+        infos = [str(c) for c in mock_logger.info.call_args_list]
+        self.assertTrue(any("gemini/m1" in s and "request took" in s for s in infos), infos)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
