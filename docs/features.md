@@ -41,7 +41,9 @@ A read timeout no longer throws the request away. The slow-but-alive request is 
 
 ## 🧾 Logs & Diagnostics
 
-The **Logs** tab shows real-time addon logs with **Level** (DEBUG/INFO/WARNING/ERROR) and **Source** filters — including **Lingering**, which isolates the background linger-on-timeout lines (`AI-Hints Linger: ...`). A free-text **Search** box narrows further, with match counting. **Debug logging** enables verbose `DEBUG`-level request/response output instantly (no restart needed), and **Clear on startup** keeps the current file fresh while retaining rotated backups. See [Storage → Log Files](storage.md#5-log-files-ai_hintslog) for paths and rotation.
+The **Logs** tab shows real-time addon logs with **Level** (DEBUG/INFO/WARNING/ERROR) and **Source** filters — including **Lingering**, which isolates the background linger-on-timeout lines (`AI-Hints Linger: ...`). A free-text **Search** box narrows further, with match counting. **Debug logging** enables verbose `DEBUG`-level request/response output instantly (no restart needed), and **Clear on startup** keeps the current file fresh while retaining rotated backups.
+
+A dedicated path row shows the canonical log file location and provides one-click **Copy Path**, **Open Log Folder**, **Refresh**, **Copy**, and **Clear Log** actions. See [Storage → Log Files](storage.md#5-log-files-ai_hintslog) for paths and rotation.
 
 ## 🎮 Interactive Review UI
 

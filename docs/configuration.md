@@ -95,7 +95,7 @@ Top row buttons:
 Global fallback controls:
 
 - **Enable Advanced Fallback Priority (Global List)** — use a global priority list instead of per-provider nested fallbacks.
-- **Advanced Fallback Priority...** — open the global priority dialog with two tables side by side behind a draggable splitter in one window: **Enabled priority order** (rows actually tried, top to bottom) and **Disabled / available**. Unchecking moves a row to Disabled; checking moves it back to Enabled. Each table is a **Provider | Model | Thinking Level | Timeout (s) | Status** grid (click any column header to sort that list, click again to reverse) with its own ▲ Up / ▼ Down buttons. Each row carries its own thinking level and timeout, seeded from the per-provider values, which override the per-provider settings for that row at runtime. Newly fetched models land in Disabled.
+- **Advanced Fallback Priority...** — open the global priority dialog (non-modal — you can keep it open alongside the main config window) with two tables side by side behind a draggable splitter: **Enabled priority order** (rows actually tried, top to bottom) and **Disabled / available**. Unchecking moves a row to Disabled; checking moves it back to Enabled. Each table is a **Provider | Model | Thinking Level | Timeout (s) | Status** grid (click any column header to sort that list, click again to reverse) with its own ▲ Up / ▼ Down / ⏫ Top / ⏬ Bottom buttons and drag-and-drop reordering (drag selected rows to the desired position; multi-row selections move as a group). Each row carries its own thinking level and timeout, seeded from the per-provider values, which override the per-provider settings for that row at runtime. Newly fetched models land in Disabled.
 - **Group Same Models** (inside the dialog) — cluster rows for the same model together across providers (vendor prefixes, `:free` suffixes, case, and `-`/`.`/`_`/`@` punctuation ignored) so a model served by several providers can be ordered once; fallback still tries rows top to bottom.
 - **Sort** (inside the dialog) — alphabetically reorder rows by provider or by model name before fine-tuning priority.
 
@@ -120,11 +120,11 @@ Each provider in your priority order has a row with:
 #### Fallback Priority Dialog (per provider)
 
 - Search field to filter models.
-- Two tables side by side behind a draggable splitter in one window: **Enabled priority** (first row is the Active model) and **Disabled / available** — uncheck to disable (Active promotes the next row), check to re-enable; each list has its own ▲ Up / ▼ Down buttons and reorders independently.
+- Two tables side by side behind a draggable splitter in one window: **Enabled priority** (first row is the Active model) and **Disabled / available** — uncheck to disable (Active promotes the next row), check to re-enable; each list has its own ▲ Up / ▼ Down / ⏫ Top / ⏬ Bottom buttons and supports drag-and-drop reordering (drag selected rows to the desired position; multi-row selections move together).
 - Tables with **Model Name**, **Thinking Level** (`off`/`low`/`medium`/`high`), and **Timeout (s)** per model — click any header to sort by it (again to reverse), drag any header boundary to resize the column.
 - Status markers: ⭐ active, 🆕 newly fetched (green), ⚠️ deprecated (red), ⚠️ no longer returned (amber). These markers are independent from the Advanced Global Fallback dialog.
 - Buttons: **Move Up / Move Down / Set Active**, **Remove** (Selected / Deprecated / No Longer Returned / both), **Test** (Checked / Row / All), **Rank Checked First**, **Fetch All**, **Restore Defaults**. Tests linger like live generations: a timed-out model is retried in the background and a late result still counts. Every request logs its elapsed time (`request took Xs`).
-  - **Move Up / Move Down** reorder the selected model(s). Multiple rows can be selected at once (Ctrl/Shift-click) and are moved as a group; the selection is preserved after the move and each row keeps its per-model thinking level, timeout, checkbox state, and status highlights.
+  - **Move Up / Move Down / Top / Bottom** reorder the selected model(s). Multiple rows can be selected at once (Ctrl/Shift-click) and are moved as a group; the selection is preserved after the move and each row keeps its per-model thinking level, timeout, checkbox state, and status highlights. Rows can also be dragged to any position within the same list.
 - Fetching models in this dialog preserves the current checked state for rows that already exist; newly fetched rows stay unchecked until you enable them.
 
 ### Model Testing Prompt Settings
@@ -278,14 +278,20 @@ See [Mobile Support](mobile-setup.md) for full instructions.
 - **Source** — ALL / Batch Processing / Pre-generation / Model Testing / Lingering / Standard Addon. **Lingering** isolates the `AI-Hints Linger: ...` background-timeout lines (late-arriving results, higher-priority race wins, total-failure rescue).
 - **Search** — text filter (debounced).
 - Match count label.
-
-### Controls
-
 - **Clear on startup** — clear the log file every Anki start.
 - **Debug logging** — enable verbose DEBUG output immediately (no restart needed).
-- **Refresh** — manually refresh the view (auto-refreshes every 1s while active).
-- **Copy** — copy the log to clipboard.
-- **Clear Log** — empty the log file.
+
+### Log file path row
+
+Directly below the filter bar is a read-only path field showing the canonical log file location (`<profile>/ai_hints_bin/ai_hints.log`). All actions on that row operate on this file:
+
+| Button | What it does |
+|--------|--------------|
+| **Copy Path** | Copy the full log file path to the clipboard. |
+| **Open Log Folder** | Open the `ai_hints_bin` directory in your system file manager. |
+| **Refresh** | Manually refresh the log view (auto-refreshes every 1 s while the tab is active). |
+| **Copy** | Copy the current (filtered) log content to the clipboard. |
+| **Clear Log** | Empty the current log file (rotated backups are not affected). |
 
 ### Log view
 
