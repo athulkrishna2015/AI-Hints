@@ -2779,24 +2779,29 @@ class ProvidersTabMixin:
             tooltip(f"Ignoring {orphaned} row(s) for deleted providers (dropped on OK).")
 
         dlg = GlobalFallbackOrderDialog(self, current_list)
-        dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
+        dlg.setWindowModality(Qt.WindowModality.NonModal)
         self.global_fallback_dlg = dlg
-        try:
-            if dlg.exec():
-                # The full list must keep disabled rows too (they live in the
-                # Disabled table now); the separate disabled map marks which
-                # are off, and never touches per-provider fallback state.
-                self.disabled_global_model_priority_data = dlg.get_disabled_list()
-                self.global_model_priority_data = dlg.get_ordered_list() + self.disabled_global_model_priority_data
+        def save_global_fallback():
+            # The full list must keep disabled rows too (they live in the
+            # Disabled table now); the separate disabled map marks which
+            # are off, and never touches per-provider fallback state.
+            self.disabled_global_model_priority_data = dlg.get_disabled_list()
+            self.global_model_priority_data = dlg.get_ordered_list() + self.disabled_global_model_priority_data
 
-                # This row's own thinking/timeout values live in the global
-                # scope and override the per-provider ones at runtime.
-                self.global_thinking_levels_data = dlg.get_global_thinking_levels()
-                self.global_model_timeouts_data = dlg.get_global_model_timeouts()
+            # This row's own thinking/timeout values live in the global
+            # scope and override the per-provider ones at runtime.
+            self.global_thinking_levels_data = dlg.get_global_thinking_levels()
+            self.global_model_timeouts_data = dlg.get_global_model_timeouts()
+            tooltip("Advanced fallback priority and disabled states updated. Click Save to apply.")
 
-                tooltip("Advanced fallback priority and disabled states updated. Click Save to apply.")
-        finally:
+        def clear_global_fallback(*args):
             self.global_fallback_dlg = None
+
+        dlg.accepted.connect(save_global_fallback)
+        dlg.finished.connect(clear_global_fallback)
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     def _create_providers_tab(self):
         """Constructs the Tab 2: AI Providers UI"""

@@ -469,7 +469,6 @@ class GlobalDialogTableTests(unittest.TestCase):
 
     def test_ok_button_keeps_disabled(self):
         from PyQt6.QtCore import Qt
-        from types import SimpleNamespace
         from unittest.mock import patch
 
         owner = QtWidgets.QWidget()
@@ -478,15 +477,35 @@ class GlobalDialogTableTests(unittest.TestCase):
         owner._known_global_providers = lambda: {"a", "b"}
         real_dlg = GlobalFallbackOrderDialog(owner, [("a", "m1"), ("b", "m2")])
         real_dlg.enabled_table.item(0, 0).setCheckState(Qt.CheckState.Unchecked)
-        fake = SimpleNamespace(
-            setWindowModality=lambda *a: None,
-            exec=lambda: True,
-            get_ordered_list=real_dlg.get_ordered_list,
-            get_disabled_list=real_dlg.get_disabled_list,
-            get_global_thinking_levels=real_dlg.get_global_thinking_levels,
-            get_global_model_timeouts=real_dlg.get_global_model_timeouts,
-        )
-        with patch.object(_TP_MOD, "GlobalFallbackOrderDialog", return_value=fake):
+        class Signal:
+            def connect(self, callback):
+                self.callback = callback
+
+        class FakeDialog:
+            def __init__(self):
+                self.accepted = Signal()
+                self.finished = Signal()
+
+            def setWindowModality(self, *args):
+                pass
+
+            def show(self):
+                self.accepted.callback()
+
+            def raise_(self):
+                pass
+
+            def activateWindow(self):
+                pass
+
+            get_ordered_list = real_dlg.get_ordered_list
+            get_disabled_list = real_dlg.get_disabled_list
+            get_global_thinking_levels = real_dlg.get_global_thinking_levels
+            get_global_model_timeouts = real_dlg.get_global_model_timeouts
+
+        fake = FakeDialog()
+        with patch.object(_TP_MOD, "GlobalFallbackOrderDialog", return_value=fake), \
+             patch.object(_TP_MOD, "tooltip"):
             ProvidersTabMixin.on_advanced_fallback_clicked(owner)
         self.assertIn(("a", "m1"), [tuple(d) for d in owner.global_model_priority_data])
         self.assertIn(("a", "m1"), [tuple(d) for d in owner.disabled_global_model_priority_data])
