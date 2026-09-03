@@ -163,7 +163,13 @@ class FallbackPriorityDialog(QDialog):
         if index.isValid() and pos.y() >= table.visualRect(index).center().y():
             boundary += 1
         selected = set(rows)
-        keys = [self._row_key(table, row) for row in range(table.rowCount())]
+        keys = []
+        for row in range(table.rowCount()):
+            key = self._row_key(table, row)
+            if not key or (isinstance(key, (tuple, list)) and len(key) != 2):
+                event.ignore()
+                return
+            keys.append(key)
         moving = [keys[row] for row in rows]
         rest = [key for row, key in enumerate(keys) if row not in selected]
         insert_at = sum(1 for row in range(boundary) if row not in selected)
@@ -1793,7 +1799,10 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         self._move_row_to_other_table(table, row, checked)
 
     def _move_row_to_other_table(self, table, row, checked):
-        provider, model = self._row_pair(table, row)
+        pair = table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        if not isinstance(pair, (tuple, list)) or len(pair) != 2:
+            return
+        provider, model = pair
         self._moving_rows = True
         try:
             self._harvest_widgets()
