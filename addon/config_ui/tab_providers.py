@@ -141,6 +141,14 @@ class _FallbackTable(QTableWidget):
             # Let QTableWidget update its insertion-line painting state. The
             # drop event remains custom so Qt never moves or deletes cells.
             super().dragMoveEvent(event)
+            margin = 48
+            y = event.position().toPoint().y()
+            height = self.viewport().height()
+            scrollbar = self.verticalScrollBar()
+            if y < margin:
+                scrollbar.setValue(scrollbar.value() - max(1, margin - y) // 4)
+            elif y > height - margin:
+                scrollbar.setValue(scrollbar.value() + max(1, y - (height - margin)) // 4)
             event.acceptProposedAction()
         else:
             event.ignore()
