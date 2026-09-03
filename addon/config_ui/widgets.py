@@ -587,12 +587,14 @@ class ProviderRowWidget(QWidget):
                 if new_active and hasattr(self, "edit"):
                     self.edit.setCurrentText(new_active)
                     
-                new_fallbacks = self.fallback_dialog.get_ordered_list()
+                # The full list must keep disabled rows too (they live in the
+                # Disabled table now); the disabled map marks which are off.
+                new_disabled = self.fallback_dialog.get_disabled_list()
+                new_fallbacks = self.fallback_dialog.get_ordered_list() + new_disabled
                 if hasattr(self, "parent_dialog") and hasattr(self.parent_dialog, "model_fallbacks_data"):
                     self.parent_dialog.model_fallbacks_data[self.provider] = new_fallbacks
-                
+
                 # Save disabled fallback models
-                new_disabled = self.fallback_dialog.get_disabled_list()
                 if hasattr(self, "parent_dialog") and hasattr(self.parent_dialog, "disabled_fallback_models_data"):
                     self.parent_dialog.disabled_fallback_models_data[self.provider] = new_disabled
                 
