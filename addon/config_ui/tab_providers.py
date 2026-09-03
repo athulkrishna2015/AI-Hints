@@ -114,11 +114,41 @@ def provider_enabled_pairs(main_dialog):
 
 
 class _FallbackTable(QTableWidget):
+    MIME_TYPE = "application/x-ai-hints-fallback-rows"
+
     def __init__(self, drop_handler, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._drop_handler = drop_handler
 
+    def startDrag(self, supported_actions):
+        if not self.selectionModel().selectedRows():
+            return
+        drag = QDrag(self)
+        mime = QMimeData()
+        mime.setData(self.MIME_TYPE, QByteArray(b"ai-hints-fallback-rows"))
+        drag.setMimeData(mime)
+        drag.exec(Qt.DropAction.MoveAction)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(self.MIME_TYPE):
+            super().dragEnterEvent(event)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat(self.MIME_TYPE):
+            # Let QTableWidget update its insertion-line painting state. The
+            # drop event remains custom so Qt never moves or deletes cells.
+            super().dragMoveEvent(event)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
     def dropEvent(self, event):
+        if not event.mimeData().hasFormat(self.MIME_TYPE):
+            event.ignore()
+            return
         self._drop_handler(self, event)
 
 
@@ -144,6 +174,7 @@ class FallbackPriorityDialog(QDialog):
         table.setStyleSheet("""
             QTableWidget::item { padding: 4px; }
             QTableWidget::item:selected { background-color: rgba(0, 140, 186, 0.1); color: black; }
+            QTableWidget::drop-indicator { background-color: #1687c7; height: 3px; }
         """)
         if not hasattr(self, "_sort_states"):
             self._sort_states = {}
@@ -165,7 +196,11 @@ class FallbackPriorityDialog(QDialog):
         selected = set(rows)
         keys = []
         for row in range(table.rowCount()):
-            key = self._row_key(table, row)
+            try:
+                key = self._row_key(table, row)
+            except (TypeError, IndexError):
+                event.ignore()
+                return
             if not key or (isinstance(key, (tuple, list)) and len(key) != 2):
                 event.ignore()
                 return
