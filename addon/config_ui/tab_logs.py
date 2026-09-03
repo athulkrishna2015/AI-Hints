@@ -207,10 +207,6 @@ class LogTabMixin:
         ))
         filter_layout.addWidget(copy_btn)
         
-        clear_btn = QPushButton("Clear Log")
-        clear_btn.clicked.connect(self.clear_log)
-        filter_layout.addWidget(clear_btn)
-        
         layout.addLayout(filter_layout)
 
         path_layout = QHBoxLayout()
@@ -228,6 +224,10 @@ class LogTabMixin:
         open_folder_btn = QPushButton("Open Log Folder")
         open_folder_btn.clicked.connect(self.open_log_folder)
         path_layout.addWidget(open_folder_btn)
+
+        clear_btn = QPushButton("Clear Log")
+        clear_btn.clicked.connect(self.clear_log)
+        path_layout.addWidget(clear_btn)
         layout.addLayout(path_layout)
         
         self.log_view = QTextBrowser()
