@@ -94,7 +94,7 @@ Top row buttons:
 
 Global fallback controls:
 
-- **Enable Advanced Fallback Priority (Global List)** — use a global priority list instead of per-provider nested fallbacks.
+- **Enable Advanced Fallback Priority (Global List)** — use a global priority list instead of per-provider nested fallbacks. When enabled, a green **"Mode: Advanced Global Fallback active"** banner appears, the **Advanced Fallback Priority...** button turns solid green, and the per-provider rows are visually dimmed for clarity — but every per-provider control stays fully interactive (keys, models, enable toggles, per-provider fallbacks, fetch/test/timeouts are all still read at runtime). When disabled, the banner switches to a neutral **"Standard per-provider fallbacks"** note and the rows return to full opacity.
 - **Advanced Fallback Priority...** — open the global priority dialog (non-modal — you can keep it open alongside the main config window) with two tables side by side behind a draggable splitter: **Enabled priority order** (rows actually tried, top to bottom) and **Disabled / available**. Unchecking moves a row to Disabled; checking moves it back to Enabled. Each table is a **Provider | Model | Thinking Level | Timeout (s) | Status** grid (click any column header to sort that list, click again to reverse) with its own ▲ Up / ▼ Down / ⏫ Top / ⏬ Bottom buttons and drag-and-drop reordering (drag selected rows to the desired position; multi-row selections move as a group). Each row carries its own thinking level and timeout, seeded from the per-provider values, which override the per-provider settings for that row at runtime. Newly fetched models land in Disabled.
 - **Group Same Models** (inside the dialog) — cluster rows for the same model together across providers (vendor prefixes, `:free` suffixes, case, and `-`/`.`/`_`/`@` punctuation ignored) so a model served by several providers can be ordered once; fallback still tries rows top to bottom.
 - **Sort** (inside the dialog) — alphabetically reorder rows by provider or by model name before fine-tuning priority.
@@ -228,7 +228,7 @@ Two bindings are independent of the modifier scheme above:
 - **Method Type** — `Sequential Local Queue (Recommended)` or `Native Async API (Cloud)` (Gemini only, paid billing, no fallbacks).
 - **Force Provider** — override which provider the batch uses (default follows the fallback matrix).
 - **Force Model** — override which model to use (default system default).
-- **Source Deck** — which deck to batch (autocomplete supported).
+- **Source Deck** — which deck to batch; editable with a **searchable** field (type to filter a live popup below, case-insensitive, includes **Entire Collection**, height-capped so it never spans the screen).
 - **Skip cards that already have AI Hints generated** — skip cards already having hints.
 - **🧹 Force FULL scan (ignore last-scan cursor)** — re-check every card.
 - **Except if Generated Version <** — still queue older-version cards.
@@ -241,7 +241,7 @@ Two bindings are independent of the modifier scheme above:
 - **⏸️ Pause Queue / ▶️ Resume Queue** — shown while a local queue is running; toggles pause without losing queued cards.
 - **🛑 Stop & Discard Queue** — stop and clear.
 - **🔄 Refresh Status** — refresh the view (auto-refreshes every 5s).
-- Live status log with clickable card links, discard buttons, and job reordering. The Active Concurrent Threads list shows how long each in-flight request has been running (e.g. `Processing [Card 1234] (1m 20s)`), so a slow provider call is visibly alive instead of looking stuck.
+- Live status log with clickable card links, discard buttons, and job reordering. The Active Concurrent Threads list shows how long each in-flight request has been running (e.g. `Processing [Card 1234] (1m 20s)`), so a slow provider call is visibly alive instead of looking stuck. When the queue reaches "0 left" but requests are still finishing, a 🧼 **Draining** notice appears; providers whose models are all on cooldown exit the pass gracefully when a peer is serving the queue.
 
 ---
 

@@ -27,7 +27,7 @@ Fallback providers are ranked by intelligence and reasoning capability. Default 
 12. Cerebras
 13. Custom Providers (Ollama/LM Studio/Local Endpoints)
 
-You can reorder this list, enable/disable individual providers, or enable the **global flat priority list** for cross-provider model-level control.
+You can reorder this list, enable/disable individual providers, or enable the **global flat priority list** for cross-provider model-level control. When the global list is active, the Providers tab shows a green **"Mode: Advanced Global Fallback active"** banner and dims (but does not disable) the per-provider rows, so it's always clear which fallback mode is driving order.
 
 ### Linger-on-Timeout Fallback
 
@@ -106,7 +106,8 @@ Permanently skip AI generation for individual cards. Skipped cards show an **"AI
 
 ## ⚡ Batch & Maintenance Tools
 
-- **Queued batch generation**: Queue multiple bulk generation runs for entire decks, processed in the background (optionally with concurrent multi-provider parallelism).
+- **Queued batch generation**: Queue multiple bulk generation runs for entire decks, processed in the background (optionally with concurrent multi-provider parallelism). The **Source Deck** field is searchable — typing filters a live popup of matching decks (including **Entire Collection**) that is height-capped so it never spans the screen.
+- **Graceful cooldown handling**: In multithreaded batches, a provider whose models are all on cooldown exits the pass when a peer is serving the queue (a lone cooldown-stalled provider waits a bounded grace period then cedes to the verification pass), and a winding-down batch shows a 🧼 **Draining** notice once "0 left" is reached while the last requests finish.
 - **Incremental fast scan**: Re-running a batch only scans notes created since the deck's last full scan — tracked per-deck (including sub-decks). A **Force FULL scan** option re-checks everything.
 - **Multiple queued jobs**: Add another deck/browser selection while one is running; reorder, cancel, or clear pending jobs.
 - **Continuous checkpointing**: Progress saves to disk after every card, surviving crashes and restarts.
