@@ -195,18 +195,6 @@ class LogTabMixin:
         self.live_label.setVisible(False)
         filter_layout.addWidget(self.live_label)
         
-        refresh_btn = QPushButton("Refresh")
-        refresh_btn.setToolTip("Manually refresh the log view")
-        refresh_btn.clicked.connect(self.load_log)
-        filter_layout.addWidget(refresh_btn)
-        
-        copy_btn = QPushButton("Copy")
-        copy_btn.clicked.connect(lambda: (
-            QApplication.clipboard().setText(self.log_view.toPlainText()),
-            tooltip("Log copied to clipboard")
-        ))
-        filter_layout.addWidget(copy_btn)
-        
         layout.addLayout(filter_layout)
 
         path_layout = QHBoxLayout()
@@ -224,6 +212,18 @@ class LogTabMixin:
         open_folder_btn = QPushButton("Open Log Folder")
         open_folder_btn.clicked.connect(self.open_log_folder)
         path_layout.addWidget(open_folder_btn)
+
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setToolTip("Manually refresh the log view")
+        refresh_btn.clicked.connect(self.load_log)
+        path_layout.addWidget(refresh_btn)
+
+        copy_btn = QPushButton("Copy")
+        copy_btn.clicked.connect(lambda: (
+            QApplication.clipboard().setText(self.log_view.toPlainText()),
+            tooltip("Log copied to clipboard")
+        ))
+        path_layout.addWidget(copy_btn)
 
         clear_btn = QPushButton("Clear Log")
         clear_btn.clicked.connect(self.clear_log)
