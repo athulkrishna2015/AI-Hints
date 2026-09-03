@@ -2,6 +2,12 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 7.2.1 (2026-09-03)
+- **Fallback Drag-and-Drop Reordering**: Models in both fallback windows can now be dragged to reorder them in the Enabled or Disabled list. Multi-row selections move together, model labels and row metadata remain intact, and transient Qt rows are safely ignored instead of causing crashes.
+- **Smooth Drag Placement Preview**: Dragging near the top or bottom of a fallback list now scrolls gradually rather than jumping, while a glowing divider shows exactly where the selected models will be placed.
+- **Fallback Windows Stay Non-Modal**: The Advanced Global Fallback window no longer blocks the main configuration UI or other Anki windows. Changes are saved on OK and discarded on Cancel or close.
+- **Logs Tab File Controls**: The Logs tab now shows the canonical profile-scoped log path with Copy Path and Open Log Folder actions. Refresh, Copy, and Clear Log are grouped on the same row to reduce filter-label overflow.
+
 ## 7.2.0 (2026-09-03)
 - **Group Same Models Order Helper**: The Advanced Global Fallback Priority dialog has a new **Group Same Models** button that clusters rows for the same model together across providers (first-seen model order, provider order within each cluster preserved), so shared models served by several providers can be ordered once and the preferred provider entry ranked first. Matching ignores vendor prefixes (`openai/gpt-4o` matches `gpt-4o`), `:free` suffixes, case, and punctuation (`claude-haiku-4.5` matches `claude-haiku-4-5`, `qwen3-32b` matches `qwen-3-32b`); verified against 2134 real fetched model names with no false merges. Fallback still tries rows top to bottom and no config format changed.
 - **Excel-Style Fallback Table**: The Advanced Global Fallback Priority dialog is now a **Provider | Model | Thinking Level | Timeout (s) | Status** table instead of a single-column list. Clicking any column header sorts by that column (click again to reverse, with an arrow indicator); check states, status highlights, and selection survive re-sorting. Manual ordering still uses Move Up / Move Down (drag & drop removed).
