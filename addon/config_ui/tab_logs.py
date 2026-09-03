@@ -122,7 +122,7 @@ def process_log_file(path: str, level_filter: str, source_filter: str, search_fi
                 f"(render cap {max_lines:,}). Narrow with Level/Source/Search or raise "
                 f"AI-Hints' log render cap.</span>"
             ))
-        content_html = "<pre style='margin:0; font-family:monospace; white-space:pre-wrap;'>" + "<br/>".join(html_lines) + "</pre>"
+        content_html = "<pre style='margin:0; font-family:monospace; white-space:pre;'>" + "<br/>".join(html_lines) + "</pre>"
         content_plain = "".join(lines)
 
     return {
@@ -235,6 +235,8 @@ class LogTabMixin:
         self.log_view.setOpenExternalLinks(False)
         self.log_view.setOpenLinks(False)
         self.log_view.anchorClicked.connect(self._on_log_anchor_clicked)
+        self.log_view.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.log_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.log_view.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse | 
             Qt.TextInteractionFlag.TextSelectableByKeyboard |
