@@ -2260,13 +2260,27 @@ class AIClient:
     def _is_actually_online(self) -> bool:
         """
         Returns True if the network is currently available.
-        Uses a cached value updated by a background thread, but performs
-        a synchronous refresh if the cache is older than 60 seconds.
+
+        When the cache is warm (checked within the last 60 s) return the
+        cached value immediately — no I/O.  When the cache is cold (first
+        card of the session, last_check == 0) optimistically assume online
+        and trigger a background refresh so the *next* call is fast too.
+        This eliminates the up-to-1.5 s synchronous socket block that used
+        to freeze the UI on the very first card shown after "Study Now".
         """
         now = time.time()
         if now - _NETWORK_STATE["last_check"] < 60:
-            return _NETWORK_STATE["online"]
-        return _check_network_online()
+            cached = _NETWORK_STATE["online"]
+            # Cache hit: None means background hasn't resolved yet — assume online.
+            return cached if cached is not None else True
+        # Cache stale: fire a background refresh and optimistically return True.
+        # The monitor thread will update _NETWORK_STATE and invoke callbacks if
+        # connectivity actually changes.
+        import threading as _threading
+        _threading.Thread(target=_check_network_online, daemon=True).start()
+        # If we have a prior known-offline state that's merely stale, keep it.
+        cached = _NETWORK_STATE["online"]
+        return cached if cached is not None else True
 
     def is_network_available(self) -> bool:
         """Public helper for callers that need a cheap offline gate."""

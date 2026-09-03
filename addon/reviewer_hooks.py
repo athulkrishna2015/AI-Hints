@@ -90,16 +90,19 @@ class PregenCache(UserDict):
             logger.error(f"Failed to load pregen cache: {e}")
 
     def save(self):
-        try:
-            # Atomic write (temp + os.replace) so a crash mid-write can never
-            # truncate the cache — same failure mode that destroyed meta.json
-            # on 2026-08-20.
-            from .config_io import atomic_write_json
-
-            atomic_write_json(self.filepath, {str(k): v for k, v in self.data.items()})
-        except Exception as e:
-            from .logger import logger
-            logger.error(f"Failed to save pregen cache: {e}")
+        import threading as _threading
+        snapshot = {str(k): v for k, v in self.data.items()}
+        path = self.filepath
+        def _write():
+            try:
+                from .config_io import atomic_write_json
+                atomic_write_json(path, snapshot)
+            except Exception as e:
+                from .logger import logger
+                logger.error(f"Failed to save pregen cache: {e}")
+        t = _threading.Thread(target=_write, daemon=True)
+        t.start()
+        return t
 
     def __setitem__(self, key, value):
         super().__setitem__(key, value)
@@ -156,6 +159,58 @@ _reviewer_is_ending = False
 
 _css_cache = None
 _js_cache = None
+
+# Cache for find_hints_block results, keyed on (note.id, note.mod).
+# Avoids redundant regex scans of all note fields when the same note is
+# accessed multiple times within the same card-show pipeline
+# (webview_will_set_content → _trigger_frontend_setup → card_has_hints).
+_HINTS_BLOCK_CACHE: dict = {}
+_HINTS_BLOCK_CACHE_MAX = 50
+
+def _cached_find_hints_block(parser, note, card):
+    """find_hints_block with a (note.id, note.mod) cache.
+
+    The cached value is invalidated automatically the moment the note is
+    modified (note.mod changes), so stale results never linger.
+    """
+    try:
+        note_id = getattr(note, "id", None)
+        note_mod = getattr(note, "mod", None)
+        if note_id is not None and note_mod is not None:
+            cache_key = (note_id, note_mod, getattr(card, "ord", None))
+            hit = _HINTS_BLOCK_CACHE.get(cache_key)
+            if hit is not None:
+                # Sentinel: we cached a "no block" result as the empty string
+                return hit if hit != "" else None
+    except Exception:
+        cache_key = None
+
+    result = parser.find_hints_block(note, card)
+
+    try:
+        if cache_key is not None:
+            # Evict oldest entries if we hit the cap
+            while len(_HINTS_BLOCK_CACHE) >= _HINTS_BLOCK_CACHE_MAX:
+                _HINTS_BLOCK_CACHE.pop(next(iter(_HINTS_BLOCK_CACHE)))
+            _HINTS_BLOCK_CACHE[cache_key] = result if result is not None else ""
+    except Exception:
+        pass
+
+    return result
+
+def _invalidate_hints_block_cache(note=None):
+    """Drop all or one entry from the block-result cache after a write."""
+    if note is None:
+        _HINTS_BLOCK_CACHE.clear()
+        return
+    try:
+        note_id = getattr(note, "id", None)
+        if note_id is not None:
+            for key in list(_HINTS_BLOCK_CACHE.keys()):
+                if key[0] == note_id:
+                    del _HINTS_BLOCK_CACHE[key]
+    except Exception:
+        pass
 
 # Addon version loaded once at import time
 _ADDON_VERSION: str = ""
@@ -280,6 +335,7 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
             _note_set_tag(note, skip_tag, is_skipped)
         
         mw.col.update_note(note)
+        _invalidate_hints_block_cache(note)
         _remember_generated_hints(fresh_card, data, toggles)
         _just_generated_card_ids.add(fresh_card.id)
         
@@ -288,25 +344,14 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
             if skip_redraw:
                 _push_hint_data_to_frontend(web, fresh_card, data, is_manual=is_manual)
             else:
-                try:
-                    refresh_current_card(card=fresh_card, web=web)
-                except Exception as e:
-                    logger.error(f"AI-Hints card refresh failed: {e}")
-                # Safety net: the redraw above swaps the card HTML asynchronously,
-                # so its setup pass can race the swap and leave the visible face
-                # stale (data written to disk but not rendered until the next
-                # card transition). Re-push the payload after the swap settles;
-                # the JS-side identity check makes this a no-op if the user has
-                # meanwhile moved to a different card.
-                try:
-                    QTimer.singleShot(
-                        400,
-                        lambda: _push_hint_data_to_frontend(
-                            web, fresh_card, data, is_manual=is_manual
-                        ),
-                    )
-                except Exception:
-                    pass
+                # Push the data via JS only — no full page re-render.
+                # The note was already written to SQLite above; the frontend
+                # only needs the new payload, not a whole HTML reload.
+                # A full _showQuestion()/_showAnswer() re-render would:
+                #   1. re-fire webview_will_set_content (expensive sync path)
+                #   2. re-inject template.js
+                #   3. cause a visible flash on the first post-generation card
+                _push_hint_data_to_frontend(web, fresh_card, data, is_manual=is_manual)
 
         return True
     return False
@@ -648,6 +693,7 @@ def redo_last_ai_update():
             return
         if hasattr(note, "fields"):
             note.fields[:] = new_fields
+        _invalidate_hints_block_cache(note)
         mw.col.update_note(note)
         _forget_generated_hints(card)
         web = getattr(reviewer, "web", None)
@@ -767,6 +813,7 @@ def undo_last_ai_update():
 
         if hasattr(note, "fields"):
             note.fields[:] = new_fields
+        _invalidate_hints_block_cache(note)
         mw.col.update_note(note)
         _forget_generated_hints(card)
         web = getattr(reviewer, "web", None)
@@ -931,6 +978,37 @@ def _set_frontend_generating(web, active, card_id=None, is_pregen=False, status=
         }})();
     """)
 
+_MODEL_CHOICES_CACHE: dict = {}  # {fingerprint: choices_list}
+
+def _model_choices_fingerprint(config: dict) -> int:
+    """Cheap fingerprint of the config keys that affect model choices.
+
+    Includes a snapshot of the blacklist cache so that models moving in/out
+    of cooldown invalidate the picker result (e.g. the test that sets a
+    FAILED_COMBOS_CACHE entry between calls must see a fresh result).
+    """
+    try:
+        from .ai_client import FAILED_COMBOS_CACHE
+        bl_fp = hash(frozenset(FAILED_COMBOS_CACHE.keys()))
+    except Exception:
+        bl_fp = 0
+    try:
+        return hash((
+            config.get("ai_provider"),
+            str(config.get("provider_priority", [])),
+            str(config.get("disabled_providers", [])),
+            str(config.get("models", {})),
+            str(config.get("model_fallbacks", {})),
+            str(config.get("disabled_fallback_models", {})),
+            str(config.get("custom_providers", {})),
+            str(config.get("use_global_model_priority")),
+            str(config.get("global_model_priority", [])),
+            str(config.get("disabled_global_model_priority", [])),
+            bl_fp,
+        ))
+    except Exception:
+        return 0
+
 def _get_model_choices(config):
     """Builds the Alt+click "Generate with a specific model" picker data.
 
@@ -941,7 +1019,14 @@ def _get_model_choices(config):
         stay included so they can be retried explicitly);
       - disabled_models: unchecked fallback models, listed separately in the UI
         so the user can still force an explicit generation with them.
+
+    Result is cached per config fingerprint so the expensive AIClient
+    construction and provider-list walk happen at most once between config saves.
     """
+    fp = _model_choices_fingerprint(config)
+    cached = _MODEL_CHOICES_CACHE.get(fp)
+    if cached is not None:
+        return cached
     try:
         from .ai_client import PROVIDER_ORDER
         client = AIClient(config)
@@ -1016,6 +1101,8 @@ def _get_model_choices(config):
         # Enabled providers first (stable sort keeps priority order within
         # each group); the ⛔-marked disabled ones sink to the bottom.
         choices.sort(key=lambda c: 0 if c["enabled"] else 1)
+        _MODEL_CHOICES_CACHE.clear()  # one entry at a time is enough
+        _MODEL_CHOICES_CACHE[fp] = choices
         return choices
     except Exception as e:
         logger.debug(f"AI-Hints: Failed to build model choices: {e}")
@@ -1145,7 +1232,7 @@ def on_webview_will_set_content(web_content, context):
 
                 # Only inject data validated for the active card. This prevents a
                 # stale c2/c3 payload from being shown after clozes are added or edited.
-                valid_block = parser.find_hints_block(note, card)
+                valid_block = _cached_find_hints_block(parser, note, card)
                 if valid_block:
                     hints_blocks = [valid_block]
                     block_source = "note"
@@ -1302,7 +1389,7 @@ def _trigger_frontend_setup(card=None, web=None):
                     note.load()
                 except Exception:
                     pass
-                block_html = parser.find_hints_block(note, card)
+                block_html = _cached_find_hints_block(parser, note, card)
                 if block_html:
                     import re, html as _html
                     m = re.search(
@@ -1725,6 +1812,7 @@ def clear_hints(card=None, web=None):
             _skip_tag = _clear_config.get("skip_tag", "ai-hints::skipped") or "ai-hints::skipped"
             tag_changed = _note_set_tag(note, _skip_tag, False) or tag_changed
         mw.col.update_note(note)
+        _invalidate_hints_block_cache(note)
         _forget_generated_hints(card)
         _just_cleared_card_ids.add(card.id)
         logger.info("AI-Hints cleared for card %s", card.id)
@@ -1771,6 +1859,7 @@ def remove_warning_hint(card=None, web=None):
     note = card.note()
     if parser.remove_warning_hint_from_note(note, card):
         mw.col.update_note(note)
+        _invalidate_hints_block_cache(note)
         _forget_generated_hints(card)
         logger.info("AI-Hints warning removed for card %s", card.id)
         tooltip("AI-Hints: Warning removed.")
@@ -3093,8 +3182,8 @@ def card_has_hints(card):
         # Check cache first
         if _cached_hints_for_card(card):
             return True
-        # Check note
-        return bool(parser.find_hints_block(card.note(), card))
+        # Check note (with block-result cache)
+        return bool(_cached_find_hints_block(parser, card.note(), card))
     except Exception:
         return False
 
@@ -3707,6 +3796,7 @@ def init_hooks():
         _just_generated_card_ids.clear()
         _just_cleared_card_ids.clear()
         _generated_hint_cache.clear()
+        _HINTS_BLOCK_CACHE.clear()
         
     gui_hooks.reviewer_did_show_question.append(lambda _card: close_popup_if_open())
     gui_hooks.reviewer_will_end.append(_on_reviewer_end)
@@ -3723,6 +3813,7 @@ def init_hooks():
         _just_generated_card_ids.clear()
         _just_cleared_card_ids.clear()
         _generated_hint_cache.clear()
+        _HINTS_BLOCK_CACHE.clear()
 
         if mw.reviewer and mw.reviewer.card:
             # Force UI setup for the restored card

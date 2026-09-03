@@ -8,6 +8,18 @@ from unittest.mock import MagicMock
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+if "aqt" not in sys.modules:
+    import types
+    aqt = types.ModuleType("aqt")
+    aqt.mw = MagicMock()
+    aqt.qt = MagicMock()
+    aqt.utils = MagicMock()
+    aqt.gui_hooks = MagicMock()
+    sys.modules["aqt"] = aqt
+    sys.modules["aqt.qt"] = aqt.qt
+    sys.modules["aqt.utils"] = aqt.utils
+    sys.modules["aqt.gui_hooks"] = aqt.gui_hooks
+
 from addon.reviewer_hooks import _time_less_than, _card_saved_generation_time
 from addon.card_parser import CardParser
 

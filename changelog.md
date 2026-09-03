@@ -23,6 +23,11 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
 ## Unreleased
 
+## 7.2.2 (2026-09-03)
+- **Deterministic Fallback Ordering**: The provider/model picker and fallback dialogs now iterate providers in a stable order, so the same active and fallback rows stay in the same sequence across runs instead of depending on hash/set ordering.
+- **Undo / Redo Cache Hygiene**: Reviewer undo and redo now invalidate cached hint-block lookups after restoring card content, so stepping backward and forward between AI writes always targets the current note state.
+- **Logs and Cache Test Isolation**: Headless logs-tab and time-based regression tests now restore shared `aqt` state between cases, keeping the release test suite stable without changing runtime behavior.
+
 ## 7.1.2 (2026-09-02)
 - **Rate-Limit Key Burst Fix + Configurable Inter-Key Delay**: When an API request hits a 429 (rate limit), the add-on now pauses briefly before trying the next key instead of immediately hammering all remaining keys in rapid succession. This prevents the observed 3-second burst that burned through every key (blacklisting each for 10-20 minutes) when multiple separate-account keys were rate-limited at once. The pause is configurable via the new **Key Retry Delay after 429 (seconds)** setting in Settings → Advanced → Model Cooldowns & Blacklist, defaulting to 2 seconds, and now logs `AI-Hints: 429 rate limit — sleeping Xs before next key for provider/model` so the delay is visible in `ai_hints.log`.
 

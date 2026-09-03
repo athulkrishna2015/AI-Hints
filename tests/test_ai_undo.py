@@ -40,6 +40,7 @@ aqt.mw.addonManager.getConfig.return_value = {}
 from addon.reviewer_hooks import (  # noqa: E402
     _capture_ai_snapshot, _apply_restore_to_fields,
     _push_ai_undo, _pop_ai_undo_for_card, _ai_undo_stack, MAX_AI_UNDO_STACK,
+    _HINTS_BLOCK_CACHE,
 )
 from addon.card_parser import CardParser  # noqa: E402
 
@@ -90,9 +91,11 @@ class FakeCard:
 class AiUndoTests(unittest.TestCase):
     def setUp(self):
         _ai_undo_stack.clear()
+        _HINTS_BLOCK_CACHE.clear()
 
     def tearDown(self):
         _ai_undo_stack.clear()
+        _HINTS_BLOCK_CACHE.clear()
 
     def _make_card(self, hint="h1"):
         block1 = make_block(111, 0, payload(hint))

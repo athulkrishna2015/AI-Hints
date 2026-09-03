@@ -134,6 +134,7 @@ def _make_tab(path):
     tab.log_path_edit = MagicMock()
     tab._apply_search_highlighting = lambda pattern: None
     # Bind the real unbound methods.
+    tab._current_log_path = lambda: path
     tab.load_log = lambda: LogTabMixin.load_log(tab)
     tab._apply_log_result = lambda r, s: LogTabMixin._apply_log_result(tab, r, s)
     return tab
@@ -254,9 +255,15 @@ class LoadLogDeliveryTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_sync_fallback_renders(self):
-        tab = _make_tab(self.path)
-        tab.load_log()
-        self.assertIn("marker-line-xyz", tab.log_view.html)
+        aqt_mod = sys.modules["aqt"]
+        old_mw = getattr(aqt_mod, "mw", None)
+        aqt_mod.mw = None
+        try:
+            tab = _make_tab(self.path)
+            tab.load_log()
+            self.assertIn("marker-line-xyz", tab.log_view.html)
+        finally:
+            aqt_mod.mw = old_mw
 
     def test_future_delivery_renders(self):
         import addon.config_ui.tab_logs as tl
@@ -272,6 +279,7 @@ class LoadLogDeliveryTests(unittest.TestCase):
         mw_mock = MagicMock()
         mw_mock.taskman.run_in_background.side_effect = fake_run_in_background
         aqt_mod = sys.modules["aqt"]
+        old_mw = getattr(aqt_mod, "mw", None)
         aqt_mod.mw = mw_mock
         try:
             tab.load_log()
@@ -279,7 +287,7 @@ class LoadLogDeliveryTests(unittest.TestCase):
             fut = _FutureLike(captured["func"]())
             captured["on_done"](fut)  # must unwrap, not crash on subscript
         finally:
-            aqt_mod.mw = None
+            aqt_mod.mw = old_mw
         self.assertIn("marker-line-xyz", tab.log_view.html)
         self.assertNotIn("Error", tab.log_view.text or tab.log_view.html[:200])
 
@@ -296,6 +304,7 @@ class LoadLogDeliveryTests(unittest.TestCase):
         mw_mock = MagicMock()
         mw_mock.taskman.run_in_background.side_effect = fake_run_in_background
         aqt_mod = sys.modules["aqt"]
+        old_mw = getattr(aqt_mod, "mw", None)
         aqt_mod.mw = mw_mock
         try:
             tab.load_log()          # gen 1 scheduled
@@ -310,7 +319,7 @@ class LoadLogDeliveryTests(unittest.TestCase):
             # Late-arriving gen-1 result must be ignored.
             done1(_FutureLike(func1()))
         finally:
-            aqt_mod.mw = None
+            aqt_mod.mw = old_mw
         self.assertEqual(tab.log_view.html, latest_html)
         self.assertIn("newer-entry", tab.log_view.html)
 

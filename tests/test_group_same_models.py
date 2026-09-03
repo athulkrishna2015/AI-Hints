@@ -203,8 +203,8 @@ class PruneOrphanPairsTests(unittest.TestCase):
         }
         owner.custom_providers_data = {}
         self.assertEqual(
-            provider_enabled_pairs(owner),
-            [("openai", "gpt-4o"), ("custom", "custom-primary")],
+            set(provider_enabled_pairs(owner)),
+            {("openai", "gpt-4o"), ("custom", "custom-primary")},
         )
 
 

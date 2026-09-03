@@ -210,7 +210,9 @@ class TestH5AtomicPregenSave(unittest.TestCase):
         path = os.path.join(tmpdir, "pregen.json")
         cache = PregenCache(path)
         cache[123] = {"hints": ["h"], "options": []}
-        cache.save()
+        t = cache.save()
+        if t is not None:
+            t.join(timeout=5)  # save() is async; wait for the write thread
         self.assertFalse(os.path.exists(path + ".tmp"))
         with open(path, encoding="utf-8") as f:
             data = json.load(f)

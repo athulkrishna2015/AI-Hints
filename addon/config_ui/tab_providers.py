@@ -100,7 +100,7 @@ def provider_enabled_pairs(main_dialog):
             if isinstance(data, dict) and data.get("model"):
                 models = dict(models)
                 models.setdefault(provider, data["model"])
-    for provider in providers:
+    for provider in sorted(providers):
         blocked = set(disabled.get(provider, []) or [])
         candidates = list(fallbacks.get(provider, []) or [])
         active = models.get(provider, "") if isinstance(models, dict) else ""

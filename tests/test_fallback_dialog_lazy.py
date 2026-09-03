@@ -108,7 +108,12 @@ restore_dlg = CustomProviderDialog(
 restore_dlg.on_restore_default()
 restored = restore_dlg.get_data()
 assert restored["url"] == "https://api.openai.com/v1/chat/completions"
-assert restored["model"] == "gpt-4o"
+# The shipped config.json intentionally ships no model names; the model field
+# restores to the empty string (or whatever config.json carries for openai).
+import json as _json
+_shipped = _json.load(open(os.path.join(PROJECT_ROOT, "addon", "config.json")))
+_shipped_model = (_shipped.get("models") or {}).get("openai", "")
+assert restored["model"] == _shipped_model, f"expected {_shipped_model!r}, got {restored['model']!r}"
 assert restored["api_key"] == ""
 assert restored["headers"] == {} and restored["body_params"] == {}
 
