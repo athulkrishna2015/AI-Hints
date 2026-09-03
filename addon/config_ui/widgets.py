@@ -1,9 +1,34 @@
 import os
 import json
+import time
 from aqt import mw
 from aqt.qt import *
 from ..logger import info, tooltip
 from ..ai_client import DEFAULT_MODELS, MODEL_FALLBACKS, PROVIDER_ORDER, MODEL_SUGGESTIONS, AIClient, BUILTIN_PROVIDER_URLS
+
+
+def _get_blacklist_remaining(provider, model, config=None):
+    """Return a human-readable remaining cooldown string, or None if not blacklisted."""
+    try:
+        from ..ai_client import FAILED_COMBOS_CACHE
+        now = time.time()
+        min_remaining = None
+        for (p, m, _key), expiry in FAILED_COMBOS_CACHE.items():
+            if p == provider and m == model:
+                remaining = max(0, expiry - now)
+                if min_remaining is None or remaining < min_remaining:
+                    min_remaining = remaining
+        if min_remaining is not None and min_remaining > 0:
+            mins = int(min_remaining // 60)
+            secs = int(min_remaining % 60)
+            if mins >= 60:
+                hours = mins // 60
+                mins %= 60
+                return f"{hours}h {mins}m remaining"
+            return f"{mins}m {secs}s remaining"
+    except Exception:
+        pass
+    return None
 
 # Resolve the top-level addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
 ADDON_PACKAGE = __name__.split(".")[0]
@@ -560,7 +585,11 @@ class ProviderRowWidget(QWidget):
         from ..ai_client import is_model_blacklisted
         if model and is_model_blacklisted(self.provider, model):
             self.status_label.setText("🚫 Blacklisted")
-            self.status_label.setToolTip("This model is currently blacklisted on cooldown due to recent failures.")
+            remaining = _get_blacklist_remaining(self.provider, model, getattr(self.parent_dialog, "config", None))
+            tooltip_text = "This model is currently blacklisted on cooldown due to recent failures."
+            if remaining:
+                tooltip_text += f"<br/><i>{remaining} left</i>"
+            self.status_label.setToolTip(tooltip_text)
             self.status_label.setStyleSheet("font-weight: bold; color: red; margin-left: 5px;")
         else:
             self.status_label.setText("")

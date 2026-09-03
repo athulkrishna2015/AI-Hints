@@ -8,7 +8,8 @@ from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS, MODEL_FALLBACKS, PROV
 from ..ai_client import is_model_blacklisted, is_model_deprecated
 from .widgets import (CustomProviderDialog, ProviderRowWidget, PERSISTENT_TEST_STATUSES,
                       FETCH_CANCELLATIONS, NEWLY_ADDED_MODELS, MISSING_FROM_FETCH,
-                      GLOBAL_NEWLY_ADDED_MODELS, GLOBAL_MISSING_FROM_FETCH)
+                      GLOBAL_NEWLY_ADDED_MODELS, GLOBAL_MISSING_FROM_FETCH,
+                      _get_blacklist_remaining)
 
 DEFAULT_TEST_QUESTION = "Why does a rotating magnet fall slower through a copper tube than a non-magnetic mass of the same size?"
 DEFAULT_TEST_ANSWER = "Due to Faraday's law of induction and Lenz's law, the falling magnet induces eddy currents in the copper tube, creating an opposing magnetic field that exerts an upward electromagnetic braking force."
@@ -1107,6 +1108,7 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             self.remove_btn.setEnabled(True)
             if test_key in TEST_CANCELLATIONS:
                 del TEST_CANCELLATIONS[test_key]
+            self.update_item_labels()
         mw.taskman.run_on_main(_done)
 
     def _find_row_in(self, table, name):
@@ -1230,8 +1232,15 @@ class FallbackOrderDialog(FallbackPriorityDialog):
                     if not item: continue
                     m = item.data(Qt.ItemDataRole.UserRole)
                     status = fallback_statuses.get(m)
-                    bl = " | 🚫 Blacklisted" if is_model_blacklisted(self.provider, m, getattr(self.main_dialog, "config", None)) else ""
-                    status_suffix = f" ({status}{bl})" if status else (f" ({bl.strip()})" if bl else "")
+                    bl = is_model_blacklisted(self.provider, m, getattr(self.main_dialog, "config", None))
+                    bl_text = ""
+                    remaining = None
+                    if bl:
+                        bl_text = " | 🚫 Blacklisted"
+                        remaining = _get_blacklist_remaining(self.provider, m, getattr(self.main_dialog, "config", None))
+                        if remaining:
+                            bl_text += f" ({remaining})"
+                    status_suffix = f" ({status}{bl_text})" if status else (f" ({bl_text.strip()})" if bl_text else "")
 
                     tt = fallback_tooltips.get(m) if fallback_tooltips else None
                     is_new, is_dep, is_missing = self._model_flags(m)
@@ -1243,8 +1252,13 @@ class FallbackOrderDialog(FallbackPriorityDialog):
                         item.setToolTip(dep_note)
                     elif missing_note:
                         item.setToolTip(missing_note)
+                    elif bl:
+                        bl_tooltip = "This model is currently on cooldown due to recent failures."
+                        if remaining:
+                            bl_tooltip += f"<br/><i>{remaining} left</i>"
+                        item.setToolTip(bl_tooltip)
                     else:
-                        item.setToolTip("" if not bl else "This model is currently on cooldown due to recent failures.")
+                        item.setToolTip("")
 
                     new_mark = "🆕 " if is_new else ""
                     dep_mark = " | ⚠️ Deprecated" if is_dep else ""
@@ -1932,9 +1946,13 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         global_tooltips = PERSISTENT_TEST_STATUSES.get("global_fallback_tooltips", {})
         status = global_statuses.get((provider, model))
         bl = is_model_blacklisted(provider, model, getattr(self.main_dialog, "config", None))
+        remaining = _get_blacklist_remaining(provider, model, getattr(self.main_dialog, "config", None))
+        bl_text = " | 🚫 Blacklisted"
+        if remaining:
+            bl_text += f" ({remaining})"
         core = status or ""
         if bl:
-            core = f"{core} | 🚫 Blacklisted" if core else "🚫 Blacklisted"
+            core = f"{core}{bl_text}" if core else bl_text.strip()
         new_mark, dep_mark, missing_mark, is_new, is_dep, is_missing = self._global_marks(provider, model)
         texts = {
             0: self._provider_display(provider),
@@ -1943,6 +1961,8 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         }
         if bl:
             tt = "This model is currently on cooldown due to recent failures."
+            if remaining:
+                tt += f"<br/><i>{remaining} left</i>"
         elif is_dep:
             tt = "⚠️ This model appears to be deprecated/retired. Consider removing it from the global list."
         elif is_missing:
