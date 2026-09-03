@@ -344,13 +344,11 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
             if skip_redraw:
                 _push_hint_data_to_frontend(web, fresh_card, data, is_manual=is_manual)
             else:
-                # Push the data via JS only — no full page re-render.
-                # The note was already written to SQLite above; the frontend
-                # only needs the new payload, not a whole HTML reload.
-                # A full _showQuestion()/_showAnswer() re-render would:
-                #   1. re-fire webview_will_set_content (expensive sync path)
-                #   2. re-inject template.js
-                #   3. cause a visible flash on the first post-generation card
+                if is_manual:
+                    try:
+                        refresh_current_card(card=fresh_card, web=web)
+                    except Exception as e:
+                        logger.error(f"AI-Hints card refresh failed: {e}")
                 _push_hint_data_to_frontend(web, fresh_card, data, is_manual=is_manual)
 
         return True
@@ -2813,9 +2811,7 @@ def skip_ai_for_card(card=None, web=None):
     )
     
     data = {"hints": [], "options": [], "_skipped": True, "_generation_type": "skip"}
-    if _apply_results_to_card(card, data, is_manual=True, web=web):
-        # Trigger a refresh so the skip state is visible
-        refresh_current_card(card=card, web=web)
+    _apply_results_to_card(card, data, is_manual=True, web=web)
 
 def show_bottom_bar_menu():
     reviewer = getattr(mw, "reviewer", None)
