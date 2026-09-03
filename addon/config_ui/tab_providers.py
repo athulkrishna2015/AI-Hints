@@ -75,19 +75,54 @@ def sort_pairs_by(pairs, kind):
     return sorted(pairs, key=lambda p: (p[0].casefold(), p[1].casefold()))
 
 
+def prune_orphan_pairs(pairs, known_providers):
+    current, orphaned = [], 0
+    for item in pairs or []:
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            if item[0] in known_providers:
+                current.append((item[0], item[1]))
+            else:
+                orphaned += 1
+    return current, orphaned
+
+
+def provider_enabled_pairs(main_dialog):
+    """Return provider/model pairs enabled in the per-provider fallback data."""
+    result = []
+    models = getattr(main_dialog, "config", {}).get("models", {}) or {}
+    fallbacks = getattr(main_dialog, "model_fallbacks_data", {}) or {}
+    disabled = getattr(main_dialog, "disabled_fallback_models_data", {}) or {}
+    providers = set(fallbacks) | set(models)
+    custom = getattr(main_dialog, "custom_providers_data", {}) or {}
+    if isinstance(custom, dict):
+        providers.update(custom)
+        for provider, data in custom.items():
+            if isinstance(data, dict) and data.get("model"):
+                models = dict(models)
+                models.setdefault(provider, data["model"])
+    for provider in providers:
+        blocked = set(disabled.get(provider, []) or [])
+        candidates = list(fallbacks.get(provider, []) or [])
+        active = models.get(provider, "") if isinstance(models, dict) else ""
+        if active:
+            candidates.insert(0, active)
+        for model in candidates:
+            pair = (provider, model)
+            if model and model not in blocked and pair not in result:
+                result.append(pair)
+    return result
+
+
 class FallbackPriorityDialog(QDialog):
-    def _make_fallback_table(self, headers, stretch_col, fixed_widths=None):
+    def _make_fallback_table(self, headers, init_widths=None):
         table = QTableWidget()
         table.setColumnCount(len(headers))
         table.setHorizontalHeaderLabels(headers)
         for c in range(len(headers)):
-            if fixed_widths and c in fixed_widths:
-                table.horizontalHeader().setSectionResizeMode(c, QHeaderView.ResizeMode.Fixed)
-                table.setColumnWidth(c, fixed_widths[c])
-            else:
-                table.horizontalHeader().setSectionResizeMode(
-                    c, QHeaderView.ResizeMode.Stretch if c == stretch_col
-                    else QHeaderView.ResizeMode.ResizeToContents)
+            table.horizontalHeader().setSectionResizeMode(c, QHeaderView.ResizeMode.Interactive)
+            if init_widths and c in init_widths:
+                table.setColumnWidth(c, init_widths[c])
+        table.horizontalHeader().setStretchLastSection(True)
         table.verticalHeader().setVisible(False)
         table.setSortingEnabled(False)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -100,8 +135,8 @@ class FallbackPriorityDialog(QDialog):
             self._sort_states = {}
         return table
 
-    def _init_fallback_table(self, headers, stretch_col, fixed_widths=None):
-        self.table = self._make_fallback_table(headers, stretch_col, fixed_widths)
+    def _init_fallback_table(self, headers, init_widths=None):
+        self.table = self._make_fallback_table(headers, init_widths)
         self.table.horizontalHeader().sectionClicked.connect(self._on_header_clicked)
 
     def _tbl(self, table):
@@ -147,6 +182,9 @@ class FallbackPriorityDialog(QDialog):
 
     def _split_tables(self):
         return tuple(t for t in (getattr(self, "enabled_table", None), getattr(self, "disabled_table", None)) if t is not None)
+
+    def _tables(self):
+        return self._split_tables()
 
     def _focused_table(self):
         for table in self._split_tables() or (self._tbl(None),):
@@ -246,11 +284,10 @@ class FallbackOrderDialog(FallbackPriorityDialog):
 
         # Columns: [Model Name] [Thinking Level] [Timeout]
         headers = ["Model Name", "Thinking Level", "Timeout (s)"]
-        self.enabled_table = self._make_fallback_table(headers, stretch_col=0, fixed_widths={1: 120, 2: 100})
-        self.disabled_table = self._make_fallback_table(headers, stretch_col=0, fixed_widths={1: 120, 2: 100})
+        self.enabled_table = self._make_fallback_table(headers, {0: 320, 1: 120, 2: 100})
+        self.disabled_table = self._make_fallback_table(headers, {0: 320, 1: 120, 2: 100})
         self.table = self.enabled_table
         for table in (self.enabled_table, self.disabled_table):
-            table.horizontalHeader().setStretchLastSection(False)
             table.horizontalHeader().sectionClicked.connect(lambda col, t=table: self._on_header_clicked(col, t))
             table.itemChanged.connect(self._on_item_changed)
             table.verticalScrollBar().valueChanged.connect(self._ensure_visible_widgets)
@@ -313,8 +350,11 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         self.disabled_down_btn = QPushButton("▼ Down")
         self.disabled_down_btn.clicked.connect(lambda: self.move_item_in(self.disabled_table, 1))
 
-        lists_layout = QHBoxLayout()
-        enabled_panel = QVBoxLayout()
+        lists_splitter = QSplitter(Qt.Orientation.Horizontal)
+        lists_splitter.setChildrenCollapsible(False)
+        enabled_wrap = QWidget()
+        enabled_panel = QVBoxLayout(enabled_wrap)
+        enabled_panel.setContentsMargins(0, 0, 0, 0)
         enabled_panel.addWidget(self.enabled_label)
         enabled_panel.addWidget(self.enabled_table, 1)
         enabled_move = QHBoxLayout()
@@ -322,8 +362,10 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         enabled_move.addWidget(self.enabled_down_btn)
         enabled_move.addStretch()
         enabled_panel.addLayout(enabled_move)
-        lists_layout.addLayout(enabled_panel, 1)
-        disabled_panel = QVBoxLayout()
+        lists_splitter.addWidget(enabled_wrap)
+        disabled_wrap = QWidget()
+        disabled_panel = QVBoxLayout(disabled_wrap)
+        disabled_panel.setContentsMargins(0, 0, 0, 0)
         disabled_panel.addWidget(self.disabled_label)
         disabled_panel.addWidget(self.disabled_table, 1)
         disabled_move = QHBoxLayout()
@@ -331,8 +373,10 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         disabled_move.addWidget(self.disabled_down_btn)
         disabled_move.addStretch()
         disabled_panel.addLayout(disabled_move)
-        lists_layout.addLayout(disabled_panel, 1)
-        layout.addLayout(lists_layout, 1)
+        lists_splitter.addWidget(disabled_wrap)
+        lists_splitter.setStretchFactor(0, 1)
+        lists_splitter.setStretchFactor(1, 1)
+        layout.addWidget(lists_splitter, 1)
         self._update_counts()
 
         # Action buttons (stacked in 2 rows to prevent overflow)
@@ -357,6 +401,9 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         self.list_test_btn = QPushButton("Test")
         self.list_test_btn.setToolTip("Test models from the list. Choose which mode from the dropdown.")
         self.list_test_btn.setMenu(_build_test_menu(self.on_test_from_list))
+        self.match_global_btn = QPushButton("Match Global Enabled")
+        self.match_global_btn.setToolTip("Enable the models currently enabled in Advanced Global Fallback Priority. This keeps the current per-provider order and does not change the global order.")
+        self.match_global_btn.clicked.connect(self.match_global_enabled)
 
         self.list_fetch_btn = QPushButton("Fetch All")
         self.list_fetch_btn.setToolTip("Fetch available models from this provider's API.")
@@ -367,6 +414,7 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         self.restore_btn.clicked.connect(self.restore_defaults)
         
         row2_layout.addWidget(self.list_test_btn)
+        row2_layout.addWidget(self.match_global_btn)
         row2_layout.addWidget(self.list_fetch_btn)
         row2_layout.addWidget(self.restore_btn)
         
@@ -871,6 +919,35 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         self.enabled_label.setText(f"Enabled priority (first row is Active, {self.enabled_table.rowCount()}):")
         self.disabled_label.setText(f"Disabled / available ({self.disabled_table.rowCount()}):")
 
+    def match_global_enabled(self):
+        """Make per-provider membership match the global enabled set."""
+        wanted = {
+            model for provider, model in (
+                getattr(self.main_dialog, "global_model_priority_data", []) or []
+            ) if provider == self.provider
+        }
+        self._harvest_widgets()
+        rows = []
+        for table in self._split_tables():
+            for row in range(table.rowCount()):
+                data = self._row_data(table, row)
+                data["checked"] = data["name"] in wanted
+                rows.append(data)
+        present = {data["name"] for data in rows}
+        for model in wanted - present:
+            rows.append({"name": model, "checked": True,
+                         "think": "off", "timeout": 0})
+        self._moving_rows = True
+        try:
+            enabled = [data for data in rows if data["checked"]]
+            disabled = [data for data in rows if not data["checked"]]
+            self._rebuild_rows(enabled, self.enabled_table)
+            self._rebuild_rows(disabled, self.disabled_table)
+        finally:
+            self._moving_rows = False
+        self._update_counts()
+        self.update_item_labels()
+
     def _move_row_to_other_table(self, table, row, checked):
         item = table.item(row, 0)
         name = item.data(Qt.ItemDataRole.UserRole) if item else ""
@@ -913,12 +990,15 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         self._move_row_to_other_table(table, row, checked)
 
     def _swap_rows_in(self, table, a, b):
-        """Swap two rows in the given table; widgets (if any) follow their new model."""
+        """Swap two rows in the given table; widgets follow their new model."""
         self._harvest_widgets()
-        item_a = table.takeItem(a, 0)
-        item_b = table.takeItem(b, 0)
-        table.setItem(a, 0, item_b)
-        table.setItem(b, 0, item_a)
+        for column in range(table.columnCount()):
+            if table.cellWidget(a, column) is not None or table.cellWidget(b, column) is not None:
+                continue
+            item_a = table.takeItem(a, column)
+            item_b = table.takeItem(b, column)
+            table.setItem(a, column, item_b)
+            table.setItem(b, column, item_a)
         self._refresh_row_widgets(table, a)
         self._refresh_row_widgets(table, b)
 
@@ -1054,7 +1134,11 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         if not rows:
             return
         selected = set(rows)
-        moved = set(rows)
+        selected_keys = {
+            table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+            for row in rows
+            if table.item(row, 0) is not None
+        }
 
         # Swap with the adjacent row instead of removing/recreating selected
         # rows. This handles non-contiguous selections and keeps every row's
@@ -1068,16 +1152,19 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             if neighbor < 0 or neighbor >= table.rowCount() or neighbor in selected:
                 continue
             self._swap_rows_in(table, row, neighbor)
-            moved.discard(row)
-            moved.add(neighbor)
-            selected.discard(row)
+            selected.remove(row)
             selected.add(neighbor)
 
         table.clearSelection()
         selection_model = table.selectionModel()
-        if moved:
-            table.setCurrentCell(min(moved), 0)
-        for row in sorted(moved):
+        new_rows = []
+        for row in range(table.rowCount()):
+            item = table.item(row, 0)
+            if item is not None and item.data(Qt.ItemDataRole.UserRole) in selected_keys:
+                new_rows.append(row)
+        if new_rows:
+            table.setCurrentCell(new_rows[0], 0)
+        for row in new_rows:
             index = table.model().index(row, 0)
             selection_model.select(
                 index,
@@ -1317,8 +1404,8 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         self._moving_rows = False
 
         headers = ["Provider", "Model", "Thinking Level", "Timeout (s)", "Status"]
-        self.enabled_table = self._make_fallback_table(headers, stretch_col=1, fixed_widths={2: 120, 3: 100})
-        self.disabled_table = self._make_fallback_table(headers, stretch_col=1, fixed_widths={2: 120, 3: 100})
+        self.enabled_table = self._make_fallback_table(headers, {0: 150, 1: 280, 2: 110, 3: 90, 4: 160})
+        self.disabled_table = self._make_fallback_table(headers, {0: 150, 1: 280, 2: 110, 3: 90, 4: 160})
         for table in (self.enabled_table, self.disabled_table):
             table.horizontalHeader().sectionClicked.connect(
                 lambda col, t=table: self._on_header_clicked(col, t))
@@ -1339,8 +1426,11 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         self.disabled_down_btn = QPushButton("▼ Down")
         self.disabled_down_btn.clicked.connect(lambda: self.move_item_in(self.disabled_table, 1))
 
-        lists_layout = QHBoxLayout()
-        enabled_panel = QVBoxLayout()
+        lists_splitter = QSplitter(Qt.Orientation.Horizontal)
+        lists_splitter.setChildrenCollapsible(False)
+        enabled_wrap = QWidget()
+        enabled_panel = QVBoxLayout(enabled_wrap)
+        enabled_panel.setContentsMargins(0, 0, 0, 0)
         enabled_panel.addWidget(self.enabled_label)
         enabled_panel.addWidget(self.enabled_table, 1)
         enabled_move = QHBoxLayout()
@@ -1348,8 +1438,10 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         enabled_move.addWidget(self.enabled_down_btn)
         enabled_move.addStretch()
         enabled_panel.addLayout(enabled_move)
-        lists_layout.addLayout(enabled_panel, 1)
-        disabled_panel = QVBoxLayout()
+        lists_splitter.addWidget(enabled_wrap)
+        disabled_wrap = QWidget()
+        disabled_panel = QVBoxLayout(disabled_wrap)
+        disabled_panel.setContentsMargins(0, 0, 0, 0)
         disabled_panel.addWidget(self.disabled_label)
         disabled_panel.addWidget(self.disabled_table, 1)
         disabled_move = QHBoxLayout()
@@ -1357,8 +1449,10 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         disabled_move.addWidget(self.disabled_down_btn)
         disabled_move.addStretch()
         disabled_panel.addLayout(disabled_move)
-        lists_layout.addLayout(disabled_panel, 1)
-        layout.addLayout(lists_layout, 1)
+        lists_splitter.addWidget(disabled_wrap)
+        lists_splitter.setStretchFactor(0, 1)
+        lists_splitter.setStretchFactor(1, 1)
+        layout.addWidget(lists_splitter, 1)
 
         # Populate current list
         self.populate_list(current_global_list)
@@ -1384,6 +1478,9 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         self.group_same_btn = QPushButton("Group Same Models")
         self.group_same_btn.setToolTip("Cluster rows for the same model together across providers within each list so you can order each model once, then pick which provider entry has priority. Ignores vendor prefixes (openai/gpt-4o matches gpt-4o), :free suffixes, case, and punctuation (claude-haiku-4.5 matches claude-haiku-4-5); fallback still tries enabled rows top to bottom.")
         self.group_same_btn.clicked.connect(self.group_same_models)
+        self.match_provider_btn = QPushButton("Match Per-Provider Enabled")
+        self.match_provider_btn.setToolTip("Match Enabled/Disabled membership to the built-in and custom provider fallback lists. The global row order is preserved.")
+        self.match_provider_btn.clicked.connect(self.match_provider_enabled)
 
         self.list_fetch_btn = QPushButton("Fetch All")
         self.list_fetch_btn.setToolTip("Fetch available models for all providers.")
@@ -1407,6 +1504,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         
         row2_layout.addWidget(self.list_test_btn)
         row2_layout.addWidget(self.group_same_btn)
+        row2_layout.addWidget(self.match_provider_btn)
         row2_layout.addWidget(self.list_fetch_btn)
         row2_layout.addWidget(self.edit_provider_btn)
         row2_layout.addWidget(self.remove_provider_btn)
@@ -1752,6 +1850,32 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         return {p: {m: v for m, v in models.items() if (p, m) in pairs}
                 for p, models in self._g_timeouts.items() if isinstance(models, dict)}
 
+    def match_provider_enabled(self):
+        """Match global membership to provider fallback enabled states only."""
+        enabled_pairs = set(provider_enabled_pairs(self.main_dialog))
+        self._moving_rows = True
+        try:
+            ordered = [self._row_key(table, r) for table in self._tables() for r in range(table.rowCount())]
+            enabled = [pair for pair in ordered if pair in enabled_pairs]
+            disabled = [pair for pair in ordered if pair not in enabled_pairs]
+            self._rebuild_global_membership(enabled, self.enabled_table)
+            self._rebuild_global_membership(disabled, self.disabled_table)
+        finally:
+            self._moving_rows = False
+        self._update_counts()
+
+    def _rebuild_global_membership(self, pairs, table):
+        table.blockSignals(True)
+        table.setUpdatesEnabled(False)
+        try:
+            table.setRowCount(0)
+            for provider, model in pairs:
+                self._add_table_row(table, provider, model, checked=(table is self.enabled_table))
+        finally:
+            table.setUpdatesEnabled(True)
+            table.blockSignals(False)
+        self._ensure_table_widgets(table)
+
     def populate_list(self, model_pairs):
         for table in self._tables():
             table.blockSignals(True)
@@ -1838,18 +1962,33 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         rows = self._selected_rows(table)
         if not rows:
             return
-        top = rows[0] + delta
-        bottom = rows[-1] + delta
-        if top < 0 or bottom >= table.rowCount():
-            return
+        selected_pairs = {self._row_key(table, row) for row in rows}
         pairs = [self._row_key(table, r) for r in range(table.rowCount())]
         selected = set(rows)
-        moving = [pairs[r] for r in rows]
-        rest = [p for r, p in enumerate(pairs) if r not in selected]
-        top = max(0, min(top, len(rest)))
-        wanted = rest[:top] + moving + rest[top:]
+        candidates = rows if delta < 0 else reversed(rows)
+        for row in candidates:
+            neighbor = row + delta
+            if neighbor < 0 or neighbor >= len(pairs) or neighbor in selected:
+                continue
+            pairs[row], pairs[neighbor] = pairs[neighbor], pairs[row]
+            selected.remove(row)
+            selected.add(neighbor)
+        wanted = pairs
         self._reorder_to_keys(table, wanted, "Moving rows...")
-        table.setCurrentCell(min(top, table.rowCount() - 1), 0)
+        table.clearSelection()
+        selection_model = table.selectionModel()
+        selected_rows = []
+        for row in range(table.rowCount()):
+            if self._row_key(table, row) in selected_pairs:
+                selected_rows.append(row)
+        if selected_rows:
+            table.setCurrentCell(selected_rows[0], 0)
+        for row in selected_rows:
+            selection_model.select(
+                table.model().index(row, 0),
+                QItemSelectionModel.SelectionFlag.Select
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
         self._clear_sort_indicator(table)
 
     def on_edit_selected_provider(self):
@@ -2402,25 +2541,34 @@ class ProvidersTabMixin:
         self.test_answer_edit.setText(DEFAULT_TEST_ANSWER)
         tooltip("Reset test prompt to default.")
 
+    def _known_global_providers(self):
+        known = set(PROVIDER_ORDER)
+        known.update((self.config.get("provider_priority", None) or []))
+        for attr in ("custom_providers_data", "local_providers_data"):
+            data = getattr(self, attr, {}) or {}
+            if isinstance(data, dict):
+                known.update(data.keys())
+        known.add("local")
+        return known
+
     def on_advanced_fallback_clicked(self):
         if not hasattr(self, "global_model_priority_data"):
             self.global_model_priority_data = self.config.get("global_model_priority", [])
-        
-        current_list = []
-        for item in self.global_model_priority_data:
-            if isinstance(item, (list, tuple)) and len(item) == 2:
-                current_list.append((item[0], item[1]))
+
+        current_list, orphaned = prune_orphan_pairs(self.global_model_priority_data, self._known_global_providers())
+        if orphaned:
+            tooltip(f"Ignoring {orphaned} row(s) for deleted providers (dropped on OK).")
 
         dlg = GlobalFallbackOrderDialog(self, current_list)
         dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.global_fallback_dlg = dlg
         try:
             if dlg.exec():
-                self.global_model_priority_data = dlg.get_ordered_list()
-
-                # Keep global checkbox state separate from per-provider fallback
-                # checkbox state. A global edit must never rewrite provider lists.
+                # The full list must keep disabled rows too (they live in the
+                # Disabled table now); the separate disabled map marks which
+                # are off, and never touches per-provider fallback state.
                 self.disabled_global_model_priority_data = dlg.get_disabled_list()
+                self.global_model_priority_data = dlg.get_ordered_list() + self.disabled_global_model_priority_data
 
                 # This row's own thinking/timeout values live in the global
                 # scope and override the per-provider ones at runtime.

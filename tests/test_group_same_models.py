@@ -28,6 +28,11 @@ for mod in (QtCore, QtGui, QtWidgets):
     for name in dir(mod):
         if not name.startswith("_"):
             setattr(qt_mod, name, getattr(mod, name))
+saved_runtime_modules = {
+    k: sys.modules.get(k)
+    for k in list(sys.modules)
+    if k == "aqt" or k.startswith("aqt.") or k == "addon" or k.startswith("addon.")
+}
 sys.modules["aqt"] = aqt_mod
 sys.modules["aqt.qt"] = qt_mod
 sys.modules["aqt.utils"] = utils_mod
@@ -43,15 +48,21 @@ sys.modules["addon"] = pkg
 from addon.config_ui.tab_providers import (  # noqa: E402
     FallbackOrderDialog,
     GlobalFallbackOrderDialog,
+    ProvidersTabMixin,
     cluster_pairs_by_model,
     normalized_model_key,
+    prune_orphan_pairs,
+    provider_enabled_pairs,
     sort_pairs_by,
 )
+from addon.config_ui.widgets import ProviderRowWidget  # noqa: E402
+
+_TP_MOD = sys.modules.get("addon.config_ui.tab_providers")
 
 for k in list(sys.modules):
-    if k == "addon" or k.startswith("addon."):
+    if k == "addon" or k.startswith("addon.") or k == "aqt" or k.startswith("aqt."):
         del sys.modules[k]
-for k, v in saved.items():
+for k, v in saved_runtime_modules.items():
     if v is not None:
         sys.modules[k] = v
 
@@ -168,6 +179,35 @@ class SortPairsByTests(unittest.TestCase):
         self.assertEqual(sort_pairs_by([], "provider"), [])
 
 
+class PruneOrphanPairsTests(unittest.TestCase):
+    def test_keeps_known_providers(self):
+        pairs = [["openai", "gpt-4o"], ["aihubmix", "x"], ["bad"], ["solo"]]
+        current, orphaned = prune_orphan_pairs(pairs, {"openai", "gemini"})
+        self.assertEqual(current, [("openai", "gpt-4o")])
+        self.assertEqual(orphaned, 1)
+
+    def test_empty_and_none(self):
+        self.assertEqual(prune_orphan_pairs([], {"a"}), ([], 0))
+        self.assertEqual(prune_orphan_pairs(None, {"a"}), ([], 0))
+
+    def test_provider_enabled_pairs_includes_active_and_fallback_models(self):
+        owner = QtWidgets.QWidget()
+        owner.config = {"models": {"openai": "gpt-4o", "custom": "custom-primary"}}
+        owner.model_fallbacks_data = {
+            "openai": ["gpt-4o", "gpt-4o-mini"],
+            "custom": ["custom-primary", "custom-secondary"],
+        }
+        owner.disabled_fallback_models_data = {
+            "openai": ["gpt-4o-mini"],
+            "custom": ["custom-secondary"],
+        }
+        owner.custom_providers_data = {}
+        self.assertEqual(
+            provider_enabled_pairs(owner),
+            [("openai", "gpt-4o"), ("custom", "custom-primary")],
+        )
+
+
 class GlobalDialogTableTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -187,7 +227,17 @@ class GlobalDialogTableTests(unittest.TestCase):
         return [dlg._row_pair(dlg.disabled_table, r) for r in range(dlg.disabled_table.rowCount())]
 
     def test_table_columns_and_rows(self):
+        from PyQt6 import QtWidgets as _qw
+
         dlg = self._make_dialog([("openai", "gpt-4o"), ("gemini", "alpha")])
+        splitters = dlg.findChildren(_qw.QSplitter)
+        self.assertTrue(splitters, "lists must sit in a resizable splitter")
+        for table in (dlg.enabled_table, dlg.disabled_table):
+            for c in range(table.columnCount()):
+                self.assertEqual(
+                    table.horizontalHeader().sectionResizeMode(c),
+                    _qw.QHeaderView.ResizeMode.Interactive,
+                )
         self.assertEqual(dlg.enabled_table.columnCount(), 5)
         self.assertEqual(dlg.enabled_table.rowCount(), 2)
         self.assertEqual(dlg.disabled_table.rowCount(), 0)
@@ -305,6 +355,75 @@ class GlobalDialogTableTests(unittest.TestCase):
         self.assertEqual(self._order(dlg), [("a", "m1"), ("c", "m3"), ("b", "m2")])
         dlg.remove_models("selected")
         self.assertEqual(self._order(dlg), [("a", "m1"), ("b", "m2")])
+
+    def test_move_multiple_global_rows_keeps_all_columns_aligned(self):
+        dlg = self._make_dialog([
+            ("a", "m1"),
+            ("b", "m2"),
+            ("c", "m3"),
+            ("d", "m4"),
+        ])
+        selection_model = dlg.enabled_table.selectionModel()
+        selection_model.clearSelection()
+        for row in (1, 2):
+            selection_model.select(
+                dlg.enabled_table.model().index(row, 0),
+                QtCore.QItemSelectionModel.SelectionFlag.Select
+                | QtCore.QItemSelectionModel.SelectionFlag.Rows,
+            )
+        dlg.move_item(-1)
+
+        self.assertEqual(self._order(dlg), [
+            ("b", "m2"),
+            ("c", "m3"),
+            ("a", "m1"),
+            ("d", "m4"),
+        ])
+        for row, pair in enumerate(self._order(dlg)):
+            self.assertEqual(
+                tuple(dlg.enabled_table.item(row, column).data(Qt.ItemDataRole.UserRole)
+                      for column in (0, 1, 4)),
+                (pair, pair, pair),
+            )
+        self.assertEqual(
+            sorted(index.row() for index in dlg.enabled_table.selectionModel().selectedRows()),
+            [0, 1],
+        )
+
+    def test_ok_roundtrip_keeps_disabled(self):
+        from PyQt6.QtCore import Qt
+
+        dlg = self._make_dialog([("a", "m1"), ("b", "m2")])
+        dlg.enabled_table.item(0, 0).setCheckState(Qt.CheckState.Unchecked)
+        saved_priority = dlg.get_ordered_list() + dlg.get_disabled_list()
+        saved_disabled = [list(d) for d in dlg.get_disabled_list()]
+        dlg2 = self._make_dialog(saved_priority, disabled=saved_disabled)
+        self.assertEqual(self._order(dlg2), [("b", "m2")])
+        self.assertEqual(self._disabled_order(dlg2), [("a", "m1")])
+
+    def test_ok_button_keeps_disabled(self):
+        from PyQt6.QtCore import Qt
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        owner = QtWidgets.QWidget()
+        owner.config = {}
+        owner.global_model_priority_data = [["a", "m1"], ["b", "m2"]]
+        owner._known_global_providers = lambda: {"a", "b"}
+        real_dlg = GlobalFallbackOrderDialog(owner, [("a", "m1"), ("b", "m2")])
+        real_dlg.enabled_table.item(0, 0).setCheckState(Qt.CheckState.Unchecked)
+        fake = SimpleNamespace(
+            setWindowModality=lambda *a: None,
+            exec=lambda: True,
+            get_ordered_list=real_dlg.get_ordered_list,
+            get_disabled_list=real_dlg.get_disabled_list,
+            get_global_thinking_levels=real_dlg.get_global_thinking_levels,
+            get_global_model_timeouts=real_dlg.get_global_model_timeouts,
+        )
+        with patch.object(_TP_MOD, "GlobalFallbackOrderDialog", return_value=fake):
+            ProvidersTabMixin.on_advanced_fallback_clicked(owner)
+        self.assertIn(("a", "m1"), [tuple(d) for d in owner.global_model_priority_data])
+        self.assertIn(("a", "m1"), [tuple(d) for d in owner.disabled_global_model_priority_data])
 
     def test_group_large_list_completes(self):
         import time as _time
@@ -476,3 +595,96 @@ class ProviderDialogHeaderSortTests(unittest.TestCase):
         self.assertEqual(dlg.disabled_table.rowCount(), 0)
         self.assertIn("m-low", self._names_in(dlg, dlg.enabled_table))
         self.assertEqual(dlg.get_disabled_list(), [])
+
+    def test_global_match_provider_membership_preserves_global_order(self):
+        owner = QtWidgets.QWidget()
+        owner.config = {}
+        owner.custom_providers_data = {}
+        owner.disabled_global_model_priority_data = []
+        dlg = GlobalFallbackOrderDialog(
+            owner,
+            [("openai", "gpt-4o"), ("gemini", "gemini-flash"), ("openrouter", "openai/gpt-4o")],
+        )
+        owner.model_fallbacks_data = {
+            "openai": ["gpt-4o"],
+            "gemini": ["gemini-flash"],
+            "openrouter": ["openai/gpt-4o"],
+        }
+        owner.config["models"] = {}
+        owner.disabled_fallback_models_data = {"openrouter": ["openai/gpt-4o"]}
+        dlg.match_provider_enabled()
+        enabled = [dlg._row_pair(dlg.enabled_table, r) for r in range(dlg.enabled_table.rowCount())]
+        disabled = [dlg._row_pair(dlg.disabled_table, r) for r in range(dlg.disabled_table.rowCount())]
+        self.assertEqual(
+            enabled,
+            [("openai", "gpt-4o"), ("gemini", "gemini-flash")],
+        )
+        self.assertEqual(disabled, [("openrouter", "openai/gpt-4o")])
+
+    def test_provider_match_global_membership_preserves_provider_order(self):
+        from PyQt6.QtCore import Qt
+
+        dlg = self._make_provider_dialog(["m1", "m2", "m3"], "m1")
+        dlg.main_dialog.global_model_priority_data = [["p", "m1"], ["p", "m3"]]
+        dlg.enabled_table.item(1, 0).setCheckState(Qt.CheckState.Unchecked)
+        dlg.match_global_enabled()
+        self.assertEqual(self._names_in(dlg, dlg.enabled_table), ["m1", "m3"])
+        self.assertEqual(self._names_in(dlg, dlg.disabled_table), ["m2"])
+
+    def _make_provider_dialog(self, models, active, disabled=()):
+        class FakeSettingsDialog(QtWidgets.QWidget):
+            disabled_fallback_models_data = {"p": list(disabled)}
+            thinking_levels_data = {}
+            model_timeouts_data = {}
+
+        return FallbackOrderDialog(FakeSettingsDialog(), "p", active, models, [])
+
+    def test_ok_roundtrip_keeps_disabled_provider(self):
+        from PyQt6.QtCore import Qt
+
+        dlg = self._make_provider_dialog(["m1", "m2", "m3"], "m1")
+        dlg.enabled_table.item(1, 0).setCheckState(Qt.CheckState.Unchecked)
+        saved_fallbacks = dlg.get_ordered_list() + dlg.get_disabled_list()
+        saved_disabled = dlg.get_disabled_list()
+        self.assertEqual(saved_disabled, ["m2"])
+        dlg2 = self._make_provider_dialog(saved_fallbacks, "m1", disabled=saved_disabled)
+        self.assertEqual(self._names_in(dlg2, dlg2.disabled_table), ["m2"])
+        self.assertEqual(dlg2.get_active_model(), "m1")
+
+    def test_ok_button_keeps_disabled_provider(self):
+        from PyQt6.QtCore import Qt
+
+        pkg = types.ModuleType("addon")
+        pkg.__path__ = [os.path.join(PROJECT_ROOT, "addon")]
+        pkg.__package__ = "addon"
+        saved = {k: sys.modules.get(k) for k in list(sys.modules)
+                 if k == "addon" or k.startswith("addon.") or k in ("aqt", "aqt.qt", "aqt.utils")}
+        for k in ("addon.config_ui.widgets", "addon.config_ui.tab_providers", "addon.config_ui"):
+            sys.modules.pop(k, None)
+        sys.modules["addon"] = pkg
+        sys.modules["aqt"] = aqt_mod
+        sys.modules["aqt.qt"] = qt_mod
+        sys.modules["aqt.utils"] = utils_mod
+        try:
+            from addon.config_ui.widgets import ProviderRowWidget as FreshRowWidget
+            owner = QtWidgets.QWidget()
+            owner.config = {"disabled_providers": [], "api_keys": {}}
+            owner.model_fallbacks_data = {"p": ["m1", "m2", "m3"]}
+            owner.disabled_fallback_models_data = {}
+            owner.thinking_levels_data = {}
+            owner.model_timeouts_data = {}
+            owner.custom_providers_data = {}
+            row = FreshRowWidget("p", owner)
+            row.on_fallbacks_clicked()
+            dlg = row.fallback_dialog
+            dlg.enabled_table.item(1, 0).setCheckState(Qt.CheckState.Unchecked)
+            dlg.accepted.emit()
+            self.assertIn("m2", owner.model_fallbacks_data["p"])
+            self.assertEqual(owner.disabled_fallback_models_data["p"], ["m2"])
+        finally:
+            for k in list(sys.modules):
+                if k == "addon" or k.startswith("addon.") or k in ("aqt", "aqt.qt", "aqt.utils"):
+                    del sys.modules[k]
+            for k, v in saved.items():
+                if v is not None:
+                    sys.modules[k] = v
