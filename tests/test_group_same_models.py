@@ -390,6 +390,43 @@ class GlobalDialogTableTests(unittest.TestCase):
             [0, 1],
         )
 
+    def test_move_multiple_global_rows_to_top_and_bottom(self):
+        dlg = self._make_dialog([
+            ("a", "m1"),
+            ("b", "m2"),
+            ("c", "m3"),
+            ("d", "m4"),
+        ])
+        selection_model = dlg.enabled_table.selectionModel()
+        selection_model.select(
+            dlg.enabled_table.model().index(1, 0),
+            QtCore.QItemSelectionModel.SelectionFlag.Select
+            | QtCore.QItemSelectionModel.SelectionFlag.Rows,
+        )
+        selection_model.select(
+            dlg.enabled_table.model().index(2, 0),
+            QtCore.QItemSelectionModel.SelectionFlag.Select
+            | QtCore.QItemSelectionModel.SelectionFlag.Rows,
+        )
+
+        dlg.move_item_to_edge(dlg.enabled_table)
+        self.assertEqual(self._order(dlg), [
+            ("b", "m2"), ("c", "m3"), ("a", "m1"), ("d", "m4"),
+        ])
+        self.assertEqual(
+            sorted(index.row() for index in dlg.enabled_table.selectionModel().selectedRows()),
+            [0, 1],
+        )
+
+        dlg.move_item_to_edge(dlg.enabled_table, to_bottom=True)
+        self.assertEqual(self._order(dlg), [
+            ("a", "m1"), ("d", "m4"), ("b", "m2"), ("c", "m3"),
+        ])
+        self.assertEqual(
+            sorted(index.row() for index in dlg.enabled_table.selectionModel().selectedRows()),
+            [2, 3],
+        )
+
     def test_ok_roundtrip_keeps_disabled(self):
         from PyQt6.QtCore import Qt
 

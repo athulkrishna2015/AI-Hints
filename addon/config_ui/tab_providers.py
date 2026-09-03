@@ -228,6 +228,33 @@ class FallbackPriorityDialog(QDialog):
         keys = [self._row_key(t, r) for r in range(t.rowCount())]
         self._reorder_to_keys(t, [k for _, k in sorted(enumerate(keys), key=lambda e: keyfn(e[1], e[0]), reverse=st[1])])
 
+    def move_item_to_edge(self, table, to_bottom=False):
+        rows = self._selected_rows(table)
+        if not rows:
+            return
+        keys = [self._row_key(table, row) for row in range(table.rowCount())]
+        selected = set(rows)
+        moving = [keys[row] for row in rows]
+        rest = [key for row, key in enumerate(keys) if row not in selected]
+        wanted = rest + moving if to_bottom else moving + rest
+        self._reorder_to_keys(table, wanted)
+        selected_keys = set(moving)
+        table.clearSelection()
+        selection_model = table.selectionModel()
+        selected_rows = [
+            row for row in range(table.rowCount())
+            if self._row_key(table, row) in selected_keys
+        ]
+        if selected_rows:
+            table.setCurrentCell(selected_rows[0], 0)
+        for row in selected_rows:
+            selection_model.select(
+                table.model().index(row, 0),
+                QItemSelectionModel.SelectionFlag.Select
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
+        self._clear_sort_indicator(table)
+
     def filter_models(self, text, table=None):
         t = self._tbl(table)
         query = text.strip().casefold()
@@ -345,10 +372,18 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         self.enabled_up_btn.clicked.connect(lambda: self.move_item_in(self.enabled_table, -1))
         self.enabled_down_btn = QPushButton("▼ Down")
         self.enabled_down_btn.clicked.connect(lambda: self.move_item_in(self.enabled_table, 1))
+        self.enabled_top_btn = QPushButton("⇈ Top")
+        self.enabled_top_btn.clicked.connect(lambda: self.move_item_to_edge(self.enabled_table))
+        self.enabled_bottom_btn = QPushButton("⇊ Bottom")
+        self.enabled_bottom_btn.clicked.connect(lambda: self.move_item_to_edge(self.enabled_table, True))
         self.disabled_up_btn = QPushButton("▲ Up")
         self.disabled_up_btn.clicked.connect(lambda: self.move_item_in(self.disabled_table, -1))
         self.disabled_down_btn = QPushButton("▼ Down")
         self.disabled_down_btn.clicked.connect(lambda: self.move_item_in(self.disabled_table, 1))
+        self.disabled_top_btn = QPushButton("⇈ Top")
+        self.disabled_top_btn.clicked.connect(lambda: self.move_item_to_edge(self.disabled_table))
+        self.disabled_bottom_btn = QPushButton("⇊ Bottom")
+        self.disabled_bottom_btn.clicked.connect(lambda: self.move_item_to_edge(self.disabled_table, True))
 
         lists_splitter = QSplitter(Qt.Orientation.Horizontal)
         lists_splitter.setChildrenCollapsible(False)
@@ -360,6 +395,8 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         enabled_move = QHBoxLayout()
         enabled_move.addWidget(self.enabled_up_btn)
         enabled_move.addWidget(self.enabled_down_btn)
+        enabled_move.addWidget(self.enabled_top_btn)
+        enabled_move.addWidget(self.enabled_bottom_btn)
         enabled_move.addStretch()
         enabled_panel.addLayout(enabled_move)
         lists_splitter.addWidget(enabled_wrap)
@@ -371,6 +408,8 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         disabled_move = QHBoxLayout()
         disabled_move.addWidget(self.disabled_up_btn)
         disabled_move.addWidget(self.disabled_down_btn)
+        disabled_move.addWidget(self.disabled_top_btn)
+        disabled_move.addWidget(self.disabled_bottom_btn)
         disabled_move.addStretch()
         disabled_panel.addLayout(disabled_move)
         lists_splitter.addWidget(disabled_wrap)
@@ -1421,10 +1460,18 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         self.enabled_up_btn.clicked.connect(lambda: self.move_item_in(self.enabled_table, -1))
         self.enabled_down_btn = QPushButton("▼ Down")
         self.enabled_down_btn.clicked.connect(lambda: self.move_item_in(self.enabled_table, 1))
+        self.enabled_top_btn = QPushButton("⇈ Top")
+        self.enabled_top_btn.clicked.connect(lambda: self.move_item_to_edge(self.enabled_table))
+        self.enabled_bottom_btn = QPushButton("⇊ Bottom")
+        self.enabled_bottom_btn.clicked.connect(lambda: self.move_item_to_edge(self.enabled_table, True))
         self.disabled_up_btn = QPushButton("▲ Up")
         self.disabled_up_btn.clicked.connect(lambda: self.move_item_in(self.disabled_table, -1))
         self.disabled_down_btn = QPushButton("▼ Down")
         self.disabled_down_btn.clicked.connect(lambda: self.move_item_in(self.disabled_table, 1))
+        self.disabled_top_btn = QPushButton("⇈ Top")
+        self.disabled_top_btn.clicked.connect(lambda: self.move_item_to_edge(self.disabled_table))
+        self.disabled_bottom_btn = QPushButton("⇊ Bottom")
+        self.disabled_bottom_btn.clicked.connect(lambda: self.move_item_to_edge(self.disabled_table, True))
 
         lists_splitter = QSplitter(Qt.Orientation.Horizontal)
         lists_splitter.setChildrenCollapsible(False)
@@ -1436,6 +1483,8 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         enabled_move = QHBoxLayout()
         enabled_move.addWidget(self.enabled_up_btn)
         enabled_move.addWidget(self.enabled_down_btn)
+        enabled_move.addWidget(self.enabled_top_btn)
+        enabled_move.addWidget(self.enabled_bottom_btn)
         enabled_move.addStretch()
         enabled_panel.addLayout(enabled_move)
         lists_splitter.addWidget(enabled_wrap)
@@ -1447,6 +1496,8 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         disabled_move = QHBoxLayout()
         disabled_move.addWidget(self.disabled_up_btn)
         disabled_move.addWidget(self.disabled_down_btn)
+        disabled_move.addWidget(self.disabled_top_btn)
+        disabled_move.addWidget(self.disabled_bottom_btn)
         disabled_move.addStretch()
         disabled_panel.addLayout(disabled_move)
         lists_splitter.addWidget(disabled_wrap)
