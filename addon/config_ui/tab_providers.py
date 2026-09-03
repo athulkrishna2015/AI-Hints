@@ -1783,7 +1783,10 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         row = table.row(item)
         if row < 0 or row >= table.rowCount():
             return
-        provider, model = self._row_pair(table, row)
+        pair = table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        if not isinstance(pair, (tuple, list)) or len(pair) != 2:
+            return
+        provider, model = pair
         checked = item.checkState() == Qt.CheckState.Checked
         if (table is self.enabled_table) == checked:
             return
