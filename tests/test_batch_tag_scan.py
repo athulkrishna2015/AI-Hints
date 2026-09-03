@@ -35,6 +35,7 @@ classes = [
     'QListWidgetItem', 'QDesktopServices', 'QUrl', 'QProgressBar',
     'QStyledItemDelegate', 'QEvent', 'QTextBrowser', 'QFontDatabase',
     'QCompleter', 'QButtonGroup', 'QRadioButton', 'QMessageBox', 'QProgressDialog',
+    'QTableWidget', 'QTableWidgetItem', 'QHeaderView',
 ]
 for cls in classes:
     # Keep these as class objects so `class ConfigDialog(QDialog, ...)` subclasses work.
