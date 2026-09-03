@@ -2696,8 +2696,14 @@ class ProvidersTabMixin:
             return
         use_global = self.advanced_fallback_cb.isChecked()
         self.advanced_fallback_btn.setEnabled(use_global)
-        
-        # 1. Disable reordering and fallback configurations on standard provider rows
+
+        # Visually dim the per-provider rows while the advanced global fallback
+        # list is active, so it's obvious the global list governs fallback order —
+        # but keep the controls fully interactive (grayed out, not disabled).
+        # Per-provider settings (keys, active model, enable toggle, per-provider
+        # fallbacks/timeouts) are still read at runtime, so the user can reach
+        # them without unchecking the global list. When unchecked, restore full
+        # opacity.
         if hasattr(self, 'models_layout') and self.models_layout is not None:
             from .widgets import ProviderRowWidget
             for i in range(self.models_layout.count()):
@@ -2705,10 +2711,47 @@ class ProvidersTabMixin:
                 if not item: continue
                 w = item.widget()
                 if isinstance(w, ProviderRowWidget):
-                    w.up_btn.setEnabled(not use_global)
-                    w.down_btn.setEnabled(not use_global)
-                    w.enabled_cb.setEnabled(not use_global)
-                    w.fallbacks_btn.setEnabled(not use_global)
+                    if use_global:
+                        effect = QGraphicsOpacityEffect(w)
+                        effect.setOpacity(0.45)
+                        w.setGraphicsEffect(effect)
+                    else:
+                        w.setGraphicsEffect(None)
+
+        # Update the visible mode indicator (text + colour) and highlight the
+        # Advanced Fallback button whenever the global list is active, so the user
+        # always knows which fallback mode is in play.
+        if hasattr(self, "fallback_mode_label"):
+            if use_global:
+                self.fallback_mode_label.setText(
+                    "🖥️ <b>Mode: Advanced Global Fallback active</b> — the global "
+                    "priority list controls cross-provider fallback order. Provider "
+                    "rows are dimmed for clarity but stay fully interactive (keys, "
+                    "models, toggles, and per-provider fallbacks are still read at "
+                    "runtime)."
+                )
+                self.fallback_mode_label.setStyleSheet(
+                    "color: #1e7e34; font-weight: normal; padding: 5px; "
+                    "background-color: rgba(30,126,52,0.12); border-radius: 4px;"
+                )
+            else:
+                self.fallback_mode_label.setText(
+                    "⚙️ <b>Mode: Standard per-provider fallbacks</b> — each provider "
+                    "uses its own nested fallback list in priority order. The "
+                    "advanced global list is not applied."
+                )
+                self.fallback_mode_label.setStyleSheet(
+                    "color: #5a6268; font-weight: normal; padding: 5px;"
+                )
+
+        if hasattr(self, "advanced_fallback_btn"):
+            if use_global:
+                self.advanced_fallback_btn.setStyleSheet(
+                    "QPushButton { background-color: #1e7e34; color: white; "
+                    "font-weight: bold; border-radius: 4px; padding: 3px 8px; }"
+                )
+            else:
+                self.advanced_fallback_btn.setStyleSheet("")
                     
     def rank_checked_providers_first(self):
         """Reorder provider rows so all checked/enabled providers float to the top,
@@ -2861,6 +2904,16 @@ class ProvidersTabMixin:
         self.advanced_fallback_cb.setToolTip("If checked, the system uses the global priority list rather than the standard nested model fallback rules.")
         self.advanced_fallback_cb.stateChanged.connect(self.update_fallback_ui_states)
         model_main_layout.addWidget(self.advanced_fallback_cb)
+
+        # Visible mode indicator so it's always clear which fallback mode is active
+        # (advanced global list vs standard per-provider nested fallbacks). Text,
+        # color, and highlight all update in update_fallback_ui_states().
+        self.fallback_mode_label = QLabel()
+        self.fallback_mode_label.setWordWrap(True)
+        self.fallback_mode_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        model_main_layout.addWidget(self.fallback_mode_label)
 
         self.advanced_fallback_btn = QPushButton("Advanced Fallback Priority...")
         self.advanced_fallback_btn.setToolTip("Configure a global priority list to mix-and-match model fallbacks across different providers.")

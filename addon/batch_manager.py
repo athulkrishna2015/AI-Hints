@@ -291,6 +291,31 @@ class BatchManager:
                 except Exception:
                     pass
 
+            # Draining notice: the queue is empty but workers are still finishing
+            # the last in-flight requests. Show a clear "winding down" state so an
+            # active batch at "0 left" doesn't look stuck on the drain window.
+            if not getattr(self, "local_queue", None) and active_threads:
+                in_flight = [
+                    info for info in active_threads.values()
+                    if info.get("cid") is not None and info.get("status") == "Processing"
+                ]
+                if in_flight:
+                    oldest = min(
+                        (float(info.get("since") or time.monotonic()) for info in in_flight)
+                    )
+                    draining_elapsed = time.monotonic() - oldest
+                    waiting = len(active_threads) - len(in_flight)
+                    note = (
+                        f"🧼 <b>Draining:</b> {len(in_flight)} in-flight request(s) "
+                        f"still completing (longest running {_fmt_elapsed(draining_elapsed)})"
+                    )
+                    if waiting:
+                        note += f"; {waiting} provider(s) waiting on peers"
+                    note += ". Batch is winding down — results apply automatically."
+                    html_parts.append(
+                        f"<div style='margin-top:4px; color:#6c757d; font-size:11px;'>{note}</div>"
+                    )
+
             if active_threads:
                  html_parts.append("<div style='margin-top:6px; font-size:11px;'>")
                  html_parts.append("<b>Active Concurrent Threads:</b><br/>")
@@ -1137,6 +1162,12 @@ class BatchManager:
                 f"their cards remain without hints."
             )
 
+    def _cooldown_stall_cap(self) -> float:
+        """How long a lone provider may wait on an all-blacklisted model set before
+        ceding to the Verification Pass. Long enough to let a normal short cooldown
+        expire, short enough that a genuinely dead key can't pin the pass open."""
+        return float(self.saved_config.get("batch_request_timeout", 120)) + 60.0
+
     def _run_local_queue_thread(self, provider: str, parser: CardParser, config: Dict):
         from .reviewer_hooks import _get_card_from_collection
 
@@ -1159,6 +1190,10 @@ class BatchManager:
             "cid": None,
             "status": "Starting"
         }
+
+        # Tracks how long this provider has been stuck with every model on
+        # cooldown while no peer is serving the queue (used to cap the stall).
+        stall_started = None
 
         while self.local_queue_active:
             if getattr(self, "_abort_threads", None) and self._abort_threads.is_set():
@@ -1190,13 +1225,42 @@ class BatchManager:
             
             if not available_models:
                  with self._db_lock:
-                     if not self.local_queue:
-                         break
+                     queue_empty = not self.local_queue
+                     peers_serving = any(
+                         info.get("cid") is not None and info.get("status") == "Processing"
+                         for pp, info in self.active_threads_status.items()
+                         if pp != provider
+                     )
+                 if queue_empty:
+                     break
+                 if peers_serving:
+                     # Every model for this provider is blacklisted/on cooldown and
+                     # another worker is actively serving the queue, so this thread
+                     # is redundant. It gets a fresh chance next pass (threads are
+                     # always re-created per pass), so exiting just shrinks the idle
+                     # fleet instead of spinning on the blacklist.
+                     logger.info(
+                         f"AI-Hints Thread for {provider} exiting: all models on "
+                         f"cooldown while a peer is serving the queue."
+                     )
+                     break
                  self.active_threads_status[provider] = {
                      "model": current_model,
                      "cid": None,
                      "status": "⏳ Rate Limited / Cooldown"
                  }
+                 # Every model is on cooldown and no peer is currently serving, so
+                 # we are the only hope left for the queue. Wait for a cooldown to
+                 # expire, but cap the stall so a hard-dead key set can't pin the
+                 # pass open indefinitely — the Verification Pass requeues instead.
+                 if stall_started is None:
+                     stall_started = time.monotonic()
+                 elif time.monotonic() - stall_started >= self._cooldown_stall_cap():
+                     logger.warning(
+                         f"AI-Hints Thread for {provider} giving up after "
+                         f"cooldown stall; the Verification Pass will requeue."
+                     )
+                     break
                  # Sleep and check again later, do not pop a card!
                  time.sleep(2)
                  continue
@@ -1227,6 +1291,7 @@ class BatchManager:
                     if found_idx != -1:
                         cid = self.local_queue.pop(found_idx)
                         self.save_state()
+                        stall_started = None
                     else:
                         # All remaining cards in the queue have been tried and failed by this provider.
                         # Sleep and try again later

@@ -125,26 +125,48 @@ class BatchTabMixin:
         # 📦 Searchable Embedded Deck Selector
         self.batch_deck_chooser = QComboBox()
         self.batch_deck_chooser.setEditable(True)
-        self.batch_deck_chooser.setInsertPolicy(QComboBox.InsertPolicy.NoInsert) 
-        
-        # Load and Sort Deck Names
+        self.batch_deck_chooser.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        # Cap the popup so a large deck list never spans the whole screen; typing
+        # still searches via the completer below.
+        self.batch_deck_chooser.setMaxVisibleItems(16)
+        self.batch_deck_chooser.setToolTip(
+            "Type to search decks (substring, case-insensitive) or pick from the "
+            "list. A deck includes all of its sub-decks for batching."
+        )
         try:
-             all_decks = mw.col.decks.all_names()
-             self.batch_deck_chooser.addItem(ENTIRE_COLLECTION)
-             self.batch_deck_chooser.addItems(all_decks)
-             # Pre-select current active deck in main window
-             curr = getattr(self, "selected_deck_name", None) or mw.col.decks.current().get('name', '')
-             if curr in all_decks:
-                  self.batch_deck_chooser.setCurrentText(curr)
-        except: pass
+            self.batch_deck_chooser.lineEdit().setPlaceholderText("Search decks…")
+        except Exception:
+            pass
 
-        # Enable Advanced Partial Searching (AutoComplete)
-        completer = QCompleter(mw.col.decks.all_names(), self)
+        # Load decks once, then populate both the chooser and its completer with
+        # the same list so the special "Entire Collection" entry is searchable too.
+        try:
+            all_decks = list(mw.col.decks.all_names())
+        except Exception:
+            all_decks = []
+
+        self.batch_deck_chooser.addItem(ENTIRE_COLLECTION)
+        self.batch_deck_chooser.addItems(all_decks)
+        # Pre-select current active deck in main window
+        if curr := getattr(self, "selected_deck_name", None) or self._current_deck_name():
+            if curr in all_decks or curr == ENTIRE_COLLECTION:
+                self.batch_deck_chooser.setCurrentText(curr)
+
+        # Searchable autocomplete: filters the deck list by substring as you type.
+        # Uses a dedicated model (Entire Collection + all decks) with an explicit
+        # Popup completion mode so typed substrings reliably narrow the list.
+        completer = QCompleter([ENTIRE_COLLECTION] + all_decks, self)
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains) 
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        completer.setMaxVisibleItems(16)
+        try:
+            completer.popup().setMaximumHeight(320)
+        except Exception:
+            pass
         self.batch_deck_chooser.setCompleter(completer)
         self.batch_deck_chooser.currentTextChanged.connect(self._on_deck_chooser_changed)
-        
+
         s_layout.addRow("Source Deck:", self.batch_deck_chooser)
         
         self.batch_skip_existing_cb = QCheckBox("Skip cards that already have AI Hints generated")
@@ -600,6 +622,16 @@ class BatchTabMixin:
             if curr in all_decks:
                  self.batch_deck_chooser.setCurrentText(curr)
         except: pass
+
+    def _current_deck_name(self):
+        """Return the name of the deck currently active in Anki's main window, or ''."""
+        try:
+            cur = mw.col.decks.current()
+            if cur:
+                return cur.get("name", "") or ""
+        except Exception:
+            pass
+        return ""
 
     def _on_deck_chooser_changed(self, text):
         text = text.strip()
