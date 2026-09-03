@@ -2,7 +2,7 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
-## Unreleased
+## 7.2.5 (2026-09-04)
 - **Searchable "Source Deck" Dropdown (Live Filter List)**: In the Batch tab, the **Source Deck** field is now clearly searchable — it shows a **"Search decks…"** placeholder and a "type to search" tooltip. As you type, a live filtered list of matching decks appears right below the field (substring, case-insensitive), including the special **"Entire Collection"** entry; pick from it or keep typing. The filtering popup is capped (16 rows / 320px) so it never spans the screen.
 - **Clear Fallback-Mode Indicator**: The Providers tab now makes it unmistakable which fallback mode is active. When **Advanced Fallback Priority (Global List)** is on, a green **"Mode: Advanced Global Fallback active"** banner appears, the **Advanced Fallback Priority...** button turns solid green, and the per-provider rows are visually dimmed (grayed out) to show the global list governs cross-provider order — but every per-provider control stays fully interactive (keys, models, enable toggles, per-provider fallbacks, fetch/test/timeouts are all still read at runtime). When unchecked, the banner switches to a neutral **"Standard per-provider fallbacks"** note and the rows return to full opacity, so you always know which path the fallback engine will take.
 - **Per-Provider Controls Accessible With Advanced Fallback**: Turning on the global fallback list no longer disables the provider-row buttons — it only dims them for clarity, keeping Edit / Fallbacks / Fetch / Test / Move / toggles usable.
