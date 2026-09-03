@@ -254,7 +254,7 @@ class CardParserTests(unittest.TestCase):
         
         # Mark card 1 (ord 0) as skipped
         parser.update_note_with_hints(note, {"hints": [], "options": [], "_skipped": True}, card=FakeCard(1, 0))
-        self.assertIsNotNone(parser.find_hints_block(note, FakeCard(1, 0)))
+        self.assertIn('"_skipped": true', note["Text"])
         
         # Clear hints
         self.assertTrue(parser.clear_hints_from_note(note, FakeCard(1, 0)))

@@ -819,7 +819,7 @@ class CardParser:
                 # Check if this block is scoped to the card
                 if self._block_matches_card(block, card):
                     # Check if the block actually HAS data for this specific card
-                    if self._json_block_has_data_for_card(block, match.group(1), card, note):
+                    if self._json_block_has_data_for_card(block, match.group(1), card, note, count_skipped_as_data=False):
                         return block
         return None
 
@@ -1469,9 +1469,8 @@ class CardParser:
             return False
         return any(re.fullmatch(r"c\d+", str(key)) for key in payload.keys())
 
-    def _json_block_has_data_for_card(self, block: str, raw_payload: str, card=None, note=None) -> bool:
+    def _json_block_has_data_for_card(self, block: str, raw_payload: str, card=None, note=None, count_skipped_as_data=True) -> bool:
         if self.json_class not in block:
-            # HTML-only blocks always count as having data (we don't know what's in them)
             return True
 
         card_ord = self._card_ord(card)
@@ -1484,7 +1483,6 @@ class CardParser:
         try:
             parsed = self._parse_json_payload(raw_payload)
         except Exception:
-            # Corrupt JSON: count as NO data so we can replace/append
             return False
 
         if not isinstance(parsed, dict) or not parsed:
@@ -1493,7 +1491,7 @@ class CardParser:
         if self._is_keyed_payload(parsed):
             if card_ord is None:
                 return any(
-                    isinstance(val, dict) and (bool(val.get("hints")) or bool(val.get("options")) or bool(val.get("_skipped")))
+                    isinstance(val, dict) and (bool(val.get("hints")) or bool(val.get("options")) or (count_skipped_as_data and bool(val.get("_skipped"))))
                     for val in parsed.values()
                 )
             card_key = f"c{card_ord + 1}"
@@ -1503,11 +1501,10 @@ class CardParser:
             if not isinstance(card_data, dict):
                 return False
             
-            has_valid_data = bool(card_data.get("hints")) or bool(card_data.get("options")) or bool(card_data.get("_skipped"))
+            has_valid_data = bool(card_data.get("hints")) or bool(card_data.get("options")) or (count_skipped_as_data and bool(card_data.get("_skipped")))
             if not has_valid_data:
                 return False
 
-            # Cloze validation: check if active cloze tag exists and answer matches
             if note:
                 model = note.model() if hasattr(note, "model") and callable(note.model) else None
                 model_name = model["name"].lower() if model and isinstance(model, dict) and "name" in model else ""
@@ -1527,8 +1524,7 @@ class CardParser:
 
             return True
             
-        # Legacy/Universal block: check for hints/options
-        has_hints = bool(parsed.get("hints")) or bool(parsed.get("options")) or bool(parsed.get("_skipped"))
+        has_hints = bool(parsed.get("hints")) or bool(parsed.get("options")) or (count_skipped_as_data and bool(parsed.get("_skipped")))
         
         if (
             has_hints
@@ -1536,7 +1532,6 @@ class CardParser:
             and card_ord is not None
             and card_ord > 0
         ):
-            # Legacy blocks only match c1
             return False
             
         return has_hints
