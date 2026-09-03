@@ -21,7 +21,11 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Lingering Retries in Fallback Tests**: The per-provider and global Fallback Priority **Test** buttons now capture delayed responses — a model that hits a read timeout is re-dispatched in the background with an extended deadline while the test continues, and a late result rescues the test instead of reporting a bare timeout (same semantics as live generations, including the amber Lingering status).
 - **Per-Request Elapsed Logging**: Every provider request now logs `AI-Hints: <provider>/<model> request took Xs.` at INFO level, covering all generation paths (manual, auto, pregen, batch, lingering retries) as well as model tests, so slow endpoints are visible in `ai_hints.log` without debug logging.
 
-## Unreleased
+## 7.2.3 (2026-09-03)
+
+- **Reviewer Refresh After Regeneration**: Explicitly regenerating hints from the reviewer bottom bar now refreshes the card face so the new AI data is visible immediately.
+- **Skipped Card Retry**: Cards that were skipped due to missing cloze content are now eligible for regeneration once the content is present, instead of being treated as already-generated.
+- **Horizontal Log Scrolling**: The Logs tab now preserves long lines and allows horizontal scrolling instead of wrapping them.
 
 ## 7.2.2 (2026-09-03)
 - **Deterministic Fallback Ordering**: The provider/model picker and fallback dialogs now iterate providers in a stable order, so the same active and fallback rows stay in the same sequence across runs instead of depending on hash/set ordering.
