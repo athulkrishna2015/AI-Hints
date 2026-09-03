@@ -119,6 +119,27 @@ class _FallbackTable(QTableWidget):
     def __init__(self, drop_handler, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._drop_handler = drop_handler
+        self._drop_pos = None
+        self._scroll_direction = 0
+        self._scroll_timer = QTimer(self)
+        self._scroll_timer.setInterval(45)
+        self._scroll_timer.timeout.connect(self._scroll_drag_position)
+
+    def _scroll_drag_position(self):
+        if not self._scroll_direction:
+            return
+        scrollbar = self.verticalScrollBar()
+        value = scrollbar.value()
+        next_value = value + self._scroll_direction
+        if next_value == value:
+            self._stop_drag_scroll()
+            return
+        scrollbar.setValue(next_value)
+        self.update()
+
+    def _stop_drag_scroll(self):
+        self._scroll_direction = 0
+        self._scroll_timer.stop()
 
     def startDrag(self, supported_actions):
         if not self.selectionModel().selectedRows():
@@ -132,6 +153,7 @@ class _FallbackTable(QTableWidget):
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat(self.MIME_TYPE):
             super().dragEnterEvent(event)
+            self._drop_pos = event.position().toPoint()
             event.acceptProposedAction()
         else:
             event.ignore()
@@ -144,20 +166,56 @@ class _FallbackTable(QTableWidget):
             margin = 48
             y = event.position().toPoint().y()
             height = self.viewport().height()
-            scrollbar = self.verticalScrollBar()
             if y < margin:
-                scrollbar.setValue(scrollbar.value() - max(1, margin - y) // 4)
+                self._scroll_direction = -1
             elif y > height - margin:
-                scrollbar.setValue(scrollbar.value() + max(1, y - (height - margin)) // 4)
+                self._scroll_direction = 1
+            else:
+                self._scroll_direction = 0
+                self._scroll_timer.stop()
+            if self._scroll_direction and not self._scroll_timer.isActive():
+                self._scroll_timer.start()
+            self._drop_pos = event.position().toPoint()
+            self.update()
             event.acceptProposedAction()
         else:
             event.ignore()
 
     def dropEvent(self, event):
+        self._stop_drag_scroll()
+        self._drop_pos = None
+        self.update()
         if not event.mimeData().hasFormat(self.MIME_TYPE):
             event.ignore()
             return
         self._drop_handler(self, event)
+
+    def dragLeaveEvent(self, event):
+        self._stop_drag_scroll()
+        self._drop_pos = None
+        self.update()
+        super().dragLeaveEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self._drop_pos is None:
+            return
+        index = self.indexAt(self._drop_pos)
+        if index.isValid():
+            rect = self.visualRect(index)
+            y = rect.top() if self._drop_pos.y() < rect.center().y() else rect.bottom() + 1
+        else:
+            y = self.viewport().height()
+            if self.rowCount():
+                last = self.visualRect(self.model().index(self.rowCount() - 1, 0))
+                y = last.bottom() + 1 if last.isValid() else y
+        painter = QPainter(self.viewport())
+        painter.setPen(QPen(QColor("#35bfff"), 3))
+        painter.drawLine(0, y, self.viewport().width(), y)
+        painter.setPen(QPen(QColor("#b9efff"), 1))
+        painter.drawLine(0, y - 2, self.viewport().width(), y - 2)
+        painter.drawLine(0, y + 2, self.viewport().width(), y + 2)
+        painter.end()
 
 
 class FallbackPriorityDialog(QDialog):
