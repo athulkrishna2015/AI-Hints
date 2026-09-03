@@ -135,6 +135,13 @@ def process_log_file(path: str, level_filter: str, source_filter: str, search_fi
 
 
 class LogTabMixin:
+    def _current_log_path(self):
+        try:
+            from ..logger import _log_path
+            return _log_path()
+        except Exception:
+            return os.path.join(self.addon_dir, "ai_hints.log")
+
     def _create_log_tab(self):
         """Constructs the Tab 7: Logs UI"""
         tab = QWidget()
@@ -205,6 +212,23 @@ class LogTabMixin:
         filter_layout.addWidget(clear_btn)
         
         layout.addLayout(filter_layout)
+
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(QLabel("Log file:"))
+        self.log_path_edit = QLineEdit()
+        self.log_path_edit.setReadOnly(True)
+        self.log_path_edit.setCursorPosition(0)
+        self.log_path_edit.setToolTip("Select and copy the canonical AI-Hints log file path.")
+        path_layout.addWidget(self.log_path_edit, 1)
+
+        copy_path_btn = QPushButton("Copy Path")
+        copy_path_btn.clicked.connect(self.copy_log_path)
+        path_layout.addWidget(copy_path_btn)
+
+        open_folder_btn = QPushButton("Open Log Folder")
+        open_folder_btn.clicked.connect(self.open_log_folder)
+        path_layout.addWidget(open_folder_btn)
+        layout.addLayout(path_layout)
         
         self.log_view = QTextBrowser()
         self.log_view.setReadOnly(True)
@@ -231,11 +255,8 @@ class LogTabMixin:
             self.load_log()
 
     def load_log(self):
-        try:
-            from ..logger import _log_path
-            log_file = _log_path()
-        except Exception:
-            log_file = os.path.join(self.addon_dir, "ai_hints.log")
+        log_file = self._current_log_path()
+        self.log_path_edit.setText(os.path.abspath(log_file))
         if not os.path.exists(log_file):
             self._log_fingerprint = None
             self.log_view.setPlainText("No log file found yet. Errors will appear here after using the add-on.")
@@ -360,17 +381,27 @@ class LogTabMixin:
             self.match_count_label.setText(f"{count} matches{limit_hit}")
 
     def clear_log(self):
-        try:
-            from ..logger import _log_path
-            log_file = _log_path()
-        except Exception:
-            log_file = os.path.join(self.addon_dir, "ai_hints.log")
+        log_file = self._current_log_path()
         try:
             open(log_file, "w", encoding="utf-8").close()
             self.log_view.setPlainText("Log cleared.")
             logger.info("Log cleared by user.")
         except Exception as e:
             info(f"Could not clear log: {e}")
+
+    def copy_log_path(self):
+        path = os.path.abspath(self._current_log_path())
+        self.log_path_edit.setText(path)
+        QApplication.clipboard().setText(path)
+        tooltip("Log file path copied to clipboard")
+
+    def open_log_folder(self):
+        folder = os.path.dirname(os.path.abspath(self._current_log_path()))
+        if not os.path.isdir(folder):
+            info(f"Log folder does not exist yet: {folder}")
+            tooltip("Log folder does not exist yet.")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def _on_log_anchor_clicked(self, qurl):
         """Intercepts clicks on anchor tags to either open Anki Browser or an external URL."""

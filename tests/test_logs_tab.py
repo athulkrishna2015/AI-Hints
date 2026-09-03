@@ -131,6 +131,7 @@ def _make_tab(path):
     tab.addon_dir = os.path.dirname(path)
     tab.log_view = _FakeView()
     tab.match_count_label = MagicMock()
+    tab.log_path_edit = MagicMock()
     tab._apply_search_highlighting = lambda pattern: None
     # Bind the real unbound methods.
     tab.load_log = lambda: LogTabMixin.load_log(tab)
