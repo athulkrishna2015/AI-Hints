@@ -427,6 +427,35 @@ class GlobalDialogTableTests(unittest.TestCase):
             [2, 3],
         )
 
+    def test_drag_reorder_keeps_selected_group_together(self):
+        dlg = self._make_dialog([
+            ("a", "m1"),
+            ("b", "m2"),
+            ("c", "m3"),
+            ("d", "m4"),
+        ])
+        selection_model = dlg.enabled_table.selectionModel()
+        for row in (0, 1):
+            selection_model.select(
+                dlg.enabled_table.model().index(row, 0),
+                QtCore.QItemSelectionModel.SelectionFlag.Select
+                | QtCore.QItemSelectionModel.SelectionFlag.Rows,
+            )
+
+        dlg._reorder_dragged_rows(
+            dlg.enabled_table,
+            [("c", "m3"), ("d", "m4"), ("a", "m1"), ("b", "m2")],
+            [("a", "m1"), ("b", "m2")],
+        )
+
+        self.assertEqual(self._order(dlg), [
+            ("c", "m3"), ("d", "m4"), ("a", "m1"), ("b", "m2"),
+        ])
+        self.assertEqual(
+            sorted(index.row() for index in dlg.enabled_table.selectionModel().selectedRows()),
+            [2, 3],
+        )
+
     def test_ok_roundtrip_keeps_disabled(self):
         from PyQt6.QtCore import Qt
 

@@ -113,9 +113,18 @@ def provider_enabled_pairs(main_dialog):
     return result
 
 
+class _FallbackTable(QTableWidget):
+    def __init__(self, drop_handler, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._drop_handler = drop_handler
+
+    def dropEvent(self, event):
+        self._drop_handler(self, event)
+
+
 class FallbackPriorityDialog(QDialog):
     def _make_fallback_table(self, headers, init_widths=None):
-        table = QTableWidget()
+        table = _FallbackTable(self._handle_table_drop)
         table.setColumnCount(len(headers))
         table.setHorizontalHeaderLabels(headers)
         for c in range(len(headers)):
@@ -127,6 +136,11 @@ class FallbackPriorityDialog(QDialog):
         table.setSortingEnabled(False)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        table.setDragEnabled(True)
+        table.setAcceptDrops(True)
+        table.setDropIndicatorShown(True)
+        table.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+        table.setDefaultDropAction(Qt.DropAction.MoveAction)
         table.setStyleSheet("""
             QTableWidget::item { padding: 4px; }
             QTableWidget::item:selected { background-color: rgba(0, 140, 186, 0.1); color: black; }
@@ -134,6 +148,47 @@ class FallbackPriorityDialog(QDialog):
         if not hasattr(self, "_sort_states"):
             self._sort_states = {}
         return table
+
+    def _handle_table_drop(self, table, event):
+        if event.source() is not table:
+            event.ignore()
+            return
+        rows = self._selected_rows(table)
+        if not rows:
+            event.ignore()
+            return
+        pos = event.position().toPoint()
+        index = table.indexAt(pos)
+        boundary = table.rowCount() if not index.isValid() else index.row()
+        if index.isValid() and pos.y() >= table.visualRect(index).center().y():
+            boundary += 1
+        selected = set(rows)
+        keys = [self._row_key(table, row) for row in range(table.rowCount())]
+        moving = [keys[row] for row in rows]
+        rest = [key for row, key in enumerate(keys) if row not in selected]
+        insert_at = sum(1 for row in range(boundary) if row not in selected)
+        wanted = rest[:insert_at] + moving + rest[insert_at:]
+        self._reorder_dragged_rows(table, wanted, moving)
+        event.setDropAction(Qt.DropAction.MoveAction)
+        event.accept()
+
+    def _reorder_dragged_rows(self, table, wanted, selected_keys):
+        self._reorder_to_keys(table, wanted)
+        table.clearSelection()
+        selection_model = table.selectionModel()
+        selected_rows = [
+            row for row in range(table.rowCount())
+            if self._row_key(table, row) in set(selected_keys)
+        ]
+        if selected_rows:
+            table.setCurrentCell(selected_rows[0], 0)
+        for row in selected_rows:
+            selection_model.select(
+                table.model().index(row, 0),
+                QItemSelectionModel.SelectionFlag.Select
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
+        self._clear_sort_indicator(table)
 
     def _init_fallback_table(self, headers, init_widths=None):
         self.table = self._make_fallback_table(headers, init_widths)
