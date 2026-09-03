@@ -317,6 +317,76 @@ class GlobalDialogTableTests(unittest.TestCase):
         self.assertLess(dt, 10, f"group_same_models took {dt:.1f}s")
         self.assertEqual(dlg.enabled_table.rowCount(), 1500)
 
+    def test_reorder_progress_completes(self):
+        from unittest.mock import patch
+
+        rows = [(f"p{i % 5}", f"model-{i % 4}") for i in range(20)]
+        dlg = self._make_dialog(rows)
+        dlg._reorder_progress_after = 5
+        seen = {}
+
+        class FakeProgress:
+            def __init__(self, *args):
+                seen["shown"] = True
+                seen["closed"] = False
+
+            def setWindowModality(self, *args):
+                pass
+
+            def setMinimumDuration(self, *args):
+                pass
+
+            def setValue(self, *args):
+                pass
+
+            def wasCanceled(self):
+                return False
+
+            def close(self):
+                seen["closed"] = True
+
+        with patch("PyQt6.QtWidgets.QProgressDialog", FakeProgress):
+            dlg.group_same_models()
+        self.assertTrue(seen.get("shown"))
+        self.assertTrue(seen.get("closed"))
+        self.assertEqual(dlg.enabled_table.rowCount(), 20)
+        got = [dlg._row_pair(dlg.enabled_table, r) for r in range(20)]
+        self.assertEqual(got, cluster_pairs_by_model(rows))
+
+    def test_reorder_cancel_keeps_table_complete(self):
+        from unittest.mock import patch
+
+        rows = [(f"p{i % 5}", f"model-{i % 4}") for i in range(20)]
+        dlg = self._make_dialog(rows)
+        dlg._reorder_progress_after = 5
+        seen = {}
+
+        class FakeProgress:
+            def __init__(self, *args):
+                seen["closed"] = False
+
+            def setWindowModality(self, *args):
+                pass
+
+            def setMinimumDuration(self, *args):
+                pass
+
+            def setValue(self, *args):
+                pass
+
+            def wasCanceled(self):
+                return True
+
+            def close(self):
+                seen["closed"] = True
+
+        with patch("PyQt6.QtWidgets.QProgressDialog", FakeProgress):
+            dlg.group_same_models()
+        self.assertTrue(seen.get("closed"))
+        got = [dlg._row_pair(dlg.enabled_table, r) for r in range(dlg.enabled_table.rowCount())]
+        self.assertEqual(dlg.enabled_table.rowCount(), 20)
+        self.assertEqual(sorted(got), sorted(rows))
+
 
 class ProviderDialogHeaderSortTests(unittest.TestCase):
     @classmethod

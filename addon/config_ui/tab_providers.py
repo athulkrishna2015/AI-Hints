@@ -1467,23 +1467,97 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             return lambda pair, row: int(self._g_timeouts.get(pair[0], {}).get(pair[1], 0) or 0)
         return lambda pair, row: table.item(row, 4).text().casefold()
 
-    def _reorder_to_keys(self, table, wanted):
+    def _capture_rows(self, table):
+        data = []
+        for r in range(table.rowCount()):
+            item = table.item(r, 0)
+            pair = item.data(Qt.ItemDataRole.UserRole)
+            data.append({
+                "pair": (pair[0], pair[1]),
+                "checked": item.checkState() == Qt.CheckState.Checked,
+                "hidden": table.isRowHidden(r),
+                "selected": item.isSelected(),
+                "texts": {c: table.item(r, c).text() for c in (0, 1, 4)},
+                "tips": {c: table.item(r, c).toolTip() for c in (0, 1, 4)},
+                "bg": {c: table.item(r, c).background() for c in (0, 1, 4)},
+                "fg": {c: table.item(r, c).foreground() for c in (0, 1, 4)},
+            })
+        return data
+
+    def _restore_captured_row(self, table, d):
+        p, m = d["pair"]
+        row = table.rowCount()
+        table.insertRow(row)
+        for col in (0, 1, 4):
+            item = QTableWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, (p, m))
+            if col == 0:
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            table.setItem(row, col, item)
+        table.item(row, 0).setCheckState(Qt.CheckState.Checked if d["checked"] else Qt.CheckState.Unchecked)
+        for col in (0, 1, 4):
+            item = table.item(row, col)
+            item.setText(d["texts"][col])
+            item.setToolTip(d["tips"][col])
+            item.setBackground(d["bg"][col])
+            item.setForeground(d["fg"][col])
+        table.setRowHidden(row, d["hidden"])
+        table.item(row, 0).setSelected(d["selected"])
+        return row
+
+    def _reorder_to_keys(self, table, wanted, label=None):
         self._harvest_widgets()
-        stored = self._take_all_rows(table)
+        data = self._capture_rows(table)
         buckets = {}
-        for pair, items, selected, hidden in stored:
-            buckets.setdefault(pair, []).append([items, selected, hidden])
-        order_index = {}
-        for pair, queue in buckets.items():
-            order_index[pair] = 0
+        for d in data:
+            buckets.setdefault(d["pair"], []).append(d)
+        order_index = {pair: 0 for pair in buckets}
         ordered = []
         for pair in wanted:
             queue = buckets[pair]
             i = order_index[pair]
             order_index[pair] = i + 1
-            ordered.append((pair,) + tuple(queue[i]))
-        self._restore_rows(table, ordered)
-        self._refresh_visible_widgets()
+            ordered.append(queue[i])
+        for d in ordered:
+            d["added"] = False
+        show_progress = label is not None and len(ordered) > self._reorder_progress_after
+        prog = None
+        if show_progress:
+            from PyQt6.QtWidgets import QProgressDialog, QApplication
+            prog = QProgressDialog(label, "Cancel", 0, len(ordered), self)
+            prog.setWindowModality(Qt.WindowModality.WindowModal)
+            prog.setMinimumDuration(400)
+            prog.setValue(0)
+        self._moving_rows = True
+        table.blockSignals(True)
+        table.setUpdatesEnabled(False)
+        table.setVisible(False)
+        try:
+            table.setRowCount(0)
+            cancelled = False
+            for n, d in enumerate(ordered):
+                self._restore_captured_row(table, d)
+                d["added"] = True
+                if prog is not None and n % 100 == 0:
+                    prog.setValue(n)
+                    QApplication.processEvents()
+                    if prog.wasCanceled():
+                        cancelled = True
+                        break
+            if cancelled:
+                for d in data:
+                    if not d["added"]:
+                        self._restore_captured_row(table, d)
+                        d["added"] = True
+        finally:
+            table.setVisible(True)
+            table.setUpdatesEnabled(True)
+            table.blockSignals(False)
+            self._moving_rows = False
+            if prog is not None:
+                prog.close()
+        self._ensure_table_widgets(table)
+        self._update_counts()
 
     def _find_row(self, provider, model):
         for table in self._tables():
@@ -1726,42 +1800,16 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             item.setBackground(QBrush(QColor(COL_NEW_BG)))
             item.setForeground(QBrush(QColor(COL_NEW_FG)))
 
-    def _take_all_rows(self, table):
-        table.blockSignals(True)
-        stored = []
-        for r in range(table.rowCount()):
-            items = [table.takeItem(r, c) for c in (0, 1, 4)]
-            pair = items[0].data(Qt.ItemDataRole.UserRole)
-            stored.append(((pair[0], pair[1]), items, items[0].isSelected(), table.isRowHidden(r)))
-        table.setRowCount(0)
-        table.blockSignals(False)
-        return stored
+    _reorder_progress_after = 800
 
-    def _restore_rows(self, table, stored):
-        table.blockSignals(True)
-        table.setUpdatesEnabled(False)
-        try:
-            for _, items, selected, hidden in stored:
-                row = table.rowCount()
-                table.insertRow(row)
-                for col, item in zip((0, 1, 4), items):
-                    table.setItem(row, col, item)
-                items[0].setSelected(selected)
-                table.setRowHidden(row, hidden)
-        finally:
-            table.setUpdatesEnabled(True)
-            table.blockSignals(False)
-        self._ensure_table_widgets(table)
-        self._update_counts()
-
-    def _apply_pair_order(self, table, wanted):
-        self._reorder_to_keys(table, wanted)
+    def _apply_pair_order(self, table, wanted, label=None):
+        self._reorder_to_keys(table, wanted, label)
         self._clear_sort_indicator(table)
 
     def group_same_models(self):
         for table in self._tables():
             pairs = [self._row_key(table, r) for r in range(table.rowCount())]
-            self._apply_pair_order(table, cluster_pairs_by_model(pairs))
+            self._apply_pair_order(table, cluster_pairs_by_model(pairs), "Grouping same models...")
 
     def filter_models(self, text):
         for table in self._tables():
@@ -1794,24 +1842,14 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         bottom = rows[-1] + delta
         if top < 0 or bottom >= table.rowCount():
             return
-        self._harvest_widgets()
-        table.blockSignals(True)
-        try:
-            stored = []
-            for r in reversed(rows):
-                items = [table.takeItem(r, c) for c in (0, 1, 4)]
-                table.removeRow(r)
-                stored.insert(0, items)
-            for i, items in enumerate(stored):
-                table.insertRow(top + i)
-                for col, item in zip((0, 1, 4), items):
-                    table.setItem(top + i, col, item)
-                table.item(top + i, 0).setSelected(True)
-            table.setCurrentCell(top, 0)
-        finally:
-            table.blockSignals(False)
-        self._refresh_visible_widgets()
-        self._ensure_visible_widgets()
+        pairs = [self._row_key(table, r) for r in range(table.rowCount())]
+        selected = set(rows)
+        moving = [pairs[r] for r in rows]
+        rest = [p for r, p in enumerate(pairs) if r not in selected]
+        top = max(0, min(top, len(rest)))
+        wanted = rest[:top] + moving + rest[top:]
+        self._reorder_to_keys(table, wanted, "Moving rows...")
+        table.setCurrentCell(min(top, table.rowCount() - 1), 0)
         self._clear_sort_indicator(table)
 
     def on_edit_selected_provider(self):
