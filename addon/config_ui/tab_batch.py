@@ -605,6 +605,15 @@ class BatchTabMixin:
             all_decks = mw.col.decks.all_names()
             self.batch_deck_chooser.addItem(ENTIRE_COLLECTION)
             self.batch_deck_chooser.addItems(all_decks)
+            try:
+                comp = self.batch_deck_chooser.completer()
+                if comp is not None:
+                    from PyQt6.QtCore import QStringListModel
+                    comp.setModel(QStringListModel([ENTIRE_COLLECTION] + all_decks))
+                    comp.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+                    comp.setFilterMode(Qt.MatchFlag.MatchContains)
+            except Exception:
+                pass
             
             # 1. First, check if currentText is a valid deck name
             if current_text in all_decks:
@@ -622,6 +631,25 @@ class BatchTabMixin:
             if curr in all_decks:
                  self.batch_deck_chooser.setCurrentText(curr)
         except: pass
+        # Ensure searchable state is restored even after a clear
+        try:
+            self.batch_deck_chooser.setEditable(True)
+            self.batch_deck_chooser.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+            if not self.batch_deck_chooser.completer():
+                from PyQt6.QtCore import QStringListModel
+                all_decks = mw.col.decks.all_names() if hasattr(mw, "col") and mw.col else []
+                comp = QCompleter([ENTIRE_COLLECTION] + all_decks, self)
+                comp.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+                comp.setFilterMode(Qt.MatchFlag.MatchContains)
+                comp.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+                comp.setMaxVisibleItems(16)
+                try:
+                    comp.popup().setMaximumHeight(320)
+                except Exception:
+                    pass
+                self.batch_deck_chooser.setCompleter(comp)
+        except Exception:
+            pass
 
     def _current_deck_name(self):
         """Return the name of the deck currently active in Anki's main window, or ''."""
