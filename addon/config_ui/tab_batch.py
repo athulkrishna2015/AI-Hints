@@ -1034,6 +1034,17 @@ class BatchTabMixin:
                 progress.setWindowTitle("AI Hints - Card Scanner")
                 progress.setWindowModality(Qt.WindowModality.WindowModal)
                 progress.setMinimumDuration(0)
+                # Prevent spurious wasCanceled() from window-close/ESC — handle
+                # only explicit Cancel clicks; keep dialog responsive via processEvents
+                try:
+                    progress.setCancelButton(None)
+                except Exception:
+                    pass
+                try:
+                    progress.setAutoClose(False)
+                    progress.setAutoReset(False)
+                except Exception:
+                    pass
 
                 # Fast path: group sibling cloze cards by note so each note is
                 # loaded and parsed once. Falls back to per-card checks on error.
