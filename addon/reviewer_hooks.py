@@ -344,12 +344,19 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
             if skip_redraw:
                 _push_hint_data_to_frontend(web, fresh_card, data, is_manual=is_manual)
             else:
+                # History-aware refresh: manual regenerate keeps the 51b68ea
+                # refresh+JS path so the card visibly updates without a flash
+                # race. Autogen uses a full refresh (495c166/e7b2043) so the
+                # compiled card HTML already contains the hints — no JS patch
+                # needed, matching the pregen race fix.
+                try:
+                    refresh_current_card(card=fresh_card, web=web)
+                except Exception as e:
+                    logger.error(f"AI-Hints card refresh failed: {e}")
+                    _push_hint_data_to_frontend(web, fresh_card, data, is_manual=is_manual)
+                    return True
                 if is_manual:
-                    try:
-                        refresh_current_card(card=fresh_card, web=web)
-                    except Exception as e:
-                        logger.error(f"AI-Hints card refresh failed: {e}")
-                _push_hint_data_to_frontend(web, fresh_card, data, is_manual=is_manual)
+                    _push_hint_data_to_frontend(web, fresh_card, data, is_manual=is_manual)
 
         return True
     return False
