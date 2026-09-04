@@ -891,11 +891,22 @@ class BatchManager:
         def _task():
             try:
                 from .reviewer_hooks import card_has_hints, _get_card_from_collection
+                from .card_parser import CardParser
+                _parser = CardParser()
                 missing = []
                 for cid in cid_list:
                     card = _get_card_from_collection(cid)
-                    if card is None or not card_has_hints(card):
-                        missing.append(cid)
+                    if card is None:
+                        continue
+                    if card_has_hints(card):
+                        continue
+                    try:
+                        note = card.note()
+                        if _parser.is_card_skipped(note, card):
+                            continue
+                    except Exception:
+                        pass
+                    missing.append(cid)
                 result["value"] = missing
             except Exception as e:
                 logger.error(f"AI-Hints: hint verification failed: {e}")
