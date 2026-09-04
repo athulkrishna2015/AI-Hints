@@ -90,9 +90,11 @@ def prune_orphan_pairs(pairs, known_providers):
 def provider_enabled_pairs(main_dialog):
     """Return provider/model pairs enabled in the per-provider fallback data."""
     result = []
-    models = getattr(main_dialog, "config", {}).get("models", {}) or {}
+    config = getattr(main_dialog, "config", {}) or {}
+    models = config.get("models", {}) or {}
     fallbacks = getattr(main_dialog, "model_fallbacks_data", {}) or {}
     disabled = getattr(main_dialog, "disabled_fallback_models_data", {}) or {}
+    disabled_providers = set(config.get("disabled_providers", []) or [])
     providers = set(fallbacks) | set(models)
     custom = getattr(main_dialog, "custom_providers_data", {}) or {}
     if isinstance(custom, dict):
@@ -102,6 +104,8 @@ def provider_enabled_pairs(main_dialog):
                 models = dict(models)
                 models.setdefault(provider, data["model"])
     for provider in sorted(providers):
+        if provider in disabled_providers:
+            continue
         blocked = set(disabled.get(provider, []) or [])
         candidates = list(fallbacks.get(provider, []) or [])
         active = models.get(provider, "") if isinstance(models, dict) else ""

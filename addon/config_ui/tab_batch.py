@@ -985,47 +985,228 @@ class BatchTabMixin:
                 
             skipped_count = 0
             if self.batch_skip_existing_cb.isChecked():
-                from ..reviewer_hooks import card_has_hints, _get_card_from_collection, _card_saved_version, _version_less_than
                 from aqt.qt import Qt, QProgressDialog, QApplication
-                
+                from ..card_parser import CardParser
+
                 final_ids = []
                 use_ver_gate = self.batch_regen_version_cb.isChecked()
                 min_ver = self.batch_regen_min_version_edit.text().strip()
-                
-                # Show a progress dialog
+
+                try:
+                    _cfg = self.config if isinstance(getattr(self, "config", None), dict) else {}
+                    _parser = CardParser(
+                        mathjax_format=_cfg.get("mathjax_format", "delimiters"),
+                        fix_latex=_cfg.get("fix_latex", False),
+                    )
+                except Exception:
+                    from ..reviewer_hooks import card_has_hints as _fallback_has_hints
+                    _parser = None
+
                 progress = QProgressDialog("Scanning deck for eligible cards...", "Cancel", 0, len(source_cids), self)
                 progress.setWindowTitle("AI Hints - Card Scanner")
                 progress.setWindowModality(Qt.WindowModality.WindowModal)
-                progress.setMinimumDuration(0)  # Show immediately
-                
-                for i, cid in enumerate(source_cids):
-                    if i % 10 == 0:
-                        progress.setValue(i)
-                        progress.setLabelText(f"Scanning card {i+1} of {len(source_cids)}...")
-                        QApplication.processEvents()
-                        if progress.wasCanceled():
-                            logger.info("AI-Hints Batch: Scanning canceled by user.")
-                            progress.close()
-                            return
-                            
-                    c = _get_card_from_collection(cid)
-                    if not c: continue
-                    has_hints = card_has_hints(c)
-                    should_process = not has_hints
-                    if has_hints and use_ver_gate and min_ver:
-                        saved_ver = _card_saved_version(c)
-                        if _version_less_than(saved_ver, min_ver):
-                            should_process = True
-                    
-                    if should_process:
-                        final_ids.append(cid)
+                progress.setMinimumDuration(0)
+
+                # Fast path: group sibling cloze cards by note so each note is
+                # loaded and parsed once. Falls back to per-card checks on error.
+                try:
+                    # Build cid -> (nid, ord) via a single batched SQL query.
+                    cid_to_nid_ord = {}
+                    if source_cids:
+                        chunk_sz = 900
+                        for s in range(0, len(source_cids), chunk_sz):
+                            chunk = source_cids[s:s+chunk_sz]
+                            placeholders = ",".join("?" for _ in chunk)
+                            try:
+                                rows = mw.col.db.all(f"SELECT id, nid, ord FROM cards WHERE id IN ({placeholders})", *chunk)
+                            except Exception:
+                                rows = []
+                                for cid in chunk:
+                                    try:
+                                        c = mw.col.get_card(cid)
+                                        if c:
+                                            rows.append((c.id, c.nid, c.ord))
+                                    except Exception:
+                                        pass
+                            for r in rows:
+                                try:
+                                    cid_to_nid_ord[int(r[0])] = (int(r[1]), int(r[2]))
+                                except Exception:
+                                    pass
+
+                    # Invert to nid -> [(cid, ord)]
+                    from collections import defaultdict
+                    nid_to_cids = defaultdict(list)
+                    orphan_cids = []
+                    for cid in source_cids:
+                        tup = cid_to_nid_ord.get(cid)
+                        if tup is None:
+                            orphan_cids.append(cid)
+                        else:
+                            nid_to_cids[tup[0]].append((cid, tup[1]))
+
+                    total_notes = len(nid_to_cids) + len(orphan_cids)
+                    processed_notes = 0
+                    last_pump = time.time()
+
+                    # Pre-import version helper lazily
+                    _need_version = bool(use_ver_gate and min_ver)
+                    if _need_version:
+                        from ..reviewer_hooks import _version_less_than as _v_lt
                     else:
-                        skipped_count += 1
-                        if skipped_count < 5:
-                             logger.debug(f"AI-Hints Batch: Skipping card {cid} (already has hints).")
-                
-                progress.setValue(len(source_cids))
-                logger.info(f"AI-Hints Batch Filtering: Filtered {len(source_cids)} cards -> {len(final_ids)} cards to process ({skipped_count} skipped).")
+                        _v_lt = None
+
+                    for nid, cid_ord_list in list(nid_to_cids.items()):
+                        if processed_notes % 10 == 0:
+                            now = time.time()
+                            if now - last_pump > 0.08:
+                                progress.setValue(min(processed_notes * 10, len(source_cids)))
+                                progress.setLabelText(f"Scanning notes {processed_notes+1} of {total_notes} ({len(source_cids)} cards)...")
+                                QApplication.processEvents()
+                                if progress.wasCanceled():
+                                    logger.info("AI-Hints Batch: Scanning canceled by user.")
+                                    progress.close()
+                                    return
+                                last_pump = now
+                        processed_notes += 1
+
+                        try:
+                            note = mw.col.get_note(nid)
+                        except Exception:
+                            # Note missing -> all its cards are eligible (nothing to skip)
+                            for cid, _ in cid_ord_list:
+                                final_ids.append(cid)
+                            continue
+
+                        # Fast prefilter: if no ai-hints marker at all, skip parsing
+                        try:
+                            fields = getattr(note, "fields", None)
+                            if fields is None and hasattr(note, "values"):
+                                fields = list(note.values())
+                            has_marker = False
+                            if isinstance(fields, (list, tuple)):
+                                for f in fields:
+                                    if isinstance(f, str) and "ai-hints-json" in f:
+                                        has_marker = True
+                                        break
+                            if not has_marker:
+                                for cid, _ in cid_ord_list:
+                                    final_ids.append(cid)
+                                continue
+                        except Exception:
+                            pass
+
+                        # Per-card check reusing the same note object
+                        for cid, ord_ in cid_ord_list:
+                            # Lightweight fake card for parser matching
+                            class _FC:
+                                __slots__ = ("id","ord","nid","_note")
+                                def __init__(self, _id,_ord,_nid,_note):
+                                    self.id=_id; self.ord=_ord; self.nid=_nid; self._note=_note
+                                def note(self): return self._note
+                            fc = _FC(cid, ord_, nid, note)
+                            try:
+                                block = _parser.find_hints_block(note, fc) if _parser else None
+                                has_hints = bool(block)
+                            except Exception:
+                                # Fallback to legacy helper
+                                try:
+                                    from ..reviewer_hooks import card_has_hints as _ch
+                                    has_hints = bool(_ch(fc))
+                                except Exception:
+                                    has_hints = False
+
+                            should_process = not has_hints
+                            if has_hints and _need_version:
+                                try:
+                                    # Inline version extraction without extra DB hop
+                                    import re as _re, html as _html
+                                    from ..card_parser import _safe_loads
+                                    saved_ver = ""
+                                    for fval in (fields or []):
+                                        if not isinstance(fval, str):
+                                            continue
+                                        for m in _re.finditer(r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>', fval, _re.DOTALL | _re.IGNORECASE):
+                                            raw = _html.unescape(m.group(1) or "")
+                                            try:
+                                                parsed = _safe_loads(raw)
+                                            except Exception:
+                                                continue
+                                            if isinstance(parsed, dict):
+                                                card_key = f"c{ord_+1}"
+                                                if card_key in parsed and isinstance(parsed[card_key], dict):
+                                                    saved_ver = str(parsed[card_key].get("_version",""))
+                                                    break
+                                                elif "_version" in parsed:
+                                                    saved_ver = str(parsed.get("_version",""))
+                                                    break
+                                        if saved_ver:
+                                            break
+                                    if _v_lt and _v_lt(saved_ver, min_ver):
+                                        should_process = True
+                                except Exception:
+                                    pass
+
+                            if should_process:
+                                final_ids.append(cid)
+                            else:
+                                skipped_count += 1
+                                if skipped_count < 5:
+                                    logger.debug(f"AI-Hints Batch: Skipping card {cid} (already has hints).")
+
+                    # Orphan cids that had no cards row (deleted) - treat via fallback
+                    for cid in orphan_cids:
+                        # Let legacy path decide (will be skipped if card missing)
+                        try:
+                            from ..reviewer_hooks import _get_card_from_collection, card_has_hints
+                            c = _get_card_from_collection(cid)
+                            if not c:
+                                continue
+                            has_hints = card_has_hints(c)
+                            should_process = not has_hints
+                            if has_hints and _need_version:
+                                from ..reviewer_hooks import _card_saved_version, _version_less_than
+                                if _version_less_than(_card_saved_version(c), min_ver):
+                                    should_process = True
+                            if should_process:
+                                final_ids.append(cid)
+                            else:
+                                skipped_count += 1
+                        except Exception:
+                            final_ids.append(cid)
+
+                    progress.setValue(len(source_cids))
+                    logger.info(f"AI-Hints Batch Filtering: Filtered {len(source_cids)} cards -> {len(final_ids)} cards to process ({skipped_count} skipped).")
+                except Exception as e:
+                    logger.warning(f"AI-Hints Batch fast scan failed ({e}), falling back to per-card scan.")
+                    # Fallback: original per-card loop
+                    from ..reviewer_hooks import card_has_hints, _get_card_from_collection, _card_saved_version, _version_less_than
+                    final_ids = []
+                    skipped_count = 0
+                    for i, cid in enumerate(source_cids):
+                        if i % 10 == 0:
+                            progress.setValue(i)
+                            progress.setLabelText(f"Scanning card {i+1} of {len(source_cids)}...")
+                            QApplication.processEvents()
+                            if progress.wasCanceled():
+                                logger.info("AI-Hints Batch: Scanning canceled by user.")
+                                progress.close()
+                                return
+                        c = _get_card_from_collection(cid)
+                        if not c:
+                            continue
+                        has_hints = card_has_hints(c)
+                        should_process = not has_hints
+                        if has_hints and use_ver_gate and min_ver:
+                            saved_ver = _card_saved_version(c)
+                            if _version_less_than(saved_ver, min_ver):
+                                should_process = True
+                        if should_process:
+                            final_ids.append(cid)
+                        else:
+                            skipped_count += 1
+                    progress.setValue(len(source_cids))
+                    logger.info(f"AI-Hints Batch Filtering: Filtered {len(source_cids)} cards -> {len(final_ids)} cards to process ({skipped_count} skipped).")
             else:
                 final_ids = list(source_cids)
 
