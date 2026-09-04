@@ -1215,6 +1215,13 @@ class BatchTabMixin:
                             final_ids.append(cid)
 
                     progress.setValue(len(source_cids))
+                    try:
+                        progress.close()
+                    except Exception:
+                        try:
+                            progress.hide()
+                        except Exception:
+                            pass
                     logger.info(f"AI-Hints Batch Filtering: Filtered {len(source_cids)} cards -> {len(final_ids)} cards to process ({skipped_count} skipped).")
                 except Exception as e:
                     logger.warning(f"AI-Hints Batch fast scan failed ({e}), falling back to per-card scan.")
@@ -1245,6 +1252,13 @@ class BatchTabMixin:
                         else:
                             skipped_count += 1
                     progress.setValue(len(source_cids))
+                    try:
+                        progress.close()
+                    except Exception:
+                        try:
+                            progress.hide()
+                        except Exception:
+                            pass
                     logger.info(f"AI-Hints Batch Filtering: Filtered {len(source_cids)} cards -> {len(final_ids)} cards to process ({skipped_count} skipped).")
             else:
                 final_ids = list(source_cids)
