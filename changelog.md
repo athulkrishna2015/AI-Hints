@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 7.2.7 (2026-09-04)
+- **Autogen Now Does Full Card Refresh**: `auto_generate`/`pregen` completions now call `refresh_current_card()` so the compiled card HTML already contains the new hints. Only manual Regenerate keeps the `refresh + JS push` combo (`51b68ea`); auto paths no longer rely on `window.aiHintsUpdateData` alone, restoring the `495c166`/`e7b2043` clean-refresh behavior that prevents transition-race stale faces.
+
 ## 7.2.6 (2026-09-04)
 - **Match Per-Provider Respects Disabled Providers**: **Advanced Global Fallback → Match Per-Provider Enabled** no longer pulls models from disabled providers. Previously the active/first model of a disabled provider (e.g. grok/xAI, chatgpt/openai when disabled) was still treated as enabled and landed in the Global Enabled list. `provider_enabled_pairs` now skips any provider listed in `disabled_providers`, so the global Enabled set mirrors only truly enabled per-provider rows.
 - **Faster Batch Initiate Scan (Grouped by Note)**: **Batch → Initiate Queue** scanning is now batched by note: sibling cloze cards sharing a note are checked once, notes without any `ai-hints-json` marker are skipped without parsing, and the `cards` table is queried in 900-row SQL chunks instead of one-by-one `get_card()` calls. A single `CardParser` instance and throttled progress updates (8% interval) replace per-card parser construction and 10-card `processEvents()` churn. Large decks (10k+ cards) now start 3–8× faster; cloze-heavy decks see the biggest gain. Falls back to the original per-card loop on any error.
