@@ -34,6 +34,12 @@ from ..config_io import write_pretty_config_preserve_keys
 
 LAST_ACTIVE_TAB_INDEX = 7  # Fallback static state
 
+def _set_test_status(status_label, provider, st, tt, col, model_name):
+    PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
+    status_label.setText(st)
+    status_label.setToolTip(tt)
+    status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
+
 class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin, 
                    ShortcutsTabMixin, BatchTabMixin, SupportTabMixin, LogTabMixin, MobileTabMixin):
     
@@ -604,10 +610,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not model_name:
             if status_label:
                 st, tt, col = "❌ No Model", "Please select or enter a model name first.", "red"
-                PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, "")
-                status_label.setText(st)
-                status_label.setToolTip(tt)
-                status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
+                _set_test_status(status_label, provider, st, tt, col, "")
             else:
                 info(f"Please select or enter a model name for {provider.capitalize()} first.")
             return
@@ -617,10 +620,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not api_key and provider not in ["local"] and provider not in self.custom_providers_data and provider not in local_providers:
             if status_label:
                 st, tt, col = "❌ No API Key", "Please enter an API key first.", "red"
-                PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
-                status_label.setText(st)
-                status_label.setToolTip(tt)
-                status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
+                _set_test_status(status_label, provider, st, tt, col, model_name)
             else:
                 info(f"Please enter an API key for {provider.capitalize()} first.")
             return
@@ -680,10 +680,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                                 f"<pre style='font-family: monospace; font-size: 11px; white-space: pre-wrap; word-wrap: break-word;'>{formatted_res}</pre>"
                                 f"</div>"
                             ), "green"
-                            PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
-                            status_label.setText(st)
-                            status_label.setToolTip(tt)
-                            status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
+                            _set_test_status(status_label, provider, st, tt, col, model_name)
                         else:
                             info(f"✅ Success! {provider.capitalize()} is working.\n\n"
                                  f"Model: {model_name}\n"
@@ -691,10 +688,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     else:
                         if status_label:
                             st, tt, col = "❌ Failed", f"<div style='width: 350px;'><b>Question:</b> {test_front}<br/><b>Answer:</b> {test_back}<br/><br/>The provider returned an empty response. Check API key, model name, balance.</div>", "red"
-                            PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
-                            status_label.setText(st)
-                            status_label.setToolTip(tt)
-                            status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
+                            _set_test_status(status_label, provider, st, tt, col, model_name)
                         else:
                             info(f"❌ Test Failed for {provider.capitalize()}.\n\n"
                                  f"The provider returned an empty response. Check your API key, "
@@ -715,10 +709,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                             f"{'<i>Tip: Endpoint timed out. You can increase request timeout in Advanced tab.</i>' if st_text == '⏳ Timeout' else ''}"
                             f"</div>"
                         ), "red"
-                        PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
-                        status_label.setText(st)
-                        status_label.setToolTip(tt)
-                        status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
+                        _set_test_status(status_label, provider, st, tt, col, model_name)
                     else:
                         info(f"❌ Test Error ({provider.capitalize()}):\\n\\n{err_msg}")
                 mw.taskman.run_on_main(_fail)
@@ -953,27 +944,34 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 
         threading.Thread(target=_runner, daemon=True).start()
 
+    def _save_custom_dialog(self, dlg, old_name=None):
+        name = dlg.name_edit.text().strip()
+        api_key = dlg.key_edit.text().strip()
+        if old_name and old_name != name:
+            del self.custom_providers_data[old_name]
+            if hasattr(self, "api_key_edits") and old_name in self.api_key_edits:
+                del self.api_key_edits[old_name]
+        self.custom_providers_data[name] = {
+            "url": dlg.url_edit.text().strip(),
+            "models_url": dlg.models_url_edit.text().strip(),
+            "api_key": api_key,
+            "model": dlg.model_edit.text().strip(),
+            "headers": json.loads(dlg.headers_edit.toPlainText() or "{}"),
+            "body_params": json.loads(dlg.body_params_edit.toPlainText() or "{}")
+        }
+        if "api_keys" not in self.config or not isinstance(self.config["api_keys"], dict):
+            self.config["api_keys"] = {}
+        if api_key:
+            self.config["api_keys"][name] = api_key
+        if hasattr(self, "api_key_edits") and name in self.api_key_edits:
+            self.api_key_edits[name].setText(api_key)
+        self.refresh_custom_list()
+
     def on_add_custom(self):
         dlg = CustomProviderDialog(self, config=self.config)
         if dlg.exec():
-            name = dlg.name_edit.text().strip()
-            api_key = dlg.key_edit.text().strip()
-            self.custom_providers_data[name] = {
-                "url": dlg.url_edit.text().strip(),
-                "models_url": dlg.models_url_edit.text().strip(),
-                "api_key": api_key,
-                "model": dlg.model_edit.text().strip(),
-                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}"),
-                "body_params": json.loads(dlg.body_params_edit.toPlainText() or "{}")
-            }
-            if "api_keys" not in self.config or not isinstance(self.config["api_keys"], dict):
-                self.config["api_keys"] = {}
-            if api_key:
-                self.config["api_keys"][name] = api_key
-            if hasattr(self, "api_key_edits") and name in self.api_key_edits:
-                self.api_key_edits[name].setText(api_key)
-            self.refresh_custom_list()
-            
+            self._save_custom_dialog(dlg)
+
     def on_edit_custom(self):
         item = self.custom_list.currentItem()
         if not item: return
@@ -981,27 +979,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         data = self.custom_providers_data.get(name, {})
         dlg = CustomProviderDialog(self, name=name, data=data, config=self.config)
         if dlg.exec():
-            new_name = dlg.name_edit.text().strip()
-            api_key = dlg.key_edit.text().strip()
-            if new_name != name:
-                del self.custom_providers_data[name]
-                if hasattr(self, "api_key_edits") and name in self.api_key_edits:
-                    del self.api_key_edits[name]
-            self.custom_providers_data[new_name] = {
-                "url": dlg.url_edit.text().strip(),
-                "models_url": dlg.models_url_edit.text().strip(),
-                "api_key": api_key,
-                "model": dlg.model_edit.text().strip(),
-                "headers": json.loads(dlg.headers_edit.toPlainText() or "{}"),
-                "body_params": json.loads(dlg.body_params_edit.toPlainText() or "{}")
-            }
-            if "api_keys" not in self.config or not isinstance(self.config["api_keys"], dict):
-                self.config["api_keys"] = {}
-            if api_key:
-                self.config["api_keys"][new_name] = api_key
-            if hasattr(self, "api_key_edits") and new_name in self.api_key_edits:
-                self.api_key_edits[new_name].setText(api_key)
-            self.refresh_custom_list()
+            self._save_custom_dialog(dlg, old_name=name)
 
     def on_remove_custom(self):
         item = self.custom_list.currentItem()
@@ -1580,157 +1558,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
     def _show_orphans_cleanup_dialog(self, orphaned_hints, parser):
         """Displays a dialog showing all orphaned hints found and allows safe cleanup."""
-        from aqt.qt import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QMessageBox
-        import json, html, re
-        
-        dialog = QDialog(self)
-        dialog.setWindowTitle("🧹 Orphaned Hints Cleanup")
-        dialog.resize(600, 450)
-        layout = QVBoxLayout(dialog)
-
-        desc = QLabel(
-            "The following orphaned AI hints were detected. These exist in your cards' "
-            "JSON data but do not correspond to any active cards (likely because "
-            "cloze deletions were removed or note types were changed)."
-        )
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
-
-        list_widget = QListWidget()
-        layout.addWidget(list_widget)
-
-        for item in orphaned_hints:
-            keys_str = ", ".join([opt[1] for opt in item["orphans"]])
-            preview_text = f"📝 {item['preview']}\n   ❌ Orphaned Card Keys: {keys_str}"
-            
-            list_item = QListWidgetItem(preview_text)
-            list_widget.addItem(list_item)
-
-        tip_label = QLabel("💡 <i>Double-click an item or click 'Show in Browser' to view the note in Anki's Browser.</i>")
-        tip_label.setWordWrap(True)
-        tip_label.setStyleSheet("color: #666; font-size: 11px; margin-top: 2px; margin-bottom: 2px;")
-        layout.addWidget(tip_label)
-
-        btn_layout = QHBoxLayout()
-        
-        show_btn = QPushButton("🔍 Show in Browser")
-        show_btn.setStyleSheet("padding: 6px; border-radius: 4px;")
-        show_btn.setEnabled(False)
-        
-        clean_btn = QPushButton(f"🔥 Remove {len(orphaned_hints)} Orphaned Hints")
-        clean_btn.setStyleSheet("font-weight: bold; background-color: #dc3545; color: white; padding: 6px; border-radius: 4px;")
-        
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setStyleSheet("padding: 6px;")
-        
-        btn_layout.addWidget(show_btn)
-        btn_layout.addStretch()
-        btn_layout.addWidget(clean_btn)
-        btn_layout.addWidget(cancel_btn)
-        layout.addLayout(btn_layout)
-
-        def on_show_card():
-            selected_row = list_widget.currentRow()
-            if selected_row < 0 or selected_row >= len(orphaned_hints):
-                return
-            item_data = orphaned_hints[selected_row]
-            note_id = item_data["note_id"]
-            query = f"nid:{note_id}"
-            from aqt import dialogs
-            browser = dialogs.open("Browser", mw)
-            try:
-                browser.search_for(query)
-            except AttributeError:
-                try:
-                    browser.search(query)
-                except (AttributeError, TypeError):
-                    try:
-                        try: browser.form.searchEdit.lineEdit().setText(query)
-                        except AttributeError: browser.form.searchEdit.setText(query)
-                        try: browser.search() 
-                        except (AttributeError, TypeError): browser.onSearchActivated()
-                    except Exception: pass
-            browser.setFocus()
-            browser.activateWindow()
-            browser.raise_()
-
-        def on_selection_changed():
-            show_btn.setEnabled(list_widget.currentRow() >= 0)
-
-        list_widget.currentRowChanged.connect(on_selection_changed)
-        list_widget.itemDoubleClicked.connect(on_show_card)
-        show_btn.clicked.connect(on_show_card)
-
-
-        def do_clean():
-            mw.checkpoint("Clean Orphaned Hints")
-            cleaned_count = 0
-            logger.info(f"AI-Hints: Starting cleanup of orphaned hints in {len(orphaned_hints)} notes.")
-            
-            for item in orphaned_hints:
-                note = item["note"]
-                fields = list(note.keys())
-                if not fields:
-                    continue
-                
-                note_changed = False
-                
-                for f_name in fields:
-                    val = note[f_name]
-                    if not isinstance(val, str) or parser.json_class not in val:
-                        continue
-                    
-                    pattern = re.compile(
-                        rf'<div\b[^>]*class=["\'][^"\']*{parser.json_class}[^"\']*["\'][^>]*>(.*?)</div>',
-                        flags=re.DOTALL | re.IGNORECASE,
-                    )
-                    
-                    new_val = val
-                    matches = list(pattern.finditer(val))
-                    for match in reversed(matches):
-                        block_html = match.group(0)
-                        raw_payload = match.group(1)
-                        try:
-                            parsed = parser._parse_json_payload(raw_payload)
-                            if isinstance(parsed, dict) and parser._is_keyed_payload(parsed):
-                                keys_removed = 0
-                                for opt in item["orphans"]:
-                                    orphan_block = opt[0]
-                                    orphan_key = opt[1]
-                                    if block_html == orphan_block and orphan_key in parsed:
-                                        del parsed[orphan_key]
-                                        keys_removed += 1
-                                
-                                if keys_removed > 0:
-                                    if parsed:
-                                        new_payload = parser.serialize_json_payload(parsed)
-                                        new_val = new_val[:match.start(1)] + new_payload + new_val[match.end(1):]
-                                        note_changed = True
-                                    else:
-                                        new_val = new_val[:match.start()] + new_val[match.end():]
-                                        note_changed = True
-                        except Exception as e:
-                            logger.error(f"Error cleaning orphaned hint block in note {note.id}: {e}")
-                
-                if note_changed:
-                    new_val = re.sub(r'(?:<br\s*/?>|\s|&nbsp;)+$', '', new_val, flags=re.IGNORECASE)
-                    note[fields[0]] = new_val.strip()
-                    mw.col.update_note(note)
-                    cleaned_count += 1
-
-            dialog.accept()
-            mw.reset()
-            set_orphans_check_time(int(time.time()))
-            logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
-            QMessageBox.information(
-                self, "Cleanup Complete",
-                f"🎉 Successfully cleaned up orphaned AI hints from {cleaned_count} notes!"
-            )
-
-        clean_btn.clicked.connect(do_clean)
-        dialog.setModal(False)
-        dialog.show()
-        mw._orphaned_hints_dialog = dialog
+        _build_orphans_cleanup_dialog(self, orphaned_hints, parser)
 
     def on_tag_all_hinted(self):
         """Tags every note that already contains AI-Hints data with the configured hint tag,
@@ -1833,21 +1661,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             flags=re.DOTALL | re.IGNORECASE,
         )
 
-        def find_json_candidates(text):
-            candidates = []
-            start = -1
-            depth = 0
-            for i, char in enumerate(text):
-                if char == '{':
-                    if depth == 0:
-                        start = i
-                    depth += 1
-                elif char == '}':
-                    if depth > 0:
-                        depth -= 1
-                        if depth == 0 and start != -1:
-                            candidates.append((start, i + 1, text[start:i+1]))
-            return candidates
+        from ..card_parser import find_json_candidates
 
         for i, nid in enumerate(nids):
             if progress.wasCanceled():
@@ -2018,6 +1832,143 @@ def check_support_on_update():
     except Exception as e:
         logger.error(f"AI-Hints: Update check failed: {e}")
 
+def _build_orphans_cleanup_dialog(parent, orphaned_hints, parser):
+    """Shared orphaned-hints cleanup dialog behind the config tab and the Tools-menu entry."""
+    from aqt.qt import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QMessageBox
+    import re
+
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("🧹 Orphaned Hints Cleanup")
+    dialog.resize(600, 450)
+    layout = QVBoxLayout(dialog)
+
+    desc = QLabel(
+        "The following orphaned AI hints were detected. These exist in your cards' "
+        "JSON data but do not correspond to any active cards (likely because "
+        "cloze deletions were removed or note types were changed)."
+    )
+    desc.setWordWrap(True)
+    layout.addWidget(desc)
+
+    list_widget = QListWidget()
+    layout.addWidget(list_widget)
+
+    for item in orphaned_hints:
+        keys_str = ", ".join([opt[1] for opt in item["orphans"]])
+        preview_text = f"📝 {item['preview']}\n   ❌ Orphaned Card Keys: {keys_str}"
+        list_widget.addItem(QListWidgetItem(preview_text))
+
+    tip_label = QLabel("💡 <i>Double-click an item or click 'Show in Browser' to view the note in Anki's Browser.</i>")
+    tip_label.setWordWrap(True)
+    tip_label.setStyleSheet("color: #666; font-size: 11px; margin-top: 2px; margin-bottom: 2px;")
+    layout.addWidget(tip_label)
+
+    btn_layout = QHBoxLayout()
+    show_btn = QPushButton("🔍 Show in Browser")
+    show_btn.setStyleSheet("padding: 6px; border-radius: 4px;")
+    show_btn.setEnabled(False)
+    clean_btn = QPushButton(f"🔥 Remove {len(orphaned_hints)} Orphaned Hints")
+    clean_btn.setStyleSheet("font-weight: bold; background-color: #dc3545; color: white; padding: 6px; border-radius: 4px;")
+    btn_layout.addWidget(show_btn)
+    btn_layout.addStretch()
+    btn_layout.addWidget(clean_btn)
+    layout.addLayout(btn_layout)
+
+    def on_show_card():
+        selected_row = list_widget.currentRow()
+        if selected_row < 0 or selected_row >= len(orphaned_hints):
+            return
+        query_str = f"nid:{orphaned_hints[selected_row]['note_id']}"
+        from aqt import dialogs
+        browser = dialogs.open("Browser", mw)
+        try:
+            browser.search_for(query_str)
+        except AttributeError:
+            try:
+                browser.search(query_str)
+            except (AttributeError, TypeError):
+                try:
+                    try: browser.form.searchEdit.lineEdit().setText(query_str)
+                    except AttributeError: browser.form.searchEdit.setText(query_str)
+                    try: browser.search()
+                    except (AttributeError, TypeError): browser.onSearchActivated()
+                except Exception: pass
+        browser.setFocus()
+        browser.activateWindow()
+        browser.raise_()
+
+    def on_selection_changed():
+        show_btn.setEnabled(list_widget.currentRow() >= 0)
+
+    list_widget.currentRowChanged.connect(on_selection_changed)
+    list_widget.itemDoubleClicked.connect(on_show_card)
+    show_btn.clicked.connect(on_show_card)
+
+    def do_clean():
+        mw.checkpoint("Clean Orphaned Hints")
+        cleaned_count = 0
+        logger.info(f"AI-Hints: Starting cleanup of orphaned hints in {len(orphaned_hints)} notes.")
+        for item in orphaned_hints:
+            note = item["note"]
+            fields = list(note.keys())
+            if not fields:
+                continue
+            note_changed = False
+            for f_name in fields:
+                val = note[f_name]
+                if not isinstance(val, str) or parser.json_class not in val:
+                    continue
+                pattern = re.compile(
+                    rf'<div\b[^>]*class=["\'][^"\']*{parser.json_class}[^"\']*["\'][^>]*>(.*?)</div>',
+                    flags=re.DOTALL | re.IGNORECASE,
+                )
+                new_val = val
+                matches = list(pattern.finditer(val))
+                for match in reversed(matches):
+                    block_html = match.group(0)
+                    raw_payload = match.group(1)
+                    try:
+                        parsed = parser._parse_json_payload(raw_payload)
+                        if isinstance(parsed, dict) and parser._is_keyed_payload(parsed):
+                            keys_removed = 0
+                            for opt in item["orphans"]:
+                                orphan_block = opt[0]
+                                orphan_key = opt[1]
+                                if block_html == orphan_block and orphan_key in parsed:
+                                    del parsed[orphan_key]
+                                    keys_removed += 1
+                            if keys_removed > 0:
+                                if parsed:
+                                    new_payload = parser.serialize_json_payload(parsed)
+                                    new_val = new_val[:match.start(1)] + new_payload + new_val[match.end(1):]
+                                    note_changed = True
+                                else:
+                                    new_val = new_val[:match.start()] + new_val[match.end():]
+                                    note_changed = True
+                    except Exception as e:
+                        logger.error(f"Error cleaning orphaned hint block in note {note.id}: {e}")
+            if note_changed:
+                new_val = re.sub(r'(?:<br\s*/?>|\s|&nbsp;)+$', '', new_val, flags=re.IGNORECASE)
+                note[fields[0]] = new_val.strip()
+                mw.col.update_note(note)
+                cleaned_count += 1
+
+        dialog.accept()
+        mw.reset()
+        set_orphans_check_time(int(time.time()))
+        logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
+        QMessageBox.information(
+            parent, "Cleanup Complete",
+            f"🎉 Successfully cleaned up orphaned AI hints from {cleaned_count} notes!"
+        )
+
+    clean_btn.clicked.connect(do_clean)
+    dialog.setModal(False)
+    dialog.show()
+    mw._orphaned_hints_dialog = dialog
+    return dialog
+
+
 def on_clean_orphaned_hints(query="", scope_str="entire collection"):
     """Run the orphaned-hints scan and show the cleanup dialog without opening the config window."""
     if not isinstance(query, str):
@@ -2109,140 +2060,7 @@ def _show_orphans_cleanup_dialog_standalone(parent, query="", scope_str="entire 
         QMessageBox.information(parent, "Scan Complete", "🎉 No orphaned hints found! Your collection is perfectly clean.")
         return
 
-    # --- Cleanup dialog ---
-    dialog = QDialog(parent)
-    dialog.setWindowTitle("🧹 Orphaned Hints Cleanup")
-    dialog.resize(600, 450)
-    layout = QVBoxLayout(dialog)
-
-    desc = QLabel(
-        "The following orphaned AI hints were detected. These exist in your cards' "
-        "JSON data but do not correspond to any active cards (likely because "
-        "cloze deletions were removed or note types were changed)."
-    )
-    desc.setWordWrap(True)
-    layout.addWidget(desc)
-
-    list_widget = QListWidget()
-    layout.addWidget(list_widget)
-
-    for item in orphaned_hints:
-        keys_str = ", ".join([opt[1] for opt in item["orphans"]])
-        preview_text = f"📝 {item['preview']}\n   ❌ Orphaned Card Keys: {keys_str}"
-        list_widget.addItem(QListWidgetItem(preview_text))
-
-    tip_label = QLabel("💡 <i>Double-click an item or click 'Show in Browser' to view the note in Anki's Browser.</i>")
-    tip_label.setWordWrap(True)
-    tip_label.setStyleSheet("color: #666; font-size: 11px; margin-top: 2px; margin-bottom: 2px;")
-    layout.addWidget(tip_label)
-
-    btn_layout = QHBoxLayout()
-    show_btn = QPushButton("🔍 Show in Browser")
-    show_btn.setStyleSheet("padding: 6px; border-radius: 4px;")
-    show_btn.setEnabled(False)
-    clean_btn = QPushButton(f"🔥 Remove {len(orphaned_hints)} Orphaned Hints")
-    clean_btn.setStyleSheet("font-weight: bold; background-color: #dc3545; color: white; padding: 6px; border-radius: 4px;")
-    cancel_btn = QPushButton("Cancel")
-    cancel_btn.setStyleSheet("padding: 6px;")
-    btn_layout.addWidget(show_btn)
-    btn_layout.addStretch()
-    btn_layout.addWidget(clean_btn)
-    btn_layout.addWidget(cancel_btn)
-    layout.addLayout(btn_layout)
-
-    def on_show_card():
-        selected_row = list_widget.currentRow()
-        if selected_row < 0 or selected_row >= len(orphaned_hints):
-            return
-        note_id = orphaned_hints[selected_row]["note_id"]
-        query_str = f"nid:{note_id}"
-        from aqt import dialogs
-        browser = dialogs.open("Browser", mw)
-        try:
-            browser.search_for(query_str)
-        except AttributeError:
-            try:
-                browser.search(query_str)
-            except (AttributeError, TypeError):
-                try:
-                    try: browser.form.searchEdit.lineEdit().setText(query_str)
-                    except AttributeError: browser.form.searchEdit.setText(query_str)
-                    try: browser.search()
-                    except (AttributeError, TypeError): browser.onSearchActivated()
-                except Exception: pass
-        browser.setFocus()
-        browser.activateWindow()
-        browser.raise_()
-
-    def on_selection_changed():
-        show_btn.setEnabled(list_widget.currentRow() >= 0)
-
-    list_widget.currentRowChanged.connect(on_selection_changed)
-    list_widget.itemDoubleClicked.connect(on_show_card)
-    show_btn.clicked.connect(on_show_card)
-
-    def do_clean():
-        mw.checkpoint("Clean Orphaned Hints")
-        cleaned_count = 0
-        logger.info(f"AI-Hints: Starting cleanup of orphaned hints in {len(orphaned_hints)} notes.")
-        for item in orphaned_hints:
-            note = item["note"]
-            fields = list(note.keys())
-            if not fields:
-                continue
-            note_changed = False
-            for f_name in fields:
-                val = note[f_name]
-                if not isinstance(val, str) or parser.json_class not in val:
-                    continue
-                pattern = re.compile(
-                    rf'<div\b[^>]*class=["\'][^"\']*{parser.json_class}[^"\']*["\'][^>]*>(.*?)</div>',
-                    flags=re.DOTALL | re.IGNORECASE,
-                )
-                new_val = val
-                matches = list(pattern.finditer(val))
-                for match in reversed(matches):
-                    block_html = match.group(0)
-                    raw_payload = match.group(1)
-                    try:
-                        parsed_block = parser._parse_json_payload(raw_payload)
-                        if isinstance(parsed_block, dict) and parser._is_keyed_payload(parsed_block):
-                            keys_removed = 0
-                            for opt in item["orphans"]:
-                                orphan_block = opt[0]
-                                orphan_key = opt[1]
-                                if block_html == orphan_block and orphan_key in parsed_block:
-                                    del parsed_block[orphan_key]
-                                    keys_removed += 1
-                            if keys_removed > 0:
-                                if parsed_block:
-                                    new_payload = parser.serialize_json_payload(parsed_block)
-                                    new_val = new_val[:match.start(1)] + new_payload + new_val[match.end(1):]
-                                    note_changed = True
-                                else:
-                                    new_val = new_val[:match.start()] + new_val[match.end():]
-                                    note_changed = True
-                    except Exception as e:
-                        logger.error(f"Error cleaning orphaned hint block in note {note.id}: {e}")
-            if note_changed:
-                new_val = re.sub(r'(?:<br\s*/?>|\s|&nbsp;)+$', '', new_val, flags=re.IGNORECASE)
-                note[fields[0]] = new_val.strip()
-                mw.col.update_note(note)
-                cleaned_count += 1
-
-        dialog.accept()
-        mw.reset()
-        set_orphans_check_time(int(time.time()))
-        logger.info(f"AI-Hints: Orphaned hints cleanup COMPLETED. Cleaned data in {cleaned_count} notes.")
-        QMessageBox.information(
-            parent, "Cleanup Complete",
-            f"🎉 Successfully cleaned up orphaned AI hints from {cleaned_count} notes!"
-        )
-
-    clean_btn.clicked.connect(do_clean)
-    dialog.setModal(False)
-    dialog.show()
-    mw._orphaned_hints_dialog = dialog
+    _build_orphans_cleanup_dialog(parent, orphaned_hints, parser)
 
 def _log_orphaned_results(orphaned_hints, is_standalone=False):
     prefix = "Standalone orphan scan" if is_standalone else "Orphaned hints scan"

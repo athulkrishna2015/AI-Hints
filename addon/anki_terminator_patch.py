@@ -280,6 +280,3 @@ def setup_anki_terminator_patch():
         gui_hooks.browser_did_fetch_row.append(clean_browser_row)
     except Exception:
         pass
-
-# Prevent Anki_Terminator_Performance_Companion from overriding this with its buggy version
-_companion_optimized = True

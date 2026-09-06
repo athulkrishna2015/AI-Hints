@@ -2,7 +2,6 @@ import os
 import argparse
 import sys
 import zipfile
-import fnmatch
 from datetime import datetime
 from pathlib import Path
 
@@ -32,30 +31,17 @@ def load_gitignore_patterns(root_dir: Path) -> list[str]:
     return patterns
 
 def is_ignored(path: Path, root_dir: Path, patterns: list[str]) -> bool:
-    rel_path = path.relative_to(root_dir).as_posix()
-    parts = rel_path.split("/")
-    
-    # Exclude standard built-in git files unconditionally
-    if ".git" in parts:
+    try:
+        rel = path.relative_to(root_dir).as_posix()
+    except ValueError:
+        return False
+    if ".git" in Path(rel).parts:
         return True
-        
-    for pattern in patterns:
-        p = pattern
-        is_dir_only = p.endswith("/")
-        if is_dir_only:
-            p = p[:-1]
-            
-        # 1. Match full relative path or any individual part/sub-path
-        if fnmatch.fnmatch(rel_path, p) or any(fnmatch.fnmatch(part, p) for part in parts):
-            return True
-            
-        # 2. Match directory prefix (e.g. pattern is 'scratch' and path is 'scratch/file.txt')
-        for i in range(1, len(parts) + 1):
-            sub_path = "/".join(parts[:i])
-            if fnmatch.fnmatch(sub_path, p):
-                return True
-                
-    return False
+    p = Path(rel)
+    def _hit(pat: str) -> bool:
+        q = pat.rstrip("/")
+        return p.match(q) or p.match(q + "/*")
+    return any(_hit(pat) for pat in patterns)
 
 def artifact_names(
     addon_name: str,

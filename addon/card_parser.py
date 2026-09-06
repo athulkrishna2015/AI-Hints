@@ -3,10 +3,9 @@ import json
 import html
 from typing import Any, List, Optional, Tuple, Dict
 try:
-    from .latex_fixer import fix_latex, normalize_math_text, repair_latex_control_chars
+    from .latex_fixer import normalize_math_text, repair_latex_control_chars
 except ImportError:
     # Fallback/debug info
-    fix_latex = lambda x, **kwargs: x
     normalize_math_text = lambda x, **kwargs: x
     repair_latex_control_chars = lambda x: x
 
@@ -55,6 +54,23 @@ def _loads_or_none(raw):
         return _safe_loads(raw)
     except Exception:
         return None
+
+def find_json_candidates(text):
+    """Brace-depth scan for `{...}` spans possibly holding naked AI JSON."""
+    candidates = []
+    start = -1
+    depth = 0
+    for i, char in enumerate(text):
+        if char == '{':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif char == '}':
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start != -1:
+                    candidates.append((start, i + 1, text[start:i+1]))
+    return candidates
 
 # ---------------------------------------------------------------------------
 # Depth-aware AI-Hints block scanning
@@ -185,10 +201,6 @@ class CardParser:
         self.container_class = "ai-hints-container"
         self.json_class = "ai-hints-json"
 
-    def _fix_lazy_latex(self, text: str) -> str:
-        """Repairs common AI math errors like missing backslashes or joined commands."""
-        return fix_latex(text, output_format=self._latex_output_format(), fix_latex=self.fix_latex)
-
     def normalize_hint_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize generated hint text before storage or direct reviewer injection."""
         if not isinstance(data, dict):
@@ -306,17 +318,6 @@ class CardParser:
         if str(self.mathjax_format).lower() in {"inline", "dollar", "dollars"}:
             return "dollars"
         return "anki"
-
-    def _fix_latex_span(self, span: str) -> str:
-        # Note: We keep this for internal calls, but it's now just a pass-through to the library.
-        # However, many methods in CardParser were private helpers for this.
-        # Since they are no longer used by the main logic (which moved to the library),
-        # we can remove them.
-        try:
-            from .latex_fixer.latex_fixer import _fix_latex_span
-        except ImportError:
-            return span
-        return _fix_latex_span(span)
 
     def _convert_to_mathjax_tags(self, text: str) -> str:
         r"""Converts standard LaTeX delimiters \( \) and \[ \] to Anki's <anki-mathjax> tags."""
@@ -1151,22 +1152,6 @@ class CardParser:
                     field_cleared = True
 
             # 2. Clean naked/raw JSON strings left behind by older versions or failures
-            def find_json_candidates(text):
-                candidates = []
-                start = -1
-                depth = 0
-                for i, char in enumerate(text):
-                    if char == '{':
-                        if depth == 0:
-                            start = i
-                        depth += 1
-                    elif char == '}':
-                        if depth > 0:
-                            depth -= 1
-                            if depth == 0 and start != -1:
-                                candidates.append((start, i + 1, text[start:i+1]))
-                return candidates
-
             import json
             for start_idx, end_idx, candidate in reversed(find_json_candidates(new_val)):
                 try:

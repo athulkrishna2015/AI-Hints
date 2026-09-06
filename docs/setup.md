@@ -111,7 +111,7 @@ The project includes a regression suite covering core logic, UI behavior, and ne
 Mocks the Anki / Qt environment. No API keys or internet required.
 
 ```shell
-python3 -B tests/local_verify.py
+python3 -B scratch/local_verify.py
 ```
 
 ### 2. Specialized Logic Suites
@@ -139,7 +139,7 @@ python3 tests/test_local_ai.py
 Requires real API keys configured in `addon/config.json` or a local `meta.json`.
 
 ```shell
-python3 tests/live_test.py
+python3 scratch/live_test.py
 python3 tests/test_raw_local.py
 ```
 

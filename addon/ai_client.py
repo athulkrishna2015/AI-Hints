@@ -1038,7 +1038,8 @@ class AIClient:
                 pass
             return False
 
-        return bool(self._api_key_for(provider))
+        keys = self._available_api_keys(provider)
+        return bool(keys and keys[0])
 
     def _local_provider_configs(self) -> List[Dict[str, Any]]:
         local_providers = self.config.get("local_providers") or {}
@@ -1120,17 +1121,7 @@ class AIClient:
             if state.GLOBAL_STOP:
                 break
 
-            from .logger import log_context
-            is_test = getattr(log_context, "source", None) == "model_test"
-            if is_test:
-                available_keys = keys
-            else:
-                available_keys = [k for k in keys if not self._is_combo_failed(provider_name, model, k)]
-                if not available_keys and override_model:
-                    # Explicit single-model request (Alt+click override): every
-                    # key combo for this model is on cooldown — retry them all
-                    # anyway rather than silently returning nothing.
-                    available_keys = list(keys)
+            available_keys = self._live_keys(provider_name, model, keys, override_model)
             if not available_keys:
                 continue
 
@@ -1281,17 +1272,7 @@ class AIClient:
             elif not keys:
                 continue
 
-            from .logger import log_context
-            is_test = getattr(log_context, "source", None) == "model_test"
-            if is_test:
-                available_keys = keys
-            else:
-                available_keys = [k for k in keys if not self._is_combo_failed(provider, model, k)]
-                if not available_keys and override_model:
-                    # Explicit single-model request (Alt+click override): every
-                    # key combo for this model is on cooldown — retry them all
-                    # anyway rather than silently returning nothing.
-                    available_keys = list(keys)
+            available_keys = self._live_keys(provider, model, keys, override_model)
             if not available_keys:
                 continue
 
@@ -1447,17 +1428,7 @@ class AIClient:
             if not keys:
                 continue
 
-            from .logger import log_context
-            is_test = getattr(log_context, "source", None) == "model_test"
-            if is_test:
-                available_keys = keys
-            else:
-                available_keys = [k for k in keys if not self._is_combo_failed("anthropic", model, k)]
-                if not available_keys and override_model:
-                    # Explicit single-model request (Alt+click override): every
-                    # key combo for this model is on cooldown — retry them all
-                    # anyway rather than silently returning nothing.
-                    available_keys = list(keys)
+            available_keys = self._live_keys("anthropic", model, keys, override_model)
             if not available_keys:
                 continue
 
@@ -1550,17 +1521,7 @@ class AIClient:
             if not keys:
                 continue
 
-            from .logger import log_context
-            is_test = getattr(log_context, "source", None) == "model_test"
-            if is_test:
-                available_keys = keys
-            else:
-                available_keys = [k for k in keys if not self._is_combo_failed("gemini", model, k)]
-                if not available_keys and override_model:
-                    # Explicit single-model request (Alt+click override): every
-                    # key combo for this model is on cooldown — retry them all
-                    # anyway rather than silently returning nothing.
-                    available_keys = list(keys)
+            available_keys = self._live_keys("gemini", model, keys, override_model)
             if not available_keys:
                 continue
 
@@ -2025,10 +1986,6 @@ class AIClient:
         api_keys = self.config.get("api_keys") or {}
         return api_keys if isinstance(api_keys, dict) else {}
 
-    def _api_key_for(self, provider: str) -> str:
-        keys = self._available_api_keys(provider)
-        return keys[0] if keys else ""
-
     def _parse_all_keys(self, provider: str, val: str) -> List[Dict[str, Any]]:
         val = str(val or "").strip()
         if not val:
@@ -2136,33 +2093,20 @@ class AIClient:
             return
 
         streak_key = (provider, model, api_key)
+        streak = RATE_LIMIT_STREAK.get(streak_key, 0) + 1
+        RATE_LIMIT_STREAK[streak_key] = streak
         if delay_seconds is None:
             # Apply streak-based cooldown for ALL failures to prevent repeated lag
-            streak = RATE_LIMIT_STREAK.get(streak_key, 0) + 1
-            RATE_LIMIT_STREAK[streak_key] = streak
-
-            cooldown_sec = self._cooldown_seconds()
-            delay_seconds = cooldown_sec * streak
-        else:
-            streak = RATE_LIMIT_STREAK.get(streak_key, 0) + 1
-            RATE_LIMIT_STREAK[streak_key] = streak
+            delay_seconds = self._cooldown_seconds() * streak
             
         expiry = time.time() + delay_seconds
         FAILED_COMBOS_CACHE[streak_key] = expiry
         self._save_blacklist()
         
         # Format for log
-        mins = int(delay_seconds // 60)
-        hours = mins // 60
-        mins = mins % 60
-        secs = int(delay_seconds % 60)
-        
-        if hours > 0:
-            time_str = f"{hours}h {mins}m"
-        elif mins > 0:
-            time_str = f"{mins}m {secs}s"
-        else:
-            time_str = f"{secs}s"
+        mins, secs = divmod(int(delay_seconds), 60)
+        hours, mins = divmod(mins, 60)
+        time_str = f"{hours}h {mins}m" if hours else f"{mins}m {secs}s" if mins else f"{secs}s"
             
         preview = api_key[-6:] if len(api_key) > 6 else api_key
         logger.info(f"AI-Hints: Blacklisted combo {provider}/{model} (Key: ...{preview}) for {time_str} due to failure (Streak: {streak}).")
@@ -2224,18 +2168,17 @@ class AIClient:
                 return False
         return True
 
-    # Legacy compatibility stubs to prevent import/access crashes:
-    def _mark_key_failed(self, provider: str, api_key: str, delay_seconds: float = None):
-        pass
-
-    def _on_key_success(self, provider: str, api_key: str):
-        pass
-
-    def _mark_model_failed(self, provider: str, model: str, delay_seconds: float = None):
-        pass
-
-    def _on_model_success(self, provider: str, model: str):
-        pass
+    def _live_keys(self, provider: str, model: str, keys, override_model: str = "") -> list:
+        from .logger import log_context
+        if getattr(log_context, "source", None) == "model_test":
+            return list(keys)
+        live = [k for k in keys if not self._is_combo_failed(provider, model, k)]
+        if not live and override_model:
+            # Explicit single-model request (Alt+click override): every
+            # key combo for this model is on cooldown — retry them all
+            # anyway rather than silently returning nothing.
+            return list(keys)
+        return live
 
     def _get_model(self, provider: str) -> str:
         models = self.config.get("models") or {}

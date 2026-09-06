@@ -106,21 +106,7 @@ class MigrationTests(unittest.TestCase):
             flags=re.DOTALL | re.IGNORECASE,
         )
 
-        def find_json_candidates(text):
-            candidates = []
-            start = -1
-            depth = 0
-            for i, char in enumerate(text):
-                if char == '{':
-                    if depth == 0:
-                        start = i
-                    depth += 1
-                elif char == '}':
-                    if depth > 0:
-                        depth -= 1
-                        if depth == 0 and start != -1:
-                            candidates.append((start, i + 1, text[start:i+1]))
-            return candidates
+        from addon.card_parser import find_json_candidates
 
         def purge_naked_json(field_val):
             if not isinstance(field_val, str) or '{' not in field_val:

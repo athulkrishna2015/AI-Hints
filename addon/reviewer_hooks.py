@@ -8,11 +8,9 @@ from aqt import mw, gui_hooks
 from aqt.qt import QMessageBox, QMenu, QAction, QPoint, Qt, QDialog, QVBoxLayout, QTimer
 from .logger import logger, info, tooltip, state
 from .card_parser import _iter_hint_blocks as _cp_iter_hint_blocks
+from .card_parser import _json_size_depth_guard as _cp_json_guard
 
 ADDON_PACKAGE = __name__.split(".")[0]
-
-_AI_JSON_MAX_CHARS = 262144
-_AI_JSON_MAX_DEPTH = 100
 
 def _safe_loads(raw):
     """Guarded json.loads for AI payloads extracted from cards/bridge messages.
@@ -21,30 +19,11 @@ def _safe_loads(raw):
     and can abort the process via unbounded recursion. Refuse them instead.
     """
     s = str(raw) if raw is not None else ""
-    if len(s) > _AI_JSON_MAX_CHARS:
-        logger.info("AI-Hints: refused JSON parse, payload too large (%d chars)", len(s))
-        raise ValueError("ai-hints payload too large")
-    depth = 0
-    in_str = False
-    esc = False
-    for ch in s:
-        if in_str:
-            if esc:
-                esc = False
-            elif ch == "\\":
-                esc = True
-            elif ch == '"':
-                in_str = False
-            continue
-        if ch == '"':
-            in_str = True
-        elif ch in "[{":
-            depth += 1
-            if depth > _AI_JSON_MAX_DEPTH:
-                logger.info("AI-Hints: refused JSON parse, nesting too deep")
-                raise ValueError("ai-hints payload nested too deep")
-        elif ch in "]}":
-            depth -= 1
+    try:
+        _cp_json_guard(s)
+    except ValueError as e:
+        logger.info(f"AI-Hints: refused JSON parse, {e}")
+        raise
     return json.loads(s)
 
 # Lazy imports for helper types
