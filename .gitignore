@@ -32,6 +32,3 @@ bugs/
 
 # Test-generated state files (redirected by AIHINTS_DATA_DIR)
 tests/.aihints_data/
-
-# Private working docs (never packaged — make_ankiaddon respects .gitignore)
-MONETIZATION_PLAN.md

@@ -252,10 +252,11 @@ class FallbackPriorityDialog(QDialog):
         return table
 
     def _handle_table_drop(self, table, event):
-        if event.source() is not table:
+        source = event.source()
+        if source not in self._split_tables():
             event.ignore()
             return
-        rows = self._selected_rows(table)
+        rows = self._selected_rows(source)
         if not rows:
             event.ignore()
             return
@@ -264,6 +265,11 @@ class FallbackPriorityDialog(QDialog):
         boundary = table.rowCount() if not index.isValid() else index.row()
         if index.isValid() and pos.y() >= table.visualRect(index).center().y():
             boundary += 1
+        if source is not table:
+            self._move_rows_to_table(source, table, rows, boundary)
+            event.setDropAction(Qt.DropAction.MoveAction)
+            event.accept()
+            return
         selected = set(rows)
         keys = []
         for row in range(table.rowCount()):
@@ -283,6 +289,52 @@ class FallbackPriorityDialog(QDialog):
         self._reorder_dragged_rows(table, wanted, moving)
         event.setDropAction(Qt.DropAction.MoveAction)
         event.accept()
+
+    def _move_rows_to_table(self, source, target, rows, boundary):
+        """Drop rows from the sibling list: remove from source, insert at the
+        drop position with the target list's checked state. Lazy by design —
+        one harvest, no full rebuild, only row 0 labels can change."""
+        keys = [self._row_key(source, r) for r in rows]
+        keys = [k for k in keys if k and not (isinstance(k, (tuple, list)) and len(k) != 2)]
+        if not keys:
+            return
+        checked = target is self.enabled_table
+        self._moving_rows = True
+        for t in (source, target):
+            t.blockSignals(True)
+            t.setUpdatesEnabled(False)
+        try:
+            self._harvest_widgets()
+            for r in sorted(rows, reverse=True):
+                source.removeRow(r)
+            insert_at = min(boundary, target.rowCount())
+            for i, key in enumerate(keys):
+                target.insertRow(insert_at + i)
+                self._insert_moved_row(target, key, checked, insert_at + i)
+            self._clear_sort_indicator(source)
+            self._clear_sort_indicator(target)
+            self._update_counts()
+            self.update_item_labels(tables=(source, target), rows=(0,))
+        finally:
+            for t in (source, target):
+                t.blockSignals(False)
+                t.setUpdatesEnabled(True)
+            self._moving_rows = False
+        target.setCurrentCell(insert_at, 0)
+        selection_model = target.selectionModel()
+        for i in range(insert_at, insert_at + len(keys)):
+            selection_model.select(
+                target.model().index(i, 0),
+                QItemSelectionModel.SelectionFlag.Select
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
+        self._update_active_highlight()
+
+    def _insert_moved_row(self, target, key, checked, pos):
+        if isinstance(key, (tuple, list)) and len(key) == 2:
+            self._add_table_row(target, key[0], key[1], checked=checked, row=pos)
+        else:
+            self._add_model_row(target, key, checked, row=pos)
 
     def _reorder_dragged_rows(self, table, wanted, selected_keys):
         self._reorder_to_keys(table, wanted)
@@ -379,6 +431,9 @@ class FallbackPriorityDialog(QDialog):
         for table in self._split_tables() or (self._tbl(None),):
             if table.selectedItems():
                 return table
+        highlighted = getattr(self, "_highlighted_table", None)
+        if highlighted in (self._split_tables() or ()):
+            return highlighted
         forced = getattr(self, "_forced_active", None)
         if forced in (self._split_tables() or ()):
             return forced
@@ -448,7 +503,7 @@ class FallbackPriorityDialog(QDialog):
         self._clear_sort_indicator(table)
 
     def filter_models(self, text, table=None):
-        t = self._tbl(table)
+        t = table if table is not None else self._focused_table()
         query = text.strip().casefold()
         for r in range(t.rowCount()):
             t.setRowHidden(r, bool(query and query not in self._row_search_text(t, r).casefold()))
@@ -1011,7 +1066,7 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         finally:
             table.blockSignals(False)
             table.setUpdatesEnabled(True)
-        self.update_item_labels()
+        self.update_item_labels(tables=(table,), rows=(0,))
         self._ensure_visible_widgets()
 
     def on_test_from_list(self, mode="all", table=None):
@@ -1283,16 +1338,25 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             "timeout": self._model_timeouts.get(name, 0),
         }
 
-    def update_item_labels(self, *args):
-        for table in (self.enabled_table, self.disabled_table):
+    def update_item_labels(self, *args, tables=None, rows=None):
+        """Refresh row texts/tooltips. Texts are per-model (order-free), so
+        structural ops pass a narrow scope (usually just row 0, whose Active
+        star can change) instead of rescanning 1000+ rows."""
+        targets = ((self.enabled_table, self.disabled_table) if tables is None
+                   else tuple(tables) if isinstance(tables, (list, tuple))
+                   else (tables,))
+        for table in targets:
             table.blockSignals(True)
             table.setUpdatesEnabled(False)
         try:
             fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_statuses", {})
             fallback_tooltips = PERSISTENT_TEST_STATUSES.get(f"{self.provider}_fallback_tooltips", {})
-            for table in (self.enabled_table, self.disabled_table):
+            for table in targets:
                 active_table = table is self.enabled_table
-                for i in range(table.rowCount()):
+                idxs = rows if rows is not None else range(table.rowCount())
+                for i in idxs:
+                    if i < 0 or i >= table.rowCount():
+                        continue
                     item = table.item(i, 0)
                     if not item: continue
                     m = item.data(Qt.ItemDataRole.UserRole)
@@ -1982,11 +2046,11 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             self._apply_global_highlight(item, provider, model)
         self._refresh_row_widgets(table, row)
 
-    def _add_table_row(self, table, provider, model, checked=True):
+    def _add_table_row(self, table, provider, model, checked=True, row=None):
         self._seed_row_values(provider, model)
         table.blockSignals(True)
         try:
-            row = table.rowCount()
+            row = table.rowCount() if row is None else row
             table.insertRow(row)
             for col in (0, 1, 4):
                 item = QTableWidgetItem()

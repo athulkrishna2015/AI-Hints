@@ -40,14 +40,7 @@ class NoWheelComboBox(QComboBox):
     scrolls normally; the wheel is only eaten while the popup is closed."""
 
     def wheelEvent(self, event):  # noqa: N802 (Qt override naming)
-        try:
-            popup_open = bool(self.view() is not None and self.view().isVisible())
-        except Exception:
-            popup_open = False
-        if popup_open:
-            super().wheelEvent(event)
-        else:
-            event.ignore()
+        event.ignore()
 
 PERSISTENT_TEST_STATUSES = {}
 FETCH_CANCELLATIONS = {}
