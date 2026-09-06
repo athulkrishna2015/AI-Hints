@@ -2,6 +2,14 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.0.0 (2026-09-06)
+- **Fast Large Fallback Lists**: Enabled/Disabled fallback lists now share one lazy implementation for both per-provider and global fallback dialogs. Reordering, sorting, drag-and-drop, list switching, and row controls avoid rebuilding or materializing thousands of rows.
+- **Independent List Controls**: The highlighted fallback list is the target for shared reorder, remove, and test controls. Each list has its own search field, and empty-list space can be selected as the active target.
+- **Cross-List Drag and Drop**: Models can be dragged between Enabled and Disabled lists while preserving order and per-model settings.
+- **Safer Provider Renames**: Renaming a custom provider carries its models, fallback rows, disabled states, keys, priorities, thinking levels, and timeouts instead of dropping rows as orphaned providers.
+- **Reliable Batch and Cache Progress**: Batch scan progress counts actual cards, and concurrent pre-generation cache writes use unique temporary files.
+- **UI Safeguards**: Scrolling settings no longer changes closed dropdown values, and the final enabled fallback model may be disabled when an empty Enabled list is intentional.
+
 ## 7.2.7 (2026-09-04)
 - **Autogen Now Does Full Card Refresh**: `auto_generate`/`pregen` completions now call `refresh_current_card()` so the compiled card HTML already contains the new hints. Only manual Regenerate keeps the `refresh + JS push` combo (`51b68ea`); auto paths no longer rely on `window.aiHintsUpdateData` alone, restoring the `495c166`/`e7b2043` clean-refresh behavior that prevents transition-race stale faces.
 
