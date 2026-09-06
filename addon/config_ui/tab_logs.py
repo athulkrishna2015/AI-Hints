@@ -4,6 +4,7 @@ from collections import deque
 from aqt.qt import *
 from aqt.utils import askUser
 from ..logger import logger, info, tooltip
+from .widgets import NoWheelComboBox
 from ..batch_manager import batch_manager
 
 # Render cap: at most this many *matching* lines are turned into HTML per
@@ -150,14 +151,14 @@ class LogTabMixin:
         # Level filter
         filter_layout = QHBoxLayout()
         filter_layout.addWidget(QLabel("Level:"))
-        self.log_level_cb = QComboBox()
+        self.log_level_cb = NoWheelComboBox()
         self.log_level_cb.addItems(["ALL", "DEBUG", "INFO", "WARNING", "ERROR"])
         self.log_level_cb.setCurrentText("INFO")
         self.log_level_cb.currentIndexChanged.connect(self.load_log)
         filter_layout.addWidget(self.log_level_cb)
         
         filter_layout.addWidget(QLabel(" Source:"))
-        self.log_source_cb = QComboBox()
+        self.log_source_cb = NoWheelComboBox()
         self.log_source_cb.addItems(["ALL", "Batch Processing", "Pre-generation", "Model Testing", "Lingering", "Standard Addon"])
         self.log_source_cb.currentIndexChanged.connect(self.load_log)
         filter_layout.addWidget(self.log_source_cb)

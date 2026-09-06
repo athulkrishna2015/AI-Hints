@@ -1,4 +1,5 @@
 from aqt.qt import *
+from .widgets import NoWheelComboBox
 
 class GeneralTabMixin:
     def _create_general_tab(self):
@@ -20,7 +21,7 @@ class GeneralTabMixin:
         self.options_count_sb.setToolTip("Set how many multiple-choice options (answers) the AI should generate per card.")
         gen_layout.addRow("Number of Options:", self.options_count_sb)
         
-        self.answer_display_position_cb = QComboBox()
+        self.answer_display_position_cb = NoWheelComboBox()
         self.answer_display_position_cb.addItems(["between", "bottom"])
         self.answer_display_position_cb.setToolTip("Select where AI hints/options are shown on the answer side:\nbetween: Front, AI Data, Back (default)\nbottom: Front, Back, AI Data")
         gen_layout.addRow("Answer Display Position:", self.answer_display_position_cb)

@@ -33,6 +33,22 @@ def _get_blacklist_remaining(provider, model, config=None):
 # Resolve the top-level addon package name (e.g. 'ai_hints_dev' or 'AI-Hints')
 ADDON_PACKAGE = __name__.split(".")[0]
 
+
+class NoWheelComboBox(QComboBox):
+    """QComboBox that ignores mouse-wheel scrolling so scrolling the settings
+    page never silently changes a dropdown value. The popup list itself still
+    scrolls normally; the wheel is only eaten while the popup is closed."""
+
+    def wheelEvent(self, event):  # noqa: N802 (Qt override naming)
+        try:
+            popup_open = bool(self.view() is not None and self.view().isVisible())
+        except Exception:
+            popup_open = False
+        if popup_open:
+            super().wheelEvent(event)
+        else:
+            event.ignore()
+
 PERSISTENT_TEST_STATUSES = {}
 FETCH_CANCELLATIONS = {}
 # provider -> set of model names added by the most recent "fetch all" so the
@@ -401,7 +417,7 @@ class ProviderRowWidget(QWidget):
         bottom_layout.addWidget(self.model_label)
 
         # Combobox
-        self.edit = QComboBox()
+        self.edit = NoWheelComboBox()
         self.edit.setEditable(True)
         self.edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
@@ -409,15 +425,27 @@ class ProviderRowWidget(QWidget):
         default = DEFAULT_MODELS.get(provider, "")
         fallbacks = MODEL_FALLBACKS.get(provider, [])
         suggestions = MODEL_SUGGESTIONS.get(provider, [])
-        
+
         all_items = []
         seen = set()
-        
+
         def _add_if_new(model_name):
             if not model_name or model_name in seen: return
             seen.add(model_name)
             all_items.append(model_name)
-            
+
+        # Current saved model first, then the provider's enabled
+        # fallback-priority models so the dropdown lists every
+        # usable model, not just the active one.
+        _cfg = getattr(parent_dialog, "config", {}) or {}
+        _add_if_new(str((_cfg.get("models", {}) or {}).get(provider, "") or "").strip())
+        _fb = (getattr(parent_dialog, "model_fallbacks_data", {}) or {}).get(provider, []) or []
+        _disabled = set((getattr(parent_dialog, "disabled_fallback_models_data", {}) or {}).get(provider, []) or [])
+        if isinstance(_fb, list):
+            for m in _fb:
+                if m not in _disabled:
+                    _add_if_new(m)
+
         _add_if_new(default)
         for m in fallbacks: _add_if_new(m)
         for m in suggestions: _add_if_new(m)
@@ -514,6 +542,8 @@ class ProviderRowWidget(QWidget):
                 self.parent_dialog.custom_providers_data.update(custom_providers)
                 if hasattr(self.parent_dialog, "api_key_edits") and self.provider in self.parent_dialog.api_key_edits:
                     del self.parent_dialog.api_key_edits[self.provider]
+                if hasattr(self.parent_dialog, "_rename_provider"):
+                    self.parent_dialog._rename_provider(self.provider, new_name)
                 self.provider = new_name
                 self.label.setText(f"<b>{new_name.capitalize()}</b>")
                 self.parent_dialog.api_key_edits[new_name] = self.key_edit

@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import tempfile
 import threading
 
 try:
@@ -144,10 +145,18 @@ def atomic_write_json(path, data):
     churning writes never touch meta.json (which holds api_keys, providers
     and the whole user config).
     """
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
-    os.replace(tmp, path)
+    tmp_dir = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(dir=tmp_dir, prefix=".tmp-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def read_json_file(path, default=None):

@@ -282,6 +282,13 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
     def load_config_into_ui(self):
         c = self.config
+        # Provider rows read these during construction — assign before
+        # refresh_custom_list() builds them.
+        self.model_fallbacks_data = (c.get("model_fallbacks", {}) or {}).copy()
+        disabled_models = c.get("disabled_fallback_models", {}) or {}
+        if not isinstance(disabled_models, dict):
+            disabled_models = {}
+        self.disabled_fallback_models_data = disabled_models.copy()
         self.refresh_custom_list()
         self.options_count_sb.setValue(c.get("options_count", 4))
         self.fix_latex_cb.setChecked(c.get("fix_latex", False))
@@ -387,13 +394,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.mobile_extra_cb.setChecked(c.get("mobile_show_extra_buttons", False))
         self.update_mobile_script_view()
 
-        # AI Provider Logic
+        # AI Provider Logic (fallback/disabled maps already assigned at the
+        # top of load_config_into_ui so provider rows can read them)
 
-        self.model_fallbacks_data = c.get("model_fallbacks", {}).copy()
-        disabled_models = c.get("disabled_fallback_models", {}) or {}
-        if not isinstance(disabled_models, dict):
-            disabled_models = {}
-        self.disabled_fallback_models_data = disabled_models.copy()
         self.global_model_priority_data = list(c.get("global_model_priority", []))
         self.disabled_global_model_priority_data = list(c.get("disabled_global_model_priority", []))
         self.local_providers_data = (c.get("local_providers", {}) or {}).copy()
@@ -944,6 +947,43 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 
         threading.Thread(target=_runner, daemon=True).start()
 
+    def _rename_provider(self, old_name, new_name):
+        """Carry every provider-keyed setting across a custom provider rename.
+
+        Without this, rows keyed by the old name look orphaned and get
+        dropped the next time a fallback dialog is accepted.
+        """
+        if not old_name or not new_name or old_name == new_name:
+            return
+        cfg = self.config if isinstance(getattr(self, "config", None), dict) else {}
+        for key in ("models", "api_keys"):
+            section = cfg.get(key)
+            if isinstance(section, dict) and old_name in section:
+                section[new_name] = section.pop(old_name)
+        priority = cfg.get("provider_priority")
+        if isinstance(priority, list):
+            cfg["provider_priority"] = [new_name if p == old_name else p for p in priority]
+
+        def _move_key(obj, attr):
+            data = getattr(obj, attr, None)
+            if isinstance(data, dict) and old_name in data:
+                data[new_name] = data.pop(old_name)
+
+        for attr in ("model_fallbacks_data", "disabled_fallback_models_data",
+                     "thinking_levels_data", "model_timeouts_data",
+                     "global_thinking_levels_data", "global_model_timeouts_data"):
+            _move_key(self, attr)
+
+        def _rewrite_pairs(obj, attr):
+            pairs = getattr(obj, attr, None)
+            if isinstance(pairs, list) and all(
+                    isinstance(p, (list, tuple)) and len(p) == 2 for p in pairs):
+                setattr(obj, attr, [type(p)([new_name if p[0] == old_name else p[0], p[1]])
+                                    for p in pairs])
+
+        _rewrite_pairs(self, "global_model_priority_data")
+        _rewrite_pairs(self, "disabled_global_model_priority_data")
+
     def _save_custom_dialog(self, dlg, old_name=None):
         name = dlg.name_edit.text().strip()
         api_key = dlg.key_edit.text().strip()
@@ -951,6 +991,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             del self.custom_providers_data[old_name]
             if hasattr(self, "api_key_edits") and old_name in self.api_key_edits:
                 del self.api_key_edits[old_name]
+            self._rename_provider(old_name, name)
         self.custom_providers_data[name] = {
             "url": dlg.url_edit.text().strip(),
             "models_url": dlg.models_url_edit.text().strip(),
@@ -1835,6 +1876,7 @@ def check_support_on_update():
 def _build_orphans_cleanup_dialog(parent, orphaned_hints, parser):
     """Shared orphaned-hints cleanup dialog behind the config tab and the Tools-menu entry."""
     from aqt.qt import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QMessageBox
+    from ..config_io import set_orphans_check_time
     import re
 
     dialog = QDialog(parent)

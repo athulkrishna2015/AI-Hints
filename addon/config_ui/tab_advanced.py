@@ -1,5 +1,6 @@
 from aqt import mw
 from aqt.qt import *
+from .widgets import NoWheelComboBox
 
 class AdvancedTabMixin:
     def _create_advanced_tab(self):
@@ -25,7 +26,7 @@ class AdvancedTabMixin:
         # Sort options row
         sort_layout = QHBoxLayout()
         sort_layout.addWidget(QLabel("Sort By:"))
-        self.blacklist_sort_cb = QComboBox()
+        self.blacklist_sort_cb = NoWheelComboBox()
         self.blacklist_sort_cb.addItems(["Name", "Time Remaining (Descending)", "Time Remaining (Ascending)", "Failure Streak"])
         self.blacklist_sort_cb.currentTextChanged.connect(self.refresh_blacklist_list)
         sort_layout.addWidget(self.blacklist_sort_cb)
@@ -100,7 +101,7 @@ class AdvancedTabMixin:
         style_group = QGroupBox("Visual Styling")
         style_layout = QFormLayout()
         
-        self.font_size_combo = QComboBox()
+        self.font_size_combo = NoWheelComboBox()
         self.font_size_combo.setEditable(True)
         self.font_size_combo.addItems([
             "inherit",
@@ -120,7 +121,7 @@ class AdvancedTabMixin:
         scope_layout = QHBoxLayout()
         scope_layout.addWidget(QLabel("Scope Task To:"))
         
-        self.maint_deck_cb = QComboBox()
+        self.maint_deck_cb = NoWheelComboBox()
         self.maint_deck_cb.setEditable(True)
         self.maint_deck_cb.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.maint_deck_cb.setToolTip("Choose whether to run maintenance on a specific deck or your entire collection.")

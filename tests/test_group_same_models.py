@@ -252,6 +252,17 @@ class GlobalDialogTableTests(unittest.TestCase):
         self.assertEqual(self._disabled_order(dlg), [("b", "m2")])
         self.assertEqual(dlg.get_disabled_list(), [("b", "m2")])
 
+    def test_active_list_follows_selection(self):
+        dlg = self._make_dialog([("a", "m1"), ("b", "m2"), ("c", "m3")], disabled=[("c", "m3")])
+        self.assertIs(dlg._focused_table(), dlg.enabled_table)
+        dlg.disabled_table.setCurrentCell(0, 0)
+        self.assertIs(dlg._focused_table(), dlg.disabled_table)
+        self.assertIn("#1687c7", dlg.disabled_wrap.styleSheet())
+        self.assertNotIn("#1687c7", dlg.enabled_wrap.styleSheet())
+        dlg.enabled_table.item(0, 0).setSelected(True)
+        self.assertIs(dlg._focused_table(), dlg.enabled_table)
+        self.assertFalse(dlg.disabled_table.selectedItems())
+
     def test_uncheck_moves_to_disabled(self):
         from PyQt6.QtCore import Qt
 
@@ -654,7 +665,7 @@ class ProviderDialogHeaderSortTests(unittest.TestCase):
         self.assertEqual(dlg.get_active_model(), "m-high")
         self.assertEqual(self._names_in(dlg, dlg.disabled_table), ["m-zed"])
 
-    def test_cannot_disable_last_enabled(self):
+    def test_can_disable_last_enabled(self):
         from PyQt6.QtCore import Qt
 
         dlg = self._make_dialog()
@@ -662,8 +673,8 @@ class ProviderDialogHeaderSortTests(unittest.TestCase):
             dlg.enabled_table.item(1, 0).setCheckState(Qt.CheckState.Unchecked)
         self.assertEqual(dlg.enabled_table.rowCount(), 1)
         dlg.enabled_table.item(0, 0).setCheckState(Qt.CheckState.Unchecked)
-        self.assertEqual(dlg.enabled_table.rowCount(), 1)
-        self.assertEqual(dlg.get_active_model(), "m-zed")
+        self.assertEqual(dlg.enabled_table.rowCount(), 0)
+        self.assertEqual(dlg.get_active_model(), "")
 
     def test_check_in_disabled_moves_to_enabled(self):
         from PyQt6.QtCore import Qt
@@ -773,3 +784,92 @@ class ProviderDialogHeaderSortTests(unittest.TestCase):
             for k, v in saved.items():
                 if v is not None:
                     sys.modules[k] = v
+
+
+class ProviderRowActiveModelTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    def _make_row(self, fallbacks, disabled, saved_model):
+        saved = {k: sys.modules.get(k) for k in list(sys.modules)
+                 if k == "addon" or k.startswith("addon.") or k in ("aqt", "aqt.qt", "aqt.utils")}
+        for k in ("addon.config_ui.widgets", "addon.config_ui.tab_providers", "addon.config_ui"):
+            sys.modules.pop(k, None)
+        pkg = types.ModuleType("addon")
+        pkg.__path__ = [os.path.join(PROJECT_ROOT, "addon")]
+        pkg.__package__ = "addon"
+        sys.modules["addon"] = pkg
+        sys.modules["aqt"] = aqt_mod
+        sys.modules["aqt.qt"] = qt_mod
+        sys.modules["aqt.utils"] = utils_mod
+        try:
+            from addon.config_ui.widgets import ProviderRowWidget
+
+            owner = QtWidgets.QWidget()
+            owner.config = {"disabled_providers": [], "api_keys": {}, "models": {"p": saved_model}}
+            owner.model_fallbacks_data = {"p": list(fallbacks)}
+            owner.disabled_fallback_models_data = {"p": list(disabled)}
+            owner.thinking_levels_data = {}
+            owner.model_timeouts_data = {}
+            owner.custom_providers_data = {}
+            row = ProviderRowWidget("p", owner)
+            return [row.edit.itemText(i) for i in range(row.edit.count())]
+        finally:
+            for k in list(sys.modules):
+                if k == "addon" or k.startswith("addon.") or k in ("aqt", "aqt.qt", "aqt.utils"):
+                    del sys.modules[k]
+            for k, v in saved.items():
+                if v is not None:
+                    sys.modules[k] = v
+
+    def test_combo_lists_saved_plus_enabled_fallbacks(self):
+        items = self._make_row(["m1", "m2", "m3"], ["m2"], "m1")
+        self.assertEqual(items[0], "m1")
+        self.assertIn("m3", items)
+        self.assertNotIn("m2", items)
+
+    def test_combo_keeps_unlisted_saved_model_first(self):
+        items = self._make_row(["m1", "m3"], [], "m-custom")
+        self.assertEqual(items[0], "m-custom")
+        self.assertIn("m1", items)
+        self.assertIn("m3", items)
+
+    def test_no_wheel_combo_ignores_wheel_when_closed(self):
+        from unittest.mock import MagicMock
+
+        from PyQt6.QtWidgets import QComboBox
+
+        saved = {k: sys.modules.get(k) for k in list(sys.modules)
+                 if k == "addon" or k.startswith("addon.") or k in ("aqt", "aqt.qt", "aqt.utils")}
+        for k in ("addon.config_ui.widgets", "addon.config_ui.tab_providers", "addon.config_ui"):
+            sys.modules.pop(k, None)
+        pkg = types.ModuleType("addon")
+        pkg.__path__ = [os.path.join(PROJECT_ROOT, "addon")]
+        pkg.__package__ = "addon"
+        sys.modules["addon"] = pkg
+        sys.modules["aqt"] = aqt_mod
+        sys.modules["aqt.qt"] = qt_mod
+        sys.modules["aqt.utils"] = utils_mod
+        try:
+            from addon.config_ui.widgets import NoWheelComboBox
+
+            self.assertTrue(issubclass(NoWheelComboBox, QComboBox))
+            combo = NoWheelComboBox()
+            combo.addItems(["a", "b", "c"])
+            combo.setCurrentIndex(1)
+            ev = MagicMock()
+            combo.wheelEvent(ev)
+            ev.ignore.assert_called_once_with()
+            self.assertEqual(combo.currentIndex(), 1)
+        finally:
+            for k in list(sys.modules):
+                if k == "addon" or k.startswith("addon.") or k in ("aqt", "aqt.qt", "aqt.utils"):
+                    del sys.modules[k]
+            for k, v in saved.items():
+                if v is not None:
+                    sys.modules[k] = v
+
+
+if __name__ == "__main__":
+    unittest.main()

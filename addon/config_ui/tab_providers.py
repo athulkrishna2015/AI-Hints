@@ -6,7 +6,7 @@ from aqt.qt import *
 from ..logger import info, tooltip
 from ..ai_client import DEFAULT_MODELS, MODEL_SUGGESTIONS, MODEL_FALLBACKS, PROVIDER_ORDER
 from ..ai_client import is_model_blacklisted, is_model_deprecated
-from .widgets import (CustomProviderDialog, ProviderRowWidget, PERSISTENT_TEST_STATUSES,
+from .widgets import (CustomProviderDialog, ProviderRowWidget, NoWheelComboBox, PERSISTENT_TEST_STATUSES,
                       FETCH_CANCELLATIONS, NEWLY_ADDED_MODELS, MISSING_FROM_FETCH,
                       GLOBAL_NEWLY_ADDED_MODELS, GLOBAL_MISSING_FROM_FETCH,
                       _get_blacklist_remaining)
@@ -338,7 +338,29 @@ class FallbackPriorityDialog(QDialog):
             QEvent.Type.Resize,
         ):
             self._ensure_visible_widgets()
+        elif event.type() == QEvent.Type.MouseButtonPress:
+            for t in tables:
+                if obj is t.viewport():
+                    try:
+                        empty = not t.indexAt(event.position().toPoint()).isValid()
+                    except Exception:
+                        empty = False
+                    if empty:
+                        self._force_active_table(t)
+                    break
         return super().eventFilter(obj, event)
+
+    def _force_active_table(self, table):
+        """Activate a list via empty-space click — works even with zero rows."""
+        for t in self._split_tables():
+            if t.selectedItems():
+                t.clearSelection()
+        self._forced_active = table
+        try:
+            table.setFocus()
+        except Exception:
+            pass
+        self._update_active_highlight()
 
     def _selected_rows(self, table=None):
         t = self._tbl(table)
@@ -357,6 +379,9 @@ class FallbackPriorityDialog(QDialog):
         for table in self._split_tables() or (self._tbl(None),):
             if table.selectedItems():
                 return table
+        forced = getattr(self, "_forced_active", None)
+        if forced in (self._split_tables() or ()):
+            return forced
         for table in self._split_tables() or (self._tbl(None),):
             if table.hasFocus() and table.currentRow() >= 0:
                 return table
@@ -429,6 +454,111 @@ class FallbackPriorityDialog(QDialog):
             t.setRowHidden(r, bool(query and query not in self._row_search_text(t, r).casefold()))
         self._after_filter()
 
+    # Shared Enabled/Disabled panels + single control set, used by both the
+    # per-provider and the global fallback dialogs. Every mutating control
+    # below acts on the highlighted (active) list only — no button ever
+    # touches both lists at once.
+    _ACTIVE_PANEL_STYLE = "#aiHintsListPanel { border: 2px solid #1687c7; border-radius: 6px; }"
+    _INACTIVE_PANEL_STYLE = "#aiHintsListPanel { border: 2px solid transparent; border-radius: 6px; }"
+
+    def _update_active_highlight(self):
+        try:
+            active = self._focused_table()
+        except Exception:
+            return
+        if active is getattr(self, "_highlighted_table", None):
+            return  # same side: restyling 1000+ rows each time is what lagged
+        self._highlighted_table = active
+        for table, wrap in ((getattr(self, "enabled_table", None),
+                             getattr(self, "enabled_wrap", None)),
+                            (getattr(self, "disabled_table", None),
+                             getattr(self, "disabled_wrap", None))):
+            if wrap is not None:
+                wrap.setStyleSheet(self._ACTIVE_PANEL_STYLE if table is not None and table is active
+                                   else self._INACTIVE_PANEL_STYLE)
+
+    def _track_active_table(self, table):
+        # Selections are per-view in Qt: clicking rows in one list does NOT
+        # clear the other list's selection, so without this the "first table
+        # with a selection" lookup would stick to Enabled forever. Keep the
+        # invariant that at most one list holds a selection.
+        self._forced_active = None
+        if getattr(self, "_tracking_active", False):
+            return
+        if table.selectedItems():
+            self._tracking_active = True
+            try:
+                other = self.disabled_table if table is self.enabled_table else self.enabled_table
+                if other.selectedItems():
+                    other.clearSelection()
+            finally:
+                self._tracking_active = False
+        self._update_active_highlight()
+
+    def _build_split_lists(self, layout, headers, widths, enabled_title,
+                           disabled_title, search_placeholder):
+        """Search box + Enabled/Disabled splitter + one move row. Row content
+        population and dialog-specific action rows stay with the caller."""
+        search_edit = QLineEdit()
+        search_edit.setPlaceholderText(search_placeholder)
+        search_edit.textChanged.connect(self.filter_models)
+        layout.addWidget(search_edit)
+
+        self.enabled_table = self._make_fallback_table(headers, widths)
+        self.disabled_table = self._make_fallback_table(headers, widths)
+        self.table = self.enabled_table
+        for table in (self.enabled_table, self.disabled_table):
+            table.horizontalHeader().sectionClicked.connect(lambda col, t=table: self._on_header_clicked(col, t))
+            table.itemChanged.connect(self._on_item_changed)
+            table.verticalScrollBar().valueChanged.connect(self._ensure_visible_widgets)
+            table.viewport().installEventFilter(self)
+            table.itemSelectionChanged.connect(lambda _t=table: self._track_active_table(_t))
+            table.currentCellChanged.connect(lambda *_a: self._update_active_highlight())
+        self._moving_rows = False
+
+        self.enabled_label = QLabel(enabled_title)
+        self.enabled_label.setStyleSheet("font-weight: bold; margin-top: 4px;")
+        self.disabled_label = QLabel(disabled_title)
+        self.disabled_label.setStyleSheet("font-weight: bold; margin-top: 4px;")
+
+        self.move_up_btn = QPushButton("▲ Up")
+        self.move_up_btn.clicked.connect(lambda: self.move_item_in(self._focused_table(), -1))
+        self.move_down_btn = QPushButton("▼ Down")
+        self.move_down_btn.clicked.connect(lambda: self.move_item_in(self._focused_table(), 1))
+        self.move_top_btn = QPushButton("⇈ Top")
+        self.move_top_btn.clicked.connect(lambda: self.move_item_to_edge(self._focused_table()))
+        self.move_bottom_btn = QPushButton("⇊ Bottom")
+        self.move_bottom_btn.clicked.connect(lambda: self.move_item_to_edge(self._focused_table(), True))
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        self.enabled_wrap = QWidget()
+        self.enabled_wrap.setObjectName("aiHintsListPanel")
+        enabled_panel = QVBoxLayout(self.enabled_wrap)
+        enabled_panel.setContentsMargins(0, 0, 0, 0)
+        enabled_panel.addWidget(self.enabled_label)
+        enabled_panel.addWidget(self.enabled_table, 1)
+        splitter.addWidget(self.enabled_wrap)
+        self.disabled_wrap = QWidget()
+        self.disabled_wrap.setObjectName("aiHintsListPanel")
+        disabled_panel = QVBoxLayout(self.disabled_wrap)
+        disabled_panel.setContentsMargins(0, 0, 0, 0)
+        disabled_panel.addWidget(self.disabled_label)
+        disabled_panel.addWidget(self.disabled_table, 1)
+        splitter.addWidget(self.disabled_wrap)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
+        layout.addWidget(splitter, 1)
+
+        move_row = QHBoxLayout()
+        move_row.addWidget(self.move_up_btn)
+        move_row.addWidget(self.move_down_btn)
+        move_row.addWidget(self.move_top_btn)
+        move_row.addWidget(self.move_bottom_btn)
+        move_row.addStretch()
+        layout.addLayout(move_row)
+        self._update_active_highlight()
+
 class ToolTipDelegate(QStyledItemDelegate):
     def helpEvent(self, event, view, option, index):
         if event.type() == QEvent.Type.ToolTip:
@@ -465,28 +595,19 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             "Configure the list of models to try if the primary model fails.<br/>"
             "The first model in <b>Enabled</b> is the Active Model. Uncheck a row to move it to "
             "<b>Disabled</b> (or check one there to enable it) — each list keeps its own order.<br/>"
-            "Click a column header to sort that list, or use the buttons below to reorder."
+            "Click a column header to sort that list. The highlighted list is the active one: "
+            "every button below acts on it only."
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
         layout.addWidget(info_label)
-        
-        self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Search models...")
-        self.search_edit.textChanged.connect(self.filter_models)
-        layout.addWidget(self.search_edit)
 
         # Columns: [Model Name] [Thinking Level] [Timeout]
         headers = ["Model Name", "Thinking Level", "Timeout (s)"]
-        self.enabled_table = self._make_fallback_table(headers, {0: 320, 1: 120, 2: 100})
-        self.disabled_table = self._make_fallback_table(headers, {0: 320, 1: 120, 2: 100})
-        self.table = self.enabled_table
-        for table in (self.enabled_table, self.disabled_table):
-            table.horizontalHeader().sectionClicked.connect(lambda col, t=table: self._on_header_clicked(col, t))
-            table.itemChanged.connect(self._on_item_changed)
-            table.verticalScrollBar().valueChanged.connect(self._ensure_visible_widgets)
-            table.viewport().installEventFilter(self)
-        self._moving_rows = False
+        self._build_split_lists(layout, headers, {0: 320, 1: 120, 2: 100},
+                                "Enabled priority (first row is Active):",
+                                "Disabled / available:",
+                                "Search models...")
 
         disabled_models = getattr(parent, "disabled_fallback_models_data", {}).get(provider, [])
         fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{provider}_fallback_statuses", {})
@@ -530,59 +651,6 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         # Materialize the first screenful immediately so the dialog never opens
         # with empty cells; further rows load as the user scrolls.
         self._ensure_visible_widgets()
-
-        self.enabled_label = QLabel("Enabled priority (first row is Active):")
-        self.enabled_label.setStyleSheet("font-weight: bold; margin-top: 4px;")
-        self.disabled_label = QLabel("Disabled / available:")
-        self.disabled_label.setStyleSheet("font-weight: bold; margin-top: 4px;")
-        self.enabled_up_btn = QPushButton("▲ Up")
-        self.enabled_up_btn.clicked.connect(lambda: self.move_item_in(self.enabled_table, -1))
-        self.enabled_down_btn = QPushButton("▼ Down")
-        self.enabled_down_btn.clicked.connect(lambda: self.move_item_in(self.enabled_table, 1))
-        self.enabled_top_btn = QPushButton("⇈ Top")
-        self.enabled_top_btn.clicked.connect(lambda: self.move_item_to_edge(self.enabled_table))
-        self.enabled_bottom_btn = QPushButton("⇊ Bottom")
-        self.enabled_bottom_btn.clicked.connect(lambda: self.move_item_to_edge(self.enabled_table, True))
-        self.disabled_up_btn = QPushButton("▲ Up")
-        self.disabled_up_btn.clicked.connect(lambda: self.move_item_in(self.disabled_table, -1))
-        self.disabled_down_btn = QPushButton("▼ Down")
-        self.disabled_down_btn.clicked.connect(lambda: self.move_item_in(self.disabled_table, 1))
-        self.disabled_top_btn = QPushButton("⇈ Top")
-        self.disabled_top_btn.clicked.connect(lambda: self.move_item_to_edge(self.disabled_table))
-        self.disabled_bottom_btn = QPushButton("⇊ Bottom")
-        self.disabled_bottom_btn.clicked.connect(lambda: self.move_item_to_edge(self.disabled_table, True))
-
-        lists_splitter = QSplitter(Qt.Orientation.Horizontal)
-        lists_splitter.setChildrenCollapsible(False)
-        enabled_wrap = QWidget()
-        enabled_panel = QVBoxLayout(enabled_wrap)
-        enabled_panel.setContentsMargins(0, 0, 0, 0)
-        enabled_panel.addWidget(self.enabled_label)
-        enabled_panel.addWidget(self.enabled_table, 1)
-        enabled_move = QHBoxLayout()
-        enabled_move.addWidget(self.enabled_up_btn)
-        enabled_move.addWidget(self.enabled_down_btn)
-        enabled_move.addWidget(self.enabled_top_btn)
-        enabled_move.addWidget(self.enabled_bottom_btn)
-        enabled_move.addStretch()
-        enabled_panel.addLayout(enabled_move)
-        lists_splitter.addWidget(enabled_wrap)
-        disabled_wrap = QWidget()
-        disabled_panel = QVBoxLayout(disabled_wrap)
-        disabled_panel.setContentsMargins(0, 0, 0, 0)
-        disabled_panel.addWidget(self.disabled_label)
-        disabled_panel.addWidget(self.disabled_table, 1)
-        disabled_move = QHBoxLayout()
-        disabled_move.addWidget(self.disabled_up_btn)
-        disabled_move.addWidget(self.disabled_down_btn)
-        disabled_move.addWidget(self.disabled_top_btn)
-        disabled_move.addWidget(self.disabled_bottom_btn)
-        disabled_move.addStretch()
-        disabled_panel.addLayout(disabled_move)
-        lists_splitter.addWidget(disabled_wrap)
-        lists_splitter.setStretchFactor(0, 1)
-        lists_splitter.setStretchFactor(1, 1)
-        layout.addWidget(lists_splitter, 1)
         self._update_counts()
 
         # Action buttons (stacked in 2 rows to prevent overflow)
@@ -712,7 +780,7 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             return
         name = item.data(Qt.ItemDataRole.UserRole)
 
-        combo = QComboBox()
+        combo = NoWheelComboBox()
         combo.addItems(["off", "low", "medium", "high"])
         combo.setCurrentText(self._thinking_levels.get(name, "off"))
         table.setCellWidget(row, 1, combo)
@@ -946,7 +1014,7 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         self.update_item_labels()
         self._ensure_visible_widgets()
 
-    def on_test_from_list(self, mode="all"):
+    def on_test_from_list(self, mode="all", table=None):
         test_key = f"{self.provider}_test"
         if test_key in TEST_CANCELLATIONS:
             TEST_CANCELLATIONS[test_key] = True
@@ -958,17 +1026,18 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         TEST_CANCELLATIONS[test_key] = False
         self.list_test_btn.setText("Stop Test")
         self.restore_btn.setEnabled(False)
-        self.enabled_up_btn.setEnabled(False)
-        self.enabled_down_btn.setEnabled(False)
-        self.disabled_up_btn.setEnabled(False)
-        self.disabled_down_btn.setEnabled(False)
+        self.move_up_btn.setEnabled(False)
+        self.move_down_btn.setEnabled(False)
+        self.move_top_btn.setEnabled(False)
+        self.move_bottom_btn.setEnabled(False)
         self.remove_btn.setEnabled(False)
 
-        # Collect models based on mode
+        # Collect models based on mode, from the active list by default
+        active = table if table is not None else self._focused_table()
         if mode == "checked":
             tables = [self.enabled_table]
         else:
-            tables = [self.enabled_table, self.disabled_table]
+            tables = [active]
         models = []
         model_tables = []
         seen_models = set()
@@ -1105,10 +1174,10 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         def _done():
             self.list_test_btn.setText("Test")
             self.restore_btn.setEnabled(True)
-            self.enabled_up_btn.setEnabled(True)
-            self.enabled_down_btn.setEnabled(True)
-            self.disabled_up_btn.setEnabled(True)
-            self.disabled_down_btn.setEnabled(True)
+            self.move_up_btn.setEnabled(True)
+            self.move_down_btn.setEnabled(True)
+            self.move_top_btn.setEnabled(True)
+            self.move_bottom_btn.setEnabled(True)
             self.remove_btn.setEnabled(True)
             if test_key in TEST_CANCELLATIONS:
                 del TEST_CANCELLATIONS[test_key]
@@ -1185,14 +1254,6 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             return
         checked = item.checkState() == Qt.CheckState.Checked
         if (table is self.enabled_table) == checked:
-            return
-        if table is self.enabled_table and self.enabled_table.rowCount() == 1:
-            table.blockSignals(True)
-            try:
-                item.setCheckState(Qt.CheckState.Checked)
-            finally:
-                table.blockSignals(False)
-            tooltip("Cannot disable the last enabled model.")
             return
         self._move_row_to_other_table(table, row, checked)
 
@@ -1291,6 +1352,9 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             self._move_row_to_other_table(table, row, True)
             row = self._find_row_in(self.enabled_table, name)
             table = self.enabled_table
+        if row < 0:
+            tooltip("Select a model first.")
+            return
         if row > 0:
             self._swap_rows_in(table, row, 0)
             table.setCurrentCell(0, 0)
@@ -1393,9 +1457,8 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         self.update_item_labels()
         self._clear_sort_indicator(table)
 
-    def filter_models(self, text):
-        for table in (self.enabled_table, self.disabled_table):
-            super().filter_models(text, table)
+    def filter_models(self, text, table=None):
+        super().filter_models(text, self.enabled_table if table is None else table)
 
     def _rows_matching(self, table, pred):
         rows = []
@@ -1405,12 +1468,13 @@ class FallbackOrderDialog(FallbackPriorityDialog):
                 rows.append(i)
         return rows
 
-    def remove_models(self, kind):
+    def remove_models(self, kind, table=None):
         """Remove rows based on the requested removal type.
 
         kind in {"selected", "deprecated", "missing", "flagged"}.
+        Acts on the given table, defaulting to the highlighted (active) list.
         """
-        tables = (self.enabled_table, self.disabled_table)
+        tables = (table,) if table is not None else (self._focused_table(),)
         if kind == "selected":
             targets = [(t, i) for t in tables for i in self._selected_rows(t)]
             label = "selected"
@@ -1527,10 +1591,10 @@ class AddModelDialog(QDialog):
         self.setWindowTitle("Add Model to Global Priority")
         layout = QFormLayout(self)
         
-        self.provider_cb = QComboBox()
+        self.provider_cb = NoWheelComboBox()
         self.provider_cb.addItems(providers)
         
-        self.model_cb = QComboBox()
+        self.model_cb = NoWheelComboBox()
         self.model_cb.setEditable(True)
         
         self.providers_data = {}
@@ -1605,85 +1669,23 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             "Configure a global fallback sequence across all models and providers.<br/>"
             "Only the <b>Enabled</b> list is tried, top to bottom. Uncheck a row to move it to "
             "<b>Disabled</b> (or check one there to enable it) — each list keeps its own order.<br/>"
-            "Click a column header to sort that list by the column (click again to reverse)."
+            "Click a column header to sort that list by the column (click again to reverse). "
+            "The highlighted list is the active one: every button below acts on it only."
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
         layout.addWidget(info_label)
 
-        self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Search providers/models...")
-        self.search_edit.textChanged.connect(self.filter_models)
-        layout.addWidget(self.search_edit)
-
         self._g_thinking = {p: dict(m) for p, m in (getattr(parent, "global_thinking_levels_data", {}) or {}).items() if isinstance(m, dict)}
         self._g_timeouts = {p: dict(m) for p, m in (getattr(parent, "global_model_timeouts_data", {}) or {}).items() if isinstance(m, dict)}
         self._per_thinking = getattr(parent, "thinking_levels_data", {}) or {}
         self._per_timeouts = getattr(parent, "model_timeouts_data", {}) or {}
-        self._moving_rows = False
 
         headers = ["Provider", "Model", "Thinking Level", "Timeout (s)", "Status"]
-        self.enabled_table = self._make_fallback_table(headers, {0: 150, 1: 280, 2: 110, 3: 90, 4: 160})
-        self.disabled_table = self._make_fallback_table(headers, {0: 150, 1: 280, 2: 110, 3: 90, 4: 160})
-        for table in (self.enabled_table, self.disabled_table):
-            table.horizontalHeader().sectionClicked.connect(
-                lambda col, t=table: self._on_header_clicked(col, t))
-            table.itemChanged.connect(self._on_item_changed)
-            table.verticalScrollBar().valueChanged.connect(self._ensure_visible_widgets)
-            table.viewport().installEventFilter(self)
-
-        self.enabled_label = QLabel("Enabled priority order:")
-        self.enabled_label.setStyleSheet("font-weight: bold; margin-top: 4px;")
-        self.disabled_label = QLabel("Disabled / available:")
-        self.disabled_label.setStyleSheet("font-weight: bold; margin-top: 4px;")
-        self.enabled_up_btn = QPushButton("▲ Up")
-        self.enabled_up_btn.clicked.connect(lambda: self.move_item_in(self.enabled_table, -1))
-        self.enabled_down_btn = QPushButton("▼ Down")
-        self.enabled_down_btn.clicked.connect(lambda: self.move_item_in(self.enabled_table, 1))
-        self.enabled_top_btn = QPushButton("⇈ Top")
-        self.enabled_top_btn.clicked.connect(lambda: self.move_item_to_edge(self.enabled_table))
-        self.enabled_bottom_btn = QPushButton("⇊ Bottom")
-        self.enabled_bottom_btn.clicked.connect(lambda: self.move_item_to_edge(self.enabled_table, True))
-        self.disabled_up_btn = QPushButton("▲ Up")
-        self.disabled_up_btn.clicked.connect(lambda: self.move_item_in(self.disabled_table, -1))
-        self.disabled_down_btn = QPushButton("▼ Down")
-        self.disabled_down_btn.clicked.connect(lambda: self.move_item_in(self.disabled_table, 1))
-        self.disabled_top_btn = QPushButton("⇈ Top")
-        self.disabled_top_btn.clicked.connect(lambda: self.move_item_to_edge(self.disabled_table))
-        self.disabled_bottom_btn = QPushButton("⇊ Bottom")
-        self.disabled_bottom_btn.clicked.connect(lambda: self.move_item_to_edge(self.disabled_table, True))
-
-        lists_splitter = QSplitter(Qt.Orientation.Horizontal)
-        lists_splitter.setChildrenCollapsible(False)
-        enabled_wrap = QWidget()
-        enabled_panel = QVBoxLayout(enabled_wrap)
-        enabled_panel.setContentsMargins(0, 0, 0, 0)
-        enabled_panel.addWidget(self.enabled_label)
-        enabled_panel.addWidget(self.enabled_table, 1)
-        enabled_move = QHBoxLayout()
-        enabled_move.addWidget(self.enabled_up_btn)
-        enabled_move.addWidget(self.enabled_down_btn)
-        enabled_move.addWidget(self.enabled_top_btn)
-        enabled_move.addWidget(self.enabled_bottom_btn)
-        enabled_move.addStretch()
-        enabled_panel.addLayout(enabled_move)
-        lists_splitter.addWidget(enabled_wrap)
-        disabled_wrap = QWidget()
-        disabled_panel = QVBoxLayout(disabled_wrap)
-        disabled_panel.setContentsMargins(0, 0, 0, 0)
-        disabled_panel.addWidget(self.disabled_label)
-        disabled_panel.addWidget(self.disabled_table, 1)
-        disabled_move = QHBoxLayout()
-        disabled_move.addWidget(self.disabled_up_btn)
-        disabled_move.addWidget(self.disabled_down_btn)
-        disabled_move.addWidget(self.disabled_top_btn)
-        disabled_move.addWidget(self.disabled_bottom_btn)
-        disabled_move.addStretch()
-        disabled_panel.addLayout(disabled_move)
-        lists_splitter.addWidget(disabled_wrap)
-        lists_splitter.setStretchFactor(0, 1)
-        lists_splitter.setStretchFactor(1, 1)
-        layout.addWidget(lists_splitter, 1)
+        self._build_split_lists(layout, headers, {0: 150, 1: 280, 2: 110, 3: 90, 4: 160},
+                                "Enabled priority order:",
+                                "Disabled / available:",
+                                "Search providers/models...")
 
         # Populate current list
         self.populate_list(current_global_list)
@@ -2002,7 +2004,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         if table.cellWidget(row, 2) is not None:
             return
         provider, model = self._row_pair(table, row)
-        combo = QComboBox()
+        combo = NoWheelComboBox()
         combo.addItems(["off", "low", "medium", "high"])
         combo.setCurrentText(str(self._g_thinking.get(provider, {}).get(model, "off")))
         table.setCellWidget(row, 2, combo)
@@ -2278,6 +2280,8 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 if not hasattr(self.main_dialog, "custom_providers_data"):
                     self.main_dialog.custom_providers_data = {}
                 self.main_dialog.custom_providers_data.update(custom_providers)
+                if hasattr(self.main_dialog, "_rename_provider"):
+                    self.main_dialog._rename_provider(provider, new_name)
             else:
                 custom_providers[provider] = new_data
                 if not hasattr(self.main_dialog, "custom_providers_data"):
@@ -2341,27 +2345,29 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 rows.append(i)
         return rows
 
-    def remove_models(self, kind):
+    def remove_models(self, kind, table=None):
         """Remove rows based on the requested removal type.
 
         kind in {"selected", "deprecated", "missing", "flagged"}.
+        Acts on the given table, defaulting to the highlighted (active) list.
         """
+        tables = (table,) if table is not None else (self._focused_table(),)
         targets = []
         if kind == "selected":
-            for table in self._tables():
+            for table in tables:
                 targets.extend((table, i) for i in self._selected_rows(table))
             label = "selected"
         elif kind == "deprecated":
-            for table in self._tables():
+            for table in tables:
                 targets.extend((table, i) for i in self._rows_matching(table, lambda p, m: is_model_deprecated(p, m)))
             label = "deprecated"
         elif kind == "missing":
-            for table in self._tables():
+            for table in tables:
                 targets.extend((table, i) for i in self._rows_matching(
                     table, lambda p, m: m in GLOBAL_MISSING_FROM_FETCH.get(p, set())))
             label = "no-longer-returned"
         else:
-            for table in self._tables():
+            for table in tables:
                 targets.extend((table, i) for i in self._rows_matching(
                     table, lambda p, m: is_model_deprecated(p, m) or m in GLOBAL_MISSING_FROM_FETCH.get(p, set())))
             label = "deprecated/no-longer-returned"
@@ -2522,7 +2528,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 
         threading.Thread(target=_runner, daemon=True).start()
         
-    def on_test_all(self, mode="checked"):
+    def on_test_all(self, mode="checked", table=None):
         test_key = "global_fallback_test"
         if test_key in TEST_CANCELLATIONS:
             TEST_CANCELLATIONS[test_key] = True
@@ -2534,17 +2540,18 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         TEST_CANCELLATIONS[test_key] = False
         self.list_test_btn.setText("Stop Test")
         self.restore_btn.setEnabled(False)
-        self.enabled_up_btn.setEnabled(False)
-        self.enabled_down_btn.setEnabled(False)
-        self.disabled_up_btn.setEnabled(False)
-        self.disabled_down_btn.setEnabled(False)
+        self.move_up_btn.setEnabled(False)
+        self.move_down_btn.setEnabled(False)
+        self.move_top_btn.setEnabled(False)
+        self.move_bottom_btn.setEnabled(False)
         self.remove_btn.setEnabled(False)
         self.add_btn.setEnabled(False)
-        
+
+        active = table if table is not None else self._focused_table()
         if mode == "checked":
             tables = [self.enabled_table]
         else:
-            tables = list(self._tables())
+            tables = [active]
 
         def _test_includes(table, i):
             item = table.item(i, 0)
@@ -2662,10 +2669,10 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             def _done():
                 self.list_test_btn.setText("Test")
                 self.restore_btn.setEnabled(True)
-                self.enabled_up_btn.setEnabled(True)
-                self.enabled_down_btn.setEnabled(True)
-                self.disabled_up_btn.setEnabled(True)
-                self.disabled_down_btn.setEnabled(True)
+                self.move_up_btn.setEnabled(True)
+                self.move_down_btn.setEnabled(True)
+                self.move_top_btn.setEnabled(True)
+                self.move_bottom_btn.setEnabled(True)
                 self.remove_btn.setEnabled(True)
                 self.add_btn.setEnabled(True)
                 if test_key in TEST_CANCELLATIONS:
@@ -2841,9 +2848,11 @@ class ProvidersTabMixin:
         if not hasattr(self, "global_model_priority_data"):
             self.global_model_priority_data = self.config.get("global_model_priority", [])
 
-        current_list, orphaned = prune_orphan_pairs(self.global_model_priority_data, self._known_global_providers())
-        if orphaned:
-            tooltip(f"Ignoring {orphaned} row(s) for deleted providers (dropped on OK).")
+        # Never drop rows here: a renamed or temporarily-removed provider's
+        # rows stay visible so the saved priority order is always respected.
+        # Genuinely dead rows can be removed with the lists' own Remove buttons.
+        current_list = [tuple(p) for p in (self.global_model_priority_data or [])
+                        if isinstance(p, (list, tuple)) and len(p) == 2]
 
         dlg = GlobalFallbackOrderDialog(self, current_list)
         dlg.setWindowModality(Qt.WindowModality.NonModal)

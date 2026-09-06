@@ -5,7 +5,7 @@ from aqt import mw
 from aqt.utils import askUser
 from aqt.qt import *
 from ..logger import logger, info, tooltip
-from .widgets import ADDON_PACKAGE
+from .widgets import ADDON_PACKAGE, NoWheelComboBox
 
 from ..config_io import atomic_write_json, read_json_file, _ADDON_DIR
 
@@ -97,7 +97,7 @@ class BatchTabMixin:
         s_layout.addRow("", self.batch_desc_label)
 
         # 🚀 Provider Override Selector
-        self.batch_provider_cb = QComboBox()
+        self.batch_provider_cb = NoWheelComboBox()
         self.batch_provider_cb.addItem("⚡ Standard Config (Follows Fallback Matrix)")
         # Load list of active providers
         from ..ai_client import PROVIDER_ORDER
@@ -113,7 +113,7 @@ class BatchTabMixin:
         s_layout.addRow("Force Provider:", self.batch_provider_cb)
 
         # 🎯 Specific Model Override Selector
-        self.batch_model_cb = QComboBox()
+        self.batch_model_cb = NoWheelComboBox()
         self.batch_model_cb.setEditable(True)
         self.batch_model_cb.addItem("⚡ System Default (Configured Primary Model)")
         self.batch_model_cb.setToolTip("Choose a specific model to use for this batch. Leaves blank to use your configured default for the provider.")
@@ -123,7 +123,7 @@ class BatchTabMixin:
         self.batch_provider_cb.currentIndexChanged.connect(self._update_batch_model_suggestions)
 
         # 📦 Searchable Embedded Deck Selector
-        self.batch_deck_chooser = QComboBox()
+        self.batch_deck_chooser = NoWheelComboBox()
         self.batch_deck_chooser.setEditable(True)
         self.batch_deck_chooser.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         # Cap the popup so a large deck list never spans the whole screen; typing
@@ -1086,6 +1086,7 @@ class BatchTabMixin:
 
                     total_notes = len(nid_to_cids) + len(orphan_cids)
                     processed_notes = 0
+                    processed_cards = 0
                     last_pump = time.time()
 
                     # Pre-import version helper lazily
@@ -1099,7 +1100,7 @@ class BatchTabMixin:
                         if processed_notes % 10 == 0:
                             now = time.time()
                             if now - last_pump > 0.08:
-                                progress.setValue(min(processed_notes * 10, len(source_cids)))
+                                progress.setValue(min(processed_cards, len(source_cids)))
                                 progress.setLabelText(f"Scanning notes {processed_notes+1} of {total_notes} ({len(source_cids)} cards)...")
                                 QApplication.processEvents()
                                 if progress.wasCanceled():
@@ -1108,6 +1109,7 @@ class BatchTabMixin:
                                     return
                                 last_pump = now
                         processed_notes += 1
+                        processed_cards += len(cid_ord_list)
 
                         try:
                             note = mw.col.get_note(nid)
@@ -1195,6 +1197,7 @@ class BatchTabMixin:
 
                     # Orphan cids that had no cards row (deleted) - treat via fallback
                     for cid in orphan_cids:
+                        processed_cards += 1
                         # Let legacy path decide (will be skipped if card missing)
                         try:
                             from ..reviewer_hooks import _get_card_from_collection, card_has_hints
