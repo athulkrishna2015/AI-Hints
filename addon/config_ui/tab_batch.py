@@ -1298,14 +1298,112 @@ class BatchTabMixin:
                 confirm_msg += f"\n\n{tag_filter_msg}."
             if excess > 0:
                 confirm_msg += f"\n\n(Note: {excess} remaining skipped due to safety limits.)"
+            confirm_msg += "\n\nProceed with execution?"
 
-            if not askUser(confirm_msg + "\n\nProceed with execution?"):
+            # 3-way confirm: Proceed / View in Browser / Cancel so the user can
+            # inspect the exact queued cards before running. Modeless + WindowModal:
+            # the dialog never closes on View, the Browser stays interactive, and
+            # the scan result is kept in self._pending_batch — no rescan to Proceed.
+            self._pending_batch = {
+                "chunked_ids": list(chunked_ids),
+                "deck_name": deck_name,
+                "record_cursor": record_cursor,
+                "is_native": is_native,
+            }
+            try:
+                from aqt.qt import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+                dlg = QDialog(self)
+                dlg.setWindowTitle("AI Hints - Confirm Batch")
+                # Window-modal blocks only the config window; the Browser stays usable.
+                try:
+                    dlg.setWindowModality(Qt.WindowModality.WindowModal)
+                except Exception:
+                    pass
+                lay = QVBoxLayout(dlg)
+                lbl = QLabel(confirm_msg)
+                lbl.setWordWrap(True)
+                lay.addWidget(lbl)
+                row = QHBoxLayout()
+                proceed_btn = QPushButton("Proceed")
+                proceed_btn.setDefault(True)
+                view_btn = QPushButton("View in Browser")
+                cancel_btn = QPushButton("Cancel")
+                row.addWidget(proceed_btn)
+                row.addWidget(view_btn)
+                row.addWidget(cancel_btn)
+                lay.addLayout(row)
+                dlg.setLayout(lay)
+                # Keep a ref so the modeless dialog isn't garbage-collected.
+                self._batch_confirm_dlg = dlg
+                view_btn.clicked.connect(lambda _checked=False: self._open_batch_cards_in_browser(
+                    (self._pending_batch or {}).get("chunked_ids", [])))
+                cancel_btn.clicked.connect(dlg.reject)
+                proceed_btn.clicked.connect(dlg.accept)
+                dlg.accepted.connect(self._finish_batch_start)
+                dlg.rejected.connect(lambda: setattr(self, "_pending_batch", None))
+                dlg.show()
+                return
+            except Exception:
+                if not askUser(confirm_msg):
+                    self._pending_batch = None
+                    return
+                self._finish_batch_start()
                 return
             
+        except Exception as e:
+            logger.error(f"Config UI Batch Start Master Error: {e}")
+            info(f"Launch failed: {e}")
+
+    def _open_batch_cards_in_browser(self, card_ids):
+        """Show the exact queued cards in Anki's Browser. Never touches the
+        confirm dialog or the pending scan, so no rescan is needed."""
+        if not card_ids:
+            return
+        try:
+            from aqt import dialogs
+            query = "cid:" + ",".join(map(str, card_ids))
+            browser = dialogs.open("Browser", mw)
+            try:
+                browser.search_for(query)
+            except AttributeError:
+                try:
+                    browser.search(query)
+                except (AttributeError, TypeError):
+                    try:
+                        try:
+                            browser.form.searchEdit.lineEdit().setText(query)
+                        except AttributeError:
+                            browser.form.searchEdit.setText(query)
+                        try:
+                            browser.search()
+                        except (AttributeError, TypeError):
+                            browser.onSearchActivated()
+                    except Exception:
+                        pass
+            browser.setFocus()
+            browser.activateWindow()
+            browser.raise_()
+        except Exception as e:
+            logger.error(f"Failed to open batch cards in browser: {e}")
+
+    def _finish_batch_start(self):
+        """Proceed handler for the modeless confirm dialog. Consumes the
+        stashed scan result — the dialog stays open for View clicks and is
+        already accepted by the time this runs."""
+        from ..batch_manager import batch_manager
+        pending = getattr(self, "_pending_batch", None) or {}
+        self._pending_batch = None
+        chunked_ids = pending.get("chunked_ids", [])
+        deck_name = pending.get("deck_name", "")
+        record_cursor = pending.get("record_cursor", False)
+        is_native = pending.get("is_native", False)
+        if not chunked_ids:
+            return
+        try:
             # Save configuration automatically to persist all settings from UI to disk before starting
             if hasattr(self, "save_config"):
                 self.save_config(close=False)
-            
+
             combo_idx = self.batch_provider_cb.currentIndex()
             prov_override = None
             if combo_idx > 0:
@@ -1315,21 +1413,21 @@ class BatchTabMixin:
             model_override = None
             if chosen_model and "⚡" not in chosen_model:
                  model_override = chosen_model
-            
+
             config = self.config.copy()
             config["multithread_providers"] = self.batch_multithread_cb.isChecked()
             target_prov = prov_override or config.get("ai_provider", "openai")
-            
+
             if model_override:
                  current_models = config.get("models", {})
                  if not isinstance(current_models, dict): current_models = {}
-                 else: current_models = current_models.copy() 
+                 else: current_models = current_models.copy()
                  current_models[target_prov] = model_override
                  config["models"] = current_models
                  logger.info(f"Applying transient Batch Model Override: {target_prov} -> {model_override}")
 
             from ..ai_client import AIClient
-            
+
             client = AIClient(config)
             if not client.has_any_ready_provider():
                  info("No configured API Keys found! Visit Provider settings first.")
@@ -1337,8 +1435,8 @@ class BatchTabMixin:
 
             if not is_native:
                 started = batch_manager.start_local_sequential_queue(
-                    chunked_ids, 
-                    config, 
+                    chunked_ids,
+                    config,
                     provider_override=prov_override
                 )
                 if started:
@@ -1356,7 +1454,7 @@ class BatchTabMixin:
                 if target_prov != "gemini":
                     info(f"❌ Native Cloud Batch is currently NOT supported for provider '{target_prov.upper()}'.\n\nPlease either select 'Gemini' OR switch your Method back to 'Sequential Local Queue'.")
                     return
-                
+
                 from ..card_parser import CardParser
                 from ..reviewer_hooks import _get_card_from_collection
 
@@ -1364,10 +1462,10 @@ class BatchTabMixin:
                     mathjax_format=config.get("mathjax_format", "delimiters"),
                     fix_latex=config.get("fix_latex", False)
                 )
-                
+
                 items = []
                 actual_cids = []
-                
+
                 for cid in chunked_ids:
                     try:
                         card = _get_card_from_collection(cid)
@@ -1383,11 +1481,11 @@ class BatchTabMixin:
                         })
                         actual_cids.append(cid)
                     except: pass
-                    
+
                 if not items:
                     info("Failed to assemble content payload.")
                     return
-                    
+
                 def _bg_run():
                     try:
                         tooltip("Transmitting payload to Google...")
@@ -1410,9 +1508,8 @@ class BatchTabMixin:
                     except Exception as e:
                         err_msg = str(e)
                         mw.taskman.run_on_main(lambda msg=err_msg: info(msg))
-                        
+
                 threading.Thread(target=_bg_run, daemon=True).start()
-                
         except Exception as e:
             logger.error(f"Config UI Batch Start Master Error: {e}")
             info(f"Launch failed: {e}")
