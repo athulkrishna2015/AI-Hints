@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.0.1 (2026-09-08)
+- **Batch Confirm With "View in Browser"**: The pre-run confirmation is now a 3-way **Proceed / View in Browser / Cancel** dialog showing the exact queued cards in Anki's Browser. Viewing never closes the dialog and never discards the scan, so Proceed needs no rescan. The dialog is fully non-modal (Anki stays usable while open) and never steals window focus.
+- **Batch Scan Skips Already-Skipped Cards**: Cards already marked `_skipped` (manual or automatic) are treated as done instead of missing, so every bulk run no longer re-queues and re-generates them. Unskip a card to make it eligible again.
+
 ## 8.0.0 (2026-09-06)
 - **Fast Large Fallback Lists**: Enabled/Disabled fallback lists now share one lazy implementation for both per-provider and global fallback dialogs. Reordering, sorting, drag-and-drop, list switching, and row controls avoid rebuilding or materializing thousands of rows.
 - **Independent List Controls**: The highlighted fallback list is the target for shared reorder, remove, and test controls. Each list has its own search field, and empty-list space can be selected as the active target.
