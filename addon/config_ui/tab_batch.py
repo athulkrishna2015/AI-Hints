@@ -476,14 +476,30 @@ class BatchTabMixin:
         current scrolled position untouched.
         """
         try:
-            sb = self.batch_list_view.verticalScrollBar()
-            was_at_bottom = sb.maximum() <= 0 or sb.value() >= sb.maximum() - 2
+            bar = self.batch_list_view.verticalScrollBar()
+            max_before = bar.maximum()
+            val_before = bar.value()
+            # Fractional position survives content height changes; absolute
+            # values don't (setHtml resets layout, maximum is stale until the
+            # next event-loop pass — restoring synchronously is what snapped
+            # the view to the top on every update).
+            frac = (val_before / max_before) if max_before > 0 else 1.0
+            was_at_bottom = max_before <= 0 or val_before >= max_before - 2
             self.batch_list_view.setHtml(summary)
-            if was_at_bottom:
-                sb.setValue(sb.maximum())
-            else:
-                current = sb.value()
-                QTimer.singleShot(0, lambda v=current: self.batch_list_view.verticalScrollBar().setValue(v))
+            state = {"done": False, "target": None}
+            def _restore():
+                try:
+                    b = self.batch_list_view.verticalScrollBar()
+                    if state["done"] and b.value() != state["target"]:
+                        return  # user scrolled meanwhile; leave it alone
+                    target = b.maximum() if was_at_bottom else round(frac * b.maximum())
+                    b.setValue(target)
+                    state["done"] = True
+                    state["target"] = target
+                except Exception:
+                    pass
+            QTimer.singleShot(0, _restore)
+            QTimer.singleShot(150, _restore)
         except Exception:
             try:
                 self.batch_list_view.setHtml(summary)
