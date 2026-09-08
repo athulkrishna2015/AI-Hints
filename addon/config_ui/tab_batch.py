@@ -1158,6 +1158,14 @@ class BatchTabMixin:
                                     has_hints = False
 
                             should_process = not has_hints
+                            if should_process:
+                                # Already marked skipped (manual or auto): not
+                                # missing, so don't re-queue it every bulk run.
+                                try:
+                                    if _parser is not None and _parser.is_card_skipped(note, fc):
+                                        should_process = False
+                                except Exception:
+                                    pass
                             if has_hints and _need_version:
                                 try:
                                     # Inline version extraction without extra DB hop
@@ -1206,6 +1214,12 @@ class BatchTabMixin:
                                 continue
                             has_hints = card_has_hints(c)
                             should_process = not has_hints
+                            if should_process:
+                                try:
+                                    if _parser is not None and _parser.is_card_skipped(c.note(), c):
+                                        should_process = False
+                                except Exception:
+                                    pass
                             if has_hints and _need_version:
                                 from ..reviewer_hooks import _card_saved_version, _version_less_than
                                 if _version_less_than(_card_saved_version(c), min_ver):
@@ -1246,6 +1260,12 @@ class BatchTabMixin:
                             continue
                         has_hints = card_has_hints(c)
                         should_process = not has_hints
+                        if should_process:
+                            try:
+                                if _parser is not None and _parser.is_card_skipped(c.note(), c):
+                                    should_process = False
+                            except Exception:
+                                pass
                         if has_hints and use_ver_gate and min_ver:
                             saved_ver = _card_saved_version(c)
                             if _version_less_than(saved_ver, min_ver):
@@ -1301,9 +1321,10 @@ class BatchTabMixin:
             confirm_msg += "\n\nProceed with execution?"
 
             # 3-way confirm: Proceed / View in Browser / Cancel so the user can
-            # inspect the exact queued cards before running. Modeless + WindowModal:
-            # the dialog never closes on View, the Browser stays interactive, and
-            # the scan result is kept in self._pending_batch — no rescan to Proceed.
+            # inspect the exact queued cards before running. Modeless + NonModal:
+            # Anki stays fully usable while it is open, the dialog never closes
+            # on View, and the scan result is kept in self._pending_batch —
+            # no rescan to Proceed.
             self._pending_batch = {
                 "chunked_ids": list(chunked_ids),
                 "deck_name": deck_name,
@@ -1314,9 +1335,9 @@ class BatchTabMixin:
                 from aqt.qt import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
                 dlg = QDialog(self)
                 dlg.setWindowTitle("AI Hints - Confirm Batch")
-                # Window-modal blocks only the config window; the Browser stays usable.
+                # NonModal: never blocks Anki input and never yanks focus.
                 try:
-                    dlg.setWindowModality(Qt.WindowModality.WindowModal)
+                    dlg.setWindowModality(Qt.WindowModality.NonModal)
                 except Exception:
                     pass
                 lay = QVBoxLayout(dlg)
@@ -1380,9 +1401,8 @@ class BatchTabMixin:
                             browser.onSearchActivated()
                     except Exception:
                         pass
-            browser.setFocus()
-            browser.activateWindow()
-            browser.raise_()
+            # No setFocus/activateWindow/raise_: never steal focus from the
+            # user's current app or yank the Browser to the foreground.
         except Exception as e:
             logger.error(f"Failed to open batch cards in browser: {e}")
 
