@@ -1522,7 +1522,15 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         self._clear_sort_indicator(table)
 
     def filter_models(self, text, table=None):
-        super().filter_models(text, self.enabled_table if table is None else table)
+        # Filter BOTH lists (Enabled + Disabled), mirroring the global
+        # fallback dialog. Filtering only enabled_table left the Disabled
+        # list unfiltered, so searches appeared to do nothing.
+        tables = (table,) if table is not None else self._tables()
+        query = text.strip().casefold()
+        for t in tables:
+            for r in range(t.rowCount()):
+                t.setRowHidden(r, bool(query and query not in self._row_search_text(t, r).casefold()))
+        self._after_filter()
 
     def _rows_matching(self, table, pred):
         rows = []
