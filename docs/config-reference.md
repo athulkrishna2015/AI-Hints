@@ -149,6 +149,7 @@ Example:
 | `batch_limit` | `1000` | Max cards per batch. |
 | `multithread_providers` | `false` | Concurrent multi-provider generation. |
 | `batch_full_scan` | `false` | Force full scan (ignore incremental cursor). |
+| `ignore_network_checks` | `false` | Bypass offline detection everywhere (batch, reviewer, blacklist). |
 | `deck_last_scan_nid` | `{}` | Internal per-deck incremental scan cursor. |
 
 ### Fields / Parsing

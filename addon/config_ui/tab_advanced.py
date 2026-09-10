@@ -70,6 +70,11 @@ class AdvancedTabMixin:
         backoff_row.addWidget(self.backoff_spin)
         backoff_row.addStretch()
         blacklist_layout.addLayout(backoff_row)
+
+        # Offline-detection bypass (false "Offline" parks every batch thread)
+        self.ignore_net_cb = QCheckBox("Ignore network/offline checks")
+        self.ignore_net_cb.setToolTip("Run generations even when Anki thinks the network is offline. Use when providers wrongly show 🌐 Offline while your connection works. Real failures still cool down normally.")
+        blacklist_layout.addWidget(self.ignore_net_cb)
         
         # Request Timeout setting
         timeout_row = QHBoxLayout()

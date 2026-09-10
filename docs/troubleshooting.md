@@ -47,6 +47,10 @@ Android's WebView aggressively caches `_ai_hints_template.js`. See [Mobile Suppo
 
 This is fixed in v5.8.2+. Ensure your `_ai_hints_template.js` is up to date and keep a tap zone set to "Show Answer". See [Mobile Support → AnkiMobile](mobile-setup.md#-troubleshooting-ankimobile-undefined-on-tap).
 
+## Batch Queue Stuck on 🌐 Offline
+
+All threads show **🌐 Offline** but the network works: the connectivity probe is a false negative. Hit **⚡ Force Start** in the Batch tab (one-run bypass), or tick **Ignore network/offline checks** under Advanced → Model Cooldowns & Blacklist for a permanent bypass. Parked threads pick up cards on their next wake cycle — pause/resume the queue to wake them immediately.
+
 ## Batch Generation Skipping Cards
 
 - Re-running a batch uses an **incremental per-deck cursor** and skips cards already generated. Use **Force FULL scan** to re-check everything.

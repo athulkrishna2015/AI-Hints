@@ -423,6 +423,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             
         if hasattr(self, "backoff_spin"):
             self.backoff_spin.setValue(c.get("rate_limit_backoff_seconds", 2))
+
+        if hasattr(self, "ignore_net_cb"):
+            self.ignore_net_cb.setChecked(c.get("ignore_network_checks", False))
             
         if hasattr(self, "timeout_spin"):
             self.timeout_spin.setValue(c.get("request_timeout", 60))
@@ -1263,6 +1266,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 
             if hasattr(self, "backoff_spin"):
                 new_config["rate_limit_backoff_seconds"] = self.backoff_spin.value()
+
+            if hasattr(self, "ignore_net_cb"):
+                new_config["ignore_network_checks"] = self.ignore_net_cb.isChecked()
                 
             if hasattr(self, "timeout_spin"):
                 new_config["request_timeout"] = self.timeout_spin.value()

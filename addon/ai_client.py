@@ -2088,7 +2088,7 @@ class AIClient:
             return
         import sys
         # Only blacklist if we are actually online.
-        if "unittest" not in sys.modules and not self._is_actually_online():
+        if "unittest" not in sys.modules and not self.is_network_available():
             logger.info(f"AI-Hints: Skipping blacklist for {provider}/{model} ({api_key}) because network appears offline.")
             return
 
@@ -2227,6 +2227,11 @@ class AIClient:
 
     def is_network_available(self) -> bool:
         """Public helper for callers that need a cheap offline gate."""
+        try:
+            if (self.config or {}).get("ignore_network_checks"):
+                return True
+        except Exception:
+            pass
         return self._is_actually_online()
 
     def _cooldown_seconds(self) -> float:

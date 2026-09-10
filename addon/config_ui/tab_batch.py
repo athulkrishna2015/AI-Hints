@@ -303,6 +303,14 @@ class BatchTabMixin:
         self.batch_run_btn.clicked.connect(self.on_batch_control_clicked)
         batch_btn_row.addWidget(self.batch_run_btn)
 
+        self.batch_force_btn = QPushButton("⚡ Force Start")
+        self.batch_force_btn.setAutoDefault(False)
+        self.batch_force_btn.setMinimumHeight(30)
+        self.batch_force_btn.setStyleSheet("font-weight: bold; background-color: #6f42c1; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
+        self.batch_force_btn.setToolTip("Start this run bypassing the API-key readiness check and ignoring offline detection (for queues wrongly parked as 🌐 Offline). One run only — does not change saved settings.")
+        self.batch_force_btn.clicked.connect(self.on_force_start_batch)
+        batch_btn_row.addWidget(self.batch_force_btn)
+
         self.pause_local_btn = QPushButton("⏸️ Pause Queue")
         self.pause_local_btn.setAutoDefault(False)
         self.pause_local_btn.setMinimumHeight(30)
@@ -582,6 +590,11 @@ class BatchTabMixin:
         # Start/resume always works — while a queue is running or paused clicking
         # Initiate appends a new batch to the job list. Pause/resume lives on the
         # dedicated pause button.
+        self.on_start_config_batch()
+
+    def on_force_start_batch(self):
+        """Force start: bypass readiness/offline guards for this run only."""
+        self._batch_force = True
         self.on_start_config_batch()
 
     def on_toggle_pause_local_queue(self):
@@ -1335,6 +1348,8 @@ class BatchTabMixin:
             if excess > 0:
                 confirm_msg += f"\n\n(Note: {excess} remaining skipped due to safety limits.)"
             confirm_msg += "\n\nProceed with execution?"
+            if getattr(self, "_batch_force", False):
+                confirm_msg += "\n\n⚡ Forced: readiness + offline checks bypassed for this run."
 
             # 3-way confirm: Proceed / View in Browser / Cancel so the user can
             # inspect the exact queued cards before running. Modeless + NonModal:
@@ -1346,7 +1361,9 @@ class BatchTabMixin:
                 "deck_name": deck_name,
                 "record_cursor": record_cursor,
                 "is_native": is_native,
+                "force": getattr(self, "_batch_force", False),
             }
+            self._batch_force = False
             try:
                 from aqt.qt import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
                 dlg = QDialog(self)
@@ -1433,6 +1450,7 @@ class BatchTabMixin:
         deck_name = pending.get("deck_name", "")
         record_cursor = pending.get("record_cursor", False)
         is_native = pending.get("is_native", False)
+        force = pending.get("force", False)
         if not chunked_ids:
             return
         try:
@@ -1452,6 +1470,11 @@ class BatchTabMixin:
 
             config = self.config.copy()
             config["multithread_providers"] = self.batch_multithread_cb.isChecked()
+            if force:
+                # Forced run: ignore offline detection so wrongly-parked
+                # 🌐 Offline queues proceed. Transient, not saved.
+                config["ignore_network_checks"] = True
+                logger.info("AI-Hints Batch: force start — readiness + offline checks bypassed for this run.")
             target_prov = prov_override or config.get("ai_provider", "openai")
 
             if model_override:
@@ -1465,7 +1488,7 @@ class BatchTabMixin:
             from ..ai_client import AIClient
 
             client = AIClient(config)
-            if not client.has_any_ready_provider():
+            if not force and not client.has_any_ready_provider():
                  info("No configured API Keys found! Visit Provider settings first.")
                  return
 

@@ -8,7 +8,7 @@ Batch generation lets you generate hints and MCQ options for **entire decks** in
 2. Choose a **Source Deck** (type to search — a live-filtered list appears below the field as you type, case-insensitive, including **Entire Collection**), choose **Entire Collection**, or select cards in the browser first.
 3. Optionally set a **Force Provider** / **Force Model**.
 4. Set the **Batch Limit** (max cards, default 1000).
-5. Click **🚀 Initiate Queue**.
+5. Click **🚀 Initiate Queue** (or **⚡ Force Start** to bypass the API-key readiness check and offline detection for one run).
 
 The batch runs in a dedicated background thread, so you can keep studying while it works.
 
@@ -33,6 +33,7 @@ Bundles requests and submits them to a cloud provider's native async API. **Gemi
 - **Batch Limit** — max cards to process (1–1,000,000).
 - **Concurrent Multi-Provider Generation (Multithreaded)** — generate in parallel using all ready/enabled providers (bypasses the Force Provider/Model overrides).
 - **Entire Collection** — process cards across all decks in the collection. This mode does not update a per-deck incremental scan cursor.
+- **⚡ Force Start** — starts the run bypassing the "No configured API Keys" readiness check and ignoring offline detection for that run only (saved settings are untouched; the dormant-queue resume prompt still applies). Use when a queue is wrongly parked with every thread on 🌐 Offline.
 
 ## Incremental Fast Scan
 
@@ -50,12 +51,19 @@ You can add another deck, browser selection, or sidebar group while a batch is a
 
 ## Reliability
 
-- **Continuous checkpointing**: progress is saved to disk (`batch_state.json`) after *every single card*.
+- **Continuous checkpointing**: progress is saved to disk (`batch_state.json`) at most every 30 seconds during steady progress, and immediately on every lifecycle event (pass changes, job finish, pause/stop/discard). The persisted snapshot excludes volatile per-model timeout tables, keeping the state file small.
 - **Accidental quit protection**: close Anki or crash mid-batch and your progress is preserved; queues resume on restart.
 - **Concurrent multi-provider**: use multiple providers in parallel with independent fallback queues. When a provider's models are all blacklisted/on cooldown but another worker is still serving cards, that provider exits the pass instead of idly re-checking the blacklist; a lone cooldown-stalled provider waits up to a bounded grace period (batch timeout + 60s) before ceding to the verification pass, so a dead key set can't pin the pass open.
 - **Automatic verification passes**: the system automatically retries cards that failed to generate (up to 10 sequential passes).
 - **"Draining" status**: when the queue reaches "0 left" but worker threads are still finishing in-flight requests, the status shows a 🧼 **Draining** notice (how many requests remain and how long the longest has run), so a batch that is winding down no longer looks stuck.
 - **Hung-provider watchdog**: If all cards have been dispatched but one provider thread remains, the pass is released after a 45-second grace period measured from the moment that thread becomes the lone survivor (not from pass start). The log distinguishes a genuinely busy request (`still busy with an empty queue`) from an idle waiter (`lingered idle with an empty queue`), and the leftover thread still lands its result once its HTTP call resolves. In-flight cards are not requeued by the verification pass while their request is still running, so a released thread never triggers a duplicate (billed) generation.
+
+## Queue Stuck on 🌐 Offline
+
+If every thread in the status view shows **🌐 Offline** while your connection works, the add-on's connectivity probe is giving a false negative (captive portal, DNS, proxy). Two escapes:
+
+1. **⚡ Force Start** — one-run bypass of readiness + offline checks (nothing saved).
+2. **Advanced → Model Cooldowns & Blacklist → Ignore network/offline checks** — permanent bypass (`ignore_network_checks`). Real failures still trigger normal cooldowns.
 
 ## Starting from the Deck Browser
 
