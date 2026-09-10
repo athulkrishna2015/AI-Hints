@@ -196,6 +196,32 @@ class BatchManager:
             logger.error(f"AI-Hints BatchManager failed load: {e}")
             self.jobs = {}
 
+    def _save_state_throttled(self, min_interval: float = 30.0):
+        """Rate-limited save_state for hot paths (per-card pop, per-failure).
+
+        A crash loses at most min_interval of progress; the Verification Pass
+        re-derives completed cards from their stored hints, so nothing is lost.
+        """
+        now = time.monotonic()
+        if now - getattr(self, "_last_state_save", 0.0) < min_interval:
+            return
+        self._last_state_save = now
+        self.save_state()
+
+    # Volatile per-model tables excluded from the persisted state file. They
+    # are runtime caches (thousands of entries, ~1MB) that would otherwise be
+    # re-serialized on every save; user overrides live in meta.json and the
+    # in-memory snapshot is unaffected.
+    _VOLATILE_CONFIG_KEYS = ("api_keys", "model_blacklist_data",
+                             "global_model_timeouts", "global_thinking_levels")
+
+    @classmethod
+    def _strip_volatile_config(cls, config: Dict[str, Any]) -> Dict[str, Any]:
+        stripped = dict(config or {})
+        for key in cls._VOLATILE_CONFIG_KEYS:
+            stripped.pop(key, None)
+        return stripped
+
     def save_state(self):
         if not hasattr(self, "_db_lock"):
             self._db_lock = threading.RLock()
@@ -205,12 +231,7 @@ class BatchManager:
                 serialized_jobs = []
                 for job in getattr(self, "local_queue_jobs", []):
                     job_copy = dict(job)
-                    stripped_config = dict(job.get("config", {}))
-                    if "api_keys" in stripped_config:
-                        stripped_config.pop("api_keys")
-                    if "model_blacklist_data" in stripped_config:
-                        stripped_config.pop("model_blacklist_data")
-                    job_copy["config"] = stripped_config
+                    job_copy["config"] = self._strip_volatile_config(job.get("config", {}))
                     serialized_jobs.append(job_copy)
 
                 # Get active job fields for top-level backward compatibility
@@ -223,11 +244,7 @@ class BatchManager:
                     "config": {},
                     "provider": None
                 }
-                stripped_config = dict(active_job.get("config", {}))
-                if "api_keys" in stripped_config:
-                    stripped_config.pop("api_keys")
-                if "model_blacklist_data" in stripped_config:
-                    stripped_config.pop("model_blacklist_data")
+                stripped_config = self._strip_volatile_config(active_job.get("config", {}))
 
                 payload = {
                     "native_jobs": self.jobs,
@@ -1142,11 +1159,11 @@ class BatchManager:
                     self.local_queue_failed_cards = []
                 if cid not in self.local_queue_failed_cards:
                     self.local_queue_failed_cards.append(cid)
-                self.save_state()
+                self._save_state_throttled()
             else:
                 logger.info(f"Card {cid} failed on {provider}. Requeuing for other providers to try.")
                 self.local_queue.insert(0, cid)
-                self.save_state()
+                self._save_state_throttled()
 
     def _await_workers_settled(self, threads, wait: float):
         """Block up to `wait` seconds for the given worker threads to exit.
@@ -1301,7 +1318,7 @@ class BatchManager:
                     
                     if found_idx != -1:
                         cid = self.local_queue.pop(found_idx)
-                        self.save_state()
+                        self._save_state_throttled()
                         stall_started = None
                     else:
                         # All remaining cards in the queue have been tried and failed by this provider.
