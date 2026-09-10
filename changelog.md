@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.1.0 (2026-09-10)
+- **Ignore Network/Offline Checks**: New Advanced → Model Cooldowns & Blacklist toggle (`ignore_network_checks`) for false-positive offline detection. Honored on every path — batch workers, reviewer manual/pregen/autogen, fallback loops, linger waits, and blacklist decisions — so a wrong 🌐 Offline verdict no longer parks all generation.
+- **⚡ Force Start (Batch)**: New one-run button next to Initiate Queue that skips the API-key readiness check and ignores offline detection for that run only (saved settings untouched; the dormant-queue resume prompt still applies).
+- **Lighter Batch Footprint**: Progress state saves at most every 30s during steady progress (immediate on lifecycle events) and no longer persists volatile per-model timeout tables — the state file drops from ~1MB to KBs. Model candidate lists are cached 15s per provider, blacklist skips log one summary line instead of one per model, and idle workers poll every 5s instead of 2s.
+
 ## 8.0.2 (2026-09-08)
 - **Per-Provider Fallback Search Fixed**: The search box in per-provider Fallback Priority dialogs now filters both Enabled and Disabled lists (previously only the Enabled list was filtered, so searches looked broken). Matches the Advanced Global Fallback dialog behavior.
 - **Batch Status Log Keeps Scroll Position**: The Running & Pending Batches view no longer snaps to the top on every refresh — it preserves fractional scroll position (stays pinned at bottom when at bottom, stays put mid-list) and backs off if you scroll during the update.
