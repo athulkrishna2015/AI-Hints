@@ -479,7 +479,8 @@ class _LingerPool:
             with self._lock:
                 pending = {o for o in self._pending if max_order is None or o < max_order}
                 cancelled = self._cancelled
-            if cancelled or not pending or state.GLOBAL_STOP or _NETWORK_STATE.get("online") is False:
+            offline = _NETWORK_STATE.get("online") is False and not self._base_config.get("ignore_network_checks")
+            if cancelled or not pending or state.GLOBAL_STOP or offline:
                 return None
             if time.monotonic() - start > self._linger_timeout + 15:
                 return None
@@ -740,7 +741,7 @@ class AIClient:
                 # has gone away.  A request already in flight may finish with
                 # a timeout, but retrying every provider only creates noise and
                 # delays the normal offline pause/resume flow.
-                if _NETWORK_STATE["online"] is False:
+                if _NETWORK_STATE["online"] is False and not self._ignore_network_checks():
                     logger.info("AI-Hints: Network unavailable; stopping global fallback attempts.")
                     return {"hints": [], "options": []}
 
@@ -813,7 +814,7 @@ class AIClient:
                         self._notify_status("Lingering")
                     if self._is_network_or_timeout_error(e):
                         network_failed_providers.add(provider)
-                        if not _check_network_online():
+                        if not self._ignore_network_checks() and not _check_network_online():
                             logger.info("AI-Hints: Network unavailable; stopping global fallback attempts.")
                             return {"hints": [], "options": []}
                     continue
@@ -857,7 +858,7 @@ class AIClient:
             if state.GLOBAL_STOP:
                 logger.info(f"AI-Hints: Generation aborted via Emergency Stop signal (provider loop).")
                 return {"hints": [], "options": []}
-            if _NETWORK_STATE["online"] is False:
+            if _NETWORK_STATE["online"] is False and not self._ignore_network_checks():
                 logger.info("AI-Hints: Network unavailable; stopping provider fallback attempts.")
                 return {"hints": [], "options": []}
             if provider in network_failed_providers:
@@ -915,7 +916,7 @@ class AIClient:
                     self._notify_status("Lingering")
                 if self._is_network_or_timeout_error(e):
                     network_failed_providers.add(provider)
-                    if not _check_network_online():
+                    if not self._ignore_network_checks() and not _check_network_online():
                         logger.info("AI-Hints: Network unavailable; stopping provider fallback attempts.")
                         return {"hints": [], "options": []}
                 continue
@@ -2225,13 +2226,17 @@ class AIClient:
         cached = _NETWORK_STATE["online"]
         return cached if cached is not None else True
 
+    def _ignore_network_checks(self) -> bool:
+        """True when the user bypasses offline detection (false-positive probes)."""
+        try:
+            return bool((self.config or {}).get("ignore_network_checks"))
+        except Exception:
+            return False
+
     def is_network_available(self) -> bool:
         """Public helper for callers that need a cheap offline gate."""
-        try:
-            if (self.config or {}).get("ignore_network_checks"):
-                return True
-        except Exception:
-            pass
+        if self._ignore_network_checks():
+            return True
         return self._is_actually_online()
 
     def _cooldown_seconds(self) -> float:
