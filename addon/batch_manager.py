@@ -1290,7 +1290,8 @@ class BatchManager:
                      )
                      break
                  # Sleep and check again later, do not pop a card!
-                 time.sleep(2)
+                 # (5s idle poll: the models cache absorbs recompute cost.)
+                 time.sleep(5)
                  continue
 
             cid = None
@@ -1334,7 +1335,7 @@ class BatchManager:
                     "cid": None,
                     "status": "⏳ Waiting for peers"
                 }
-                time.sleep(2)
+                time.sleep(5)
                 continue
 
             if not cid:

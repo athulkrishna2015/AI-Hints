@@ -2380,14 +2380,29 @@ class AIClient:
             return enabled
         return self._models_for_provider(provider, custom_cfg.get("model", ""), custom_cfg.get("model_fallbacks", []))
 
+    # Seconds a resolved model list stays valid. Batch workers poll this every
+    # ~2s per thread; blacklist/cooldown state only changes on failures or time
+    # expiry, so recomputing the full list each poll is pure overhead.
+    _MODELS_CACHE_TTL = 15.0
+
     def _provider_models(self, provider: str) -> List[str]:
         """Returns the ordered model candidates for a provider, using the correct
         resolution for custom providers (first enabled fallback) vs built-in ones."""
+        now = time.monotonic()
+        cache = getattr(self, "_models_cache", None)
+        if cache is None:
+            cache = self._models_cache = {}
+        hit = cache.get(provider)
+        if hit is not None and now - hit[0] < self._MODELS_CACHE_TTL:
+            return hit[1]
         custom_providers = self.config.get("custom_providers") or {}
         cp = custom_providers.get(provider)
         if provider in custom_providers:
-            return self._custom_provider_models(provider, cp if isinstance(cp, dict) else {})
-        return self._models_for_provider(provider)
+            resolved = self._custom_provider_models(provider, cp if isinstance(cp, dict) else {})
+        else:
+            resolved = self._models_for_provider(provider)
+        cache[provider] = (now, resolved)
+        return resolved
 
     def _models_for_provider(self, provider: str, primary_model: str = "", extra_fallbacks: List[str] = None) -> List[str]:
         configured = self.config.get("model_fallbacks") or {}
@@ -2413,6 +2428,7 @@ class AIClient:
 
         models = []
         seen = set()
+        skipped = 0
         for candidate in candidates:
             if getattr(log_context, "source", None) != "model_test" and candidate in disabled_models:
                 continue
@@ -2422,14 +2438,18 @@ class AIClient:
             if getattr(log_context, "source", None) != "model_test" and model in disabled_models:
                 continue
             seen.add(model)
-            
-            # Skip if model is blacklisted
+
+            # Skip if model is blacklisted (counted, not logged per model:
+            # a per-model debug line here costs an f-string + file write for
+            # every blacklisted model on every 2s worker poll).
             if getattr(log_context, "source", None) != "model_test" and self._is_model_failed(provider, model):
-                logger.debug(f"AI-Hints: Skipping blacklisted model {provider}/{model}.")
+                skipped += 1
                 continue
-                
+
             models.append(model)
-            
+
+        if skipped:
+            logger.debug(f"AI-Hints: Skipping {skipped} blacklisted model(s) for {provider}.")
         return models
 
     def _model_list(self, value: Any) -> List[str]:
