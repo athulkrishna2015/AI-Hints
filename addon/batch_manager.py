@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import html as _html
 import threading
 from typing import List, Dict, Set, Any, Optional
 from aqt import mw
@@ -35,6 +36,9 @@ class BatchManager:
         self.local_queue_jobs = []
         self.local_queue_active = False
         self.local_queue_paused = False
+        # Transient per-run bypass for false-positive offline verdicts, set by
+        # Force Start on the live job. Never persisted; resets on stop/finish.
+        self._force_online = False
         
         # Live Runtime Diagnostic Hooks
         self.current_local_cid = None
@@ -272,7 +276,6 @@ class BatchManager:
 
     def get_status_summary(self) -> str:
         """Builds rich contextual HTML summary of queue activity."""
-        import html as _html
         html_parts = []
         
         if self.local_queue_active:
@@ -827,6 +830,7 @@ class BatchManager:
 
     def stop_local_queue(self):
         """Stops/Discards the current active job. Remaining jobs in queue are preserved."""
+        self._force_online = False
         with self._db_lock:
              if not self.local_queue_jobs or (len(self.local_queue_jobs) == 1 and self.local_queue_jobs[0]["id"] == "default"):
                   self.local_queue_active = False
@@ -850,6 +854,7 @@ class BatchManager:
     def stop_all(self):
         """Emergency stop for ALL activity (Local Queue + Cloud Batches)."""
         state.GLOBAL_STOP = True
+        self._force_online = False
         logger.info("🚨 EMERGENCY STOP: Aborting all active generations.")
         
         # Clear all jobs in queue
@@ -876,6 +881,28 @@ class BatchManager:
         self.local_queue_paused = pause_state
         self.save_state()
         logger.info(f"Local Queue Pause set to: {pause_state}")
+
+    def force_resume_current(self) -> bool:
+        """Force-start the CURRENT job: clears pause/stop flags and bypasses
+        offline parking for this run. Queues no new job. Returns False when
+        there is no live or dormant job to act on."""
+        with self._db_lock:
+            jobs = getattr(self, "local_queue_jobs", [])
+            real_jobs = [j for j in jobs if j.get("id") != "default" or j.get("queue")]
+            if not real_jobs and not self.local_queue_active:
+                return False
+        self._force_online = True
+        state.GLOBAL_STOP = False
+        if self.local_queue_active:
+            # Worker threads are alive (possibly parked/offline or paused);
+            # the flags wake them on their next cycle — no new threads needed.
+            self.local_queue_paused = False
+            self.save_state()
+            logger.info("AI-Hints Force Start: current job resumed, offline checks bypassed for this run.")
+            return True
+        # Dormant queue: resume normally; _force_online covers offline parking.
+        logger.info("AI-Hints Force Start: resuming dormant queue with offline checks bypassed.")
+        return bool(self.start_local_sequential_queue(card_ids=None))
 
     def discard_from_queue(self, cid: int):
         """Removes a specific card ID from the queue."""
@@ -1142,6 +1169,7 @@ class BatchManager:
                 break
 
         self.local_queue_active = False
+        self._force_online = False
         self.active_threads_status = {}
         self.save_state()
 
@@ -1242,14 +1270,30 @@ class BatchManager:
             except Exception:
                 available_models = []
 
-            if not client.is_network_available():
-                self.active_threads_status[provider] = {
-                    "model": current_model,
-                    "cid": None,
-                    "status": "🌐 Offline"
-                }
-                time.sleep(30)
-                continue
+            if not client.is_network_available() and not getattr(self, "_force_online", False):
+                with self._db_lock:
+                    peers_serving = any(
+                        info.get("cid") is not None and info.get("status") == "Processing"
+                        for pp, info in self.active_threads_status.items()
+                        if pp != provider
+                    )
+                if peers_serving:
+                    # A peer is completing requests right now, so this offline
+                    # verdict is a false negative (e.g. the DNS-port probe is
+                    # blocked while HTTPS to providers works). Proceed anyway —
+                    # our own requests fail fast and requeue if truly offline.
+                    logger.info(
+                        f"AI-Hints Thread for {provider}: ignoring offline verdict "
+                        f"(a peer is serving the queue)."
+                    )
+                else:
+                    self.active_threads_status[provider] = {
+                        "model": current_model,
+                        "cid": None,
+                        "status": "🌐 Offline"
+                    }
+                    time.sleep(30)
+                    continue
             
             if not available_models:
                  with self._db_lock:
