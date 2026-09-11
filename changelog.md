@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.1.1 (2026-09-11)
+- **Offline-Parked Workers Self-Resume**: A worker parked on 🌐 Offline now proceeds when a peer thread is actively serving the queue (proof the offline verdict is a false negative, e.g. the DNS-port probe blocked while HTTPS works). Genuinely offline requests still fail fast and requeue normally.
+- **⚡ Force Start Unsticks the Current Job**: With a live or dormant job, Force Start resumes/unsticks that job (clears pause, bypasses offline parking) instead of queueing a duplicate. Fresh forced runs only happen when idle. The bypass is transient and resets on stop/finish.
+- **Queued Jobs List Renders Again**: Fixed a `NameError` that crashed the status refresh the moment a second job was queued — freezing the whole Batch status view with no log trace. The render path is fixed and status update failures now log instead of failing silently.
+
 ## 8.1.0 (2026-09-10)
 - **Ignore Network/Offline Checks**: New Advanced → Model Cooldowns & Blacklist toggle (`ignore_network_checks`) for false-positive offline detection. Honored on every path — batch workers, reviewer manual/pregen/autogen, fallback loops, linger waits, and blacklist decisions — so a wrong 🌐 Offline verdict no longer parks all generation.
 - **⚡ Force Start (Batch)**: New one-run button next to Initiate Queue that skips the API-key readiness check and ignores offline detection for that run only (saved settings untouched; the dormant-queue resume prompt still applies).
