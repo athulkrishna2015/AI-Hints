@@ -307,7 +307,7 @@ class BatchTabMixin:
         self.batch_force_btn.setAutoDefault(False)
         self.batch_force_btn.setMinimumHeight(30)
         self.batch_force_btn.setStyleSheet("font-weight: bold; background-color: #6f42c1; color: white; border-radius: 4px; padding-left: 10px; padding-right: 10px;")
-        self.batch_force_btn.setToolTip("Start this run bypassing the API-key readiness check and ignoring offline detection (for queues wrongly parked as 🌐 Offline). One run only — does not change saved settings.")
+        self.batch_force_btn.setToolTip("If a job is running/stuck: resumes THAT job and bypasses offline parking (no duplicate queue). If idle: starts a fresh run bypassing the API-key check and offline detection. One run only — saved settings untouched.")
         self.batch_force_btn.clicked.connect(self.on_force_start_batch)
         batch_btn_row.addWidget(self.batch_force_btn)
 
@@ -472,9 +472,11 @@ class BatchTabMixin:
                   summary = "<i>(Ready to initialize)</i>"
                   
             self._set_batch_log_preserving_scroll(summary)
-                  
-        except Exception:
-            pass
+
+        except Exception as e:
+            # Never silent: a swallowed render error freezes the whole status
+            # view (this hid the queued-jobs crash for the 2nd-job case).
+            logger.debug(f"AI-Hints Batch status update failed: {e}")
 
     def _set_batch_log_preserving_scroll(self, summary):
         """Render the batch log without snapping the view to the top.
@@ -593,7 +595,18 @@ class BatchTabMixin:
         self.on_start_config_batch()
 
     def on_force_start_batch(self):
-        """Force start: bypass readiness/offline guards for this run only."""
+        """Force start: if a job is live or dormant, resume/unstick THAT job
+        (clears pause, bypasses offline parking) instead of queueing another
+        one. Only when idle does it start a fresh forced run."""
+        from ..batch_manager import batch_manager
+        if batch_manager.local_queue_active or batch_manager.local_queue:
+            if batch_manager.force_resume_current():
+                tooltip("⚡ Forced: current job resumed, offline checks bypassed.")
+            else:
+                info("There is no active queue, saved queue, or pending selection.")
+            self._refresh_batch_controls()
+            self.update_batch_status_tab()
+            return
         self._batch_force = True
         self.on_start_config_batch()
 
