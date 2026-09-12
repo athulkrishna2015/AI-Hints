@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.2.0 (2026-09-13)
+- **Transient Provider Failures Skip Cleanly**: Normal generation now skips a provider immediately after `429 Too Many Requests` or `503 Service Unavailable` instead of retrying every key and model in the same generation. The next configured provider is tried immediately, while the unavailable provider enters a short cooldown and is retried on a later generation. Model tests still rotate keys for diagnosis.
+- **Single Improved Learning Prompt**: Replaced the duplicate prompt definitions with one shorter `system_prompt` that retains the important SRS, cloze, factual-warning, subject-specific, distractor, language, MathJax, and JSON-format rules. Factual corrections must use `⚠️` and generated output uses one canonical schema.
+
 ## 8.1.2 (2026-09-12)
 - **🛠️ Batch Linger Retries Disabled by Default**: Batch lingering retries are now `false` by default to prevent silent hangs and wasted quota on models that are genuinely slow or dead. Users can enable retries via the new "Allow batch linger retries" toggle in Advanced → Model Cooldowns & Blacklist. Enabled retries work as before with higher-priority late-result wins.
 
