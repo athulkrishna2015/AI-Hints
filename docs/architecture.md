@@ -177,6 +177,86 @@ This means every mixin method shares the same `self` (including `self.config`, `
 - `addon/latex_fixer/` — LaTeX/MathJax normalization engine; a Git submodule, but `update_deps.py` syncs its core files without managing submodule pointers manually.
 - `addon/Support/` — support / donation assets.
 
+## Fallback & Error Handling Flow
+
+Every generation (explicit review, pregen, batch, and, with `override_model`, the per-card picker) funnels through `AIClient.generate_hints` / `generate_options` → `_generate()`. The same nested tier loop runs the show, so a fix applied here fixes every flow.
+
+### Fallback Tiers
+
+Fallbacks are a three-level onion, innermost first:
+
+1. **Key rotation (model level)** — `_call_*` loops the provider's API keys for the model, skipping only the keys currently on cooldown (`_available_api_keys`). Multiple healthy keys keep working; a failing key is rotated to the next one.
+2. **Model fallbacks (provider level)** — `_call_provider` walks the provider's **enabled fallback list** in order (first row = active model, then fallbacks). A blacklisted model is skipped, not tried.
+3. **Provider fallbacks (generation level)** — one of two top loops in `_generate()`:
+   - **Global flat list** (`use_global_model_priority`): iterates `global_model_priority` — explicit `(provider, model)` rows top-to-bottom — when it is enabled and no `override_provider`/test is active.
+   - **Standard per-provider list**: `_candidate_providers(primary_provider)` yields ready providers in priority order (primary first, then fallbacks); for each, `_call_provider` runs its internal tier-2 loop. `only_this_provider` (batch) restricts it to the single primary.
+
+A generation succeeds at the first tier that produces a usable result and walks no further. Aggregation of skip conditions down the layers: each outer loop re-checks `network_failed_providers`, `_generation_skipped_providers` (transient outage), `_provider_temporarily_unavailable` (60s cooldown), disabled providers, disabled models, readiness, and the blacklist before calling anything.
+
+```
+generate_hints / generate_options
+        │
+        ▼
+Tier 3: for provider [or (provider,model) row in global list] in priority order:
+  ├─ disabled / network-failed / generation-skipped / cooling-down  → SKIP provider
+  ├─ provider not ready / model disabled / model blacklisted        → SKIP row
+        ▼
+Tier 2: for model in provider's enabled fallback list (model_test honor override):
+        │
+        ▼
+Tier 1: for api_key in provider's keys (skip keys on cooldown):
+        │
+        ├─ HTTP 429 / 503 (normal generation)
+        │      → _skip_transient_provider_error(): provider parked 60s
+        │        (PROVIDER_UNAVAILABLE_UNTIL) + added to _generation_skipped_providers;
+        │        returns empty result → the enclosing tier-3 loop moves to the NEXT
+        │        provider/row. The provider is retried on a later generation.
+        │        ← no per-key or per-model burning happens
+        │
+        ├─ HTTP 429 (model_test)
+        │      → rotate to next key with rate-limit backoff sleep; on last key re-raise
+        │        (diagnosis keeps working; a test NEVER marks the provider down)
+        │
+        ├─ HTTP 408 / 504 or read timeout (URLError/TIMEOUT/ReadTimeout)
+        │      → model_timed_out: request re-dispatched as a background LINGER retry
+        │        (3× extended deadline, clamped 180–900s) in _LingerPool; tier 2/3
+        │        fallback continues immediately. Pure read timeouts are NEVER
+        │        blacklisted (slow ≠ broken).
+        │
+        ├─ other HTTP error (401 / 400 / 422 / 5xx …)
+        │      → _extract_retry_delay() + _mark_combo_failed(): streak-based cooldown
+        │        (_cooldown_seconds() × streak, persisted in blacklist.json);
+        │        next key → next model → next provider.
+        │
+        ├─ network unreachable (socket.gaierror / ECONNREFUSED / DNS)
+        │      → provider added to network_failed_providers for this run; in batch the
+        │        worker parks on 🌐 Offline; in review the outer loop tries the next
+        │        provider. Real failures still cool down; a false-positive verdict can
+        │        be bypassed via ⚡ Force Start or ignore_network_checks.
+        │
+        ├─ odd-but-good response shape
+        │      → _extract_content() unwraps a top-level data envelope and falls back to
+        │        message.reasoning / reasoning_details before giving up; malformed JSON
+        │        goes through json_repair. Only then is a reply considered unparseable.
+        │
+        └─ unparseable response
+              → warning + _mark_combo_failed() → next model in the list
+```
+
+On **partial success** at any tier, `linger_race_policy: "priority"` (default) may hold the result while a still-running attempt from an EARLIER (higher-priority, usually smarter) row runs out its extended deadline — amber "Waiting for higher-priority model…" — and its late result wins over the later success (`_LingerPool.claim_ready` / `wait_for_any`). Set `"first"` to return the first usable result immediately instead. On **total failure** across all tiers, the generator waits out any lingering attempts (rescue: "all candidates failed; using late result from …") and only then returns empty or re-raises `last_exception`, which the caller surfaces as a UI error / batch retry notice.
+
+| Exception / status | Classification | Handling |
+|---|---|---|
+| `429 Too Many Requests` / `503 Service Unavailable`, normal generation | Provider-wide transient outage (`TRANSIENT_PROVIDER_ERROR_CODES`) | Skip provider for 60s (`PROVIDER_OUTAGE_COOLDOWN_SECONDS`); move to next provider; retried next generation. No per-key/model burning. |
+| `429` during a model test | Rate limited | Rotate keys with backoff sleep (`_rate_limit_backoff_seconds()`); last key re-raises. Never marks provider down. |
+| `408 Request Timeout` / `504 Gateway Timeout` / read-timeout exception | Timeout (`_is_read_timeout_error`) | Spawn linger retry (extended deadline) + continue fallback; never blacklisted. |
+| Other `HTTPError` (401/400/5xx …) | Hard failure | `_extract_retry_delay()` + `_mark_combo_failed()` → streak-based cooldown; next key/model/provider. |
+| Host unreachable (DNS / refused / `gaierror`) | Network failure | `_is_host_unreachable_error()` → provider marked network-failed (batch parks 🌐 Offline); next provider in review; blacklist skipped when offline (see `_is_offline_environment`). |
+| Unparseable JSON / empty content | Quality failure | `_extract_content` reasoning recovery → `json_repair` → warning + `_mark_combo_failed()`; next model. |
+| `U+FFFD` replacement chars in output | Corrupt output | Detected and discarded; fallback retries next model instead of writing garbage. |
+
+Guards: read timeouts never blacklist; model-test runs can never poison production cooldowns (`log_context.source == "model_test"`); the transient-provider skip is gated on `_skip_provider_on_transient_outage`, which is only enabled inside live generation loops.
+
 ## Concurrency Model
 
 - **All Qt UI code runs on the main thread.** Background work uses `threading.Thread` + `mw.taskman.run_on_main()`.
