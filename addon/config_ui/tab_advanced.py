@@ -96,6 +96,14 @@ class AdvancedTabMixin:
         self.batch_timeout_spin.setToolTip("Set the timeout limit (in seconds) for background batch-generation requests. Runs unattended, so it can safely be more generous than the review timeout.")
         timeout_row.addWidget(self.batch_timeout_spin)
 
+        self.batch_linger_cb = QCheckBox("Allow batch linger retries")
+        self.batch_linger_cb.setToolTip(
+            "After a batch request times out, retry it in the background with an extended deadline. "
+            "Off avoids extra CPU, memory, and requests after a batch finishes; enable only when "
+            "late results from slow models are worth those costs."
+        )
+        blacklist_layout.addWidget(self.batch_linger_cb)
+
         timeout_row.addStretch()
         blacklist_layout.addLayout(timeout_row)
 

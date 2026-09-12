@@ -434,6 +434,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.pregen_timeout_spin.setValue(c.get("pregen_request_timeout", 60))
         if hasattr(self, "batch_timeout_spin"):
             self.batch_timeout_spin.setValue(c.get("batch_request_timeout", 120))
+        if hasattr(self, "batch_linger_cb"):
+            self.batch_linger_cb.setChecked(c.get("batch_linger_on_timeout", False))
         if hasattr(self, "provider_timeout_spins"):
             for provider, spin in self.provider_timeout_spins.items():
                 spin.setValue(int((c.get("provider_timeouts", {}) or {}).get(provider, 0) or 0))
@@ -1277,6 +1279,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 new_config["pregen_request_timeout"] = self.pregen_timeout_spin.value()
             if hasattr(self, "batch_timeout_spin"):
                 new_config["batch_request_timeout"] = self.batch_timeout_spin.value()
+            if hasattr(self, "batch_linger_cb"):
+                new_config["batch_linger_on_timeout"] = self.batch_linger_cb.isChecked()
             if hasattr(self, "provider_timeout_spins"):
                 new_config["provider_timeouts"] = {
                     provider: spin.value()
