@@ -207,15 +207,19 @@ USER_AGENT = f"Anki-AI-Hints/{_load_addon_version()}"
 
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 MODEL_COOLDOWN_SECONDS = 3600  # 1 hour
+PROVIDER_OUTAGE_COOLDOWN_SECONDS = 60
+TRANSIENT_PROVIDER_ERROR_CODES = {429, 503}
 FAILED_MODELS_CACHE: Dict[Tuple[str, str], float] = {}  # Legacy stub
 FAILED_KEYS_CACHE: Dict[Tuple[str, str], float] = {}    # Legacy stub
 FAILED_COMBOS_CACHE: Dict[Tuple[str, str, str], float] = {}  # (provider, model, api_key) -> expiry_timestamp
 RATE_LIMIT_STREAK: Dict[Tuple[str, str, str], int] = {}    # (provider, model, api_key) -> consecutive_hits
+PROVIDER_UNAVAILABLE_UNTIL: Dict[str, float] = {}
 _BLACKLIST_LOADED = False
 
 # Global network state for background monitoring
 _NETWORK_STATE = {"online": None, "last_check": 0}
 _NETWORK_STATE_CALLBACKS = []
+
 
 def register_network_state_callback(callback):
     """Register a callback invoked only when connectivity changes."""
@@ -507,6 +511,8 @@ class AIClient:
         self.is_batch = is_batch
         self._request_provider = None
         self._request_model = None
+        self._generation_skipped_providers = set()
+        self._skip_provider_on_transient_outage = False
         # Optional UI progress hook: called with "Lingering" when a fallback
         # walk blocks on a higher-priority lingering retry, and with None when
         # it stops. Callers that own a frontend (reviewer_hooks) set this.
@@ -519,6 +525,25 @@ class AIClient:
                 cb(status)
             except Exception:
                 pass
+
+    def _provider_temporarily_unavailable(self, provider: str) -> bool:
+        expiry = PROVIDER_UNAVAILABLE_UNTIL.get(provider, 0.0)
+        if expiry <= time.time():
+            PROVIDER_UNAVAILABLE_UNTIL.pop(provider, None)
+            return False
+        return True
+
+    def _skip_transient_provider_error(self, provider: str, code: int) -> bool:
+        """Skip a provider-wide transient outage during normal generation."""
+        if not self._skip_provider_on_transient_outage or code not in TRANSIENT_PROVIDER_ERROR_CODES:
+            return False
+        PROVIDER_UNAVAILABLE_UNTIL[provider] = time.time() + PROVIDER_OUTAGE_COOLDOWN_SECONDS
+        self._generation_skipped_providers.add(provider)
+        logger.info(
+            f"AI-Hints: HTTP {code} from {provider} — skipping provider for "
+            f"{PROVIDER_OUTAGE_COOLDOWN_SECONDS}s; it will be retried later."
+        )
+        return True
 
     @property
     def _linger_prefers_priority(self) -> bool:
@@ -674,6 +699,7 @@ class AIClient:
         return self._is_host_unreachable_error(e) or self._is_read_timeout_error(e)
 
     def generate_options(self, front: str, back: str, override_provider: str = None, only_this_provider: bool = False, override_model: str = None) -> Dict[str, List[str]]:
+        self._generation_skipped_providers = set()
         primary_provider = override_provider or self.config.get("ai_provider", "openai")
         # Always dynamically read the core prompt from the default config.json
         # so it gets updated automatically when the addon is upgraded (cached).
@@ -723,7 +749,9 @@ class AIClient:
             "CRITICAL:\n"
             f"{mode_instructions}"
             "- Return ONLY strictly valid raw JSON. No markdown, no preambles.\n"
-            "- Ensure all options match the correct answer's format, length, and style perfectly.\n"
+            "- In full mode use exactly 'hints', 'options', and 'correct_answer'; in hints-only or options-only mode use only the keys requested above. Never use 'distractors' or add extra keys.\n"
+            "- Include the correct answer exactly once in 'options'; all other options must be relevant and factually defensible.\n"
+            "- Ensure all options match the correct answer's format, length, and style.\n"
             "- For multiple clozes with same ID, use semicolon-separated values (e.g., 'val1 ; val2').\n"
             f"{self._multi_formula_rule()}"
             "- For legal/case flashcards, do NOT invent synthetic facts or modify names/dates in the correct answer's text to make distractors; use outcomes of other actual, real-world cases/judgments.\n"
@@ -768,7 +796,7 @@ class AIClient:
                             pass
                 
                 # Skip if provider is disabled or has failed with network error
-                if provider in disabled_providers or provider in network_failed_providers:
+                if provider in disabled_providers or provider in network_failed_providers or provider in self._generation_skipped_providers or self._provider_temporarily_unavailable(provider):
                     continue
                 # Skip if model is disabled
                 if model in disabled_fallback_models.get(provider, []):
@@ -784,9 +812,11 @@ class AIClient:
                     logger.info(f"AI-Hints: Calling {provider} with model: {model} (via global priority)")
                     self._active_linger = (linger_pool, gi)
                     try:
+                        self._skip_provider_on_transient_outage = True
                         with self._global_model_overrides(provider, model):
                             result = self._call_provider(provider, system_prompt, prompt, override_model=model)
                     finally:
+                        self._skip_provider_on_transient_outage = False
                         self._active_linger = None
                     if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
                         # Priority policy: a still-running attempt from an
@@ -870,7 +900,7 @@ class AIClient:
             if _NETWORK_STATE["online"] is False and not self._ignore_network_checks():
                 logger.info("AI-Hints: Network unavailable; stopping provider fallback attempts.")
                 return {"hints": [], "options": []}
-            if provider in network_failed_providers:
+            if provider in network_failed_providers or provider in self._generation_skipped_providers or self._provider_temporarily_unavailable(provider):
                 continue
 
             # Prefer a timed-out earlier candidate that finished in the
@@ -888,8 +918,10 @@ class AIClient:
             try:
                 self._active_linger = (linger_pool, pi)
                 try:
+                    self._skip_provider_on_transient_outage = True
                     result = self._call_provider(provider, system_prompt, prompt, override_model=override_model or "")
                 finally:
+                    self._skip_provider_on_transient_outage = False
                     self._active_linger = None
                 if result.get("hints") or result.get("options") or result.get("distractors") or result.get("correct_answer"):
                     # Same priority policy as the global loop: let a still-running
@@ -1188,12 +1220,16 @@ class AIClient:
                             self._mark_combo_failed(provider_name, model, api_key)
                             continue
 
+                    if self._skip_transient_provider_error(provider_name, e.code):
+                        return {"hints": [], "options": []}
                     delay = self._extract_retry_delay(provider_name, model, api_key, e, body)
                     self._mark_combo_failed(provider_name, model, api_key, delay)
                     if e.code in (408, 504):
                         model_timed_out = True
                         break
                     if e.code == 429:
+                        if self._skip_transient_provider_error(provider_name, e.code):
+                            return {"hints": [], "options": []}
                         _bo = self._rate_limit_backoff_seconds()
                         if _bo > 0:
                             logger.info(f"AI-Hints: 429 rate limit — sleeping {_bo:.1f}s before next key for {provider_name}/{model}.")
@@ -1392,12 +1428,16 @@ class AIClient:
                             self._mark_combo_failed(provider, model, api_key)
                             continue
 
+                    if self._skip_transient_provider_error(provider, e.code):
+                        return {"hints": [], "options": []}
                     delay = self._extract_retry_delay(provider, model, api_key, e, body)
                     self._mark_combo_failed(provider, model, api_key, delay)
                     if e.code in (408, 504):
                         model_timed_out = True
                         break
                     if e.code == 429:
+                        if self._skip_transient_provider_error(provider, e.code):
+                            return {"hints": [], "options": []}
                         _bo = self._rate_limit_backoff_seconds()
                         if _bo > 0:
                             logger.info(f"AI-Hints: 429 rate limit — sleeping {_bo:.1f}s before next key for {provider}/{model}.")
@@ -1486,12 +1526,16 @@ class AIClient:
                             self._mark_combo_failed("anthropic", model, api_key)
                             continue
 
+                    if self._skip_transient_provider_error("anthropic", e.code):
+                        return {"hints": [], "options": []}
                     delay = self._extract_retry_delay("anthropic", model, api_key, e, body)
                     self._mark_combo_failed("anthropic", model, api_key, delay)
                     if e.code in (408, 504):
                         model_timed_out = True
                         break
                     if e.code == 429:
+                        if self._skip_transient_provider_error("anthropic", e.code):
+                            return {"hints": [], "options": []}
                         _bo = self._rate_limit_backoff_seconds()
                         if _bo > 0:
                             logger.info(f"AI-Hints: 429 rate limit — sleeping {_bo:.1f}s before next key for anthropic/{model}.")
@@ -1596,12 +1640,16 @@ class AIClient:
                             self._mark_combo_failed("gemini", model, api_key)
                             continue
 
+                    if self._skip_transient_provider_error("gemini", e.code):
+                        return {"hints": [], "options": []}
                     delay = self._extract_retry_delay("gemini", model, api_key, e, body)
                     self._mark_combo_failed("gemini", model, api_key, delay)
                     if e.code in (408, 504):
                         model_timed_out = True
                         break
                     if e.code == 429:
+                        if self._skip_transient_provider_error("gemini", e.code):
+                            return {"hints": [], "options": []}
                         _bo = self._rate_limit_backoff_seconds()
                         if _bo > 0:
                             logger.info(f"AI-Hints: 429 rate limit — sleeping {_bo:.1f}s before next key for gemini/{model}.")
