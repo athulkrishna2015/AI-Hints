@@ -12,10 +12,11 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 
 ### 🔌 Multi-Provider AI Engine
 - **Broad Provider Support**: Generate hints using OpenAI, Anthropic, Gemini, DeepSeek, Grok (xAI), Groq, OpenRouter, and custom local endpoints via Custom Providers (Ollama, LM Studio, vLLM).
-- **Automated Fallbacks**: Automatically retries alternative models or providers in case of API rate limits or failures, with editable provider and model priority lists.
+- **Automated Fallbacks**: Automatically retries alternative models or providers in case of API rate limits or failures, with editable provider and model priority lists. Sprint 429 and 503 outages skip the whole provider for the current generation (60s cooldown, retried on a later generation) instead of burning every key and model on a temporarily dead service.
 - **API Key Rotation**: Register and rotate multiple API keys per provider to prevent exhaustion.
 - **Active Provider Auto-Derivation**: The primary provider is derived automatically from the first usable entry in your fallback priority list (first enabled provider with an API key, or the first custom provider) — no separate dropdown to maintain.
 - **Per-Card Model Override**: **Alt+click** Generate/Regenerate to open a theme-aware dialog and force a specific provider + model for that card's regeneration (all active models are listed, including ones on cooldown; it remembers your last choice).
+- **Unified Learning Prompt**: One refined system prompt drives every provider — SRS-friendly, cloze-aware, exactly 3 progressive hints, factual errors prefixed with ⚠️, subject-specific guidance, MathJax/JSON escaping, and a single canonical output schema.
 
 ### 🎮 Interactive MCQ & Review UI
 - **Multiple-Choice Options**: Select MCQ options on the front side (via click, touch, or hotkeys `1-9`) with color-coded results (green for correct, red for incorrect).

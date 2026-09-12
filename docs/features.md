@@ -5,7 +5,7 @@ AI-Hints is a comprehensive AI study companion for Anki. This page describes eve
 ## 🧠 Multi-Provider AI Engine
 
 - **Broad provider support**: OpenAI, Anthropic, Gemini, DeepSeek, Grok (xAI), Groq, OpenRouter, Hugging Face, SambaNova, NVIDIA, Mistral, Cerebras, and custom OpenAI-compatible endpoints (Ollama, LM Studio, vLLM).
-- **Automated fallbacks**: If a provider fails (rate limit, key exhaustion, network error), the add-on automatically tries the next model/provider in your priority list.
+- **Automated fallbacks**: If a provider fails (rate limit, key exhaustion, network error), the add-on automatically tries the next model/provider in your priority list. Transient provider-wide outages — HTTP `429` (rate limited) and `503` (service unavailable) — skip the whole provider for the current generation and park it for a 60-second cooldown before retrying on a later generation, instead of hammering every key and model against a temporarily dead service. Model-test runs still rotate keys for diagnosis.
 - **API key rotation**: Register multiple keys per provider to prevent exhaustion and spread load.
 - **Model cooldowns & blacklist**: Models that fail repeatedly are temporarily blacklisted to prevent lag, with configurable lockout duration.
 

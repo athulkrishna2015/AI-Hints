@@ -75,7 +75,7 @@ Example:
 | `generate_hints_enabled` | `true` | Master switch for hint generation everywhere. |
 | `generate_options_enabled` | `true` | Master switch for MCQ/options generation. |
 | `options_count` | `4` | Number of MCQ options generated per card. |
-| `system_prompt` | (see config) | The core system prompt (not editable from dialog). |
+| `system_prompt` | (see config) | The single canonical core system prompt (not editable from dialog; appended via `additional_system_instructions`). |
 | `additional_system_instructions` | `""` | User text appended to the core prompt. |
 | `fix_latex` | `false` | Auto-repair common AI LaTeX errors. |
 | `answer_display_position` | `between` | `between` or `bottom` — where AI data renders on the answer side. |
