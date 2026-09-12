@@ -570,9 +570,18 @@ class AIClient:
     def _linger_enabled(self) -> bool:
         """Linger-on-timeout: keep timed-out requests alive in the background."""
         try:
+            # Batch jobs fan out across many providers. A lingering retry can
+            # outlive the job by minutes, retaining an HTTP client/thread and
+            # competing for the GIL after the queue has finished. Keep this
+            # expensive behavior opt-in for batch; review and pregen retain
+            # the normal global linger setting.
+            if self.is_batch and "batch_linger_on_timeout" not in self.config:
+                return False
+            if self.is_batch:
+                return bool(self.config.get("batch_linger_on_timeout"))
             return bool(self.config.get("linger_on_timeout", True))
         except Exception:
-            return True
+            return not self.is_batch
 
     @contextlib.contextmanager
     def _global_model_overrides(self, provider: str, model: str):

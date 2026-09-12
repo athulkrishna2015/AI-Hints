@@ -52,6 +52,7 @@ You can add another deck, browser selection, or sidebar group while a batch is a
 ## Reliability
 
 - **Continuous checkpointing**: progress is saved to disk (`batch_state.json`) at most every 30 seconds during steady progress, and immediately on every lifecycle event (pass changes, job finish, pause/stop/discard). The persisted snapshot excludes volatile per-model timeout tables, keeping the state file small.
+- **Post-Job Resource Cleanup**: Batch lingering retries are disabled by default (`batch_linger_on_timeout: false`) because a timed-out retry can otherwise keep a thread and HTTP client alive for several minutes after the queue finishes. Review and pre-generation lingering are unchanged. Set `batch_linger_on_timeout` to `true` only when late batch results are worth the extra CPU and memory.
 - **Accidental quit protection**: close Anki or crash mid-batch and your progress is preserved; queues resume on restart.
 - **Concurrent multi-provider**: use multiple providers in parallel with independent fallback queues. When a provider's models are all blacklisted/on cooldown but another worker is still serving cards, that provider exits the pass instead of idly re-checking the blacklist; a lone cooldown-stalled provider waits up to a bounded grace period (batch timeout + 60s) before ceding to the verification pass, so a dead key set can't pin the pass open.
 - **Automatic verification passes**: the system automatically retries cards that failed to generate (up to 10 sequential passes).

@@ -85,7 +85,7 @@ A single **Remove** dropdown removes the models you choose: *Selected*, *Depreca
 The batch generation queue is designed for heavy-duty background processing with maximum reliability:
 
 - **Concurrent Multi-Provider Generation**: Leverages multiple AI providers concurrently to process batches significantly faster, with independent fallback queues per provider.
-- **Unattended-Friendly Timeouts & Linger**: Batch requests use their own generous budget (`batch_request_timeout`, default **120s**) instead of the short review timeout, and benefit from Linger-on-Timeout rescue like every other flow — slow models get room to answer without wasting quota on premature retries.
+- **Unattended-Friendly Timeouts**: Batch requests use their own generous budget (`batch_request_timeout`, default **120s**) instead of the short review timeout. Batch linger retries are disabled by default so timed-out requests do not keep threads and memory alive after a job finishes; opt in with `batch_linger_on_timeout: true` when late results are worth the extra resource use.
 - **Multiple Queued Jobs**: Add another deck, browser selection, or sidebar group while a batch is already running. Pending jobs can be reordered, canceled, or cleared from the Batch tab.
 - **Granular Queue Management**: View the next 5 pending cards in the queue directly in the Batch tab status. Includes individual **[✖ Discard]** buttons to surgically remove cards from the current batch.
 - **Deck Browser Cogwheel Option**: Start batch generation for any deck directly from the deck browser's options menu.
