@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.1.2 (2026-09-12)
+- **🛠️ Batch Linger Retries Disabled by Default**: Batch lingering retries are now `false` by default to prevent silent hangs and wasted quota on models that are genuinely slow or dead. Users can enable retries via the new "Allow batch linger retries" toggle in Advanced → Model Cooldowns & Blacklist. Enabled retries work as before with higher-priority late-result wins.
+
 ## 8.1.1 (2026-09-11)
 - **Offline-Parked Workers Self-Resume**: A worker parked on 🌐 Offline now proceeds when a peer thread is actively serving the queue (proof the offline verdict is a false negative, e.g. the DNS-port probe blocked while HTTPS works). Genuinely offline requests still fail fast and requeue normally.
 - **⚡ Force Start Unsticks the Current Job**: With a live or dormant job, Force Start resumes/unsticks that job (clears pause, bypasses offline parking) instead of queueing a duplicate. Fresh forced runs only happen when idle. The bypass is transient and resets on stop/finish.
