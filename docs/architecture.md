@@ -193,6 +193,18 @@ Fallbacks are a three-level onion, innermost first:
 
 A generation succeeds at the first tier that produces a usable result and walks no further. Aggregation of skip conditions down the layers: each outer loop re-checks `network_failed_providers`, `_generation_skipped_providers` (transient outage), `_provider_temporarily_unavailable` (60s cooldown), disabled providers, disabled models, readiness, and the blacklist before calling anything.
 
+### Linger-on-Timeout
+
+A read timeout never throws the request away — it is kept alive in the background while fallback continues (`_LingerPool`):
+
+- **Trigger** — a timeout at any tier: `HTTPError` `408`/`504`, or a `URLError` / timeout exception matched by `_is_read_timeout_error`, including on the **first** model of a provider. Pure read timeouts are **never blacklisted** (slow ≠ broken).
+- **Re-dispatch** — `_LingerPool.spawn(order, provider, model)` re-issues the same request on a daemon thread with the extended deadline `_linger_timeout()`: `timeout_linger_seconds` if set, else `3 ×` the effective request timeout clamped to `[180, 900]`s. The lingering copy clears `model_timeouts` / `provider_timeouts` and pins both `request_timeout` and `pregen_request_timeout` to the linger budget, so a per-model/per-provider override can never cut a lingering attempt short.
+- **Hooks** — both top loops (global flat list and per-provider) host the pool in `_active_linger` while walking candidates; the inner per-provider model loops consult it, so a timeout absorbed at tier 1/2 still reaches the pool. Before starting the next candidate the loop offers any finished result via `claim_ready(max_order)` and, on success, prefers a higher-priority attempt still in flight via `wait_for_any(max_order)`.
+- **Result selection** — `_claim_best` returns the earliest-`order` (highest-priority) ready result instantly without waiting. `wait_for_any` blocks up to `linger_timeout + 15`s, draining to the earliest finished attempt; it aborts early on Emergency Stop, network loss, or when no attempts remain pending, and polls every `POLL_INTERVAL` (0.5s).
+- **Race policy** — `linger_race_policy`: `"priority"` (default) makes a fresh success yield to still-running higher-priority attempts for their extended deadline (amber **"⏳ Waiting for higher-priority model…"**, stoppable); `"first"` settles on the first usable result instead.
+- **Rescue** — when every foreground candidate has failed (`last_exception` set **or** `has_pending()` — the pending-only branch matters for single-candidate flows like batch's `only_this_provider`), generation waits out the lingering attempts instead of returning empty: `all candidates failed; using late result from …`.
+- **Scope & config** — `linger_on_timeout` (review/pregen, default **on**), `timeout_linger_seconds` (override), `linger_race_policy` (`"priority"` / `"first"`), `batch_linger_on_timeout` (batch, default **off** — a lingering retry could otherwise outlive the job by minutes holding a thread/HTTP client). Disabled for single-model tests (`log_context.source == "model_test"`); `cancel()` discards results on close/stop.
+
 ```
 generate_hints / generate_options
         │
