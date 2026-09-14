@@ -238,6 +238,72 @@ class TestPregeneration(unittest.TestCase):
             self.assertEqual(kwargs['card'].id, 555)
             self.assertEqual(kwargs['is_pregen'], True)
 
+    def test_pregen_skips_skipped_cards(self):
+        """Verify that deliberately skipped cards are never selected for pre-generation."""
+        mock_next_card = MagicMock()
+        mock_next_card.id = 555
+        mock_next_card.note.return_value = MagicMock()
+
+        mock_card_proto = MagicMock()
+        mock_card_proto.id = 555
+        mock_queued_card = MagicMock()
+        mock_queued_card.card = mock_card_proto
+        mock_queued_card.card_id = 555
+        mock_queued_cards = MagicMock()
+        mock_queued_cards.cards = [mock_queued_card]
+
+        self.mock_mw.col.sched.get_queued_cards.return_value = mock_queued_cards
+        self.mock_mw.col.get_card.return_value = mock_next_card
+        self.mock_mw.reviewer.card.id = 111
+
+        with patch('addon.reviewer_hooks.generate_hints') as mock_generate, \
+             patch('addon.reviewer_hooks.card_has_hints') as mock_has_hints, \
+             patch('addon.reviewer_hooks._card_is_skipped') as mock_is_skipped, \
+             patch('addon.reviewer_hooks.QTimer') as mock_timer:
+
+            mock_has_hints.return_value = False
+            mock_is_skipped.return_value = True
+
+            self.mock_mw.taskman.run_on_main.reset_mock()
+            _trigger_next_pregeneration(None)
+            task = mock_timer.singleShot.call_args[0][1]
+            task()
+
+            # The skipped card must not be picked as next_card.
+            self.mock_mw.col.get_card.assert_called_with(555)
+            self.mock_mw.taskman.run_on_main.assert_not_called()
+            mock_generate.assert_not_called()
+
+    @patch('addon.reviewer_hooks._trigger_next_pregeneration')
+    @patch('addon.reviewer_hooks.card_has_hints')
+    @patch('addon.reviewer_hooks.generate_hints')
+    @patch('addon.reviewer_hooks._card_is_skipped')
+    def test_auto_gen_never_generates_for_skipped_cards(self, mock_is_skipped, mock_generate_hints, mock_has_hints, mock_trigger_pregen):
+        """Verify that neither normal nor force auto-generation runs for skipped cards."""
+        reviewer_hooks._hooks_registered = False
+        reviewer_hooks.init_hooks()
+
+        on_show_question = None
+        for call in reviewer_hooks.gui_hooks.reviewer_did_show_question.append.call_args_list:
+            func = call[0][0]
+            if callable(func) and getattr(func, '__name__', '') == 'on_show_question':
+                on_show_question = func
+                break
+
+        self.assertIsNotNone(on_show_question, "on_show_question hook not found in gui_hooks")
+
+        self.config["auto_generate_new"] = True
+        self.config["auto_regenerate_all"] = True
+        mock_has_hints.return_value = False
+        mock_is_skipped.return_value = True
+
+        mock_card = MagicMock()
+        mock_card.id = 112234
+
+        on_show_question(mock_card)
+        mock_generate_hints.assert_not_called()
+        mock_trigger_pregen.assert_called_once_with(mock_card.id)
+
     @patch('addon.reviewer_hooks._apply_results_to_card')
     @patch('addon.reviewer_hooks.CardParser')
     @patch('addon.reviewer_hooks.AIClient')

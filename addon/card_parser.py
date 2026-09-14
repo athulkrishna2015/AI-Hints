@@ -206,9 +206,9 @@ class CardParser:
         if not isinstance(data, dict):
             return {"hints": [], "options": []}
 
-        # Handle skipped cards
+        # Handle skipped cards: keep only the skip marker, no empty arrays.
         if data.get("_skipped"):
-            return {"hints": [], "options": [], "_skipped": True}
+            return {"_skipped": True}
 
         # Handle new format with separate correct_answer and distractors.
         # We keep correct_answer so it survives into JSON storage; it is NOT
@@ -618,6 +618,10 @@ class CardParser:
 
         data = self.normalize_hint_data(data)
         self._attach_source_answer(note, data, card)
+        # Stripped from skipped blocks: the stale-detection snapshot is
+        # pointless on a skipped card and would re-appear every re-skip.
+        if data.get("_skipped"):
+            data.pop("_src", None)
 
         # Determine the key for this card (e.g., 'c1' for cloze ord 0)
         card_key = None
@@ -679,9 +683,7 @@ class CardParser:
                         if note:
                             parsed = self.purge_orphaned_cloze_keys(parsed, note)
                              
-                        new_payload = self.serialize_json_payload(parsed)
-                        new_attrs = self._build_attrs(toggles, card if not card_key else None)
-                        new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
+                        new_block = self._build_block(parsed, toggles, card if not card_key else None, minimal=bool(new_data.get("_skipped")))
                         return current_val[:match.start()] + new_block + current_val[match.end():]
                     except Exception:
                         pass
@@ -718,9 +720,7 @@ class CardParser:
                             parsed[card_key] = new_data
                             if note:
                                 parsed = self.purge_orphaned_cloze_keys(parsed, note)
-                            new_payload = self.serialize_json_payload(parsed)
-                            new_attrs = self._build_attrs(toggles, None) # keep universal
-                            new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
+                            new_block = self._build_block(parsed, toggles, None, minimal=bool(new_data.get("_skipped"))) # keep universal
                             return current_val[:match.start()] + new_block + current_val[match.end():]
                     except Exception:
                         pass
@@ -736,9 +736,7 @@ class CardParser:
                         parsed = {legacy_key: legacy_data}
                         parsed[card_key] = new_data
                         
-                        new_payload = self.serialize_json_payload(parsed)
-                        new_attrs = self._build_attrs(toggles, None) # universal
-                        new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
+                        new_block = self._build_block(parsed, toggles, None, minimal=bool(new_data.get("_skipped"))) # universal
                         return current_val[:match.start()] + new_block + current_val[match.end():]
 
         # 3. No match found: Append new block
@@ -751,9 +749,27 @@ class CardParser:
     def build_hints_block(self, data: Dict[str, List[str]], toggles: Dict[str, bool] = None, card=None) -> str:
         """Build the persisted/injected hints block as invisible JSON."""
         data = self.normalize_hint_data(data)
-        attrs = self._build_attrs(toggles, card)
-        payload = self.serialize_json_payload(data)
-        return f'<div class="{self.json_class}" {attrs} style="display:none">{payload}</div>'
+        return self._build_block(data, toggles, card, minimal=self._is_skip_only_payload(data))
+
+    def _build_block(self, payload: Dict[str, Any], toggles: Dict[str, bool] = None, card=None, minimal: bool = False) -> str:
+        """Serialize a payload into the hidden JSON div wrapper.
+
+        Skipped cards get a bare `<div class="ai-hints-json" style="display:none">`
+        wrapper: the addon-id/contenteditable/toggle attrs are decorative and
+        unnecessary for a card that carries no hints UI.
+        """
+        attrs = "" if minimal else f" {self._build_attrs(toggles, card)}"
+        return f'<div class="{self.json_class}"{attrs} style="display:none">{self.serialize_json_payload(payload)}</div>'
+
+    def _is_skip_only_payload(self, data) -> bool:
+        """True when the payload holds nothing but skip markers (no hints/options)."""
+        if not isinstance(data, dict) or not data:
+            return False
+        if data.get("_skipped"):
+            return True
+        if self._is_keyed_payload(data):
+            return all(isinstance(v, dict) and v.get("_skipped") for v in data.values())
+        return False
 
     def _find_target_field(self, note) -> Optional[str]:
         # User requested to ALWAYS save to the first field of all cards

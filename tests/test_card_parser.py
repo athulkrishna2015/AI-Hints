@@ -312,11 +312,46 @@ class CardParserTests(unittest.TestCase):
         
         # 3. Verify skip replaces the card's AI data instead of preserving stale hints/options
         block_text = note["Text"]
-        self.assertIn('"hints"', block_text)
-        self.assertNotIn('"H1"', block_text)
-        self.assertIn('"options"', block_text)
-        self.assertNotIn('"A"', block_text)
         self.assertIn('"_skipped": true', block_text)
+        self.assertNotIn('"H1"', block_text)
+        self.assertNotIn('"A"', block_text)
+        # Skipped blocks only carry the skip marker: no empty arrays, no stale
+        # `_src` snapshot, and a bare wrapper without decorative attrs.
+        self.assertNotIn('"hints"', block_text)
+        self.assertNotIn('"options"', block_text)
+        self.assertNotIn('"_src"', block_text)
+        self.assertNotIn('data-show-hints', block_text)
+        self.assertNotIn('data-ai-hints-addon-id', block_text)
+
+    def test_skip_strips_src_snapshot_on_cloze(self):
+        parser = CardParser()
+        note = FakeNote("Cloze", {"Text": "The capital is {{c1::Paris}}.", "Back": ""})
+        
+        # Generate normally: the cloze answer snapshot `_src` is attached.
+        parser.update_note_with_hints(note, {"hints": ["H1"], "options": ["O1"]}, card=FakeCard(1, 0))
+        block_text = note["Text"]
+        self.assertIn('"_src": "Paris"', block_text)
+        
+        # Skip: the block must lose `_src` and be reduced to the skip marker only.
+        parser.update_note_with_hints(note, {"hints": [], "options": [], "_skipped": True}, card=FakeCard(1, 0))
+        block_text = note["Text"]
+        self.assertIn('"_skipped": true', block_text)
+        self.assertNotIn('"_src"', block_text)
+        self.assertNotIn('"hints"', block_text)
+        self.assertNotIn('data-show-options', block_text)
+
+    def test_skip_append_uses_minimal_wrapper(self):
+        """A freshly-skipped card (never generated) writes a bare wrapper."""
+        parser = CardParser()
+        note = FakeNote("Cloze", {"Text": "The capital is {{c1::Paris}}.", "Back": ""})
+        parser.update_note_with_hints(note, {"hints": [], "options": [], "_skipped": True}, card=FakeCard(1, 0))
+        block_text = note["Text"]
+        self.assertIn('<div class="ai-hints-json" style="display:none">', block_text)
+        self.assertNotIn('data-ai-hints-addon-id', block_text)
+        self.assertNotIn('contenteditable', block_text)
+        self.assertIn('"_skipped": true', block_text)
+        self.assertNotIn('"hints"', block_text)
+        self.assertNotIn('"_src"', block_text)
 
     def test_clear_hints_preserves_div_wrapper_for_remaining_cards(self):
         parser = CardParser()

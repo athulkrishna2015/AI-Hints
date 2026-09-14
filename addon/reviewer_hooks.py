@@ -414,6 +414,10 @@ def _trigger_next_pregeneration(current_card_id=None):
                                 if not card:
                                     continue
                                     
+                                if _card_is_skipped(card):
+                                    # Deliberately skipped cards are covered: never pre-generate for them.
+                                    continue
+
                                 if card_has_hints(card):
                                     # We also need to be sure that the existing hints actually cover
                                     # this specific card's cloze (if it's a cloze card).
@@ -3150,6 +3154,20 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
 
     threading.Thread(target=run_async, daemon=True).start()
 
+def _card_is_skipped(card):
+    """True when this card's block is deliberately marked skipped (`_skipped`)."""
+    if not card:
+        return False
+    config = mw.addonManager.getConfig(ADDON_PACKAGE) or {}
+    try:
+        parser = CardParser(
+            mathjax_format=config.get("mathjax_format", "delimiters"),
+            fix_latex=config.get("fix_latex", False)
+        )
+        return parser.is_card_skipped(card.note(), card)
+    except Exception:
+        return False
+
 def card_has_hints(card):
     if not card:
         return False
@@ -3675,8 +3693,9 @@ def init_hooks():
                 logger.info(f"AI-Hints: Skipping auto-generation for card {card.id} because it was just manually cleared.")
                 return
 
-            needs_generation = not card_has_hints(card)
-            force_regen = config.get("auto_regenerate_all", False)
+            card_skipped = _card_is_skipped(card)
+            needs_generation = not card_has_hints(card) and not card_skipped
+            force_regen = config.get("auto_regenerate_all", False) and not card_skipped
 
             # Version-gated regeneration: regenerate if the version stored on
             # the card is older than the configured minimum version.
