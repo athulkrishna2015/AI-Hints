@@ -533,7 +533,7 @@ class AIClient:
             return False
         return True
 
-    def _skip_transient_provider_error(self, provider: str, code: int) -> bool:
+    def _skip_transient_provider_error(self, provider: str, code: int, last_key: bool = True) -> bool:
         """Skip a provider-wide transient outage during normal generation."""
         if not self._skip_provider_on_transient_outage:
             return False
@@ -544,6 +544,14 @@ class AIClient:
         if per_provider is not None:
             allowed = {int(c) for c in per_provider}
         if code not in allowed:
+            return False
+        if not last_key:
+            # Another key may be healthy — rotate to it first; the caller marks
+            # this key's combo failed and continues the key loop.
+            logger.info(
+                f"AI-Hints: HTTP {code} from {provider} on one key — trying next key "
+                f"before skipping provider."
+            )
             return False
         PROVIDER_UNAVAILABLE_UNTIL[provider] = time.time() + PROVIDER_OUTAGE_COOLDOWN_SECONDS
         self._generation_skipped_providers.add(provider)
@@ -1228,7 +1236,7 @@ class AIClient:
                             self._mark_combo_failed(provider_name, model, api_key)
                             continue
 
-                    if self._skip_transient_provider_error(provider_name, e.code):
+                    if self._skip_transient_provider_error(provider_name, e.code, idx == len(available_keys) - 1):
                         return {"hints": [], "options": []}
                     delay = self._extract_retry_delay(provider_name, model, api_key, e, body)
                     self._mark_combo_failed(provider_name, model, api_key, delay)
@@ -1236,7 +1244,7 @@ class AIClient:
                         model_timed_out = True
                         break
                     if e.code == 429:
-                        if self._skip_transient_provider_error(provider_name, e.code):
+                        if self._skip_transient_provider_error(provider_name, e.code, idx == len(available_keys) - 1):
                             return {"hints": [], "options": []}
                         _bo = self._rate_limit_backoff_seconds()
                         if _bo > 0:
@@ -1436,7 +1444,7 @@ class AIClient:
                             self._mark_combo_failed(provider, model, api_key)
                             continue
 
-                    if self._skip_transient_provider_error(provider, e.code):
+                    if self._skip_transient_provider_error(provider, e.code, idx == len(available_keys) - 1):
                         return {"hints": [], "options": []}
                     delay = self._extract_retry_delay(provider, model, api_key, e, body)
                     self._mark_combo_failed(provider, model, api_key, delay)
@@ -1444,7 +1452,7 @@ class AIClient:
                         model_timed_out = True
                         break
                     if e.code == 429:
-                        if self._skip_transient_provider_error(provider, e.code):
+                        if self._skip_transient_provider_error(provider, e.code, idx == len(available_keys) - 1):
                             return {"hints": [], "options": []}
                         _bo = self._rate_limit_backoff_seconds()
                         if _bo > 0:
@@ -1534,7 +1542,7 @@ class AIClient:
                             self._mark_combo_failed("anthropic", model, api_key)
                             continue
 
-                    if self._skip_transient_provider_error("anthropic", e.code):
+                    if self._skip_transient_provider_error("anthropic", e.code, idx == len(available_keys) - 1):
                         return {"hints": [], "options": []}
                     delay = self._extract_retry_delay("anthropic", model, api_key, e, body)
                     self._mark_combo_failed("anthropic", model, api_key, delay)
@@ -1542,7 +1550,7 @@ class AIClient:
                         model_timed_out = True
                         break
                     if e.code == 429:
-                        if self._skip_transient_provider_error("anthropic", e.code):
+                        if self._skip_transient_provider_error("anthropic", e.code, idx == len(available_keys) - 1):
                             return {"hints": [], "options": []}
                         _bo = self._rate_limit_backoff_seconds()
                         if _bo > 0:
@@ -1648,7 +1656,7 @@ class AIClient:
                             self._mark_combo_failed("gemini", model, api_key)
                             continue
 
-                    if self._skip_transient_provider_error("gemini", e.code):
+                    if self._skip_transient_provider_error("gemini", e.code, idx == len(available_keys) - 1):
                         return {"hints": [], "options": []}
                     delay = self._extract_retry_delay("gemini", model, api_key, e, body)
                     self._mark_combo_failed("gemini", model, api_key, delay)
@@ -1656,7 +1664,7 @@ class AIClient:
                         model_timed_out = True
                         break
                     if e.code == 429:
-                        if self._skip_transient_provider_error("gemini", e.code):
+                        if self._skip_transient_provider_error("gemini", e.code, idx == len(available_keys) - 1):
                             return {"hints": [], "options": []}
                         _bo = self._rate_limit_backoff_seconds()
                         if _bo > 0:

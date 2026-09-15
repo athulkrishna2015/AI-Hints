@@ -290,7 +290,10 @@ class TestGlobalModelOverrides(unittest.TestCase):
 class TestTransientProviderOutageConfig(unittest.TestCase):
 
     def setUp(self):
+        isolate_blacklist(self)
         PROVIDER_UNAVAILABLE_UNTIL.clear()
+        FAILED_COMBOS_CACHE.clear()
+        RATE_LIMIT_STREAK.clear()
 
     def _client(self, **extra):
         config = {"api_keys": {"openai": "k"}, "models": {"openai": "gpt-4o"}}
@@ -336,6 +339,49 @@ class TestTransientProviderOutageConfig(unittest.TestCase):
         client = self._client()
         client._skip_provider_on_transient_outage = False
         self.assertFalse(client._skip_transient_provider_error("openai", 429))
+
+    def test_non_last_key_rotates_instead_of_skipping(self):
+        client = self._client()
+        self.assertFalse(client._skip_transient_provider_error("openai", 503, last_key=False))
+        self.assertNotIn("openai", PROVIDER_UNAVAILABLE_UNTIL)
+
+    def test_last_key_skips_provider(self):
+        client = self._client()
+        self.assertTrue(client._skip_transient_provider_error("openai", 503, last_key=True))
+        self.assertIn("openai", PROVIDER_UNAVAILABLE_UNTIL)
+
+    def test_transient_error_on_first_key_tries_next_key(self):
+        config = {
+            "api_keys": {"openai": "k1,k2"},
+            "models": {"openai": "gpt-4o"},
+            "model_cooldown_minutes": 10,
+        }
+        client = AIClient(config)
+        client._skip_provider_on_transient_outage = True
+        err = urllib.error.HTTPError(url="http://mock.api", code=503,
+                                     msg="Service Unavailable", hdrs={}, fp=None)
+        err.read = MagicMock(return_value=b'{"error": "overloaded"}')
+        ok = {"choices": [{"message": {"content": '{"hints": ["h"], "options": ["a"]}'}}]}
+        with patch.object(AIClient, "_timed_post", side_effect=[err, ok]):
+            result = client._call_openai_compatible("openai", "sys", "prompt")
+        self.assertEqual(result.get("hints"), ["h"])
+        self.assertNotIn("openai", PROVIDER_UNAVAILABLE_UNTIL)
+
+    def test_transient_error_on_only_key_skips_provider(self):
+        config = {
+            "api_keys": {"openai": "k1"},
+            "models": {"openai": "gpt-4o"},
+            "model_cooldown_minutes": 10,
+        }
+        client = AIClient(config)
+        client._skip_provider_on_transient_outage = True
+        err = urllib.error.HTTPError(url="http://mock.api", code=503,
+                                     msg="Service Unavailable", hdrs={}, fp=None)
+        err.read = MagicMock(return_value=b'{"error": "overloaded"}')
+        with patch.object(AIClient, "_timed_post", side_effect=err):
+            result = client._call_openai_compatible("openai", "sys", "prompt")
+        self.assertEqual(result, {"hints": [], "options": []})
+        self.assertIn("openai", PROVIDER_UNAVAILABLE_UNTIL)
 
 
 if __name__ == "__main__":
