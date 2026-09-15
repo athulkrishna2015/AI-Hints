@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.2.3 (2026-09-15)
+- **Transient Errors Rotate Keys Across Generations, Not Provider-Skip**: Transient 429/503 errors now mark the failed key and abandon the provider for that card only — the next generation rotates to the next key (cyclic rotation across cards). No whole-provider skip is applied; the key's normal cooldown governs when it rejoins the rotation. The provider ✏️ edit window's **Skip on** row (checkboxes + type-in + × remove) remains, but it now controls one-attempt-per-card behavior rather than a 60s provider-wide wall-clock pause.
+- **Fix IndentationError in Config Dialog**: Restored `config_ui/widgets.py` indentation after edits so the add-on loads cleanly on Anki startup.
+
 ## 8.2.2 (2026-09-15)
 - **Per-Provider Transient Skip Codes**: The transient provider-skip (whole provider skipped for the current generation on HTTP errors, 60s cooldown) is now configurable per provider and per error code from the provider ✏️ edit window's **Skip on** row — checkboxes for common codes (429, 500, 502, 503, 504), a **+ code** box to type in any other status code, × to remove custom codes, and ↺ to reset to the global defaults. Uncheck all to never skip that provider. Stored in the new `transient_skip_providers` config key (`{provider: [codes]}`); missing providers follow the global `transient_skip_error_codes` default `[429, 503]`. Renaming a custom provider carries its skip setting along.
 
