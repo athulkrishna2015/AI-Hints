@@ -535,7 +535,15 @@ class AIClient:
 
     def _skip_transient_provider_error(self, provider: str, code: int) -> bool:
         """Skip a provider-wide transient outage during normal generation."""
-        if not self._skip_provider_on_transient_outage or code not in TRANSIENT_PROVIDER_ERROR_CODES:
+        if not self._skip_provider_on_transient_outage:
+            return False
+        cfg = self.config or {}
+        codes = cfg.get("transient_skip_error_codes")
+        allowed = {int(c) for c in codes} if codes is not None else TRANSIENT_PROVIDER_ERROR_CODES
+        per_provider = (cfg.get("transient_skip_providers") or {}).get(provider)
+        if per_provider is not None:
+            allowed = {int(c) for c in per_provider}
+        if code not in allowed:
             return False
         PROVIDER_UNAVAILABLE_UNTIL[provider] = time.time() + PROVIDER_OUTAGE_COOLDOWN_SECONDS
         self._generation_skipped_providers.add(provider)

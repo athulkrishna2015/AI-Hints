@@ -9,6 +9,7 @@ from ..ai_client import is_model_blacklisted, is_model_deprecated
 from .widgets import (CustomProviderDialog, ProviderRowWidget, NoWheelComboBox, PERSISTENT_TEST_STATUSES,
                       FETCH_CANCELLATIONS, NEWLY_ADDED_MODELS, MISSING_FROM_FETCH,
                       GLOBAL_NEWLY_ADDED_MODELS, GLOBAL_MISSING_FROM_FETCH,
+                      transient_skip_kwargs,
                       _get_blacklist_remaining)
 
 DEFAULT_TEST_QUESTION = "Why does a rotating magnet fall slower through a copper tube than a non-magnetic mass of the same size?"
@@ -2326,7 +2327,8 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 "headers": {},
                 "body_params": {},
             }
-        dlg = CustomProviderDialog(self, name=provider, data=cp_data, config=self.main_dialog.config)
+        dlg = CustomProviderDialog(self, name=provider, data=cp_data, config=self.main_dialog.config,
+                                   **transient_skip_kwargs(self.main_dialog, provider))
         if dlg.exec():
             new_data = dlg.get_data()
             new_name = dlg.name_edit.text().strip()

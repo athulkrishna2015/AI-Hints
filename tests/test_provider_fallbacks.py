@@ -11,6 +11,7 @@ from addon.ai_client import (
     AIClient,
     FAILED_COMBOS_CACHE,
     RATE_LIMIT_STREAK,
+    PROVIDER_UNAVAILABLE_UNTIL,
 )
 from blacklist_helpers import isolate_blacklist
 
@@ -284,6 +285,57 @@ class TestGlobalModelOverrides(unittest.TestCase):
                 client._call_provider("myprov", "sys", "prompt", override_model="m1")
         self.assertEqual(seen["think"], "off")
         self.assertEqual(client.config["thinking_levels"]["myprov"]["m1"], "high")
+
+
+class TestTransientProviderOutageConfig(unittest.TestCase):
+
+    def setUp(self):
+        PROVIDER_UNAVAILABLE_UNTIL.clear()
+
+    def _client(self, **extra):
+        config = {"api_keys": {"openai": "k"}, "models": {"openai": "gpt-4o"}}
+        config.update(extra)
+        client = AIClient(config)
+        client._skip_provider_on_transient_outage = True
+        return client
+
+    def test_default_codes_skip_429_503_only(self):
+        client = self._client()
+        self.assertTrue(client._skip_transient_provider_error("openai", 429))
+        PROVIDER_UNAVAILABLE_UNTIL.clear()
+        self.assertTrue(client._skip_transient_provider_error("openai", 503))
+        PROVIDER_UNAVAILABLE_UNTIL.clear()
+        self.assertFalse(client._skip_transient_provider_error("openai", 500))
+
+    def test_empty_codes_disables_skip_entirely(self):
+        client = self._client(transient_skip_error_codes=[])
+        self.assertFalse(client._skip_transient_provider_error("openai", 429))
+        self.assertFalse(client._skip_transient_provider_error("openai", 503))
+
+    def test_custom_codes_override_default(self):
+        client = self._client(transient_skip_error_codes=[429])
+        self.assertTrue(client._skip_transient_provider_error("openai", 429))
+        self.assertFalse(client._skip_transient_provider_error("openai", 503))
+
+    def test_provider_exclusion_disables_that_provider(self):
+        client = self._client(transient_skip_providers={"openai": []})
+        self.assertFalse(client._skip_transient_provider_error("openai", 429))
+        self.assertTrue(client._skip_transient_provider_error("anthropic", 429))
+
+    def test_per_provider_codes_override_global(self):
+        client = self._client(
+            transient_skip_error_codes=[503],
+            transient_skip_providers={"openai": [429]},
+        )
+        self.assertTrue(client._skip_transient_provider_error("openai", 429))
+        self.assertFalse(client._skip_transient_provider_error("openai", 503))
+        self.assertFalse(client._skip_transient_provider_error("anthropic", 429))
+        self.assertTrue(client._skip_transient_provider_error("anthropic", 503))
+
+    def test_flag_off_never_skips(self):
+        client = self._client()
+        client._skip_provider_on_transient_outage = False
+        self.assertFalse(client._skip_transient_provider_error("openai", 429))
 
 
 if __name__ == "__main__":

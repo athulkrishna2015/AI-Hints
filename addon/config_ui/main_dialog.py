@@ -289,6 +289,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not isinstance(disabled_models, dict):
             disabled_models = {}
         self.disabled_fallback_models_data = disabled_models.copy()
+        transient_skip = c.get("transient_skip_providers", {}) or {}
+        if not isinstance(transient_skip, dict):
+            transient_skip = {}
+        self.transient_skip_data = {p: list(v or []) for p, v in transient_skip.items()}
         self.refresh_custom_list()
         self.options_count_sb.setValue(c.get("options_count", 4))
         self.fix_latex_cb.setChecked(c.get("fix_latex", False))
@@ -976,7 +980,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         for attr in ("model_fallbacks_data", "disabled_fallback_models_data",
                      "thinking_levels_data", "model_timeouts_data",
-                     "global_thinking_levels_data", "global_model_timeouts_data"):
+                     "global_thinking_levels_data", "global_model_timeouts_data",
+                     "transient_skip_data"):
             _move_key(self, attr)
 
         def _rewrite_pairs(obj, attr):
@@ -1254,6 +1259,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["custom_providers"] = self.custom_providers_data
             new_config["model_fallbacks"] = self.model_fallbacks_data
             new_config["disabled_fallback_models"] = self.disabled_fallback_models_data
+            new_config["transient_skip_providers"] = getattr(self, "transient_skip_data", {})
             new_config["thinking_levels"] = self.thinking_levels_data
             new_config["model_timeouts"] = self.model_timeouts_data
             new_config["global_model_priority"] = self.global_model_priority_data

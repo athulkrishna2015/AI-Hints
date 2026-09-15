@@ -55,8 +55,17 @@ MISSING_FROM_FETCH = {}
 GLOBAL_NEWLY_ADDED_MODELS = {}
 GLOBAL_MISSING_FROM_FETCH = {}
 
+def transient_skip_kwargs(owner, provider):
+    """CustomProviderDialog kwargs wiring Skip-on checkboxes to the owner's live
+    transient_skip_data dict (created if missing)."""
+    data = getattr(owner, "transient_skip_data", None)
+    if data is None:
+        data = owner.transient_skip_data = {}
+    return {"skip_data": data, "skip_provider": provider}
+
+
 class CustomProviderDialog(QDialog):
-    def __init__(self, parent, name="", data=None, config=None):
+    def __init__(self, parent, name="", data=None, config=None, skip_data=None, skip_provider=None):
         super().__init__(parent)
         self.config = config or {}
         self.original_name = name.strip() if isinstance(name, str) else ""
@@ -138,6 +147,49 @@ class CustomProviderDialog(QDialog):
         layout.addRow("Models URL (optional):", self.models_url_edit)
         layout.addRow("Headers (JSON):", self.headers_edit)
         layout.addRow("Body Params (JSON):", self.body_params_edit)
+
+        # Transient provider-skip (per provider x per code, checkbox-driven).
+        # Only shown when the caller wires the live transient_skip_data dict.
+        self._skip_data = skip_data
+        self._skip_provider = (skip_provider or "").strip() if isinstance(skip_provider, str) else ""
+        self._skip_dirty = False
+        self._skip_reset = False
+        self.skip_cbs = {}
+        self._skip_custom = set()
+        self._skip_row = None
+        if self._skip_data is not None and self._skip_provider:
+            skip_row = QHBoxLayout()
+            self._skip_row = skip_row
+            for code in self._skip_code_palette():
+                self._add_skip_checkbox(code, checked=(code in self._effective_skip_codes()),
+                                        removable=(code not in self._SKIP_CODE_CHOICES))
+            skip_reset_btn = QPushButton("↺")
+            skip_reset_btn.setFixedWidth(30)
+            skip_reset_btn.setStyleSheet("padding: 2px;")
+            skip_reset_btn.setToolTip("Reset to the global default skip codes.")
+            skip_reset_btn.clicked.connect(self._on_skip_reset)
+            skip_row.addWidget(skip_reset_btn)
+            self.skip_add_edit = QLineEdit()
+            self.skip_add_edit.setPlaceholderText("+ code")
+            self.skip_add_edit.setFixedWidth(64)
+            self.skip_add_edit.setToolTip("Type an HTTP status code and press Enter to add it.")
+            self.skip_add_edit.returnPressed.connect(self._on_skip_add)
+            skip_row.addWidget(self.skip_add_edit)
+            skip_add_btn = QPushButton("+")
+            skip_add_btn.setFixedWidth(30)
+            skip_add_btn.setStyleSheet("padding: 2px;")
+            skip_add_btn.setToolTip("Add the typed HTTP status code.")
+            skip_add_btn.clicked.connect(self._on_skip_add)
+            skip_row.addWidget(skip_add_btn)
+            skip_row.addStretch()
+            skip_row_widget = QWidget()
+            skip_row_widget.setLayout(skip_row)
+            skip_row_widget.setToolTip(
+                "HTTP error codes that temporarily skip this whole provider for the current "
+                "generation (60s cooldown, retried later) instead of burning every key/model "
+                "on a dead service."
+            )
+            layout.addRow("Skip on:", skip_row_widget)
         
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(self.validate_and_accept)
@@ -216,6 +268,102 @@ class CustomProviderDialog(QDialog):
             "body_params": json.loads(self.body_params_edit.toPlainText() or "{}"),
         }
 
+    # Transient provider-skip (per provider x per code, checkbox-driven)
+    _SKIP_CODE_CHOICES = (429, 500, 502, 503, 504)
+
+    def _default_skip_codes(self):
+        from ..ai_client import TRANSIENT_PROVIDER_ERROR_CODES
+        codes = (self.config or {}).get("transient_skip_error_codes")
+        if codes is None:
+            return set(TRANSIENT_PROVIDER_ERROR_CODES)
+        try:
+            return {int(c) for c in codes}
+        except (TypeError, ValueError):
+            return set(TRANSIENT_PROVIDER_ERROR_CODES)
+
+    def _effective_skip_codes(self):
+        saved = (self._skip_data or {}).get(self._skip_provider)
+        if saved is not None:
+            try:
+                return {int(c) for c in (saved or [])}
+            except (TypeError, ValueError):
+                return set()
+        return self._default_skip_codes()
+
+    def _skip_code_palette(self):
+        palette = list(self._SKIP_CODE_CHOICES)
+        for c in sorted(self._default_skip_codes() | self._effective_skip_codes()):
+            if c not in palette:
+                palette.append(c)
+        return palette
+
+    def _on_skip_code_toggled(self):
+        self._skip_dirty = True
+        self._skip_reset = False
+
+    def _add_skip_checkbox(self, code, checked=True, removable=False):
+        existing = self.skip_cbs.get(code)
+        if existing is not None:
+            existing.setChecked(True)
+            return
+        cb = QCheckBox(str(code))
+        cb.setChecked(checked)
+        cb.setToolTip(
+            f"Temporarily skip this provider for the current generation when it "
+            f"returns HTTP {code} (60s cooldown, retried later). Uncheck all to "
+            f"never skip it."
+        )
+        cb.toggled.connect(self._on_skip_code_toggled)
+        self.skip_cbs[code] = cb
+        widget = cb
+        if removable:
+            self._skip_custom.add(code)
+            container = QWidget()
+            h = QHBoxLayout(container)
+            h.setContentsMargins(0, 0, 0, 0)
+            h.setSpacing(2)
+            h.addWidget(cb)
+            rm = QPushButton("×")
+            rm.setFixedWidth(22)
+            rm.setStyleSheet("padding: 2px;")
+            rm.setToolTip(f"Remove {code} from this list.")
+            rm.clicked.connect(lambda _c=False, c=code, w=container: self._remove_skip_code(c, w))
+            h.addWidget(rm)
+            widget = container
+        if self._skip_row is not None and hasattr(self, "skip_add_edit"):
+            self._skip_row.insertWidget(self._skip_row.indexOf(self.skip_add_edit), widget)
+        elif self._skip_row is not None:
+            self._skip_row.addWidget(widget)
+
+    def _on_skip_add(self):
+        try:
+            code = int(self.skip_add_edit.text().strip())
+        except (TypeError, ValueError):
+            return
+        self.skip_add_edit.clear()
+        if not 100 <= code <= 599:
+            return
+        self._add_skip_checkbox(code, checked=True, removable=(code not in self._SKIP_CODE_CHOICES))
+        self._skip_dirty = True
+        self._skip_reset = False
+
+    def _remove_skip_code(self, code, container):
+        container.setParent(None)
+        container.deleteLater()
+        self.skip_cbs.pop(code, None)
+        self._skip_custom.discard(code)
+        self._skip_dirty = True
+        self._skip_reset = False
+
+    def _on_skip_reset(self):
+        defaults = self._default_skip_codes()
+        for c, cb in self.skip_cbs.items():
+            cb.blockSignals(True)
+            cb.setChecked(c in defaults)
+            cb.blockSignals(False)
+        self._skip_dirty = True
+        self._skip_reset = True
+
     def on_restore_default(self):
         if not self.original_name or self.original_name not in BUILTIN_PROVIDER_URLS:
             return
@@ -261,6 +409,14 @@ class CustomProviderDialog(QDialog):
                     self.model_edit.setText(sorted(models)[0])
             except Exception:
                 pass
+
+        if self._skip_data is not None and self._skip_provider and self._skip_dirty:
+            if self._skip_reset:
+                self._skip_data.pop(self._skip_provider, None)
+            else:
+                self._skip_data[self._skip_provider] = sorted(
+                    c for c, cb in self.skip_cbs.items() if cb.isChecked()
+                )
 
         self.accept()
 
@@ -520,7 +676,8 @@ class ProviderRowWidget(QWidget):
                 "headers": {},
                 "body_params": {},
             }
-        dlg = CustomProviderDialog(self, name=self.provider, data=cp_data, config=self.parent_dialog.config)
+        dlg = CustomProviderDialog(self, name=self.provider, data=cp_data, config=self.parent_dialog.config,
+                                   **transient_skip_kwargs(self.parent_dialog, self.provider))
         if dlg.exec():
             new_data = dlg.get_data()
             new_name = dlg.name_edit.text().strip()

@@ -91,6 +91,11 @@
   "global_thinking_levels": {},
   "global_model_timeouts": {},
   "model_cooldown_minutes": 10,
+  "transient_skip_error_codes": [
+    429,
+    503
+  ],
+  "transient_skip_providers": {},
   "rate_limit_backoff_seconds": 2,
   "ignore_network_checks": false,
   "request_timeout": 60,

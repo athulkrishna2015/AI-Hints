@@ -67,6 +67,8 @@ Example:
 
 **Timeout overrides (`model_timeouts` / `provider_timeouts`)** apply to **every** generation flow — explicit review, pregen, and batch — but only as an *extension*: a custom value greater than the flow's base budget wins; a smaller one never shortens it. So unattended budgets keep their headroom while genuinely slow models can be granted more everywhere.| `model_cooldown_minutes` | `10` | Failure lockout duration (minutes). |
 | `model_blacklist_data` | `{}` | Internal blacklist/cooldown state (provider-model-key combos). |
+| `transient_skip_error_codes` | `[429, 503]` | Global default HTTP error codes that skip the whole provider for the current generation (60s cooldown, retried later). Empty list disables provider-skip entirely. |
+| `transient_skip_providers` | `{}` | Per-provider override: `{provider: [codes]}`. Set from the provider ✏️ edit window (Skip on). Empty list disables skip for that provider; missing provider follows the global defaults. |
 
 ### Generation
 
