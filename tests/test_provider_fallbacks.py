@@ -11,7 +11,6 @@ from addon.ai_client import (
     AIClient,
     FAILED_COMBOS_CACHE,
     RATE_LIMIT_STREAK,
-    PROVIDER_UNAVAILABLE_UNTIL,
 )
 from blacklist_helpers import isolate_blacklist
 
@@ -291,7 +290,6 @@ class TestTransientProviderOutageConfig(unittest.TestCase):
 
     def setUp(self):
         isolate_blacklist(self)
-        PROVIDER_UNAVAILABLE_UNTIL.clear()
         FAILED_COMBOS_CACHE.clear()
         RATE_LIMIT_STREAK.clear()
 
@@ -305,9 +303,9 @@ class TestTransientProviderOutageConfig(unittest.TestCase):
     def test_default_codes_skip_429_503_only(self):
         client = self._client()
         self.assertTrue(client._skip_transient_provider_error("openai", 429))
-        PROVIDER_UNAVAILABLE_UNTIL.clear()
+        client._generation_skipped_providers.clear()
         self.assertTrue(client._skip_transient_provider_error("openai", 503))
-        PROVIDER_UNAVAILABLE_UNTIL.clear()
+        client._generation_skipped_providers.clear()
         self.assertFalse(client._skip_transient_provider_error("openai", 500))
 
     def test_empty_codes_disables_skip_entirely(self):
@@ -340,17 +338,15 @@ class TestTransientProviderOutageConfig(unittest.TestCase):
         client._skip_provider_on_transient_outage = False
         self.assertFalse(client._skip_transient_provider_error("openai", 429))
 
-    def test_non_last_key_rotates_instead_of_skipping(self):
+    def test_transient_error_stops_generation_not_next_ones(self):
         client = self._client()
-        self.assertFalse(client._skip_transient_provider_error("openai", 503, last_key=False))
-        self.assertNotIn("openai", PROVIDER_UNAVAILABLE_UNTIL)
+        self.assertTrue(client._skip_transient_provider_error("openai", 503))
+        self.assertIn("openai", client._generation_skipped_providers)
+        # Next generation starts fresh (generate_options resets the set).
+        client._generation_skipped_providers = set()
+        self.assertNotIn("openai", client._generation_skipped_providers)
 
-    def test_last_key_skips_provider(self):
-        client = self._client()
-        self.assertTrue(client._skip_transient_provider_error("openai", 503, last_key=True))
-        self.assertIn("openai", PROVIDER_UNAVAILABLE_UNTIL)
-
-    def test_transient_error_on_first_key_tries_next_key(self):
+    def test_transient_error_rotates_key_next_generation(self):
         config = {
             "api_keys": {"openai": "k1,k2"},
             "models": {"openai": "gpt-4o"},
@@ -362,12 +358,34 @@ class TestTransientProviderOutageConfig(unittest.TestCase):
                                      msg="Service Unavailable", hdrs={}, fp=None)
         err.read = MagicMock(return_value=b'{"error": "overloaded"}')
         ok = {"choices": [{"message": {"content": '{"hints": ["h"], "options": ["a"]}'}}]}
-        with patch.object(AIClient, "_timed_post", side_effect=[err, ok]):
-            result = client._call_openai_compatible("openai", "sys", "prompt")
-        self.assertEqual(result.get("hints"), ["h"])
-        self.assertNotIn("openai", PROVIDER_UNAVAILABLE_UNTIL)
+        posted = []
 
-    def test_transient_error_on_only_key_skips_provider(self):
+        def fake_post(client_self, *args):
+            posted.append(args)
+            if len(posted) == 1:
+                raise err
+            return ok
+
+        def _used_key(call_args):
+            for a in call_args:
+                if isinstance(a, dict) and "Authorization" in a:
+                    return a["Authorization"]
+            return None
+
+        with patch.object(AIClient, "_timed_post", side_effect=fake_post):
+            gen1 = client._call_openai_compatible("openai", "sys", "prompt")
+            # Generation 1: exactly ONE key attempted, provider stopped for this card.
+            self.assertEqual(gen1, {"hints": [], "options": []})
+            self.assertEqual(len(posted), 1)
+            self.assertTrue(client._is_combo_failed("openai", "gpt-4o", "k1"))
+            # Generation 2 (next card): fresh per-generation state, rotates to k2.
+            client._generation_skipped_providers = set()
+            gen2 = client._call_openai_compatible("openai", "sys", "prompt")
+            self.assertEqual(gen2.get("hints"), ["h"])
+            self.assertEqual(len(posted), 2)
+            self.assertNotEqual(_used_key(posted[0]), _used_key(posted[1]))
+
+    def test_transient_error_on_single_key_stops_generation(self):
         config = {
             "api_keys": {"openai": "k1"},
             "models": {"openai": "gpt-4o"},
@@ -378,10 +396,11 @@ class TestTransientProviderOutageConfig(unittest.TestCase):
         err = urllib.error.HTTPError(url="http://mock.api", code=503,
                                      msg="Service Unavailable", hdrs={}, fp=None)
         err.read = MagicMock(return_value=b'{"error": "overloaded"}')
-        with patch.object(AIClient, "_timed_post", side_effect=err):
+        with patch.object(AIClient, "_timed_post", side_effect=err) as mock_post:
             result = client._call_openai_compatible("openai", "sys", "prompt")
         self.assertEqual(result, {"hints": [], "options": []})
-        self.assertIn("openai", PROVIDER_UNAVAILABLE_UNTIL)
+        self.assertEqual(mock_post.call_count, 1)
+        self.assertTrue(client._is_combo_failed("openai", "gpt-4o", "k1"))
 
 
 if __name__ == "__main__":

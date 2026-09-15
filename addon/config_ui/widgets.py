@@ -185,9 +185,10 @@ class CustomProviderDialog(QDialog):
             skip_row_widget = QWidget()
             skip_row_widget.setLayout(skip_row)
             skip_row_widget.setToolTip(
-                "HTTP error codes that temporarily skip this whole provider for the current "
-                "generation (60s cooldown, retried later) instead of burning every key/model "
-                "on a dead service."
+                "HTTP error codes that stop trying this whole provider for the current "
+                "card (one key attempt per card) instead of burning every key/model "
+                "on a dead service. The failed key sits out, so the next card "
+                "rotates to the next key."
             )
             layout.addRow("Skip on:", skip_row_widget)
         
@@ -301,17 +302,13 @@ class CustomProviderDialog(QDialog):
         self._skip_dirty = True
         self._skip_reset = False
 
-    def _add_skip_checkbox(self, code, checked=True, removable=False):
-        existing = self.skip_cbs.get(code)
-        if existing is not None:
-            existing.setChecked(True)
-            return
         cb = QCheckBox(str(code))
         cb.setChecked(checked)
         cb.setToolTip(
-            f"Temporarily skip this provider for the current generation when it "
-            f"returns HTTP {code} (60s cooldown, retried later). Uncheck all to "
-            f"never skip it."
+            f"Stop trying this provider for the current card when it "
+            f"returns HTTP {code} (one key attempt per card). The failed key "
+            f"sits out, so the next card rotates to the next key. Uncheck "
+            f"all to keep trying every key within one card."
         )
         cb.toggled.connect(self._on_skip_code_toggled)
         self.skip_cbs[code] = cb
