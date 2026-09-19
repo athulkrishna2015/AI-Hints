@@ -84,6 +84,7 @@
   "auto_show_options_answer": true,
   "options_before_hints": true,
   "pre_generate_next": true,
+  "pregen_direct_save": false,
   "disabled_providers": [],
   "disabled_fallback_models": {},
   "thinking_levels": {},

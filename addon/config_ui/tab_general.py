@@ -149,6 +149,16 @@ class GeneralTabMixin:
         pregen_row.addStretch()
         show_layout.addRow(pregen_container)
 
+        self.pregen_direct_save_cb = QCheckBox("Save pre-generated data directly to cards (skip cache)")
+        self.pregen_direct_save_cb.setToolTip(
+            "Write background pre-generation results straight to the card's note instead of "
+            "holding them in the pregen cache until you reach the card. Off by default (cache "
+            "behavior unchanged). Background saves skip the Ctrl+Alt+Z history; Anki's native "
+            "undo is never touched."
+        )
+        self.pregen_direct_save_cb.setStyleSheet("margin-left: 15px;")
+        show_layout.addRow(self.pregen_direct_save_cb)
+
         # Couple all sub-checkboxes to the primary Auto-Generate checkbox
         def _update_regen_controls(enabled):
             self.auto_regenerate_all_cb.setEnabled(enabled)
@@ -163,8 +173,15 @@ class GeneralTabMixin:
             )
             self.pre_generate_next_cb.setEnabled(enabled)
             self.pre_generate_count_spin.setEnabled(enabled and self.pre_generate_next_cb.isChecked())
+            self.pregen_direct_save_cb.setEnabled(enabled and self.pre_generate_next_cb.isChecked())
             if not enabled:
                 self.pre_generate_next_cb.setChecked(False)
+
+        self.pre_generate_next_cb.toggled.connect(
+            lambda checked: self.pregen_direct_save_cb.setEnabled(
+                self.auto_generate_new_cb.isChecked() and checked
+            )
+        )
 
         self.auto_generate_new_cb.toggled.connect(_update_regen_controls)
         self.pre_generate_next_cb.toggled.connect(

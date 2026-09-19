@@ -116,6 +116,7 @@ Example:
 |-----|---------|---------|
 | `pre_generate_next` | `true` | Pre-generate upcoming cards in the background. |
 | `pre_generate_count` | `3` | Pre-generation buffer size (1–10). |
+| `pregen_direct_save` | `false` | Save off-screen pre-generated results directly to their notes instead of `pregen_cache.json`. Background saves skip the add-on's Ctrl+Alt+Z history; native Anki undo is unaffected. |
 
 ### Auto-Rating
 

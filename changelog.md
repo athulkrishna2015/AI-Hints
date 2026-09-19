@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.2.4 (2026-09-15)
+- **Direct Background Card Saves**: When a foreground generation finishes after you move to another card, the result is saved directly to its original card in the background instead of being discarded or placed in the pre-generation cache. The background write does not update the visible card and does not add an entry to the add-on's `Ctrl+Alt+Z` history.
+- **Optional Direct Pre-Generation Saves**: New General → **Save pre-generated data directly to cards (skip cache)** setting (`pregen_direct_save`, off by default). When enabled, off-screen pre-generation writes directly to each card; when disabled, the existing `pregen_cache.json` behavior remains unchanged. Direct pre-generation writes also skip the add-on's custom undo history; native Anki undo is unaffected.
+
 ## 8.2.3 (2026-09-15)
 - **Transient Errors Rotate Keys Across Generations, Not Provider-Skip**: Transient 429/503 errors now mark the failed key and abandon the provider for that card only — the next generation rotates to the next key (cyclic rotation across cards). No whole-provider skip is applied; the key's normal cooldown governs when it rejoins the rotation. The provider ✏️ edit window's **Skip on** row (checkboxes + type-in + × remove) remains, but it now controls one-attempt-per-card behavior rather than a 60s provider-wide wall-clock pause.
 - **Fix IndentationError in Config Dialog**: Restored `config_ui/widgets.py` indentation after edits so the add-on loads cleanly on Anki startup.

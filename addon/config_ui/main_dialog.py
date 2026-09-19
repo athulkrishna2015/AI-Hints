@@ -332,6 +332,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.pre_generate_next_cb.setEnabled(auto_gen_on)
         self.pre_generate_count_spin.setValue(c.get("pre_generate_count", 3))
         self.pre_generate_count_spin.setEnabled(auto_gen_on and self.pre_generate_next_cb.isChecked())
+        if hasattr(self, "pregen_direct_save_cb"):
+            self.pregen_direct_save_cb.setChecked(c.get("pregen_direct_save", False))
+            self.pregen_direct_save_cb.setEnabled(auto_gen_on and self.pre_generate_next_cb.isChecked())
 
         self.generate_hints_enabled_cb.setChecked(c.get("generate_hints_enabled", True))
         self.generate_options_enabled_cb.setChecked(c.get("generate_options_enabled", True))
@@ -1189,6 +1192,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["auto_regenerate_min_time"] = self.auto_regenerate_min_time_edit.text().strip()
             new_config["pre_generate_next"] = self.pre_generate_next_cb.isChecked()
             new_config["pre_generate_count"] = self.pre_generate_count_spin.value()
+            new_config["pregen_direct_save"] = self.pregen_direct_save_cb.isChecked()
             new_config["generate_hints_enabled"] = self.generate_hints_enabled_cb.isChecked()
             new_config["generate_options_enabled"] = self.generate_options_enabled_cb.isChecked()
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()

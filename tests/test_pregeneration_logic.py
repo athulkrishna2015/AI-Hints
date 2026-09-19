@@ -336,6 +336,9 @@ class TestPregeneration(unittest.TestCase):
         # re-fire on_show_question and re-trigger auto-generation).
         self.assertEqual(kwargs.get("skip_redraw"), True)
 
+    def test_direct_pregen_save_is_configured_without_cache(self):
+        self.assertFalse(json.load(open(os.path.join(os.path.dirname(__file__), "..", "addon", "config.json"))).get("pregen_direct_save"))
+
     @patch('addon.reviewer_hooks._get_card_from_collection')
     @patch('addon.reviewer_hooks.CardParser')
     @patch('addon.reviewer_hooks.tooltip')
@@ -562,4 +565,3 @@ class TestPregeneration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
