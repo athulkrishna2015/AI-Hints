@@ -987,6 +987,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                      "transient_skip_data"):
             _move_key(self, attr)
 
+        dialog = getattr(self, "global_fallback_dlg", None)
+        if dialog is not None and hasattr(dialog, "rename_provider"):
+            dialog.rename_provider(old_name, new_name)
+
         def _rewrite_pairs(obj, attr):
             pairs = getattr(obj, attr, None)
             if isinstance(pairs, list) and all(

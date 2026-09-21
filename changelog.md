@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.2.5 (2026-09-20)
+- **Provider Edit Dialog Crash Fixed**: Restored the missing custom error-code checkbox helper so opening a provider's edit window no longer raises `AttributeError: CustomProviderDialog has no attribute _add_skip_checkbox`.
+- **Provider Rename Synchronization**: Renaming a provider from the edit window now updates its rows and settings in the open Advanced Fallback Priority window, including thinking levels, timeouts, and saved provider-keyed configuration.
+
 ## 8.2.4 (2026-09-15)
 - **Direct Background Card Saves**: When a foreground generation finishes after you move to another card, the result is saved directly to its original card in the background instead of being discarded or placed in the pre-generation cache. The background write does not update the visible card and does not add an entry to the add-on's `Ctrl+Alt+Z` history.
 - **Optional Direct Pre-Generation Saves**: New General → **Save pre-generated data directly to cards (skip cache)** setting (`pregen_direct_save`, off by default). When enabled, off-screen pre-generation writes directly to each card; when disabled, the existing `pregen_cache.json` behavior remains unchanged. Direct pre-generation writes also skip the add-on's custom undo history; native Anki undo is unaffected.

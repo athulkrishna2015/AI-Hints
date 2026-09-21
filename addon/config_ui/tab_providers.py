@@ -225,6 +225,23 @@ class _FallbackTable(QTableWidget):
 
 
 class FallbackPriorityDialog(QDialog):
+    def rename_provider(self, old_name, new_name):
+        if not old_name or not new_name or old_name == new_name:
+            return
+        self._harvest_widgets()
+        for table in self._tables():
+            for row in range(table.rowCount()):
+                provider, model = self._row_pair(table, row)
+                if provider != old_name:
+                    continue
+                for col in (0, 1, 4):
+                    table.item(row, col).setData(Qt.ItemDataRole.UserRole, (new_name, model))
+                self._render_row(table, row, new_name, model)
+        if old_name in self._g_thinking:
+            self._g_thinking.setdefault(new_name, {}).update(self._g_thinking.pop(old_name))
+        if old_name in self._g_timeouts:
+            self._g_timeouts.setdefault(new_name, {}).update(self._g_timeouts.pop(old_name))
+
     def _make_fallback_table(self, headers, init_widths=None):
         table = _FallbackTable(self._handle_table_drop)
         table.setColumnCount(len(headers))
@@ -2335,18 +2352,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             if not new_name:
                 return
             if new_name != provider:
-                self._harvest_widgets()
-                if provider in self._g_thinking:
-                    self._g_thinking.setdefault(new_name, {}).update(self._g_thinking.pop(provider))
-                if provider in self._g_timeouts:
-                    self._g_timeouts.setdefault(new_name, {}).update(self._g_timeouts.pop(provider))
-                for table in self._tables():
-                    for i in range(table.rowCount()):
-                        p, m = self._row_pair(table, i)
-                        if p == provider:
-                            for col in (0, 1, 4):
-                                table.item(i, col).setData(Qt.ItemDataRole.UserRole, (new_name, m))
-                            self._render_row(table, i, new_name, m)
+                self.rename_provider(provider, new_name)
                 cp_data = custom_providers.get(provider, {})
                 if cp_data and provider in custom_providers:
                     del custom_providers[provider]

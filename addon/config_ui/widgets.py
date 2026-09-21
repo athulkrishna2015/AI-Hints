@@ -302,6 +302,11 @@ class CustomProviderDialog(QDialog):
         self._skip_dirty = True
         self._skip_reset = False
 
+    def _add_skip_checkbox(self, code, checked=True, removable=False):
+        existing = self.skip_cbs.get(code)
+        if existing is not None:
+            existing.setChecked(True)
+            return
         cb = QCheckBox(str(code))
         cb.setChecked(checked)
         cb.setToolTip(
