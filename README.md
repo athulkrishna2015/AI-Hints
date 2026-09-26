@@ -21,7 +21,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 ### 🎮 Interactive MCQ & Review UI
 - **Multiple-Choice Options**: Select MCQ options on the front side (via click, touch, or hotkeys `1-9`) with color-coded results (green for correct, red for incorrect).
 - **Auto-Rating**: Instantly rate cards (e.g. `Good` or `Again`) automatically upon selecting an option.
-- **Inline Editor**: Edit generated hints or options directly on the card during review (via `Ctrl+Click` / `Cmd+Click`).
+- **Inline Editor**: Edit generated hints or options directly on the card during review (via `Ctrl+Click` / `Cmd+Click`). Holding `Ctrl`/`Cmd` also reveals a **+ Add** row at the end of each list — `Ctrl`+click it, type, and press `Enter` to append a new hint or option without regenerating (or spending an API call). Clearing an item's text and confirming removes it.
 - **Factual Error Alerts**: Automatically detects and flags factual errors in your notes with custom warning highlights during study.
 - **Skip AI Generation**: Permanently skip AI generation for individual cards. Skipped cards render an **"AI generation skipped"** message (with all desktop buttons, or message-only on mobile) until you generate or clear them.
 - **LaTeX Math Support**: Seamlessly parses and formats LaTeX math formulas on your cards.

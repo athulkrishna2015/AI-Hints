@@ -58,7 +58,7 @@ A dedicated path row shows the canonical log file location and provides one-clic
 
 - Generated hints render in a collapsible panel during review.
 - **Auto-show** configurable for the front and answer sides (each card resets to your defaults on a fresh show).
-- **Inline editor**: hold `Ctrl`/`Cmd` and click a hint or option to edit it directly on the card. Edits save on `Enter`, blur, or `Escape`.
+- **Inline editor**: hold `Ctrl`/`Cmd` and click a hint or option to edit it directly on the card. Edits save on `Enter`, blur, or `Escape`. The same hold reveals a **+ Add** row at the end of each list — click it to append a new hint or option. Clearing an item's text and confirming removes it.
 
 ### Keyboard Shortcuts
 

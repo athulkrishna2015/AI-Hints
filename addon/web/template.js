@@ -128,6 +128,21 @@
             list-style-type: none !important;
             padding-left: 0 !important;
         }
+        .ai-hints-add-item {
+            display: none;
+            list-style: none;
+            cursor: pointer;
+            opacity: 0.7;
+            font-size: 0.9em;
+        }
+        .ai-hints-ctrl-active .ai-hints-add-item { display: block; }
+        .ai-hints-ctrl-active .ai-hints-add-item:hover {
+            background-color: rgba(255, 235, 59, 0.15) !important;
+            border-radius: 4px;
+        }
+        .nightMode.ai-hints-ctrl-active .ai-hints-add-item:hover {
+            background-color: rgba(255, 235, 59, 0.08) !important;
+        }
     `;
 
     // 2. State & Helpers
@@ -743,6 +758,23 @@
         });
         if (title.toLowerCase().includes('option')) shuffle(listItems, seed);
         listItems.forEach(li => list.appendChild(li));
+        // Ctrl+click the "+" row to append a new hint/option. Hidden until
+        // Ctrl/Cmd is held, so it never shows up during normal review.
+        if (isAddonActive) {
+            const addLi = document.createElement('li');
+            addLi.className = 'ai-hints-add-item';
+            addLi.dataset.type = title.toLowerCase().includes('hint') ? 'hints' : 'options';
+            addLi.dataset.addNew = 'true';
+            addLi.textContent = '+ Add';
+            addLi.addEventListener('click', (event) => {
+                if (event.ctrlKey || event.metaKey) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    startInlineEditing(addLi);
+                }
+            });
+            list.appendChild(addLi);
+        }
         section.appendChild(list);
         parent.appendChild(section);
         return section;
@@ -1232,8 +1264,9 @@
                     } else if (block.classList.contains('ai-hints-container')) {
                         // Scraping fallback for HTML-only containers
                         data = { hints: [], options: [] };
-                        block.querySelectorAll('.ai-hints-hint-list li').forEach(li => data.hints.push(li.innerHTML));
-                        block.querySelectorAll('.ai-hints-list li').forEach(li => data.options.push(li.innerHTML));
+                        // Exclude the Ctrl-only "+ Add" affordance rows.
+                        block.querySelectorAll('.ai-hints-hint-list li:not(.ai-hints-add-item)').forEach(li => data.hints.push(li.innerHTML));
+                        block.querySelectorAll('.ai-hints-list li:not(.ai-hints-add-item)').forEach(li => data.options.push(li.innerHTML));
                         // Hide the original static block so we can replace it with our interactive one
                         block.style.display = 'none';
                     }
@@ -1697,6 +1730,26 @@
         
         function saveEdit() {
             const newValue = input.value.trim();
+            const isAdd = el.dataset.addNew === 'true';
+
+            if (isAdd) {
+                el.dataset.editing = 'false';
+                el.classList.remove('ai-hints-editing');
+                if (newValue) {
+                    if (typeof pycmd === 'function') {
+                        pycmd(JSON.stringify({
+                            action: "ai_hints_add_item",
+                            type: el.dataset.type,
+                            value: newValue
+                        }));
+                    }
+                } else {
+                    // Blank add -> nothing to save; restore the placeholder.
+                    el.textContent = '+ Add';
+                }
+                return;
+            }
+
             if (newValue !== el.dataset.rawText) {
                 const type = el.dataset.type;
                 const idx = el.dataset.idx;
@@ -2081,7 +2134,7 @@
             // remains supported for users who prefer it.
             const frontBareOptionMatch = !isAnswerSide() && noModifierPressed;
             if ((frontBareOptionMatch || optModMatch) && keyMatch && !isAnswerSide() && digitVal !== null) {
-                const listItems = document.querySelectorAll('.ai-hints-list li');
+                const listItems = document.querySelectorAll('.ai-hints-list li:not(.ai-hints-add-item)');
                 const index = digitVal - 1;
                 if (listItems && listItems[index]) {
                     event.preventDefault();

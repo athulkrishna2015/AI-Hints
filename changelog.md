@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.3.0 (2026-09-26)
+- **Add Hints and Options Inline**: Holding `Ctrl`/`Cmd` in the reviewer now also reveals a **+ Add** row at the end of each Hints and Options list. `Ctrl`+click it, type the new text, and press `Enter` (or `Escape`/blur) to append it — no regeneration and no extra API call. The row stays hidden during normal review, and a blank entry adds nothing.
+- **Correct Answer Unaffected by Appends**: An appended option is always a distractor; the existing correct answer (first option) is never moved or replaced.
+- **Add Rows Excluded From Scans and Hotkeys**: The new `+ Add` rows are skipped by the HTML scraping fallback and by the number-key option hotkeys, so they can never be read as hint text or selected as an answer.
+
 ## 8.2.5 (2026-09-20)
 - **Provider Edit Dialog Crash Fixed**: Restored the missing custom error-code checkbox helper so opening a provider's edit window no longer raises `AttributeError: CustomProviderDialog has no attribute _add_skip_checkbox`.
 - **Provider Rename Synchronization**: Renaming a provider from the edit window now updates its rows and settings in the open Advanced Fallback Priority window, including thinking levels, timeouts, and saved provider-keyed configuration.

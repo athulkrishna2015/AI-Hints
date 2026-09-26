@@ -1618,7 +1618,14 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
     # 4. Modify the item
     is_removal = not new_value or not new_value.strip()
 
-    if item_type == "hints":
+    if index is None:
+        # Append a new item. Blank input adds nothing.
+        if item_type not in ("hints", "options"):
+            logger.error(f"AI-Hints: Unknown edit type {item_type}")
+            return
+        if not is_removal:
+            data[item_type].append(new_value)
+    elif item_type == "hints":
         items = list(data["hints"])
         if 0 <= index < len(items):
             if is_removal:
@@ -1670,6 +1677,10 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
     else:
         logger.error("AI-Hints: Failed to update note with edited items")
 
+def add_item(card, web, item_type: str, new_value: str):
+    """Append a new hint/option from the card's Ctrl+click "+ Add" row."""
+    edit_item(card=card, web=web, item_type=item_type, index=None, new_value=new_value)
+
 def on_webview_did_receive_js_message(handled, message, context):
     card, web = _get_card_and_web_from_context(context)
     
@@ -1682,6 +1693,14 @@ def on_webview_did_receive_js_message(handled, message, context):
                     web=web,
                     item_type=data.get("type"),
                     index=data.get("index"),
+                    new_value=data.get("value")
+                )
+                return (True, None)
+            if isinstance(data, dict) and data.get("action") == "ai_hints_add_item":
+                add_item(
+                    card=card,
+                    web=web,
+                    item_type=data.get("type"),
                     new_value=data.get("value")
                 )
                 return (True, None)

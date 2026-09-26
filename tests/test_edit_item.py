@@ -34,7 +34,7 @@ from aqt import mw
 mw.addonManager = MagicMock()
 mw.addonManager.getConfig.return_value = {}
 
-from addon.reviewer_hooks import edit_item, _remember_generated_hints, _cached_hints_for_card
+from addon.reviewer_hooks import edit_item, add_item, _remember_generated_hints, _cached_hints_for_card
 from addon.card_parser import CardParser
 
 def test_edit_item_removal():
@@ -118,5 +118,66 @@ def test_edit_item_removal():
         print("  FAIL: clear_hints was not triggered.")
         exit(1)
 
+class _MockNote:
+    def __init__(self, block):
+        self.data = {"Back": f'Original text{block}'}
+
+    def __setitem__(self, key, value):
+        self.data[key] = value
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def keys(self):
+        return self.data.keys()
+
+    def values(self):
+        return self.data.values()
+
+    def items(self):
+        return self.data.items()
+
+    def __contains__(self, key):
+        return key in self.data
+
+
+def _card_with_block(block):
+    note = _MockNote(block)
+    card = MagicMock()
+    card.id = 555
+    card.ord = 0
+    card.note.return_value = note
+    return card, note
+
+
+def test_add_item_appends_hint_and_option():
+    """Ctrl+click "+ Add" appends; a blank add is a no-op."""
+    print("--- Running add_item Tests ---")
+    import addon.reviewer_hooks as rh
+    rh._cached_hints = {}
+    mw.col = MagicMock()
+
+    block = ('<div class="ai-hints-json" style="display:none;">'
+             '{"c1": {"hints": ["Hint 1"], "options": ["Correct"]}}</div>')
+    card, note = _card_with_block(block)
+    parser = CardParser()
+
+    add_item(card, None, "hints", "Hint 3")
+    saved = parser.find_hints_block(note, card)
+    assert saved and "Hint 1" in saved and "Hint 3" in saved, f"append failed: {saved}"
+
+    # Blank input must not add an empty item.
+    add_item(card, None, "hints", "   ")
+    assert parser.find_hints_block(note, card) == saved, "blank add should be a no-op"
+
+    # Appending an option keeps the existing correct answer (index 0).
+    add_item(card, None, "options", "NewDistractor")
+    saved = parser.find_hints_block(note, card)
+    assert saved and "NewDistractor" in saved and "Correct" in saved, f"option append failed: {saved}"
+
+    print("  PASS: add_item appends hints/options and ignores blanks.")
+
+
 if __name__ == "__main__":
     test_edit_item_removal()
+    test_add_item_appends_hint_and_option()
