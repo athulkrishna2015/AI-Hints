@@ -680,7 +680,10 @@ class CardParser:
                                 note = card.note()
                             except Exception:
                                 pass
-                        if note:
+                        # A skip marker for a card whose {{cN::}} is missing is the one key that
+                        # legitimately looks orphaned. Purging it here would throw away the
+                        # marker before it is saved, so the card is re-queued on every pass.
+                        if note and not new_data.get("_skipped"):
                             parsed = self.purge_orphaned_cloze_keys(parsed, note)
                              
                         new_block = self._build_block(parsed, toggles, card if not card_key else None, minimal=bool(new_data.get("_skipped")))
@@ -718,7 +721,7 @@ class CardParser:
                             
                             # Merge data
                             parsed[card_key] = new_data
-                            if note:
+                            if note and not new_data.get("_skipped"):
                                 parsed = self.purge_orphaned_cloze_keys(parsed, note)
                             new_block = self._build_block(parsed, toggles, None, minimal=bool(new_data.get("_skipped"))) # keep universal
                             return current_val[:match.start()] + new_block + current_val[match.end():]

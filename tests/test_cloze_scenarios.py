@@ -231,6 +231,27 @@ class TestClozeScenarios(unittest.TestCase):
         self.assertIn("Bhopal", field_val)
         self.assertNotIn("c2", field_val) # c2 should have been purged as an orphan!
 
+    def test_skip_marker_survives_for_card_with_missing_cloze_deletion(self):
+        # Card ord 0 needs c1 but the note only has c2 -> batch reports empty content and
+        # marks it skipped. The marker must survive the orphan purge, otherwise the card is
+        # re-queued on every verification pass forever.
+        text = (
+            "answer {{c2::Nagpur}}"
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c2\": {\"hints\": [\"sibling hint\"], \"options\": []}}"
+            "</div>"
+        )
+        note = MockNote({"Text": text}, model_name="Cloze")
+        orphan_card = MockCard(0)
+        self.assertFalse(self.parser.is_card_skipped(note, orphan_card))
+
+        updated = self.parser.update_note_with_hints(
+            note, {"hints": [], "options": [], "_skipped": True}, card=orphan_card, skip_if_exists=True
+        )
+        self.assertTrue(updated)
+        self.assertTrue(self.parser.is_card_skipped(note, orphan_card))
+        self.assertIn("sibling hint", note["Text"])  # sibling card's hints untouched
+
 
 if __name__ == "__main__":
     unittest.main()

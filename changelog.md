@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.3.1 (2026-10-01)
+- **Batch No Longer Loops Forever on Cards With a Missing Cloze**: A card whose cloze deletion is absent from the note (e.g. a `c1` card on a note that only contains `{{c2::…}}`) has no content, so the batch marked it skipped — but the orphaned-cloze-key purge then deleted that skip marker in the same save. The card was re-queued on every verification pass until the 10-pass cap, ending each run as a permanent error (`✨ 18 / 20 cards · ⚠️ Errors: 2`). Skip markers are no longer purged, so the card is marked skipped once and the run finishes clean.
+
 ## 8.3.0 (2026-09-26)
 - **Add Hints and Options Inline**: Holding `Ctrl`/`Cmd` in the reviewer now also reveals a **+ Add** row at the end of each Hints and Options list. `Ctrl`+click it, type the new text, and press `Enter` (or `Escape`/blur) to append it — no regeneration and no extra API call. The row stays hidden during normal review, and a blank entry adds nothing.
 - **Correct Answer Unaffected by Appends**: An appended option is always a distractor; the existing correct answer (first option) is never moved or replaced.
