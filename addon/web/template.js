@@ -136,6 +136,10 @@
             font-size: 0.9em;
         }
         .ai-hints-ctrl-active .ai-hints-add-item { display: block; }
+        /* The editor textarea lives inside this row, so the row must stay visible
+           while it is being edited - releasing Ctrl after Ctrl+clicking "+ Add"
+           would otherwise collapse the textarea the user is typing into. */
+        .ai-hints-add-item.ai-hints-editing { display: block; }
         .ai-hints-ctrl-active .ai-hints-add-item:hover {
             background-color: rgba(255, 235, 59, 0.15) !important;
             border-radius: 4px;
