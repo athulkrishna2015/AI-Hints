@@ -48,6 +48,7 @@ class NetworkResumeTests(unittest.TestCase):
         self.rh = reviewer_hooks
         self.rh._network_paused_card = None
         self.rh._generating_card_ids.clear()
+        self.rh._generation_tokens.clear()
         # Bare envs import the addon with mw=None; the resume path reads
         # mw.reviewer, so give it a reviewer double for the duration of the test.
         self._prev = {
@@ -65,6 +66,7 @@ class NetworkResumeTests(unittest.TestCase):
         for name, value in self._prev.items():
             setattr(self.rh, name, value)
         self.rh._generating_card_ids.clear()
+        self.rh._generation_tokens.clear()
 
     def test_resume_restarts_paused_card_instead_of_pregeneration(self):
         rh = self.rh
@@ -110,6 +112,79 @@ class NetworkResumeTests(unittest.TestCase):
         rh.generate_hints.assert_not_called()
         rh._trigger_next_pregeneration.assert_called_once()
 
+
+class GenerationOwnershipTests(unittest.TestCase):
+    def test_cancel_invalidates_previous_attempt_token(self):
+        from addon import reviewer_hooks as rh
+
+        card_id = 7319
+        first_token = rh._next_generation_token(card_id)
+        rh._next_generation_token(card_id)  # cancel invalidates the running attempt
+
+        self.assertFalse(rh._generation_is_current(card_id, first_token))
+
+    def test_new_attempt_supersedes_late_completion_from_old_attempt(self):
+        from addon import reviewer_hooks as rh
+
+        card_id = 7320
+        old_token = rh._next_generation_token(card_id)
+        new_token = rh._next_generation_token(card_id)
+
+        self.assertFalse(rh._generation_is_current(card_id, old_token))
+        self.assertTrue(rh._generation_is_current(card_id, new_token))
+
+    def test_tokens_are_unique_even_after_a_completed_token_is_retired(self):
+        from addon import reviewer_hooks as rh
+
+        card_id = 7323
+        first = rh._next_generation_token(card_id)
+        rh._generation_tokens.pop(card_id, None)
+        second = rh._next_generation_token(card_id)
+
+        self.assertNotEqual(first, second)
+
+    def test_result_input_must_still_match_current_card_content(self):
+        from addon import reviewer_hooks as rh
+
+        card = MagicMock()
+        card.id = 7321
+        fresh_card = MagicMock()
+        parser = MagicMock()
+        parser.get_note_content.return_value = ("edited front", "answer")
+
+        with unittest.mock.patch.object(rh, "mw", MagicMock()) as mocked_mw:
+            mocked_mw.col.get_card.return_value = fresh_card
+            self.assertFalse(
+                rh._generation_input_is_current(card, "original front", "answer", parser)
+            )
+
+            parser.get_note_content.return_value = ("original front", "answer")
+            self.assertTrue(
+                rh._generation_input_is_current(card, "original front", "answer", parser)
+            )
+
+    def test_new_pregen_cache_entry_is_rejected_when_prompt_source_changed(self):
+        from addon import reviewer_hooks as rh
+
+        card = MagicMock()
+        card.id = 7322
+        fresh_card = MagicMock()
+        parser = MagicMock()
+        parser.get_note_content.return_value = ("edited front", "answer")
+        data = {
+            "hints": ["old result"],
+            "_pregen_front": "original front",
+            "_pregen_back": "answer",
+        }
+
+        with unittest.mock.patch.object(rh, "mw", MagicMock()) as mocked_mw:
+            mocked_mw.col.get_card.return_value = fresh_card
+            self.assertFalse(rh._pregen_data_matches_card(card, data, parser))
+
+    def test_legacy_pregen_cache_without_source_snapshot_remains_compatible(self):
+        from addon import reviewer_hooks as rh
+
+        self.assertTrue(rh._pregen_data_matches_card(MagicMock(), {"hints": ["legacy"]}, MagicMock()))
 
 class AddRowLayoutTests(unittest.TestCase):
     def setUp(self):

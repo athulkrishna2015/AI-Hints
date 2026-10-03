@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.3.4 (2026-10-04)
+- **Prevent Overlapping Generations from Overwriting Newer Results**: Canceling a request now invalidates that attempt, and any late completion (including a lingering provider response) is discarded if canceled or superseded by a newer generation for the same card.
+- **Discard Results for Cards Edited Mid-Request**: Before saving a response, AI-Hints reloads the card and verifies its front/back content still matches the exact prompt source. If the card changed while the model was working, the stale response is discarded.
+- **Validate Cached Pre-Generation Data**: New pre-generated cache entries retain the prompt source and are checked against the current card before use. Stale cache data is discarded, and a cache hit cannot override a fresh generation already running for that card. Legacy cache entries without source metadata remain supported.
+
 ## 8.3.3 (2026-10-03)
 - **Faster Return From an Outage**: The connectivity monitor polled on a flat 30-second interval even while offline, so generation sat idle for up to half a minute after the network came back. It now checks every **3 seconds while offline** and backs off to 30 seconds once online.
 - **Generation Resumes by Itself When the Network Returns**: The offline notice promised "Generation will resume when connectivity returns", but nothing implemented it — the card stayed bare until you clicked Generate again. A card paused by the offline check is now retried automatically on reconnect (and only then, so a reconnect can never fire a duplicate or billed request); if nothing was paused, the normal pre-generation refill runs as before.

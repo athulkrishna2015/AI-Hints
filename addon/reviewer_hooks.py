@@ -45,6 +45,51 @@ def register_network_state_callback(*args, **kwargs):
 
 _hooks_registered = False
 _generating_card_ids = set()
+# Monotonic per-card generation ownership. Cancelling/superseding an attempt
+# invalidates its token so late provider/linger completions cannot write.
+_generation_tokens = {}
+_generation_serial = 0
+
+
+def _next_generation_token(card_id):
+    global _generation_serial
+    _generation_serial += 1
+    token = _generation_serial
+    _generation_tokens[card_id] = token
+    return token
+
+
+def _generation_is_current(card_id, token):
+    return _generation_tokens.get(card_id) == token
+
+
+def _generation_input_is_current(card, expected_front, expected_back, parser):
+    """Refuse to apply a response if the card content changed mid-request."""
+    try:
+        fresh_card = mw.col.get_card(card.id)
+        front, back = parser.get_note_content(fresh_card.note(), fresh_card)
+        return front == expected_front and back == expected_back
+    except Exception as e:
+        logger.info(f"AI-Hints: Could not verify generation input for card {card.id}: {e}")
+        return False
+
+
+def _pregen_data_matches_card(card, data, parser):
+    """Validate disk-cache entries against the exact prompt source when known."""
+    if not isinstance(data, dict) or "_pregen_front" not in data or "_pregen_back" not in data:
+        # Older cache entries did not retain the prompt snapshot. Preserve their
+        # compatibility; newly generated entries always carry both values.
+        return True
+    return _generation_input_is_current(
+        card, data.get("_pregen_front", ""), data.get("_pregen_back", ""), parser
+    )
+
+
+def _strip_pregen_source(data):
+    if isinstance(data, dict):
+        data.pop("_pregen_front", None)
+        data.pop("_pregen_back", None)
+    return data
 # Card whose generation was aborted because the network was down; retried as soon
 # as connectivity returns so a card is never left permanently un-generated.
 _network_paused_card = None
@@ -1818,6 +1863,7 @@ def cancel_hints(card=None, web=None):
     state.GLOBAL_STOP = True
     
     if card_id:
+        _generation_tokens.pop(card_id, None)
         _generating_card_ids.discard(card_id)
         
     if web:
@@ -2956,10 +3002,22 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
     # Check cache first for manual generation (to avoid redundant API calls)
     pregen_cache = _get_pregenerated_data()
     if not is_pregen and card_id in pregen_cache:
-        logger.info(f"AI-Hints: Found pre-generated data for card {card_id} in disk cache. Applying directly.")
+        cache_parser = CardParser(
+            mathjax_format=config.get("mathjax_format", "delimiters"),
+            fix_latex=config.get("fix_latex", False),
+        )
+        # Do not consume a cached result when another fresh attempt is already
+        # running for this card. The worker completion will own the write.
+        if card_id in _generating_card_ids:
+            if web:
+                _set_frontend_generating(web, True, card_id=card_id)
+            return
         cached_data = pregen_cache.pop(card_id)
-        _apply_results_to_card(card, cached_data, is_manual=is_manual, web=web)
-        return
+        if _pregen_data_matches_card(card, cached_data, cache_parser):
+            logger.info(f"AI-Hints: Found pre-generated data for card {card_id} in disk cache. Applying directly.")
+            _apply_results_to_card(card, _strip_pregen_source(cached_data), is_manual=is_manual, web=web)
+            return
+        logger.info(f"AI-Hints: Discarding stale pre-generated data for card {card_id}; source content changed.")
 
     if card_id in _generating_card_ids:
         if not is_pregen and web:
@@ -2999,6 +3057,10 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
             _trigger_next_pregeneration(card_id)
         return
 
+    # Starting a new attempt supersedes any older worker for this card. Its
+    # provider request may still return (including via linger), but on_done
+    # must not allow it to write over the newer attempt's result.
+    generation_token = _next_generation_token(card_id)
     _generating_card_ids.add(card_id)
     # Past the offline gate: this attempt owns the card now, so a reconnect
     # must not fire a duplicate generation for it.
@@ -3077,6 +3139,38 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
         _set_frontend_generating(web, True, card_id, is_pregen)
 
     def on_done(data):
+        # A cancellation or a newer generation may have claimed this card while
+        # the network request was still running. Such stale completions must
+        # never touch the note or clear the newer attempt's generating state.
+        if not _generation_is_current(card_id, generation_token):
+            logger.info(
+                f"AI-Hints: Discarding stale generation result for card {card_id} "
+                f"(attempt {generation_token}, current {_generation_tokens.get(card_id)})."
+            )
+            return
+
+        # A cancel is authoritative even if the user navigated to another card
+        # (which may reset the legacy global emergency-stop flag).
+        if state.GLOBAL_STOP:
+            logger.info(f"AI-Hints: Discarding generation result for card {card_id} after cancellation/stop.")
+            _generating_card_ids.discard(card_id)
+            _set_frontend_generating(web, False, card_id, is_pregen)
+            return
+
+        if not _generation_input_is_current(card, front, back, parser):
+            logger.info(
+                f"AI-Hints: Discarding generation result for card {card_id}; "
+                "card content changed while the request was in flight."
+            )
+            _generation_tokens.pop(card_id, None)
+            _generating_card_ids.discard(card_id)
+            _set_frontend_generating(web, False, card_id, is_pregen, "Stale", "Card content changed")
+            return
+
+        # This callback owns the card and will run once; retire the token now.
+        # The global serial ensures a later attempt can never reuse it.
+        _generation_tokens.pop(card_id, None)
+
         # ALWAYS discard from generating set immediately so other code (and UI refreshes)
         # know this specific task is finished.
         _generating_card_ids.discard(card_id)
@@ -3105,13 +3199,15 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
                 
                 if data and (data.get("hints") or data.get("options")):
                     data["_generation_type"] = "pregen"
+                    data["_pregen_front"] = front
+                    data["_pregen_back"] = back
                     if is_on_screen:
                          logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Applied immediately).")
-                         _apply_results_to_card(card, data, is_manual=False, web=web, skip_redraw=True)
+                         _apply_results_to_card(card, _strip_pregen_source(data), is_manual=False, web=web, skip_redraw=True)
                          # Explicitly clear frontend state as well for double safety
                          _set_frontend_generating(web, False, card_id, is_pregen)
                     elif config.get("pregen_direct_save", False):
-                        _apply_results_to_card(card, data, is_manual=False, web=None, update_ui=False, skip_undo_snapshot=True)
+                        _apply_results_to_card(card, _strip_pregen_source(data), is_manual=False, web=None, update_ui=False, skip_undo_snapshot=True)
                         logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Saved directly to note).")
                         _set_frontend_generating(web, False, card_id, is_pregen)
                     else:
@@ -3148,7 +3244,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
                         data["_generation_type"] = "regenerate" if card_has_hints(card) else "manual"
                     else:
                         data["_generation_type"] = "auto"
-                    if _apply_results_to_card(card, data, is_manual=is_manual, web=None, update_ui=False, skip_undo_snapshot=True):
+                    if _apply_results_to_card(card, _strip_pregen_source(data), is_manual=is_manual, web=None, update_ui=False, skip_undo_snapshot=True):
                         _trigger_next_pregeneration(card_id)
                 _set_frontend_generating(web, False, card_id, is_pregen)
                 return
@@ -3172,7 +3268,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
                 else:
                     data["_generation_type"] = "auto"
 
-            if _apply_results_to_card(card, data, is_manual=is_manual, web=web):
+            if _apply_results_to_card(card, _strip_pregen_source(data), is_manual=is_manual, web=web):
                 # The current card just got its data — refill the pre-generation
                 # buffer for the NEXT cards regardless of how this generation was
                 # started (manual generations used to skip this, starving the
@@ -3729,12 +3825,18 @@ def init_hooks():
                 # Retention: We do not pop here. It will be applied on the next show after the lockout.
             else:
                 data = pregen_cache.pop(card.id)
-                logger.debug(f"AI-Hints: Applying pre-generated data for card {card.id}")
-                _apply_results_to_card(card, data, is_manual=False, skip_redraw=True)
-                # Now push the applied data to the UI and pre-generate the NEXT one
-                _trigger_frontend_setup(card)
-                _trigger_next_pregeneration(card.id)
-                return
+                cache_parser = CardParser(
+                    mathjax_format=config.get("mathjax_format", "delimiters"),
+                    fix_latex=config.get("fix_latex", False),
+                )
+                if _pregen_data_matches_card(card, data, cache_parser):
+                    logger.debug(f"AI-Hints: Applying pre-generated data for card {card.id}")
+                    _apply_results_to_card(card, _strip_pregen_source(data), is_manual=False, skip_redraw=True)
+                    # Now push the applied data to the UI and pre-generate the NEXT one
+                    _trigger_frontend_setup(card)
+                    _trigger_next_pregeneration(card.id)
+                    return
+                logger.info(f"AI-Hints: Discarding stale pre-generated data for card {card.id}; source content changed.")
 
         # Trigger frontend setup.
         # The JS-side 'aiHintsSetup' is now smarter and will bail out if
