@@ -45,6 +45,9 @@ def register_network_state_callback(*args, **kwargs):
 
 _hooks_registered = False
 _generating_card_ids = set()
+# Card whose generation was aborted because the network was down; retried as soon
+# as connectivity returns so a card is never left permanently un-generated.
+_network_paused_card = None
 _just_generated_card_ids = set()
 _just_cleared_card_ids = set()
 
@@ -474,7 +477,31 @@ def _trigger_next_pregeneration(current_card_id=None):
 def _on_network_state_changed(is_online):
     if is_online:
         # Network callbacks run on the monitor thread; move work to Anki's UI loop.
-        QTimer.singleShot(0, _trigger_next_pregeneration)
+        # Retrying the paused card first (and only pre-generation when nothing was
+        # paused) gets the visible card generating again immediately on reconnect,
+        # instead of leaving it stuck until the next manual click.
+        QTimer.singleShot(0, _resume_generation_after_network_return)
+
+
+def _resume_generation_after_network_return():
+    """Restart generation for the card that was paused while the network was down."""
+    try:
+        if _network_paused_card is not None:
+            card = mw.reviewer.card if mw.reviewer else None
+            if card and card.id == _network_paused_card and card.id not in _generating_card_ids:
+                logger.info(
+                    "AI-Hints: Network restored; resuming generation for card %s.",
+                    card.id,
+                )
+                generate_hints(is_manual=False, card=card)
+                return
+        _trigger_next_pregeneration()
+    except Exception as e:
+        logger.error(f"AI-Hints: Could not resume generation after network return: {e}")
+        try:
+            _trigger_next_pregeneration()
+        except Exception:
+            pass
 
 def get_web_assets():
     global _js_cache, _css_cache
@@ -2903,6 +2930,7 @@ def close_popup_if_open():
         _popup_dialog_instance = None
 
 def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, override_provider=None, override_model=None):
+    global _network_paused_card
     if card is None:
         card = mw.reviewer.card
     if not card:
@@ -2972,6 +3000,10 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
         return
 
     _generating_card_ids.add(card_id)
+    # Past the offline gate: this attempt owns the card now, so a reconnect
+    # must not fire a duplicate generation for it.
+    if _network_paused_card == card_id:
+        _network_paused_card = None
 
     restart_speed_focus_timer()
 
@@ -3010,6 +3042,10 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
         if web:
             _set_frontend_generating(web, False, card_id, is_pregen, "Offline", "Network offline")
         _generating_card_ids.discard(card_id)
+        # Only a foreground/auto attempt is worth resuming; a paused pre-generation
+        # is picked up by the normal chain on reconnect anyway.
+        if not is_pregen:
+            _network_paused_card = card_id
         return
 
     if override_provider and not client.has_ready_provider(override_provider):

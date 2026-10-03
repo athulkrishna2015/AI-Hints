@@ -2,6 +2,12 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.3.3 (2026-10-03)
+- **Faster Return From an Outage**: The connectivity monitor polled on a flat 30-second interval even while offline, so generation sat idle for up to half a minute after the network came back. It now checks every **3 seconds while offline** and backs off to 30 seconds once online.
+- **Generation Resumes by Itself When the Network Returns**: The offline notice promised "Generation will resume when connectivity returns", but nothing implemented it — the card stayed bare until you clicked Generate again. A card paused by the offline check is now retried automatically on reconnect (and only then, so a reconnect can never fire a duplicate or billed request); if nothing was paused, the normal pre-generation refill runs as before.
+- **No More Fake "Generating…" Button**: After an offline or failed attempt the button restored whatever text it happened to be showing — which was the optimistic `✨ Generating… (Stop)` label, while its animation class had already been removed. That left a button that looked busy but had no blue pulse. Each button now records its resting label at creation and restores that instead.
+- **`+ Add` Moved Onto the Header Line**: Holding `Ctrl`/`Cmd` used to insert a full-width row at the end of each list, shoving the hints and everything below it (including the card's second field) down by ~57px. The add control is now a small chip sitting immediately to the right of the `Options:` / `Hints:` label, in the header row that already existed — so nothing moves when it appears. While you are typing into it, it expands into a panel over the list, so editing doesn't shift the card either. Sections rendered without a label keep the same zero-height behaviour as before.
+
 ## 8.3.2 (2026-10-02)
 - **`+ Add` Textbox No Longer Collapses**: Holding `Ctrl`/`Cmd` reveals the **+ Add** row, but as soon as you released `Ctrl` after `Ctrl`+clicking it, the textbox vanished before you could type — the row hides whenever `Ctrl`/`Cmd` is not held, and the editor lives inside that row. The row now stays visible for as long as its textbox is open, so you can let go of `Ctrl` and type straight away (still commits on `Enter`, `Escape`, or blur, and still hides again once closed). Editing existing hints and options was never affected.
 

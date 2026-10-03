@@ -132,17 +132,49 @@
             display: none;
             list-style: none;
             cursor: pointer;
-            opacity: 0.7;
-            font-size: 0.9em;
+            opacity: 0.65;
+            /* Sits on the section's own header line, immediately after the
+               "Options:" / "Hints:" text, so revealing it adds no height and
+               pushes nothing below it. */
+            font-size: 0.72em;
+            line-height: 1;
+            padding: 0 5px;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 3px;
+            background: #f9f9f9;
+            white-space: nowrap;
         }
-        .ai-hints-ctrl-active .ai-hints-add-item { display: block; }
-        /* The editor textarea lives inside this row, so the row must stay visible
-           while it is being edited - releasing Ctrl after Ctrl+clicking "+ Add"
-           would otherwise collapse the textarea the user is typing into. */
-        .ai-hints-add-item.ai-hints-editing { display: block; }
+        .nightMode .ai-hints-add-item { background: #2b2b2b; border-color: #555; }
+        .ai-hints-section { position: relative; }
+        /* The header row already exists for the label, so the chip rides along
+           in it. A section rendered without a label has no row to reuse, so its
+           wrapper collapses to zero height and the chip overflows it instead of
+           adding a line. */
+        .ai-hints-head { display: flex; align-items: center; justify-content: flex-start; gap: 6px; height: 14px; }
+        .ai-hints-head--bare { height: 0; align-items: flex-start; }
+        .ai-hints-head > .ai-hints-title { margin-bottom: 0; }
+        .ai-hints-ctrl-active .ai-hints-add-item { display: inline-block; vertical-align: middle; }
+        /* The editor textarea lives inside this chip, so it must stay visible after
+           Ctrl is released. Editing expands it into a panel over the list, which
+           keeps the header line height unchanged while typing. */
+        .ai-hints-add-item.ai-hints-editing {
+            display: block;
+            /* Panel over the list rather than in flow, so typing into it does
+               not shift the card either. */
+            position: absolute;
+            left: 4px;
+            right: 4px;
+            top: 18px;
+            z-index: 6;
+            font-size: 0.9em;
+            opacity: 1;
+            padding: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+        .nightMode .ai-hints-add-item.ai-hints-editing { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
         .ai-hints-ctrl-active .ai-hints-add-item:hover {
             background-color: rgba(255, 235, 59, 0.15) !important;
-            border-radius: 4px;
+            border-radius: 3px;
         }
         .nightMode.ai-hints-ctrl-active .ai-hints-add-item:hover {
             background-color: rgba(255, 235, 59, 0.08) !important;
@@ -616,12 +648,17 @@
         section.className = 'ai-hints-section tex2jax_process';
         section.style.display = 'none';
 
+        // Header row: the section label and the Ctrl-only "+ Add" chip share one line,
+        // so the chip can appear without changing the section's height.
+        const head = document.createElement('div');
+        head.className = showTitle ? 'ai-hints-head' : 'ai-hints-head ai-hints-head--bare';
         if (showTitle) {
             const label = document.createElement('span');
             label.className = 'ai-hints-title';
             label.textContent = title;
-            section.appendChild(label);
+            head.appendChild(label);
         }
+        section.appendChild(head);
 
         const list = document.createElement('ul');
         list.className = title.toLowerCase().includes('hint') ? 'ai-hints-hint-list' : 'ai-hints-list';
@@ -762,10 +799,11 @@
         });
         if (title.toLowerCase().includes('option')) shuffle(listItems, seed);
         listItems.forEach(li => list.appendChild(li));
-        // Ctrl+click the "+" row to append a new hint/option. Hidden until
-        // Ctrl/Cmd is held, so it never shows up during normal review.
+        // Ctrl+click the "+ Add" chip (on the header line, beside the label) to append
+        // a new hint/option. Hidden until Ctrl/Cmd is held, so it never shows up
+        // during normal review.
         if (isAddonActive) {
-            const addLi = document.createElement('li');
+            const addLi = document.createElement('span');
             addLi.className = 'ai-hints-add-item';
             addLi.dataset.type = title.toLowerCase().includes('hint') ? 'hints' : 'options';
             addLi.dataset.addNew = 'true';
@@ -777,7 +815,7 @@
                     startInlineEditing(addLi);
                 }
             });
-            list.appendChild(addLi);
+            head.appendChild(addLi);
         }
         section.appendChild(list);
         parent.appendChild(section);
@@ -1365,6 +1403,10 @@
                     const genBtn = document.createElement('button');
                     genBtn.className = 'ai-hints-btn';
                     genBtn.textContent = hasContent ? "Regenerate" : "Generate AI Hints";
+                    // Resting label, used to restore the button after a failed/offline
+                    // attempt. The click handler overwrites textContent with the
+                    // optimistic "Generating..." label, so capturing it later is wrong.
+                    genBtn.dataset.restLabel = genBtn.textContent;
 
                     // If both hints and options generation are disabled, generation
                     // is fully off: disable the button and never show its animation.
@@ -1940,7 +1982,12 @@
                     btn.classList.remove('ai-hints-btn-lingering');
                     
                     if (isThisCard && (status === 'Failed' || status === 'Offline')) {
-                        const oldTxt = btn.textContent;
+                        // Restore the button's resting label, NOT the text it happens
+                        // to show now: on a failed/offline attempt that is the
+                        // optimistic "Generating... (Stop)" label whose animation class
+                        // was just removed, which left a fake generating button with no
+                        // pulse background.
+                        const oldTxt = btn.dataset.restLabel || btn.textContent;
                         btn.textContent = "❌ " + (status || "Failed");
                         if (errorMsg) btn.title = errorMsg;
                         setTimeout(() => { btn.textContent = oldTxt; btn.title = ""; }, 3000);

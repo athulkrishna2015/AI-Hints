@@ -264,7 +264,11 @@ def _start_network_monitor():
         _sleep_event = threading.Event()
         while True:
             _check_network_online()
-            _sleep_event.wait(30)
+            # Poll fast while offline so generation resumes within seconds of the
+            # connection coming back; back off to the normal interval when online.
+            # ponytail: single flag flip, not an event-driven watcher - a real
+            # socket/connectivity-notify listener would need per-platform code.
+            _sleep_event.wait(3 if _NETWORK_STATE["online"] is False else 30)
 
     _monitor_thread = threading.Thread(target=monitor, daemon=True)
     _monitor_thread.name = "AI-Hints-NetworkMonitor"
