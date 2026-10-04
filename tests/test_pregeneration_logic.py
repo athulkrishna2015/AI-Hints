@@ -142,6 +142,24 @@ class TestPregeneration(unittest.TestCase):
         
         # Simulate on_done being called for a pre-gen
         # We'll re-test _apply_results_to_card separately.
+
+    def test_temporary_missing_cloze_does_not_write_skipped_marker(self):
+        """A queued card observed before its new cloze settles must not be marked skipped."""
+        card = MagicMock()
+        card.id = 12346
+        card.ord = 1
+        card.note.return_value = MagicMock()
+
+        with patch('addon.reviewer_hooks.CardParser') as MockParser, \
+             patch('addon.reviewer_hooks._apply_results_to_card') as apply, \
+             patch('addon.reviewer_hooks._trigger_next_pregeneration') as next_pregen:
+            MockParser.return_value.get_note_content.return_value = ("", "")
+
+            generate_hints(is_manual=False, card=card, is_pregen=True)
+
+        apply.assert_not_called()
+        next_pregen.assert_called_once_with(card.id)
+        self.assertNotIn(card.id, _generating_card_ids)
         
     def test_consumption_logic(self):
         """Verify that cached data is applied when the card appears."""
@@ -307,8 +325,8 @@ class TestPregeneration(unittest.TestCase):
     @patch('addon.reviewer_hooks._apply_results_to_card')
     @patch('addon.reviewer_hooks.CardParser')
     @patch('addon.reviewer_hooks.AIClient')
-    def test_generate_hints_empty_card_marked_as_skipped(self, MockClient, MockParser, mock_apply_results):
-        """Verify that when a card is empty or missing a cloze, generate_hints marks it as skipped in DB."""
+    def test_generate_hints_empty_card_does_not_persist_skip(self, MockClient, MockParser, mock_apply_results):
+        """Transient missing-cloze content must not persist a skipped marker."""
         mock_card = MagicMock()
         mock_card.id = 9999
         
@@ -324,17 +342,7 @@ class TestPregeneration(unittest.TestCase):
         
         # Verify card was discarded from generating set
         self.assertNotIn(mock_card.id, _generating_card_ids)
-        # Verify skipped results were applied
-        mock_apply_results.assert_called_once()
-        args, kwargs = mock_apply_results.call_args
-        self.assertEqual(args[0], mock_card)
-        self.assertEqual(args[1]["hints"], [])
-        self.assertEqual(args[1]["options"], [])
-        self.assertEqual(args[1]["_skipped"], True)
-        self.assertEqual(kwargs.get("is_manual"), True)
-        # A skipped card must not trigger a full reviewer redraw (which would
-        # re-fire on_show_question and re-trigger auto-generation).
-        self.assertEqual(kwargs.get("skip_redraw"), True)
+        mock_apply_results.assert_not_called()
 
     def test_direct_pregen_save_is_configured_without_cache(self):
         self.assertFalse(json.load(open(os.path.join(os.path.dirname(__file__), "..", "addon", "config.json"))).get("pregen_direct_save"))

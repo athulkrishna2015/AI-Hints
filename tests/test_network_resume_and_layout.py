@@ -143,26 +143,6 @@ class GenerationOwnershipTests(unittest.TestCase):
 
         self.assertNotEqual(first, second)
 
-    def test_result_input_must_still_match_current_card_content(self):
-        from addon import reviewer_hooks as rh
-
-        card = MagicMock()
-        card.id = 7321
-        fresh_card = MagicMock()
-        parser = MagicMock()
-        parser.get_note_content.return_value = ("edited front", "answer")
-
-        with unittest.mock.patch.object(rh, "mw", MagicMock()) as mocked_mw:
-            mocked_mw.col.get_card.return_value = fresh_card
-            self.assertFalse(
-                rh._generation_input_is_current(card, "original front", "answer", parser)
-            )
-
-            parser.get_note_content.return_value = ("original front", "answer")
-            self.assertTrue(
-                rh._generation_input_is_current(card, "original front", "answer", parser)
-            )
-
     def test_new_pregen_cache_entry_is_rejected_when_prompt_source_changed(self):
         from addon import reviewer_hooks as rh
 
@@ -180,6 +160,11 @@ class GenerationOwnershipTests(unittest.TestCase):
         with unittest.mock.patch.object(rh, "mw", MagicMock()) as mocked_mw:
             mocked_mw.col.get_card.return_value = fresh_card
             self.assertFalse(rh._pregen_data_matches_card(card, data, parser))
+
+    def test_active_generation_is_not_rejected_just_because_card_is_edited(self):
+        from addon import reviewer_hooks as rh
+
+        self.assertFalse(hasattr(rh, "_generation_input_is_current"))
 
     def test_legacy_pregen_cache_without_source_snapshot_remains_compatible(self):
         from addon import reviewer_hooks as rh
@@ -218,6 +203,15 @@ class AddRowLayoutTests(unittest.TestCase):
             r"\.ai-hints-head--bare \{[^}]*height: 0;",
             "a section without a label must collapse its header row to zero height",
         )
+
+    def test_options_header_shows_model_metadata_when_present(self):
+        self.assertIn("data._model", self.js)
+        self.assertIn("modelLabel.textContent = modelName", self.js)
+        self.assertIn("title.toLowerCase().includes('option') && modelName", self.js)
+
+    def test_clear_button_is_not_gated_on_nonempty_generated_content(self):
+        self.assertIn("if (isAddonActive && data)", self.js)
+        self.assertIn("pycmd('ai_hints_clear')", self.js)
 
     def test_add_chip_stays_visible_while_editing(self):
         self.assertRegex(

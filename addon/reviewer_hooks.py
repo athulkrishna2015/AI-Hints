@@ -63,26 +63,24 @@ def _generation_is_current(card_id, token):
     return _generation_tokens.get(card_id) == token
 
 
-def _generation_input_is_current(card, expected_front, expected_back, parser):
-    """Refuse to apply a response if the card content changed mid-request."""
-    try:
-        fresh_card = mw.col.get_card(card.id)
-        front, back = parser.get_note_content(fresh_card.note(), fresh_card)
-        return front == expected_front and back == expected_back
-    except Exception as e:
-        logger.info(f"AI-Hints: Could not verify generation input for card {card.id}: {e}")
-        return False
-
-
 def _pregen_data_matches_card(card, data, parser):
     """Validate disk-cache entries against the exact prompt source when known."""
     if not isinstance(data, dict) or "_pregen_front" not in data or "_pregen_back" not in data:
         # Older cache entries did not retain the prompt snapshot. Preserve their
         # compatibility; newly generated entries always carry both values.
         return True
-    return _generation_input_is_current(
-        card, data.get("_pregen_front", ""), data.get("_pregen_back", ""), parser
-    )
+    return _pregen_source_is_current(card, data.get("_pregen_front", ""), data.get("_pregen_back", ""), parser)
+
+
+def _pregen_source_is_current(card, expected_front, expected_back, parser):
+    """Validate cached data against its original prompt before reusing it."""
+    try:
+        fresh_card = mw.col.get_card(card.id)
+        front, back = parser.get_note_content(fresh_card.note(), fresh_card)
+        return front == expected_front and back == expected_back
+    except Exception as e:
+        logger.info(f"AI-Hints: Could not verify cached pregen source for card {card.id}: {e}")
+        return False
 
 
 def _strip_pregen_source(data):
@@ -3036,23 +3034,18 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
         fix_latex=config.get("fix_latex", False)
     )
 
-    # Early bail-out for contentless cards (e.g. a missing cloze deletion for
-    # this ordinal). Detect BEFORE adding the card to _generating_card_ids and
-    # before any network/provider checks, so an empty card never shows the
-    # generating animation, never makes an API/network call, and never triggers
-    # a costly card refresh.
+    # A reviewer card can temporarily appear contentless while a cloze is being
+    # created/edited, or while Anki is reconciling a just-added cloze card.
+    # Never persist `_skipped` from this transient state: doing so can leave a
+    # newly-created card permanently marked skipped. Just bail out without a
+    # write; a later explicit request or review pass can retry with settled data.
     front, back = parser.get_note_content(card.note(), card)
     if not front and not back:
-        logger.info("AI-Hints: Skipping generation for card %s as no content was found (likely a missing cloze).", card_id)
-
-        gtype = "pregen" if is_pregen else ("regenerate" if card_has_hints(card) else ("manual" if is_manual else "auto"))
-        data = {"hints": [], "options": [], "_skipped": True, "_generation_type": gtype}
-
-        # DB-only update (skip tags etc.). skip_redraw avoids a full card reload,
-        # which would re-fire on_show_question and retry generation.
-        _apply_results_to_card(card, data, is_manual=is_manual, web=web, skip_redraw=True)
-
-        # If this was a pre-generation, trigger the next one so the chain doesn't break
+        logger.info(
+            "AI-Hints: No usable content for card %s (likely a missing or changing cloze); "
+            "not saving a skipped marker.",
+            card_id,
+        )
         if is_pregen:
             _trigger_next_pregeneration(card_id)
         return
@@ -3155,16 +3148,6 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
             logger.info(f"AI-Hints: Discarding generation result for card {card_id} after cancellation/stop.")
             _generating_card_ids.discard(card_id)
             _set_frontend_generating(web, False, card_id, is_pregen)
-            return
-
-        if not _generation_input_is_current(card, front, back, parser):
-            logger.info(
-                f"AI-Hints: Discarding generation result for card {card_id}; "
-                "card content changed while the request was in flight."
-            )
-            _generation_tokens.pop(card_id, None)
-            _generating_card_ids.discard(card_id)
-            _set_frontend_generating(web, False, card_id, is_pregen, "Stale", "Card content changed")
             return
 
         # This callback owns the card and will run once; retire the token now.

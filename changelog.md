@@ -2,10 +2,17 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.4.0 (2026-10-04)
+- **Don't Mark Temporarily Missing Clozes as Skipped**: During review, Anki can briefly expose a newly created cloze card before its cloze content is visible to the add-on. A contentless reviewer/pre-generation attempt now leaves the note unchanged instead of persisting `{"_skipped": true}`, and pre-generation continues to the next queued card.
+- **Clear Is Available for Skipped/Empty Card Data**: The reviewer Clear control is no longer hidden when the active card data contains no hints/options (including a saved skipped marker). Clear removes the marker and skipped tag so generation can be tried again later.
+- **Show the Generating Model Beside Options**: The Options header now displays the `_model` value saved in the card's AI-Hints JSON, when available.
+- **Prevent Overlapping Generations from Overwriting Newer Results**: Canceling a request invalidates that attempt, and late completions (including lingering provider responses) are discarded if canceled or superseded by a newer generation for the same card.
+- **Validate Cached Pre-Generation Data**: New pre-generated cache entries retain the prompt source and are checked against the current card before use. Stale cached data is discarded, and a cache hit cannot override a fresh generation already running for that card. Legacy entries without source metadata remain supported. Active generations are not discarded solely because you edit the card while they run.
+
 ## 8.3.4 (2026-10-04)
 - **Prevent Overlapping Generations from Overwriting Newer Results**: Canceling a request now invalidates that attempt, and any late completion (including a lingering provider response) is discarded if canceled or superseded by a newer generation for the same card.
-- **Discard Results for Cards Edited Mid-Request**: Before saving a response, AI-Hints reloads the card and verifies its front/back content still matches the exact prompt source. If the card changed while the model was working, the stale response is discarded.
 - **Validate Cached Pre-Generation Data**: New pre-generated cache entries retain the prompt source and are checked against the current card before use. Stale cache data is discarded, and a cache hit cannot override a fresh generation already running for that card. Legacy cache entries without source metadata remain supported.
+- **Don't Mark Temporarily Missing Clozes as Skipped**: During review, Anki can briefly expose a newly created cloze card before its cloze content is visible to the add-on. A contentless reviewer/pregen attempt now leaves the note unchanged instead of persisting `{"_skipped": true}`, and pre-generation continues to the next queued card.
 
 ## 8.3.3 (2026-10-03)
 - **Faster Return From an Outage**: The connectivity monitor polled on a flat 30-second interval even while offline, so generation sat idle for up to half a minute after the network came back. It now checks every **3 seconds while offline** and backs off to 30 seconds once online.
