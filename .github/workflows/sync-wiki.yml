@@ -1,0 +1,80 @@
+name: Sync docs to wiki
+
+# Publishes docs/ into the repository wiki so the GitHub wiki mirrors the docs
+# folder. Runs only when docs actually change (plus manual dispatch), and skips
+# the commit entirely when the wiki is already up to date.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "docs/**"
+      - ".github/workflows/sync-wiki.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-wiki
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out add-on repository
+        uses: actions/checkout@v4
+
+      - name: Check out wiki repository
+        uses: actions/checkout@v4
+        with:
+          repository: athulkrishna2015/AI-Hints.wiki
+          ref: master
+          path: .wiki
+          token: ${{ secrets.WIKI_TOKEN }}
+
+      - name: Publish docs as wiki pages
+        run: |
+          set -euo pipefail
+          cp docs/*.md .wiki/
+          # The wiki landing page is Home, not "index".
+          mv -f .wiki/index.md .wiki/Home.md
+
+          python3 - <<'PY'
+          import pathlib
+
+          repo = "https://github.com/athulkrishna2015/AI-Hints/blob/master"
+          # Links that escape docs/ cannot resolve inside a wiki page, so point
+          # them at the add-on repository instead.
+          mapping = {
+              "../AGENTS.md": f"{repo}/AGENTS.md",
+              "../changelog.md": f"{repo}/changelog.md",
+              "../README.md": "https://github.com/athulkrishna2015/AI-Hints",
+              "../docs/storage.md": f"{repo}/docs/storage.md",
+              "../docs/data-format.md": f"{repo}/docs/data-format.md",
+              "../docs/frontend.md": f"{repo}/docs/frontend.md",
+              "../docs/architecture.md": f"{repo}/docs/architecture.md",
+              "../addon/ai_hints.log": "<profile>/ai_hints_bin/ai_hints.log",
+          }
+          for page in pathlib.Path(".wiki").glob("*.md"):
+              text = page.read_text(encoding="utf-8")
+              updated = text
+              for source, target in mapping.items():
+                  updated = updated.replace(f"]({source})", f"]({target})")
+              if updated != text:
+                  page.write_text(updated, encoding="utf-8")
+          PY
+
+      - name: Commit and push changes
+        working-directory: .wiki
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Wiki is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: sync docs/ from the add-on repository"
+          git push origin HEAD:master
