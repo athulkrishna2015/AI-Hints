@@ -24,7 +24,7 @@ When AI-Hints generates hints and options for a card, it stores the results in a
 | `hints` | The generated hint list, rendered in the collapsible Hints panel. |
 | `options` | The MCQ options shown to you (with distractors), rendered in the Options panel. |
 | `correct_answer` | The **current/displayed** correct answer. Used to render the correct option and highlight it green. This value is **mutable** — inline-editing an option may change it. |
-| `_provider` / `_model` | Which provider and model generated the data. |
+| `_provider` / `_model` | Which provider and model generated the data. `_model` is also displayed next to the `OPTIONS:` label on the card. |
 | `_generated_at` | Timestamp of generation (used by time-based auto-regeneration). |
 | `_generation_type` | How it was generated (`manual`, `auto`, `pregen`, `batch`, etc.). |
 | `_src` | An **immutable snapshot** of the cloze answer at generation time, used only for stale-hint detection. |

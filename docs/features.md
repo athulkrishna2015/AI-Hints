@@ -58,7 +58,8 @@ A dedicated path row shows the canonical log file location and provides one-clic
 
 - Generated hints render in a collapsible panel during review.
 - **Auto-show** configurable for the front and answer sides (each card resets to your defaults on a fresh show).
-- **Inline editor**: hold `Ctrl`/`Cmd` and click a hint or option to edit it directly on the card. Edits save on `Enter`, blur, or `Escape`. The same hold reveals a **+ Add** row at the end of each list — click it to append a new hint or option. Clearing an item's text and confirming removes it.
+- **Inline editor**: hold `Ctrl`/`Cmd` and click a hint or option to edit it directly on the card. Edits save on `Enter`, blur, or `Escape`. The same hold reveals a **+ Add** chip on the section's header line (right after the `Options:` / `Hints:` label) — click it to append a new hint or option; it expands into a panel over the list while you type, so nothing on the card shifts. Clearing an item's text and confirming removes it.
+- **Model name on the header**: when the card's saved payload records a `_model`, it is shown next to the `OPTIONS:` label so you can see which model produced the data.
 
 ### Keyboard Shortcuts
 
@@ -97,6 +98,11 @@ AI-Hints automatically detects factual errors in your notes and flags them with 
 ### Skip AI Generation
 
 Permanently skip AI generation for individual cards. Skipped cards show an **"AI generation skipped"** message (all buttons on desktop, message-only on mobile) until you generate or clear them. Can also be applied in bulk from the browser.
+
+Notes about the skipped marker:
+
+- **Clear stays available on skipped cards** — the Clear button is rendered whenever the card holds any AI-Hints data, including a skipped-only payload. Clicking it removes the marker *and* the `ai-hints::skipped` tag, so the card becomes eligible for generation again.
+- **A transiently missing cloze no longer marks a card skipped.** While you are editing or Anki is still reconciling a newly created cloze, the add-on can momentarily see a card with no content. In that case it leaves the note untouched instead of saving `{"_skipped": true}`, and pre-generation simply moves on to the next queued card.
 
 ### LaTeX & Math Support
 

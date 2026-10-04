@@ -70,6 +70,7 @@ The renderer consumes **hidden JSON `<div class="ai-hints-json">` blocks** embed
 - `hints` → the collapsible Hints panel.
 - `options` → the interactive MCQ panel (distractor order is seeded/shuffled per card, see `shuffle(array, seed)`).
 - `correct_answer` → drives which option highlights green.
+- `_model` → rendered as a small label next to the `OPTIONS:` header text (omitted when the payload has no model).
 - `_skipped: true` → renders the "AI generation skipped" message instead of data.
 
 See [Data & Storage Format](data-format.md) for the full field reference.
@@ -77,7 +78,9 @@ See [Data & Storage Format](data-format.md) for the full field reference.
 ## Rendering & State Model
 
 - `init(manualData, isManualAction)` (template.js:947) is the entry point: prune stale/foreign blocks, compute `cardId`/`cardKey`/`cardOrd`, decide fresh-show vs re-show, apply auto-show defaults, and render.
-- Rendering **replaces** any static `.ai-hints-container`s on the page with live UI built by `renderSection(parent, title, items, ...)` (hints vs options) and `renderMath` / `convertMathDelimitersToTags` for LaTeX.
+- Rendering **replaces** any static `.ai-hints-container`s on the page with live UI built by `renderSection(parent, title, items, ..., modelName)` (hints vs options) and `renderMath` / `convertMathDelimitersToTags` for LaTeX. `modelName` (from the payload's `_model`) is rendered inside the **Options** header row only; the Hints header stays label-only.
+- Each section header is a fixed-height flex row (`.ai-hints-head`) holding the label, the optional model label, and the `Ctrl`-only **+ Add** chip, so revealing the chip or the model name never changes the section's height. A section rendered without a label uses `.ai-hints-head--bare` (height `0`) so it adds no line.
+- The **Clear** button is rendered whenever the card carries any AI-Hints data object — including a skipped-only payload with no hints/options — so it can always remove a saved skipped marker (and its `ai-hints::skipped` tag).
 - Collapsed/expanded state persists via `getPersistence()` (template.js:156) keyed by `state_<cardId>_<ord>`. A changed `review_token` (fresh card show / relearn) resets to the configured auto-show defaults and collapses the JSON panel.
 - The JSON panel (📝 button) shows the raw payload inline.
 - Options are clickable: tapping one records the selection, colors it green/red on the answer side, and reveals the answer (platform-specific — see [Mobile Setup](mobile-setup.md)).

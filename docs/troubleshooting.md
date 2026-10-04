@@ -39,6 +39,18 @@ AI-Hints automatically falls back to the next provider/model in your priority li
 - AI-Hints uses an immutable snapshot of the cloze answer to detect stale data, so genuine manual edits are preserved. If a cloze's text was genuinely changed, the data is treated as stale and regenerated (this is intentional).
 - Turn off **Force Regenerate Even if Data Exists** (General tab) to prevent overwriting existing data.
 
+## A Card Shows `{"_skipped": true}` / "AI generation skipped" but I Never Skipped It
+
+- Newer versions (v8.4.0+) no longer write a skipped marker when a card only *temporarily* looks empty — for example a cloze you just created or edited, or an undo/new-cloze transition while reviewing. Such an attempt leaves the note unchanged.
+- If an older build already saved the marker (or you skipped the card deliberately), click **Clear** on the card. Clear is always rendered when the card holds AI-Hints data, and it removes both the marker and the `ai-hints::skipped` tag, so the card is eligible for generation again.
+- Still stuck? Check **Tools → AI Hints → Unskip AI for All Cards in Deck** for bulk clearing, and confirm the note actually contains a `{{c1::…}}`-style cloze for that ordinal — a card whose own cloze is absent from the note genuinely has nothing to generate from.
+
+## Card Shows Hints/Options From a Different Question
+
+- Every AI write snapshots the card it targets, and a completion that arrives after you **cancel** the request or start a **newer** generation for the same card is discarded — including late "lingering" results. So an older run can no longer overwrite a newer one.
+- Pre-generated (background) results are also checked against the text they were generated from before being applied, so a cached result is dropped if the card changed in the meantime.
+- Editing a card **while** generation runs is allowed: that run still saves its result. If the text no longer matches, use **Generate/Regenerate** again (or `Alt`+click it to pick a specific model) to refresh the data.
+
 ## Old Card Style on AnkiDroid (WebView Cache)
 
 Android's WebView aggressively caches `_ai_hints_template.js`. See [Mobile Support → AnkiDroid Cache](mobile-setup.md#-troubleshooting-ankidroid-cache-webview).

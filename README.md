@@ -21,9 +21,10 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 ### 🎮 Interactive MCQ & Review UI
 - **Multiple-Choice Options**: Select MCQ options on the front side (via click, touch, or hotkeys `1-9`) with color-coded results (green for correct, red for incorrect).
 - **Auto-Rating**: Instantly rate cards (e.g. `Good` or `Again`) automatically upon selecting an option.
-- **Inline Editor**: Edit generated hints or options directly on the card during review (via `Ctrl+Click` / `Cmd+Click`). Holding `Ctrl`/`Cmd` also reveals a **+ Add** row at the end of each list — `Ctrl`+click it, type, and press `Enter` to append a new hint or option without regenerating (or spending an API call). Clearing an item's text and confirming removes it.
+- **Inline Editor**: Edit generated hints or options directly on the card during review (via `Ctrl+Click` / `Cmd+Click`). Holding `Ctrl`/`Cmd` also reveals a **+ Add** chip on each section's header line — `Ctrl`+click it, type, and press `Enter` to append a new hint or option without regenerating (or spending an API call). The chip expands into a panel over the list while you type, so nothing on the card shifts. Clearing an item's text and confirming removes it.
+- **Model Name on the Options Header**: When the card's data records a `_model`, it is shown next to the `OPTIONS:` label so you can see which model produced the data.
 - **Factual Error Alerts**: Automatically detects and flags factual errors in your notes with custom warning highlights during study.
-- **Skip AI Generation**: Permanently skip AI generation for individual cards. Skipped cards render an **"AI generation skipped"** message (with all desktop buttons, or message-only on mobile) until you generate or clear them.
+- **Skip AI Generation**: Permanently skip AI generation for individual cards. Skipped cards render an **"AI generation skipped"** message (with all desktop buttons, or message-only on mobile) until you generate or clear them. **Clear** is always available on skipped cards — it removes the marker and the skipped tag so the card is eligible again. A cloze that is only *momentarily* invisible (being created/edited, or during an undo transition) is never auto-marked skipped.
 - **LaTeX Math Support**: Seamlessly parses and formats LaTeX math formulas on your cards.
 
 ### ⚡ Batch & Maintenance Tools
@@ -37,6 +38,16 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Hint Tagging**: Notes are automatically tagged (`ai-hints`) when hints are generated and un-tagged when cleared/skipped, enabling fast batch scanning. A **"Tag All Cards with Hints"** tool in Advanced settings covers cards created before tagging was enabled.
 - **Cloze Deletion Support**: Fully compatible with cards containing multiple Cloze deletions on a single note.
 
+
+## Data Integrity (Race Safety)
+
+Generations can finish long after you cancel them, after you start a new one, or after the card changed. AI-Hints keeps those cases apart:
+
+- **One owner per card**: every generation run claims a unique token for its card. Cancel, or start a newer generation, and the older request's result is discarded when it arrives — including late lingering results — so it can never overwrite fresher data.
+- **Editing while generating is allowed**: a running generation still saves its result if you edit the card meanwhile. Regenerate if the text has changed substantially.
+- **Cached pre-generation results are validated**: background results record the text they were generated from and are re-checked against the card before being applied; stale ones are dropped instead of pasted onto an edited card.
+- **Transiently missing clozes are not marked skipped**: while a cloze is being created/edited, the add-on leaves the note untouched and simply moves on.
+- **Every AI write is undoable** in the reviewer with `Ctrl+Alt+Z` (`Ctrl+Alt+Shift+Z` redoes), stepping back through replaced results before removing the data entirely.
 
 ## Intelligence-Ranked Fallback Hierarchy
 
