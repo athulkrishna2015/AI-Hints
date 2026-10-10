@@ -47,7 +47,7 @@ Generations can finish long after you cancel them, after you start a new one, or
 - **Editing while generating is allowed**: a running generation still saves its result if you edit the card meanwhile. Regenerate if the text has changed substantially.
 - **Cached pre-generation results are validated**: background results record the text they were generated from and are re-checked against the card before being applied; stale ones are dropped instead of pasted onto an edited card.
 - **Transiently missing clozes are not marked skipped**: while a cloze is being created/edited, the add-on leaves the note untouched and simply moves on.
-- **Every AI write is undoable** in the reviewer with `Ctrl+Alt+Z` (`Ctrl+Alt+Shift+Z` redoes), stepping back through replaced results before removing the data entirely.
+- **Every AI write is undoable** in the reviewer with `Ctrl+Alt+Z` (`Ctrl+Alt+Shift+Z` redoes), stepping back through replaced results before removing the data entirely — including results saved in the background (pre-generation direct saves, generations that finished after you moved to the next card), which stay undoable per card when you review them.
 
 ## Intelligence-Ranked Fallback Hierarchy
 

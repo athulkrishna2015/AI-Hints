@@ -55,6 +55,7 @@ The dialog opens non-modally and remembers your last tab. Closing it does not sh
   - **Regenerate if Generated Time <** — regenerate cards generated before a date (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM:SS`).
   - **Regenerate if Card Modified > Generated Date** — regenerate if the note was edited after generation.
 - **Pre-generate ahead** + **Buffer size** — pre-generate upcoming cards in the background (buffer 1–10).
+  - **Save pre-generated data directly to cards (skip cache)** (`pregen_direct_save`, off by default) — write off-screen pre-generation results straight to each card's note instead of holding them in `pregen_cache.json` until you reach the card. Like moved-on generation saves, direct saves snapshot the previous per-card state, so they are undoable/redoable with `Ctrl+Alt+Z` / `Ctrl+Alt+Shift+Z` when you review that card.
 
 **On Card Load:**
 - **Auto Show Hints** / **Auto Show Options** — expand hints/options when a card loads.
