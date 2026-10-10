@@ -1548,68 +1548,54 @@ def _get_card_and_web_from_context(context):
         
     return card, web
 
-def _stale_block_reason(card, note, parser):
-    """If the card carries stale cloze data (answer no longer matches _src), return
-    a short human-readable reason; otherwise return None."""
-    import re, html as _html, json as _json
-    card_ord = getattr(card, "ord", None)
-    if card_ord is None:
-        return None
+def _load_stale_hints_for_card(note, card, parser):
+    """Load this card's payload from a scope-matched block even when it is
+    stale (cloze answer no longer matches the stored `_src` snapshot).
 
-    model = note.model() if hasattr(note, "model") and callable(note.model) else None
-    model_name = model["name"].lower() if model and isinstance(model, dict) and "name" in model else ""
-    is_cloze = bool(model and ("cloze" in model_name or model.get("type") == 1))
-    if not is_cloze:
-        return None
+    `find_hints_block` deliberately refuses stale data so the reviewer never
+    *shows* it — but the inline editor is allowed to work on it: saving goes
+    through `update_note_with_hints`, whose `_attach_source_answer` step
+    re-snapshots `_src` to the current cloze text, re-basing the edited data
+    onto the new content and making it fresh again.
 
-    field_text = None
-    if hasattr(note, "values") and callable(note.values):
-        for f in list(note.values()):
-            if isinstance(f, str) and "{{c" in f:
-                field_text = f
-                break
-    if not field_text:
-        return None
-
-    # Scan the note for a JSON block that matches this card, regardless of the
-    # data-validity gate that find_hints_block applies.
+    Returns (data_dict_or_None, toggles_or_None).
+    """
+    import html as _html
     try:
-        note_fields = list(note.values()) if hasattr(note, "values") and callable(note.values) else list(getattr(note, "fields", []))
+        if hasattr(note, "values") and callable(note.values):
+            fields = list(note.values())
+        else:
+            fields = list(getattr(note, "fields", []))
     except Exception:
-        note_fields = []
-    pattern = re.compile(
-        r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-    for f_val in note_fields:
+        return None, None
+    card_ord = getattr(card, "ord", None)
+    card_key = f"c{card_ord + 1}" if card_ord is not None else None
+    for f_val in fields:
         if not isinstance(f_val, str):
             continue
-        for m in pattern.finditer(f_val):
-            block = m.group(0)
-            if not parser._block_matches_card(block, card):
-                continue
+        try:
+            matches = list(_cp_iter_hint_blocks(f_val))
+        except Exception:
+            continue
+        for match in matches:
+            block = match.group(0)
             try:
-                raw = _html.unescape(m.group(1) or "")
+                if not parser._block_matches_card(block, card):
+                    continue
+                raw = _html.unescape(match.group(1) or "")
                 parsed = parser._parse_json_payload(raw)
-                card_key = f"c{card_ord + 1}"
-                if isinstance(parsed, dict) and card_key in parsed and "hints" not in parsed:
+                if isinstance(parsed, dict) and card_key and card_key in parsed and "hints" not in parsed:
                     card_data = parsed[card_key]
                 else:
                     card_data = parsed
-                if not isinstance(card_data, dict):
+                if not isinstance(card_data, dict) or not card_data:
                     continue
-                src = card_data.get("_src")
-                if not src:
-                    continue
-                _, cloze_ans, found = parser._focus_current_cloze(field_text, card)
-                if found and not parser._answers_match(cloze_ans, card_data):
-                    return (
-                        "the cloze content was changed since this data was generated. "
-                        "Regenerate AI hints to update it."
-                    )
+                toggles = parser._extract_toggles_from_block(block)
+                return card_data, toggles
             except Exception:
                 continue
-    return None
+    return None, None
+
 
 def edit_item(card, web, item_type: str, index: int, new_value: str):
     if not card:
@@ -1661,20 +1647,24 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
                 except Exception as e:
                     logger.error(f"AI-Hints: Failed to parse hints JSON: {e}")
 
+        if not data:
+            # No *valid* block found — but a stale one (cloze edited after
+            # generation, so the answer no longer matches `_src`) is still
+            # editable. Saving re-snapshots `_src` onto the current cloze
+            # text, so the edit re-bases the data instead of being blocked.
+            try:
+                stale_data, stale_toggles = _load_stale_hints_for_card(note, card, parser)
+            except Exception as e:
+                logger.debug(f"AI-Hints: stale-block load failed: {e}")
+                stale_data, stale_toggles = None, None
+            if stale_data:
+                data = copy.deepcopy(stale_data)
+                if stale_toggles and not toggles:
+                    toggles = copy.deepcopy(stale_toggles)
+
     # 3. Fallbacks
     if not data:
         data = {"hints": [], "options": []}
-        # Editing failed to find any data for this card. Before reporting an
-        # out-of-range error, check whether the card actually holds stale cloze
-        # data (a block whose cloze answer no longer matches its _src snapshot).
-        # If so, explain why editing is blocked instead of failing silently.
-        try:
-            stale_reason = _stale_block_reason(card, note, parser)
-            if stale_reason:
-                tooltip(f"AI-Hints: Editing is disabled on this card — {stale_reason}")
-                return
-        except Exception as e:
-            logger.debug(f"AI-Hints: stale-block check failed: {e}")
     if not toggles:
         toggles = {
             "show_hints_button": config.get("show_hints_button", True),
