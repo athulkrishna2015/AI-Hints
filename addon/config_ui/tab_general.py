@@ -153,7 +153,8 @@ class GeneralTabMixin:
         self.pregen_direct_save_cb.setToolTip(
             "Write background pre-generation results straight to the card's note instead of "
             "holding them in the pregen cache until you reach the card. Off by default (cache "
-            "behavior unchanged). Background saves skip the Ctrl+Alt+Z history; Anki's native "
+            "behavior unchanged). Background saves are undoable/redoable per card "
+            "via Ctrl+Alt+Z / Ctrl+Alt+Shift+Z; Anki's native "
             "undo is never touched."
         )
         self.pregen_direct_save_cb.setStyleSheet("margin-left: 15px;")

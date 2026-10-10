@@ -268,6 +268,9 @@ def _note_set_tag(note, tag: str, add: bool) -> bool:
     return False
 
 def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=False, update_ui=True, skip_undo_snapshot=False):
+    # NOTE: skip_undo_snapshot is deprecated and ignored — background writes
+    # (pregen direct-save, moved-on completions) are undoable per card.
+    _ = skip_undo_snapshot
     if not card or not data:
         return False
 
@@ -334,21 +337,22 @@ def _apply_results_to_card(card, data, is_manual=True, web=None, skip_redraw=Fal
     
     # Snapshot the pre-write state so Ctrl+Alt+Z can step back through
     # AI updates (replaced result -> ... -> original value).
-    # Background saves (moved-on generations, direct pregen) skip this —
-    # Anki's native undo is never touched either way, so this only keeps
-    # silent background writes out of the user's Ctrl+Alt+Z history.
-    if not skip_undo_snapshot:
-        try:
-            _pre_snap = _capture_ai_snapshot(fresh_card)
-            _clear_redo_for_card(fresh_card.id)  # fresh write diverges history
-            _push_ai_undo({
-                "card_id": fresh_card.id,
-                "note_id": note.id,
-                "field_idx": (_pre_snap or {}).get("field_idx", 0),
-                "block_html": (_pre_snap or {}).get("block_html"),
-            })
-        except Exception as snap_err:
-            logger.debug(f"AI-Hints: pre-write snapshot skipped: {snap_err}")
+    # This includes background saves (moved-on generations, direct pregen):
+    # the stack is per-card, so a silent write to card B stays undoable/
+    # redoable when the user later reviews B. Anki's native undo is never
+    # touched either way. `skip_undo_snapshot` is kept as a deprecated no-op
+    # for backward compatibility and is intentionally ignored.
+    try:
+        _pre_snap = _capture_ai_snapshot(fresh_card)
+        _clear_redo_for_card(fresh_card.id)  # fresh write diverges history
+        _push_ai_undo({
+            "card_id": fresh_card.id,
+            "note_id": note.id,
+            "field_idx": (_pre_snap or {}).get("field_idx", 0),
+            "block_html": (_pre_snap or {}).get("block_html"),
+        })
+    except Exception as snap_err:
+        logger.debug(f"AI-Hints: pre-write snapshot skipped: {snap_err}")
 
     if parser.update_note_with_hints(note, data, toggles, fresh_card):
         logger.info(f"AI-Hints: Updating database for card {fresh_card.id} (Note {note.id}, Ord {fresh_card.ord}) with new hints.")
@@ -3190,7 +3194,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
                          # Explicitly clear frontend state as well for double safety
                          _set_frontend_generating(web, False, card_id, is_pregen)
                     elif config.get("pregen_direct_save", False):
-                        _apply_results_to_card(card, _strip_pregen_source(data), is_manual=False, web=None, update_ui=False, skip_undo_snapshot=True)
+                        _apply_results_to_card(card, _strip_pregen_source(data), is_manual=False, web=None, update_ui=False)
                         logger.info(f"AI-Hints: Pre-generation complete for {card_id} (Saved directly to note).")
                         _set_frontend_generating(web, False, card_id, is_pregen)
                     else:
@@ -3227,7 +3231,7 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
                         data["_generation_type"] = "regenerate" if card_has_hints(card) else "manual"
                     else:
                         data["_generation_type"] = "auto"
-                    if _apply_results_to_card(card, _strip_pregen_source(data), is_manual=is_manual, web=None, update_ui=False, skip_undo_snapshot=True):
+                    if _apply_results_to_card(card, _strip_pregen_source(data), is_manual=is_manual, web=None, update_ui=False):
                         _trigger_next_pregeneration(card_id)
                 _set_frontend_generating(web, False, card_id, is_pregen)
                 return

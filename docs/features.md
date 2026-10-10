@@ -81,7 +81,7 @@ Every AI write is snapshotted before it replaces data, so multi-step generations
 - `Ctrl+Alt+Z` — **Undo last AI update**: first press restores the result that was replaced (e.g. the fast fallback candidate a lingering higher-priority model overwrote); the next press removes the AI data entirely, back to the original value.
 - `Ctrl+Alt+Shift+Z` — **Redo**: re-applies the state the last undo displaced.
 
-Both act on the card currently on screen; a fresh AI write clears that card's redo history. These are fixed bindings, independent of the Shortcuts-tab modifier scheme.
+Both act on the card currently on screen — including results saved in the background (pre-generation direct saves, generations that finished after you moved on); a fresh AI write clears that card's redo history. These are fixed bindings, independent of the Shortcuts-tab modifier scheme.
 
 ### Per-Card Model Override (Alt+Click)
 

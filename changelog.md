@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.4.1 (2026-10-10)
+- **Background Writes Are Undoable/Redoable Per Card**: Results saved in the background — off-screen pre-generation direct saves (`pregen_direct_save`) and foreground generations that finish after you moved to another card — now snapshot the previous per-card state like any other AI write. `Ctrl+Alt+Z` / `Ctrl+Alt+Shift+Z` on that card steps back through them (replaced result → … → original) and forward again, instead of reporting "no previous AI update" / "nothing to redo for this card". Native Anki undo is unaffected.
+
 ## 8.4.0 (2026-10-04)
 - **Don't Mark Temporarily Missing Clozes as Skipped**: During review, Anki can briefly expose a newly created cloze card before its cloze content is visible to the add-on. A contentless reviewer/pre-generation attempt now leaves the note unchanged instead of persisting `{"_skipped": true}`, and pre-generation continues to the next queued card.
 - **Clear Is Available for Skipped/Empty Card Data**: The reviewer Clear control is no longer hidden when the active card data contains no hints/options (including a saved skipped marker). Clear removes the marker and skipped tag so generation can be tried again later.
