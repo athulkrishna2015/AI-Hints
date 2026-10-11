@@ -193,7 +193,6 @@ def _strip_block_with_ws(text: str, match: HintBlockMatch):
     e = _consume_ws_noise(text, match.end(), 1)
     return text[:s] + text[e:]
 
-
 class CardParser:
 
     def __init__(self, mathjax_format: str = "delimiters", fix_latex: bool = False, **kwargs):

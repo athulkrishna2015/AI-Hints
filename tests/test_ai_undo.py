@@ -213,6 +213,5 @@ class AiUndoTests(unittest.TestCase):
         self.assertIn("Ctrl+Alt+Shift+Z", keys)
 
 
-
 if __name__ == "__main__":
     unittest.main(verbosity=2)
