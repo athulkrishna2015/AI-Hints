@@ -16,8 +16,9 @@ name: Release
 #   - ANKIWEB_USERNAME  (AnkiWeb login email)
 #   - ANKIWEB_PASSWORD  (plain-password auth; interactive 2FA is unsupported)
 # To rebuild/republish an existing tag without cutting a new release:
-# Actions → Release → Run workflow → enter the tag (e.g. v8.4.3). The tag
-# must already have a GitHub release, or the attach step creates one.
+# Actions → Release → Run workflow → enter the tag (e.g. v8.4.2).
+# To rehearse the pipeline (tests + build + description check) without
+# touching the release or AnkiWeb: same dialog, tick `dry_run`.
 
 on:
   release:
@@ -25,8 +26,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to rebuild/republish (e.g. v8.4.3)"
+        description: "Release tag to rebuild/republish (e.g. v8.4.2). With dry_run, a branch (e.g. master) is also accepted."
         required: true
+      dry_run:
+        description: "Rehearse only: run tests and the build, skip the release + AnkiWeb uploads"
+        type: boolean
+        default: false
 
 permissions:
   contents: write # attach the .ankiaddon to the release
@@ -35,20 +40,52 @@ jobs:
   build-test-publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve tag
-        id: tag
+      - name: Resolve and validate ref
+        id: ref
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_REF: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          if [ -n "${{ github.event.release.tag_name }}" ]; then
-            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          ref="${EVENT_TAG:-$INPUT_REF}"
+          if [ -z "$ref" ]; then
+            echo "::error::No ref given. Pass one via workflow_dispatch." >&2
+            exit 1
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          # Fail early and legibly. A ref that does not exist otherwise
+          # surfaces much later as a raw "upload-pack: not our ref" failure
+          # from actions/checkout, and a missing release only fails at the
+          # attach step -- after the tests and build have already run.
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${ref}" >/dev/null 2>&1; then
+            is_tag=true
+          elif [ "$DRY_RUN" = "true" ] && gh api "repos/${GITHUB_REPOSITORY}/branches/${ref}" >/dev/null 2>&1; then
+            # Branch builds are rehearsal-only: a real release always ships
+            # from a tag, so nothing may ever be published off an untagged commit.
+            is_tag=false
+            echo "::notice::'$ref' is a branch, not a tag; dry run only, nothing will be published."
           else
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "::error::'$ref' is neither a tag nor a branch in this repository." >&2
+            exit 1
+          fi
+          if [ "$is_tag" = "true" ] && ! gh release view "$ref" >/dev/null 2>&1; then
+            if [ "$DRY_RUN" != "true" ]; then
+              echo "::error::No GitHub release found for '$ref'. Create one first." >&2
+              exit 1
+            fi
+            echo "::warning::No GitHub release for '$ref'; a dry run skips the uploads anyway."
+          fi
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry_run=true" >> "$GITHUB_OUTPUT"
+            echo "Dry run: the release and AnkiWeb upload steps will be skipped."
           fi
 
-      - name: Check out release tag
+      - name: Check out the ref
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.tag.outputs.tag }}
+          ref: ${{ steps.ref.outputs.ref }}
           submodules: recursive
 
       - name: Set up Python
@@ -56,19 +93,32 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Derive version from tag
+      - name: Derive version
         id: version
         run: |
           set -euo pipefail
           version="${TAG#v}"
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-            echo "Tag '$TAG' is not a version tag (expected v<major>.<minor>[.<patch>])" >&2
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "Building $version from $TAG"
+          elif [ "$DRY_RUN" = "true" ]; then
+            # Branch rehearsal: there is no version tag, so use the version the
+            # working tree already carries. Never published -- a real release
+            # always builds from a tag.
+            version=$(cat addon/VERSION)
+            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+              echo "::error::addon/VERSION is '$version', which is not a version." >&2
+              exit 1
+            fi
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "Dry run from branch '$TAG': building with the tree's version $version"
+          else
+            echo "::error::'$TAG' is not a version tag (expected v<major>.<minor>[.<patch>])." >&2
             exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Building $version from $TAG"
         env:
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ steps.ref.outputs.ref }}
+          DRY_RUN: ${{ steps.ref.outputs.dry_run }}
 
       - name: Run unit tests
         run: |
@@ -111,17 +161,19 @@ jobs:
           fi
 
       - name: Attach to GitHub release
+        if: steps.ref.outputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="${{ steps.tag.outputs.tag }}"
+          TAG="${{ steps.ref.outputs.ref }}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "AI-Hints ${{ steps.version.outputs.version }}" --generate-notes
           fi
           gh release upload "$TAG" "${{ steps.build.outputs.ankiaddon }}" --clobber
 
       - name: Upload to AnkiWeb
+        if: steps.ref.outputs.dry_run != 'true'
         uses: athulkrishna2015/ankiweb-api@v1
         with:
           username: ${{ secrets.ANKIWEB_USERNAME }}

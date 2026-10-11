@@ -192,12 +192,24 @@ python3 -B -m unittest discover -s tests -p "test_*.py"
    Publishing fires the `Release` workflow (`.github/workflows/release.yml`), which runs the unit tests, rebuilds `AI_Hints_vX.Y.Z_<timestamp>.ankiaddon` from the tag, attaches it to the release, and uploads it to AnkiWeb (addon `2119980872`, preserving its title/tags/support page/branch).
 7. (Automatic) The workflow uploads to AnkiWeb right after attaching the asset. Verify the listing afterwards. Manual fallback: <https://ankiweb.net/shared/upload>.
 
-One-time CI setup: repo Settings → Secrets and variables → Actions → Secrets must contain `ANKIWEB_USERNAME` (AnkiWeb login email) and `ANKIWEB_PASSWORD` (plain-password auth; interactive 2FA is unsupported). To rebuild/republish an existing tag without cutting a new release: Actions → Release → Run workflow → enter the tag.
+One-time CI setup: repo Settings → Secrets and variables → Actions → Secrets must contain `ANKIWEB_USERNAME` (AnkiWeb login email) and `ANKIWEB_PASSWORD` (plain-password auth; interactive 2FA is unsupported).
+
+The workflow can also be driven by hand from Actions → Release → Run workflow:
+
+| `tag` | `dry_run` | What happens |
+| --- | --- | --- |
+| an existing release tag | off | Rebuilds, re-attaches, and re-uploads to AnkiWeb (the usual republish path). |
+| an existing release tag | on | Tests + build + description check only; nothing is published. |
+| a **branch** (e.g. `master`) | on | Same rehearsal, but built from the branch instead of a tag. |
+| a **branch** | off | Refused. Nothing is ever published off an untagged commit. |
+
+Use a `dry_run` to rehearse a pipeline change before it ships. A ref that is neither a tag nor a branch fails immediately with a readable error, instead of surfacing later as a raw `upload-pack: not our ref` from `actions/checkout`.
 
 CI notes worth knowing:
 - The test gate runs a stable subset (`test_ai_undo`, `test_card_parser`, `test_cloze_scenarios`, `test_pregeneration_logic`, `test_race_condition_fix`, `test_edit_item.py`), one interpreter per file. Runners have no Anki install, so the workflow provides a tiny `anki.errors` stub; everything else is mocked by the tests themselves.
 - Keep `addon/latex_fixer` pinned to a commit reachable upstream — an orphaned pin breaks recursive checkouts (and would silently ship CI artifacts without the fixer).
 - The listing description is the full `README.md`, uploaded on every release. AnkiWeb **rejects** descriptions over 65,535 bytes (it does not truncate — the listing silently keeps its previous text), so a pre-flight size check fails the build instead of shipping a stale description. Current README: ~22 KB.
+- `addon/VERSION` and `manifest.json` are the version of the **last release**. `make_ankiaddon.py` bumps them on the next build, so keep them in step with what is actually published — CI forces the tag's version anyway, but a local build without an argument uses these.
 
 ## Get Your API Keys
 
