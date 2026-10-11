@@ -26,7 +26,8 @@ tests/                       # unittest-based regression tests
 make_ankiaddon.py            # Build script: bumps VERSION, packages addon/ -> .ankiaddon
 bump.py                      # Version bump helper (used by make_ankiaddon.py)
 changelog.md                 # User-facing changelog (add a bullet per PR)
-AGENTS.md                    # This file
+.github/workflows/release.yml  # Release pipeline: test -> build -> attach -> AnkiWeb upload
+.agents/AGENTS.md            # This file
 ```
 
 ## Where things live at runtime
@@ -67,28 +68,53 @@ python3 -m unittest discover -s tests -p "test_*.py"
 
 Individual files can also be run directly (`python3 -m unittest tests.test_xxx`). Pytest is not required.
 
+CI gates on a **stable subset** (`test_ai_undo`, `test_card_parser`, `test_cloze_scenarios`, `test_pregeneration_logic`, `test_race_condition_fix`, plus `tests/test_edit_item.py`), one interpreter per file because some suites share global mocks and pollute each other in a combined run. Runners have no Anki install, so the workflow puts a tiny stdlib-only `anki.errors` stub on `PYTHONPATH`. Add a new test file to that loop only once it passes on a clean checkout with no `anki`/`aqt` importable.
+
 ## Release flow
 
+Releases are automated. Publishing a GitHub release fires
+`.github/workflows/release.yml`, which runs the tests, rebuilds the
+`.ankiaddon` **from the tag**, attaches it to the release, and uploads it to
+AnkiWeb. Do not attach an asset yourself — CI builds and attaches it.
+
 1. Make changes; commit on `master` (this repo does not use branches for releases).
-2. Bump + build:
+2. Bump + build locally to sanity-check:
    ```
-   python3 make_ankiaddon.py
+   python3 make_ankiaddon.py            # auto-bumps the patch version
+   python3 make_ankiaddon.py 8.5.0      # or force an explicit version
    ```
-   This auto-bumps the patch version in `addon/VERSION` + `addon/manifest.json` and writes `AI_Hints_v<version>_<timestamp>.ankiaddon` in the repo root.
+   This updates `addon/VERSION` + `addon/manifest.json` and writes `AI_Hints_v<version>_<timestamp>.ankiaddon` in the repo root (gitignored). CI forces the tag's version anyway; these two files just track the last release.
 3. Add a `## <version> (YYYY-MM-DD)` entry to `changelog.md` (move anything in `## Unreleased` into the new version section).
 4. Commit: `release: AI-Hints vX.Y.Z`.
-5. Tag and push:
+5. Tag **the exact release commit** and push:
    ```
    git tag -a vX.Y.Z -m "AI-Hints vX.Y.Z"
    git push origin master
    git push origin vX.Y.Z
    ```
-6. Create the GitHub release with the `.ankiaddon` asset:
+6. Publish with **no asset argument**:
    ```
-   gh release create vX.Y.Z AI_Hints_vX.Y.Z_*.ankiaddon \
-     --title "AI-Hints vX.Y.Z" \
-     --notes "<release notes>"
+   gh release create vX.Y.Z --title "AI-Hints vX.Y.Z" --notes "<release notes>"
    ```
+
+A `release: published` event runs the workflow file **from the tag**, so every CI change must be committed *before* tagging — one committed afterwards never reaches that path. If you still need a CI fix afterwards, move the tag (`git tag -f -a vX.Y.Z <commit> && git push origin vX.Y.Z --force`); `.github/` is never packaged, so the shipped bytes do not change.
+
+Rehearse or re-run from Actions → Release → Run workflow:
+
+| `tag` | `dry_run` | Result |
+| --- | --- | --- |
+| existing release tag | off | rebuild, re-attach, re-upload to AnkiWeb |
+| existing release tag | on | tests + build only; nothing published |
+| branch (e.g. `master`) | on | rehearsal built from the branch |
+| branch | off | refused — nothing is ever published off an untagged commit |
+
+Release invariants:
+
+- **`addon/latex_fixer` must be pinned to a commit reachable upstream.** An orphaned pin breaks recursive checkouts and silently ships artifacts without the LaTeX fixer.
+- **`README.md` must stay under 65,535 bytes** — it *is* the AnkiWeb listing description. AnkiWeb rejects an over-limit description and the listing then silently keeps its previous text, so CI fails the build up front instead.
+- **One-time secrets:** `ANKIWEB_USERNAME` / `ANKIWEB_PASSWORD` in repo Settings → Secrets and variables → Actions. Never commit or echo them.
+- The listing (AnkiWeb addon `2119980872`, "AI-Hints and Options", branch `2.1.1-26.05+`) has its title, tags and support page re-sent on every upload — change those in the workflow, not by hand.
+- Uploads go through [`athulkrishna2015/ankiweb-api`](https://github.com/athulkrishna2015/ankiweb-api). Its `terminal_ankiweb.py` is the right way to verify a listing afterwards; two traps make a good upload look lost — older revisions parsed descriptions over 5,000 bytes as empty, and `item-info` is cached for 10 minutes without its `cb` cache-buster.
 
 ## Common edit pitfalls
 
