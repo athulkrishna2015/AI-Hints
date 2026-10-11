@@ -48,10 +48,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.tag.outputs.tag }}
-          # NOTE: no `submodules: recursive` — the pinned addon/latex_fixer
-          # commit is currently unreachable upstream (force-push orphaned it),
-          # so recursive clones fail. card_parser falls back cleanly without
-          # it, and no CI test needs the real fixer. Fix the pin separately.
+          submodules: recursive
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -84,9 +81,7 @@ jobs:
           export PYTHONPATH="$PWD/.ci-stubs${PYTHONPATH:+:$PYTHONPATH}"
           # One interpreter per file: some suites share global mocks and
           # pollute each other inside a single combined run.
-          # (test_card_parser is intentionally excluded: it needs the real
-          # latex_fixer submodule, which clean checkouts can't fetch yet.)
-          for t in test_ai_undo test_cloze_scenarios test_pregeneration_logic test_race_condition_fix; do
+          for t in test_ai_undo test_card_parser test_cloze_scenarios test_pregeneration_logic test_race_condition_fix; do
             python3 -m unittest "tests.$t"
           done
           python3 tests/test_edit_item.py
@@ -99,6 +94,23 @@ jobs:
           file=$(ls AI_Hints_v*.ankiaddon)
           echo "ankiaddon=$file" >> "$GITHUB_OUTPUT"
           echo "Built $file"
+
+      - name: Prepare AnkiWeb description
+        id: desc
+        run: |
+          set -euo pipefail
+          # AnkiWeb silently drops over-long descriptions (a 22KB README was
+          # wiped to empty; ~4KB sticks). Ship the README head instead.
+          python3 - <<'PY'
+          text = open("README.md", encoding="utf-8").read()
+          cut = text[:3500]
+          cut = cut[:cut.rfind("\n")]
+          open("ankiweb-description.md", "w", encoding="utf-8").write(
+              cut + "\n\n...(see the README on GitHub for full docs)"
+          )
+          PY
+          echo "file=ankiweb-description.md" >> "$GITHUB_OUTPUT"
+          wc -c ankiweb-description.md
 
       - name: Attach to GitHub release
         env:
@@ -121,5 +133,5 @@ jobs:
           tags: AI, LLM, Gemini, Chat, GPT, Grok, Deepseek, LLaMa, Ollama, Groq, Claude
           support-page: https://github.com/athulkrishna2015/AI-Hints
           branches: 2.1.1-26.05+
-          description-file: README.md
+          description-file: ${{ steps.desc.outputs.file }}
           addon-files: ${{ steps.build.outputs.ankiaddon }}
