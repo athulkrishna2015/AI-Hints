@@ -164,7 +164,7 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
   - **Multi-Select Test Row**: Ctrl+click or Shift+click to select multiple rows, then click **Test → Test Row** to test them.
   - **Model Status Highlights**: Fallback lists highlight 🆕 newly fetched models (green), ⚠️ deprecated (red), and ⚠️ no-longer-returned (amber) models after a fetch, with a unified **Remove** dropdown to strip Selected / Deprecated / No Longer Returned / both flagged types, and a unified **Test** dropdown (Checked / Row / All).
   - **Token Usage Logging**: Every successful provider call logs its token usage (`prompt_tokens`/`completion_tokens`/`total_tokens`) to `ai_hints.log`, visible in the Logs tab.
-  - **Debug Logging**: Enable "Debug logging" in the Logs tab to see full request/response payloads in the log file (`addon/ai_hints.log`).
+  - **Debug Logging**: Enable "Debug logging" in the Logs tab to see full request/response payloads in the log file (`<Anki profile>/ai_hints_bin/ai_hints.log`).
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.
 - **Shortcuts Tab**: Customize AI-Hints action keys and the modifier used on the answer side. The front side also accepts the action keys without the modifier for faster review.
 - **Advanced Tab**: Customize your system prompt, tune per-flow API request timeouts (active-review, pregeneration, batch — custom per-model/per-provider values extend any flow), toggle Linger-on-Timeout behavior (`linger_on_timeout`, `timeout_linger_seconds`, `linger_race_policy` via raw config), migrate hints inside your collection, use maintenance cleanups (now with **Searchable Deck Scoping**), hide visible hint boxes with the **HTML to JSON tool**, edit raw JSON configs, and manage the **Model Cooldowns & Blacklist** (including the **Ignore network/offline checks** bypass).
@@ -183,9 +183,11 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
 
 ---
 
-> `ai-latex-fixer` is included as a Git submodule at `addon/latex_fixer/`. When cloning for development, run `git submodule update --init` to pull it.
+> `ai-latex-fixer` is included as a Git submodule at `addon/latex_fixer/`. When cloning for development, run `git submodule update --init --recursive` to pull it.
 
 ## Development
+
+Releases are automated: publishing a GitHub release runs the tests, builds the `.ankiaddon` from the tag, attaches it, and uploads it to AnkiWeb — so you never need to upload a build by hand.
 
 See [docs/setup.md](docs/setup.md#install-from-github-development) for build, test, and release instructions, and [docs/architecture.md](docs/architecture.md) for the high-level architecture and per-module description.
 

@@ -16,7 +16,7 @@ AI-Hints uses Artificial Intelligence to generate helpful hints and multiple-cho
 8. [Data & Storage Format](data-format.md) — what's stored in your notes and how it's used.
 9. [Storage, Files & State](storage.md) — all data files, JSON stores, and runtime variables.
 10. [Frontend (JavaScript) Reference](frontend.md) — the unified JS renderer, runtime globals, data contract, and `pycmd` protocol.
-11. [Architecture & Code](architecture.md) — high-level architecture and per-module description, plus the build / test / release workflow for contributors.
+11. [Architecture & Code](architecture.md) — high-level architecture and per-module description. Build, test and release instructions are in [setup.md](setup.md#install-from-github-development) ([build](setup.md#building) · [tests](setup.md#running-tests) · [release flow](setup.md#release-flow)).
 
 ## Links
 

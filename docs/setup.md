@@ -27,7 +27,7 @@ When cloning for the first time, initialize the `ai-latex-fixer` Git submodule s
 ```shell
 git clone https://github.com/athulkrishna2015/AI-Hints.git
 cd AI-Hints
-git submodule update --init
+git submodule update --init --recursive
 ```
 
 ### 2. Local Testing (Symlinking)
@@ -80,13 +80,13 @@ python3 update_deps.py
 python make_ankiaddon.py
 
 # Set an explicit version:
-python make_ankiaddon.py 1.6.1
+python make_ankiaddon.py 8.5.1
 
 # Remove older local packages before building:
 python make_ankiaddon.py --clean
 ```
 
-This produces a timestamped file like `AI_Hints_v7.0.5_202608280017.ankiaddon` in the repo root. Existing `.ankiaddon` packages are preserved by default; pass `--clean` to remove them.
+This produces a timestamped file like `AI_Hints_v8.5.1_202610120017.ankiaddon` in the repo root. Existing `.ankiaddon` packages are preserved by default; pass `--clean` to remove them.
 
 **What gets included in the package** (all Python source under `addon/`, `addon/latex_fixer/`, `addon/json_repair/`, `addon/config.json`, `VERSION`, `manifest.json`).
 
@@ -100,7 +100,7 @@ python bump.py minor      # minor
 python bump.py major      # major
 ```
 
-`bump.py` follows `major.minor.patch` semver (e.g. `7.0.4` → `7.0.5`).
+`bump.py` follows `major.minor.patch` semver (e.g. `8.5.0` → `8.5.1`).
 
 ## Running Tests
 

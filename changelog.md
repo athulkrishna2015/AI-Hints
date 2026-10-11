@@ -114,6 +114,22 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Visible "Draining" Batch State**: When the queue hits "0 left" but worker threads are still finishing in-flight requests, the batch status now shows a 🧼 **Draining** notice (how many requests remain and how long the longest has run) so a batch that is winding down no longer looks stuck.
 - **Source Deck Dropdown No Longer Spans the Screen**: The Batch tab's Source Deck chooser and its autocomplete popup are height-capped (16 rows / 320px), so a large deck list can't take over the whole display window; typing-based search still narrows the list normally.
 
+## 7.2.4 (2026-09-03)
+
+- **Fallback Test Status Restoration**: Fallback model tests again show the active `Testing...` state, final status, and detailed result tooltip beside each model after the fallback-table redesign.
+- **Blacklist Cooldown Indicators**: Fallback model rows and provider status labels now show the blacklist indicator and remaining cooldown time when a model is temporarily unavailable.
+
+## 7.2.3 (2026-09-03)
+
+- **Reviewer Refresh After Regeneration**: Explicitly regenerating hints from the reviewer bottom bar now refreshes the card face so the new AI data is visible immediately.
+- **Skipped Card Retry**: Cards that were skipped due to missing cloze content are now eligible for regeneration once the content is present, instead of being treated as already-generated.
+- **Horizontal Log Scrolling**: The Logs tab now preserves long lines and allows horizontal scrolling instead of wrapping them.
+
+## 7.2.2 (2026-09-03)
+- **Deterministic Fallback Ordering**: The provider/model picker and fallback dialogs now iterate providers in a stable order, so the same active and fallback rows stay in the same sequence across runs instead of depending on hash/set ordering.
+- **Undo / Redo Cache Hygiene**: Reviewer undo and redo now invalidate cached hint-block lookups after restoring card content, so stepping backward and forward between AI writes always targets the current note state.
+- **Logs and Cache Test Isolation**: Headless logs-tab and time-based regression tests now restore shared `aqt` state between cases, keeping the release test suite stable without changing runtime behavior.
+
 ## 7.2.1 (2026-09-03)
 - **Fallback Drag-and-Drop Reordering**: Models in both fallback windows can now be dragged to reorder them in the Enabled or Disabled list. Multi-row selections move together, model labels and row metadata remain intact, and transient Qt rows are safely ignored instead of causing crashes.
 - **Smooth Drag Placement Preview**: Dragging near the top or bottom of a fallback list now scrolls gradually rather than jumping, while a glowing divider shows exactly where the selected models will be placed.
@@ -132,22 +148,6 @@ All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 - **Per-Row Thinking/Timeout in Advanced Global List**: Global rows have their own **Thinking Level** and **Timeout (s)** columns (new `global_thinking_levels` / `global_model_timeouts` config keys, seeded from the per-provider values). They override the per-provider values for that row at runtime — including an explicit `off` — and are restored afterward, so other flows are unaffected.
 - **Lingering Retries in Fallback Tests**: The per-provider and global Fallback Priority **Test** buttons now capture delayed responses — a model that hits a read timeout is re-dispatched in the background with an extended deadline while the test continues, and a late result rescues the test instead of reporting a bare timeout (same semantics as live generations, including the amber Lingering status).
 - **Per-Request Elapsed Logging**: Every provider request now logs `AI-Hints: <provider>/<model> request took Xs.` at INFO level, covering all generation paths (manual, auto, pregen, batch, lingering retries) as well as model tests, so slow endpoints are visible in `ai_hints.log` without debug logging.
-
-## 7.2.4 (2026-09-03)
-
-- **Fallback Test Status Restoration**: Fallback model tests again show the active `Testing...` state, final status, and detailed result tooltip beside each model after the fallback-table redesign.
-- **Blacklist Cooldown Indicators**: Fallback model rows and provider status labels now show the blacklist indicator and remaining cooldown time when a model is temporarily unavailable.
-
-## 7.2.3 (2026-09-03)
-
-- **Reviewer Refresh After Regeneration**: Explicitly regenerating hints from the reviewer bottom bar now refreshes the card face so the new AI data is visible immediately.
-- **Skipped Card Retry**: Cards that were skipped due to missing cloze content are now eligible for regeneration once the content is present, instead of being treated as already-generated.
-- **Horizontal Log Scrolling**: The Logs tab now preserves long lines and allows horizontal scrolling instead of wrapping them.
-
-## 7.2.2 (2026-09-03)
-- **Deterministic Fallback Ordering**: The provider/model picker and fallback dialogs now iterate providers in a stable order, so the same active and fallback rows stay in the same sequence across runs instead of depending on hash/set ordering.
-- **Undo / Redo Cache Hygiene**: Reviewer undo and redo now invalidate cached hint-block lookups after restoring card content, so stepping backward and forward between AI writes always targets the current note state.
-- **Logs and Cache Test Isolation**: Headless logs-tab and time-based regression tests now restore shared `aqt` state between cases, keeping the release test suite stable without changing runtime behavior.
 
 ## 7.1.2 (2026-09-02)
 - **Rate-Limit Key Burst Fix + Configurable Inter-Key Delay**: When an API request hits a 429 (rate limit), the add-on now pauses briefly before trying the next key instead of immediately hammering all remaining keys in rapid succession. This prevents the observed 3-second burst that burned through every key (blacklisting each for 10-20 minutes) when multiple separate-account keys were rate-limited at once. The pause is configurable via the new **Key Retry Delay after 429 (seconds)** setting in Settings → Advanced → Model Cooldowns & Blacklist, defaulting to 2 seconds, and now logs `AI-Hints: 429 rate limit — sleeping Xs before next key for provider/model` so the delay is visible in `ai_hints.log`.

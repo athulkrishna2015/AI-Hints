@@ -282,9 +282,9 @@ Guards: read timeouts never blacklist; model-test runs can never poison producti
 
 ## Cross-Cutting Concerns
 
-- **No hardcoded model names.** See [conventions in AGENTS.md](../AGENTS.md).
+- **No hardcoded model names.** See [conventions in AGENTS.md](../.agents/AGENTS.md).
 - **Respect `is_batch` / `log_context.source`.** Test endpoints and model-blacklisting must skip lingering retries and never poison production cooldowns.
-- **merge-safe config writes.** See [storage.md § 1](../docs/storage.md) and `config_io.py`.
+- **merge-safe config writes.** See [storage.md § 1](storage.md) and `config_io.py`.
 - **Profile-scoped storage.** See [storage.md](../docs/storage.md) for the canonical paths and sidecar layout.
 - **Bleed diagnostics.** Enable `debug_logging` and grep for `[BLEED]` / `[BLEED-WRITE]` lines.
 
