@@ -174,7 +174,7 @@ python3 -B -m unittest discover -s tests -p "test_*.py"
    This auto-bumps the patch version in `addon/VERSION` + `addon/manifest.json` and writes `AI_Hints_v<version>_<timestamp>.ankiaddon` in the repo root.
 3. Add a `## <version> (YYYY-MM-DD)` entry to `changelog.md` (move anything in `## Unreleased` into the new version section).
 4. Commit: `release: AI-Hints vX.Y.Z`.
-5. Tag and push:
+5. Tag and push (tag the exact release commit — CI builds from the tag, so any fix must be committed *before* tagging):
 
    ```shell
    git tag -a vX.Y.Z -m "AI-Hints vX.Y.Z"
@@ -193,6 +193,11 @@ python3 -B -m unittest discover -s tests -p "test_*.py"
 7. (Automatic) The workflow uploads to AnkiWeb right after attaching the asset. Verify the listing afterwards. Manual fallback: <https://ankiweb.net/shared/upload>.
 
 One-time CI setup: repo Settings → Secrets and variables → Actions → Secrets must contain `ANKIWEB_USERNAME` (AnkiWeb login email) and `ANKIWEB_PASSWORD` (plain-password auth; interactive 2FA is unsupported). To rebuild/republish an existing tag without cutting a new release: Actions → Release → Run workflow → enter the tag.
+
+CI notes worth knowing:
+- The test gate runs a stable subset (`test_ai_undo`, `test_card_parser`, `test_cloze_scenarios`, `test_pregeneration_logic`, `test_race_condition_fix`, `test_edit_item.py`), one interpreter per file. Runners have no Anki install, so the workflow provides a tiny `anki.errors` stub; everything else is mocked by the tests themselves.
+- Keep `addon/latex_fixer` pinned to a commit reachable upstream — an orphaned pin breaks recursive checkouts (and would silently ship CI artifacts without the fixer).
+- AnkiWeb silently wipes over-long descriptions (verified: 8KB+ emptied, ~4KB sticks), so the workflow uploads the first ~3.5KB of `README.md`, not the whole file.
 
 ## Get Your API Keys
 
