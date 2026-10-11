@@ -70,7 +70,10 @@ jobs:
             echo "::error::'$ref' is neither a tag nor a branch in this repository." >&2
             exit 1
           fi
-          if [ "$is_tag" = "true" ] && ! gh release view "$ref" >/dev/null 2>&1; then
+          # --repo is mandatory here: this step runs before actions/checkout,
+          # so gh has no git remote to infer the repository from and would fail
+          # with "failed to run git" instead of answering the question.
+          if [ "$is_tag" = "true" ] && ! gh release view "$ref" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             if [ "$DRY_RUN" != "true" ]; then
               echo "::error::No GitHub release found for '$ref'. Create one first." >&2
               exit 1
