@@ -81,7 +81,7 @@ jobs:
           mkdir -p .ci-stubs/anki
           touch .ci-stubs/anki/__init__.py
           printf 'class NotFoundError(Exception):\n    """No such card/note (mirrors anki.errors)."""\n' > .ci-stubs/anki/errors.py
-          export PYTHONPATH="$PWD/.ci-stubs:$PYTHONPATH"
+          export PYTHONPATH="$PWD/.ci-stubs${PYTHONPATH:+:$PYTHONPATH}"
           # One interpreter per file: some suites share global mocks and
           # pollute each other inside a single combined run.
           # (test_card_parser is intentionally excluded: it needs the real
