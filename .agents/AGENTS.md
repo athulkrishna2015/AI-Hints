@@ -92,10 +92,12 @@ AnkiWeb. Do not attach an asset yourself — CI builds and attaches it.
    git push origin master
    git push origin vX.Y.Z
    ```
-6. Publish with **no asset argument**:
+6. Draft the release, check it on the GitHub page, then publish — still with **no asset argument**:
    ```
-   gh release create vX.Y.Z --title "AI-Hints vX.Y.Z" --notes "<release notes>"
+   gh release create vX.Y.Z --title "AI-Hints vX.Y.Z" --notes "<release notes>" --draft
+   gh release edit vX.Y.Z --draft=false
    ```
+   Drafting runs nothing; `--draft=false` is the "go" that fires the workflow. Do not collapse this into one publish command — the draft is the only gate between a mistyped tag and an irreversible public AnkiWeb upload. If CI fails after publishing, the release sits published but asset-less (AnkiWeb untouched); fix it and re-run from Actions → Release → Run workflow.
 
 A `release: published` event runs the workflow file **from the tag**, so every CI change must be committed *before* tagging — one committed afterwards never reaches that path. If you still need a CI fix afterwards, move the tag (`git tag -f -a vX.Y.Z <commit> && git push origin vX.Y.Z --force`); `.github/` is never packaged, so the shipped bytes do not change.
 

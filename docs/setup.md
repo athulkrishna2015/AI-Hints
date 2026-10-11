@@ -181,15 +181,23 @@ python3 -B -m unittest discover -s tests -p "test_*.py"
    git push origin master
    git push origin vX.Y.Z
    ```
-6. Create the GitHub release (**without** attaching the file — CI builds it):
+6. Create the release as a **draft**, review it on the GitHub page, then publish. Never attach the file yourself — CI builds it:
 
    ```shell
+   # Draft first: no workflow runs yet, so nothing reaches AnkiWeb.
    gh release create vX.Y.Z \
      --title "AI-Hints vX.Y.Z" \
-     --notes "<release notes>"
+     --notes "<release notes>" \
+     --draft
+
+   # Check the title, notes and tag on the page, then publish. This is the
+   # "go" — it fires the workflow.
+   gh release edit vX.Y.Z --draft=false
    ```
 
    Publishing fires the `Release` workflow (`.github/workflows/release.yml`), which runs the unit tests, rebuilds `AI_Hints_vX.Y.Z_<timestamp>.ankiaddon` from the tag, attaches it to the release, and uploads it to AnkiWeb (addon `2119980872`, preserving its title/tags/support page/branch).
+
+   The draft step is what keeps a mistake off your public listing: an untagged or mistyped version can be caught before anything is built or uploaded. If the workflow fails afterwards, the release stays published but asset-less (AnkiWeb is untouched) — fix, then re-run from Actions → Release → Run workflow.
 7. (Automatic) The workflow uploads to AnkiWeb right after attaching the asset. Verify the listing afterwards. Manual fallback: <https://ankiweb.net/shared/upload>.
 
 One-time CI setup: repo Settings → Secrets and variables → Actions → Secrets must contain `ANKIWEB_USERNAME` (AnkiWeb login email) and `ANKIWEB_PASSWORD` (plain-password auth; interactive 2FA is unsupported).
