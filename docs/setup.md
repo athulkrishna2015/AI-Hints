@@ -197,7 +197,7 @@ One-time CI setup: repo Settings → Secrets and variables → Actions → Secre
 CI notes worth knowing:
 - The test gate runs a stable subset (`test_ai_undo`, `test_card_parser`, `test_cloze_scenarios`, `test_pregeneration_logic`, `test_race_condition_fix`, `test_edit_item.py`), one interpreter per file. Runners have no Anki install, so the workflow provides a tiny `anki.errors` stub; everything else is mocked by the tests themselves.
 - Keep `addon/latex_fixer` pinned to a commit reachable upstream — an orphaned pin breaks recursive checkouts (and would silently ship CI artifacts without the fixer).
-- AnkiWeb silently wipes over-long descriptions (verified: 8KB+ emptied, ~4KB sticks), so the workflow uploads the first ~3.5KB of `README.md`, not the whole file.
+- The listing description is the full `README.md`, uploaded on every release. AnkiWeb **rejects** descriptions over 65,535 bytes (it does not truncate — the listing silently keeps its previous text), so a pre-flight size check fails the build instead of shipping a stale description. Current README: ~22 KB.
 
 ## Get Your API Keys
 

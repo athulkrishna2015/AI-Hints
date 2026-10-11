@@ -9,7 +9,8 @@ name: Release
 #   3. attaches it to the GitHub release (overwriting on re-runs),
 #   4. uploads the same file to AnkiWeb (addon 2119980872) via
 #      athulkrishna2015/ankiweb-api@v1, preserving the listing's title,
-#      tags, support page and single open-ended branch.
+#      tags, support page and single open-ended branch, and refreshing the
+#      listing description from README.md.
 #
 # One-time setup (repo Settings → Secrets and variables → Actions → Secrets):
 #   - ANKIWEB_USERNAME  (AnkiWeb login email)
@@ -95,22 +96,19 @@ jobs:
           echo "ankiaddon=$file" >> "$GITHUB_OUTPUT"
           echo "Built $file"
 
-      - name: Prepare AnkiWeb description
-        id: desc
+      - name: Check AnkiWeb description size
         run: |
           set -euo pipefail
-          # AnkiWeb silently drops over-long descriptions (a 22KB README was
-          # wiped to empty; ~4KB sticks). Ship the README head instead.
-          python3 - <<'PY'
-          text = open("README.md", encoding="utf-8").read()
-          cut = text[:3500]
-          cut = cut[:cut.rfind("\n")]
-          open("ankiweb-description.md", "w", encoding="utf-8").write(
-              cut + "\n\n...(see the README on GitHub for full docs)"
-          )
-          PY
-          echo "file=ankiweb-description.md" >> "$GITHUB_OUTPUT"
-          wc -c ankiweb-description.md
+          # AnkiWeb rejects descriptions over 65535 bytes -- and rejects them
+          # *silently from the add-on's point of view*: the upload fails and the
+          # listing keeps its previous text, so it looks like the README was
+          # dropped. Fail loudly here instead of shipping a stale description.
+          size=$(wc -c < README.md)
+          echo "README.md: $size bytes (AnkiWeb limit 65535)"
+          if [ "$size" -gt 65535 ]; then
+            echo "::error::README.md is $size bytes; AnkiWeb rejects descriptions over 65535." >&2
+            exit 1
+          fi
 
       - name: Attach to GitHub release
         env:
@@ -133,5 +131,5 @@ jobs:
           tags: AI, LLM, Gemini, Chat, GPT, Grok, Deepseek, LLaMa, Ollama, Groq, Claude
           support-page: https://github.com/athulkrishna2015/AI-Hints
           branches: 2.1.1-26.05+
-          description-file: ${{ steps.desc.outputs.file }}
+          description-file: README.md
           addon-files: ${{ steps.build.outputs.ankiaddon }}
