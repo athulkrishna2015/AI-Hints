@@ -1,0 +1,112 @@
+name: Release
+
+# Automated release pipeline. The manual flow stays the same up to publishing:
+# commit on master, bump + build locally, changelog entry, commit, then
+#   gh release create vX.Y.Z --title "AI-Hints vX.Y.Z" --notes "<release notes>"
+# Publishing fires this workflow (no asset needed on the create call), which:
+#   1. runs the stable unit-test subset (fail fast: nothing broken ships),
+#   2. rebuilds the .ankiaddon from the tag (version forced to the tag),
+#   3. attaches it to the GitHub release (overwriting on re-runs),
+#   4. uploads the same file to AnkiWeb (addon 2119980872) via
+#      athulkrishna2015/ankiweb-api@v1, preserving the listing's title,
+#      tags, support page and single open-ended branch.
+#
+# One-time setup (repo Settings → Secrets and variables → Actions → Secrets):
+#   - ANKIWEB_USERNAME  (AnkiWeb login email)
+#   - ANKIWEB_PASSWORD  (plain-password auth; interactive 2FA is unsupported)
+# To rebuild/republish an existing tag without cutting a new release:
+# Actions → Release → Run workflow → enter the tag (e.g. v8.4.3). The tag
+# must already have a GitHub release, or the attach step creates one.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to rebuild/republish (e.g. v8.4.3)"
+        required: true
+
+permissions:
+  contents: write # attach the .ankiaddon to the release
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "Tag '$TAG' is not a version tag (expected v<major>.<minor>[.<patch>])" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building $version from $TAG"
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+
+      - name: Run unit tests
+        run: |
+          set -euo pipefail
+          # One interpreter per file: some suites share global mocks and
+          # pollute each other inside a single combined run.
+          for t in test_ai_undo test_card_parser test_cloze_scenarios test_pregeneration_logic test_race_condition_fix; do
+            python3 -m unittest "tests.$t"
+          done
+          python3 tests/test_edit_item.py
+
+      - name: Build .ankiaddon
+        id: build
+        run: |
+          set -euo pipefail
+          python3 make_ankiaddon.py "${{ steps.version.outputs.version }}"
+          file=$(ls AI_Hints_v*.ankiaddon)
+          echo "ankiaddon=$file" >> "$GITHUB_OUTPUT"
+          echo "Built $file"
+
+      - name: Attach to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "AI-Hints ${{ steps.version.outputs.version }}" --generate-notes
+          fi
+          gh release upload "$TAG" "${{ steps.build.outputs.ankiaddon }}" --clobber
+
+      - name: Upload to AnkiWeb
+        uses: athulkrishna2015/ankiweb-api@v1
+        with:
+          username: ${{ secrets.ANKIWEB_USERNAME }}
+          password: ${{ secrets.ANKIWEB_PASSWORD }}
+          addon-id: 2119980872
+          title: AI-Hints and Options
+          tags: AI, LLM, Gemini, Chat, GPT, Grok, Deepseek, LLaMa, Ollama, Groq, Claude
+          support-page: https://github.com/athulkrishna2015/AI-Hints
+          branches: 2.1.1-26.05+
+          description-file: README.md
+          addon-files: ${{ steps.build.outputs.ankiaddon }}

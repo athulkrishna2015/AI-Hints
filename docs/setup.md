@@ -181,14 +181,18 @@ python3 -B -m unittest discover -s tests -p "test_*.py"
    git push origin master
    git push origin vX.Y.Z
    ```
-6. Create the GitHub release with the `.ankiaddon` asset:
+6. Create the GitHub release (**without** attaching the file — CI builds it):
 
    ```shell
-   gh release create vX.Y.Z AI_Hints_vX.Y.Z_*.ankiaddon \
+   gh release create vX.Y.Z \
      --title "AI-Hints vX.Y.Z" \
      --notes "<release notes>"
    ```
-7. Upload the same `.ankiaddon` to AnkiWeb: <https://ankiweb.net/shared/upload>.
+
+   Publishing fires the `Release` workflow (`.github/workflows/release.yml`), which runs the unit tests, rebuilds `AI_Hints_vX.Y.Z_<timestamp>.ankiaddon` from the tag, attaches it to the release, and uploads it to AnkiWeb (addon `2119980872`, preserving its title/tags/support page/branch).
+7. (Automatic) The workflow uploads to AnkiWeb right after attaching the asset. Verify the listing afterwards. Manual fallback: <https://ankiweb.net/shared/upload>.
+
+One-time CI setup: repo Settings → Secrets and variables → Actions → Secrets must contain `ANKIWEB_USERNAME` (AnkiWeb login email) and `ANKIWEB_PASSWORD` (plain-password auth; interactive 2FA is unsupported). To rebuild/republish an existing tag without cutting a new release: Actions → Release → Run workflow → enter the tag.
 
 ## Get Your API Keys
 
