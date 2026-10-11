@@ -48,6 +48,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.tag.outputs.tag }}
+          submodules: recursive # addon/latex_fixer is a submodule
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -71,6 +72,13 @@ jobs:
       - name: Run unit tests
         run: |
           set -euo pipefail
+          # The runner has no Anki install. Tests mock `aqt` themselves, but
+          # `from anki.errors import NotFoundError` needs this tiny stdlib-only
+          # stub (fresh every run, never committed).
+          mkdir -p .ci-stubs/anki
+          touch .ci-stubs/anki/__init__.py
+          printf 'class NotFoundError(Exception):\n    """No such card/note (mirrors anki.errors)."""\n' > .ci-stubs/anki/errors.py
+          export PYTHONPATH="$PWD/.ci-stubs:$PYTHONPATH"
           # One interpreter per file: some suites share global mocks and
           # pollute each other inside a single combined run.
           for t in test_ai_undo test_card_parser test_cloze_scenarios test_pregeneration_logic test_race_condition_fix; do
