@@ -9,7 +9,6 @@ from aqt.qt import QMessageBox, QMenu, QAction, QPoint, Qt, QDialog, QVBoxLayout
 from .logger import logger, info, tooltip, state
 from .card_parser import _iter_hint_blocks as _cp_iter_hint_blocks
 from .card_parser import _json_size_depth_guard as _cp_json_guard
-from .card_parser import _unverifiable_cloze_data_is_stale as _cp_unverifiable_stale
 
 ADDON_PACKAGE = __name__.split(".")[0]
 
@@ -922,9 +921,6 @@ def _cached_hints_for_card(card):
                         if not found or not parser._answers_match(cloze_ans, cached.get("data") or {}):
                             _generated_hint_cache.pop(key, None)
                             return None
-                    if _cp_unverifiable_stale(note, cached.get("data") or {}):
-                        _generated_hint_cache.pop(key, None)
-                        return None
         except Exception:
             pass
     return cached
