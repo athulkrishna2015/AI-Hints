@@ -2,6 +2,12 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.5.0 (2026-10-11)
+- **Publishing a Release Now Updates AnkiWeb by Itself**: Cutting a GitHub release runs the unit tests, rebuilds the `.ankiaddon` from the tag, attaches it to the release and uploads it to AnkiWeb in one go, refreshing the listing's description from `README.md`. There is no manual upload step any more. An existing release can be rebuilt the same way from Actions → Release → Run workflow, and a `dry_run` option rehearses the whole pipeline without publishing anything.
+- **Fresher Builds**: The packaged add-on is now built with the current LaTeX fixer, after a stale submodule pin had been shipping builds without it.
+
+*This release changes the build and release tooling only — the add-on code is identical to 8.4.2.*
+
 ## 8.4.2 (2026-10-10)
 - **Inline Editing Allowed on Stale Cloze Data**: Editing a hint/option is no longer blocked with "Editing is disabled on this card" when the cloze content changed since generation. The stale payload loads for editing, and saving re-snapshots `_src` to the current cloze text — re-basing the edited data onto the new content so it becomes fresh again instead of requiring a full regeneration first.
 
