@@ -193,6 +193,56 @@ def _strip_block_with_ws(text: str, match: HintBlockMatch):
     e = _consume_ws_noise(text, match.end(), 1)
     return text[:s] + text[e:]
 
+
+def _unverifiable_cloze_data_is_stale(note, card_data, tolerance_s: int = 2) -> bool:
+    """True when a keyed cloze entry without an `_src` snapshot must not be
+    trusted as the card's current data.
+
+    `_src`-less entries predate answer-snapshot tracking, so the current cloze
+    text cannot be compared against anything. When such an entry *also* carries
+    a `_generated_at` timestamp older than the note's last modification, it is
+    either leftover from before a later edit or carried in from another note
+    (e.g. pasted field HTML) — in both cases it is stale.
+
+    Fail-open by design, so behavior only changes for the provably-stale case:
+    - entries WITH `_src` are decided by answer comparison elsewhere;
+    - entries with neither `_src` nor `_generated_at` (very old legacy data)
+      keep today's trust-everything behavior, so offline users never lose
+      displayed data to an unanswerable comparison.
+    """
+    if not isinstance(card_data, dict):
+        return False
+    if card_data.get("_src"):
+        return False
+    generated_at = card_data.get("_generated_at") or ""
+    if not isinstance(generated_at, str):
+        generated_at = str(generated_at)
+    generated_at = generated_at.strip()
+    if not generated_at:
+        return False
+    try:
+        note_mod = int(getattr(note, "mod", 0) or 0)
+    except Exception:
+        return False
+    if not note_mod:
+        return False
+    clean = generated_at.replace("T", " ").strip()
+    gen_ts = 0
+    try:
+        from datetime import datetime
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                gen_ts = datetime.strptime(clean, fmt).timestamp()
+                break
+            except ValueError:
+                continue
+    except Exception:
+        return False
+    if not gen_ts:
+        return False
+    return note_mod > (gen_ts + tolerance_s)
+
+
 class CardParser:
 
     def __init__(self, mathjax_format: str = "delimiters", fix_latex: bool = False, **kwargs):
@@ -1525,6 +1575,11 @@ class CardParser:
                                 _, cloze_ans, found = self._focus_current_cloze(fields_to_scan[0], card)
                                 if found and not self._answers_match(cloze_ans, card_data):
                                     return False
+                        # Unverifiable (`_src`-less) entries older than the
+                        # note's last edit are stale (leftover or carried in
+                        # from another note) and must not count as data.
+                        if _unverifiable_cloze_data_is_stale(note, card_data):
+                            return False
 
             return True
             

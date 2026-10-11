@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.4.3 (2026-10-11)
+- **Unverifiable Cloze Data No Longer Trusted After Later Edits**: A keyed cloze entry with no `_src` snapshot but with a `_generated_at` timestamp older than the note's last modification is now treated as stale (refused by the reader and evicted from the memory cache) instead of rendering as the card's own data. Carried-in payloads from other notes can no longer display on a newly created cloze; the card regenerates instead. Entries with a matching `_src`, and legacy entries with no timestamp at all, behave exactly as before.
+
 ## 8.4.2 (2026-10-10)
 - **Inline Editing Allowed on Stale Cloze Data**: Editing a hint/option is no longer blocked with "Editing is disabled on this card" when the cloze content changed since generation. The stale payload loads for editing, and saving re-snapshots `_src` to the current cloze text — re-basing the edited data onto the new content so it becomes fresh again instead of requiring a full regeneration first.
 
