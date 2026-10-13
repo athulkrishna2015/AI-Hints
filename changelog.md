@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.5.1 (2026-10-13)
+- **Faster Card Browser**: The hidden-JSON cleaner attached to Anki's `browser_did_fetch_row` hook ran on every cell of every row on every repaint, rebuilding its match pattern each time — so cells containing no AI data at all still paid the full cost. The pattern is now compiled once at load, text that cannot contain a hint block or hint JSON returns immediately, and the JSON scan decodes in place instead of copying the remainder of the string for every `{` it encounters. Cleaning a typical cell is ~30–50× faster (CSS/JS-heavy fields ~100×), so browsing, searching and scrolling stay responsive while the add-on is installed. Cleaning results are unchanged.
+
 ## 8.5.0 (2026-10-11)
 - **Publishing a Release Now Updates AnkiWeb by Itself**: Cutting a GitHub release runs the unit tests, rebuilds the `.ankiaddon` from the tag, attaches it to the release and uploads it to AnkiWeb in one go, refreshing the listing's description from `README.md`. There is no manual upload step any more. An existing release can be rebuilt the same way from Actions → Release → Run workflow, and a `dry_run` option rehearses the whole pipeline without publishing anything.
 - **Fresher Builds**: The packaged add-on is now built with the current LaTeX fixer, after a stale submodule pin had been shipping builds without it.
