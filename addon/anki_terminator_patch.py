@@ -2,6 +2,14 @@ import json
 import re
 import sys
 
+# Hoisted: this runs for every cell of every browser row on every repaint.
+_AI_HINTS_BLOCK_RE = re.compile(
+    r'(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*',
+    flags=re.DOTALL | re.IGNORECASE,
+)
+_JSON_DECODER = json.JSONDecoder()
+
+
 def _is_ai_hints_dict(obj) -> bool:
     if not isinstance(obj, dict):
         return False
@@ -15,14 +23,15 @@ def _is_ai_hints_dict(obj) -> bool:
 def clean_ai_hints_from_text(text: str) -> str:
     if not isinstance(text, str):
         return text
-    pattern = re.compile(
-        r'(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*<div\b[^>]*class=["\'][^"\']*(?:ai-hints-json|ai-hints-container)[^"\']*["\'][^>]*>.*?</div>(?:[\s\n\r]|<br\s*/?>|&nbsp;|<div>\s*</div>)*',
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-    cleaned = re.sub(pattern, "", text)
-    
+
+    # Fast path: nothing below can match unless one of these words is present.
+    lowered = text.lower()
+    if "hints" not in lowered and "options" not in lowered:
+        return text.strip()
+
+    cleaned = _AI_HINTS_BLOCK_RE.sub("", text)
+
     # Strip plain/tag-stripped JSON payloads that get saved in sfld (Sort Field)
-    decoder = json.JSONDecoder()
     idx = 0
     while True:
         start_idx = cleaned.find("{", idx)
@@ -30,14 +39,14 @@ def clean_ai_hints_from_text(text: str) -> str:
             break
         
         # Fast path: skip cloze deletions (which start with "{{")
-        if cleaned[start_idx:start_idx+2] == "{{":
+        if cleaned.startswith("{{", start_idx):
             idx = start_idx + 2
             continue
-            
+
         try:
-            # Try parsing a JSON object starting at start_idx
-            obj, end_pos = decoder.raw_decode(cleaned[start_idx:])
-            actual_end_idx = start_idx + end_pos
+            # Decode from start_idx rather than slicing; the slice copied the
+            # whole tail per brace, which was quadratic on CSS/JS-heavy cells.
+            obj, actual_end_idx = _JSON_DECODER.raw_decode(cleaned, start_idx)
             if _is_ai_hints_dict(obj):
                 cleaned = cleaned[:start_idx] + cleaned[actual_end_idx:]
                 idx = start_idx
