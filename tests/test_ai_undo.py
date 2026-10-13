@@ -197,6 +197,76 @@ class AiUndoTests(unittest.TestCase):
         self.assertIn('"h1"', card.note().fields[0])  # note untouched
         rh._ai_redo_stack.clear()
 
+    def test_h_inline_edits_are_undoable(self):
+        """Append, delete (✕) and modify must all push a pre-edit snapshot.
+
+        All three gestures route through edit_item, so each one has to land on
+        the same per-card stack the AI writes use, otherwise the shortcuts
+        silently skip over manual edits.
+        """
+        from addon import reviewer_hooks as rh
+
+        class EditableNote(FakeNote):
+            """FakeNote plus the mapping interface update_note_with_hints writes."""
+
+            def __init__(self, fields):
+                super().__init__(fields)
+                self._names = ["Front", "Back"][:len(fields)]
+
+            def keys(self):
+                return list(self._names)
+
+            def items(self):
+                return list(zip(self._names, self.fields))
+
+            def __getitem__(self, key):
+                return self.fields[self._names.index(key)]
+
+            def __setitem__(self, key, value):
+                self.fields[self._names.index(key)] = value
+
+            def __contains__(self, key):
+                return key in self._names
+
+        block1 = make_block(111, 0, payload("h1"))
+        note = EditableNote([f'The capital {{{{c1::Paris}}}} is big. {block1}', ''])
+        card = FakeCard(note)
+        rh.mw.col = _M()
+        rh._HINTS_BLOCK_CACHE.clear()
+
+        # 1. Modify an existing hint.
+        rh.edit_item(card, None, "hints", 0, "EDITED")
+        self.assertEqual(len(rh._ai_undo_stack), 1, "modify must snapshot")
+        snap = rh._ai_undo_stack[-1]
+        self.assertEqual(snap["card_id"], card.id, "snapshot scoped to the card")
+        self.assertIn('"h1"', snap["block_html"],
+                      "snapshot must hold the pre-edit state")
+
+        # 2. Delete an option — the ✕ sends an empty value.
+        rh.edit_item(card, None, "options", 0, "")
+        self.assertEqual(len(rh._ai_undo_stack), 2, "delete must snapshot")
+
+        # 3. Append a hint — the "+ Add" chip.
+        rh.add_item(card, None, "hints", "ADDED")
+        self.assertEqual(len(rh._ai_undo_stack), 3, "append must snapshot")
+
+        # Undo walks back through all three to the original block.
+        seen = []
+        while True:
+            entry = rh._pop_ai_undo_for_card(card.id)
+            if entry is None:
+                break
+            seen.append(entry.get("block_html"))
+        self.assertEqual(len(seen), 3, "three undo steps expected")
+        self.assertIn('"h1"', seen[-1], "oldest step is the original state")
+
+        # The stack stays per-card.
+        other = FakeCard(EditableNote([f'x {make_block(999, 0, payload("h1"))}', '']),
+                         cid=999)
+        rh.edit_item(other, None, "hints", 0, "OTHER")
+        self.assertIsNone(rh._pop_ai_undo_for_card(111), "other card must not pop")
+        self.assertIsNotNone(rh._pop_ai_undo_for_card(999), "owning card pops")
+
     def test_g_shortcuts_registered(self):
         import addon.reviewer_hooks as rh
         # Configure the mw instance this module actually bound at import time

@@ -187,6 +187,30 @@
         .nightMode.ai-hints-ctrl-active .ai-hints-add-item:hover {
             background-color: rgba(255, 235, 59, 0.08) !important;
         }
+        /* Per-item delete affordance, shown only while Ctrl/Cmd is held. Floated
+           right so it sits at the end of the item without needing a positioning
+           context, and so wrapping text flows around it instead of under it. */
+        .ai-hints-del-item {
+            display: none;
+            float: right;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            color: #dc3545;
+            font-size: 0.8em;
+            font-weight: bold;
+            line-height: 1;
+            padding: 2px 4px;
+            margin-left: 8px;
+            border-radius: 3px;
+        }
+        .ai-hints-ctrl-active .ai-hints-del-item { display: inline-block; }
+        .ai-hints-ctrl-active .ai-hints-del-item:hover {
+            background-color: #dc3545;
+            color: #fff;
+        }
+        .nightMode .ai-hints-del-item { color: #ff6b6b; }
+        .nightMode.ai-hints-ctrl-active .ai-hints-del-item:hover { color: #fff; }
     `;
 
     // 2. State & Helpers
@@ -213,6 +237,15 @@
             hash |= 0;
         }
         return Math.abs(hash).toString(36);
+    }
+
+    // Read a rendered list item's HTML for the scraping fallback, minus the
+    // Ctrl-only affordances appended inside it (the per-item ✕), so UI
+    // chrome is never scraped back in as card content.
+    function scrapeItemHtml(li) {
+        const clone = li.cloneNode(true);
+        clone.querySelectorAll('.ai-hints-del-item').forEach(n => n.remove());
+        return clone.innerHTML;
     }
     
     function getPersistence() {
@@ -809,6 +842,33 @@
                         }
                     });
                 }
+
+                // Ctrl-only ✕ that deletes this hint/option outright. An empty
+                // value is already the removal signal for ai_hints_edit_item,
+                // so this reuses the same handler as the inline editor rather
+                // than adding a second Python path.
+                if (isAddonActive) {
+                    const delItem = document.createElement('span');
+                    delItem.className = 'ai-hints-del-item';
+                    delItem.textContent = '✕';
+                    delItem.title = 'Delete this ' + (li.dataset.type === 'hints' ? 'hint' : 'option');
+                    delItem.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (li.dataset.editing === 'true') return;
+                        // No confirmation: this is undoable with Ctrl+Alt+Z,
+                        // same as an AI write or an inline edit.
+                        if (typeof pycmd === 'function') {
+                            pycmd(JSON.stringify({
+                                action: "ai_hints_edit_item",
+                                type: li.dataset.type,
+                                index: parseInt(li.dataset.idx),
+                                value: ""
+                            }));
+                        }
+                    });
+                    li.appendChild(delItem);
+                }
             }
             return li;
         });
@@ -1322,8 +1382,8 @@
                         // Scraping fallback for HTML-only containers
                         data = { hints: [], options: [] };
                         // Exclude the Ctrl-only "+ Add" affordance rows.
-                        block.querySelectorAll('.ai-hints-hint-list li:not(.ai-hints-add-item)').forEach(li => data.hints.push(li.innerHTML));
-                        block.querySelectorAll('.ai-hints-list li:not(.ai-hints-add-item)').forEach(li => data.options.push(li.innerHTML));
+                        block.querySelectorAll('.ai-hints-hint-list li:not(.ai-hints-add-item)').forEach(li => data.hints.push(scrapeItemHtml(li)));
+                        block.querySelectorAll('.ai-hints-list li:not(.ai-hints-add-item)').forEach(li => data.options.push(scrapeItemHtml(li)));
                         // Hide the original static block so we can replace it with our interactive one
                         block.style.display = 'none';
                     }

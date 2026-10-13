@@ -2,6 +2,11 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.0 (2026-10-13)
+- **Delete a Hint or Option With One Click**: Holding `Ctrl`/`Cmd` in the reviewer now reveals a red **✕** at the right end of every hint and option, alongside the existing **+ Add** chip. Click it and the item is removed from the note immediately — no regeneration, no API call, and no confirmation dialog. Deleting an option re-points the saved correct answer to the new first option, so the card stays consistent; removing the last hint *and* option still clears the card as before.
+- **Every Inline Edit Is Now Undoable**: `Ctrl+Alt+Z` / `Ctrl+Alt+Shift+Z` step back through your own edits, not just AI writes. Appending with **+ Add**, deleting with the new **✕**, and editing text in place all snapshot the previous state onto the same per-card history, so a mistyped or unwanted change is one shortcut away from reversed. Previously these edits were saved directly to the note and were unrecoverable without re-reading the field by hand.
+- **Delete Buttons Never Leak Into Card Content**: The HTML-only scraping fallback reads each rendered list item's HTML. The new ✕ is excluded from that read, so the control can never be scraped back in as hint text and fed to the AI on the next generation.
+
 ## 8.5.1 (2026-10-13)
 - **Faster Card Browser**: The hidden-JSON cleaner attached to Anki's `browser_did_fetch_row` hook ran on every cell of every row on every repaint, rebuilding its match pattern each time — so cells containing no AI data at all still paid the full cost. The pattern is now compiled once at load, text that cannot contain a hint block or hint JSON returns immediately, and the JSON scan decodes in place instead of copying the remainder of the string for every `{` it encounters. Cleaning a typical cell is ~30–50× faster (CSS/JS-heavy fields ~100×), so browsing, searching and scrolling stay responsive while the add-on is installed. Cleaning results are unchanged.
 

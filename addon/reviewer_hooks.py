@@ -1724,7 +1724,23 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
         logger.error(f"AI-Hints: Unknown edit type {item_type}")
         return
 
-    # 5. Save back to note and update Anki database
+    # 5. Record the pre-edit state so Ctrl+Alt+Z / Ctrl+Alt+Shift+Z can step
+    # back through inline edits the same way they step through AI writes. This
+    # covers append, delete and modify (add_item routes through here too), and
+    # the both-lists-empty branch below, which clears the block outright.
+    try:
+        _pre_snap = _capture_ai_snapshot(card)
+        _clear_redo_for_card(card.id)  # a new edit diverges the redo branch
+        _push_ai_undo({
+            "card_id": card.id,
+            "note_id": getattr(note, "id", None),
+            "field_idx": (_pre_snap or {}).get("field_idx", 0),
+            "block_html": (_pre_snap or {}).get("block_html"),
+        })
+    except Exception as snap_err:
+        logger.debug(f"AI-Hints: inline-edit undo snapshot skipped: {snap_err}")
+
+    # 6. Save back to note and update Anki database
     # If both hints and options are empty, clear it entirely
     if not data.get("hints") and not data.get("options"):
         clear_hints(card, web)

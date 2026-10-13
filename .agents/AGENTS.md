@@ -30,6 +30,31 @@ changelog.md                 # User-facing changelog (add a bullet per PR)
 .agents/AGENTS.md            # This file
 ```
 
+## Frontend tooling
+
+`addon/web/template.js` is the only reviewer-rendered file, and the Python suite
+does not execute it. To exercise it in a real browser:
+
+- **puppeteer 25.13.0** is installed globally at `/usr/bin/puppeteer` (npm global,
+  requireable as `require('/usr/lib/node_modules/puppeteer')`).
+- **Chrome is NOT installed.** `~/.cache/puppeteer` is empty and there is no
+  chrome/chromium on the system, so `puppeteer.launch()` fails with
+  `Could not find Chrome (ver. 155.0.8059.39)`. Run once:
+  ```
+  npx puppeteer browsers install chrome
+  ```
+- `/opt/zen-browser-bin/zen-bin` is Firefox-based and **cannot** be used as a
+  puppeteer target.
+- A plain `curl` against `ankiweb.net/shared/info/...` returns only a SvelteKit
+  JS shell, and `item-info` returns **protobuf**, not JSON. Use the
+  `ankiweb-api` sibling repo's `ankiweb_client` for listing checks, with the
+  `cb` cache-buster.
+
+After changing `template.js`, the reviewer only picks it up once it has been
+re-copied to the media folder — `auto_update_mobile_setup()` does that ~2s after
+each profile open, so verify against
+`<profile>/collection.media/_ai_hints_template.js`, not the source file.
+
 ## Where things live at runtime
 
 The add-on reads its on-disk config from `addon/meta.json` but **writes log/state files to the Anki profile folder** (e.g. `~/Library/Application Support/Anki2/User 1/` on macOS, `%APPDATA%\Anki2\User 1\` on Windows, `~/.local/share/Anki2/User 1/` on Linux).

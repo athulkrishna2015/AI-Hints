@@ -22,6 +22,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **Multiple-Choice Options**: Select MCQ options on the front side (via click, touch, or hotkeys `1-9`) with color-coded results (green for correct, red for incorrect).
 - **Auto-Rating**: Instantly rate cards (e.g. `Good` or `Again`) automatically upon selecting an option.
 - **Inline Editor**: Edit generated hints or options directly on the card during review (via `Ctrl+Click` / `Cmd+Click`). Holding `Ctrl`/`Cmd` also reveals a **+ Add** chip on each section's header line — `Ctrl`+click it, type, and press `Enter` to append a new hint or option without regenerating (or spending an API call). The chip expands into a panel over the list while you type, so nothing on the card shifts. Clearing an item's text and confirming removes it.
+- **Delete a Hint or Option With One Click**: Holding `Ctrl`/`Cmd` also reveals a red **✕** at the right end of every hint and option. Click it and the item is removed immediately — no confirmation dialog, because it is undoable. Deleting an option re-points the saved correct answer to the new first option, so the card stays consistent.
 - **Model Name on the Options Header**: When the card's data records a `_model`, it is shown next to the `OPTIONS:` label so you can see which model produced the data.
 - **Factual Error Alerts**: Automatically detects and flags factual errors in your notes with custom warning highlights during study.
 - **Skip AI Generation**: Permanently skip AI generation for individual cards. Skipped cards render an **"AI generation skipped"** message (with all desktop buttons, or message-only on mobile) until you generate or clear them. **Clear** is always available on skipped cards — it removes the marker and the skipped tag so the card is eligible again. A cloze that is only *momentarily* invisible (being created/edited, or during an undo transition) is never auto-marked skipped.
@@ -48,6 +49,7 @@ Generations can finish long after you cancel them, after you start a new one, or
 - **Cached pre-generation results are validated**: background results record the text they were generated from and are re-checked against the card before being applied; stale ones are dropped instead of pasted onto an edited card.
 - **Transiently missing clozes are not marked skipped**: while a cloze is being created/edited, the add-on leaves the note untouched and simply moves on.
 - **Every AI write is undoable** in the reviewer with `Ctrl+Alt+Z` (`Ctrl+Alt+Shift+Z` redoes), stepping back through replaced results before removing the data entirely — including results saved in the background (pre-generation direct saves, generations that finished after you moved to the next card), which stay undoable per card when you review them.
+- **Every Inline Edit Is Undoable Too**: The same shortcuts now step back through your own edits — appending a hint or option with **+ Add**, deleting one with the **✕**, and editing one in place — on the same per-card history as AI writes. Nothing you do by hand can no longer be recovered only by re-reading the note.
 
 ## Intelligence-Ranked Fallback Hierarchy
 
