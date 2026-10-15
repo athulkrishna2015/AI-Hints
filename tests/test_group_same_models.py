@@ -212,6 +212,35 @@ class GlobalDialogTableTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        # Module import strips the aqt/addon fakes from sys.modules
+        # (combined-run hygiene, see the teardown at the end of the module
+        # header). Dialog actions that reach logger.tooltip() need the aqt
+        # fakes back, since that does `from aqt.utils import tooltip` at call
+        # time — and lazy `from ..ai_client import ...` needs a fake parent
+        # `addon` package, otherwise the real addon/__init__.py executes and
+        # takes the production init path (its `from aqt import mw` sees the
+        # truthy MagicMock and imports the whole reviewer stack).
+        cls._saved_mods = {
+            k: sys.modules.get(k)
+            for k in list(sys.modules)
+            if k == "addon" or k.startswith("addon.") or k == "aqt" or k.startswith("aqt.")
+        }
+        addon_pkg = types.ModuleType("addon")
+        addon_pkg.__path__ = [os.path.join(PROJECT_ROOT, "addon")]
+        addon_pkg.__package__ = "addon"
+        sys.modules["addon"] = addon_pkg
+        sys.modules["aqt"] = aqt_mod
+        sys.modules["aqt.qt"] = qt_mod
+        sys.modules["aqt.utils"] = utils_mod
+
+    @classmethod
+    def tearDownClass(cls):
+        for k in list(sys.modules):
+            if k == "addon" or k.startswith("addon.") or k == "aqt" or k.startswith("aqt."):
+                del sys.modules[k]
+        for k, v in cls._saved_mods.items():
+            if v is not None:
+                sys.modules[k] = v
 
     def _make_dialog(self, rows, disabled=()):
         parent = QtWidgets.QWidget()

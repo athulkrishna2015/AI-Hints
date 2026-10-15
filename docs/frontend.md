@@ -97,7 +97,7 @@ When the add-on is active, the script calls Anki's `pycmd(...)` bridge to ask Py
 | `pycmd('ai_hints_clear')` | Permanently clear the card's hints. |
 | `pycmd('ai_hints_skip')` | Skip AI generation for the card. |
 | `pycmd('ai_hints_refresh')` | Refresh the rendered data from the note. |
-| `pycmd('ai_hints_remove_warning')` | Dismiss a factual-error ⚠️ warning hint. |
+| `pycmd('ai_hints_remove_warning')` | Legacy only: older templates had a dedicated warning button. Current templates delete ⚠️ hints like any other hint (Ctrl/Cmd + ✕ via `ai_hints_edit_item`). Kept so stale cached pages still work. |
 | `pycmd('ai_hints_edit_item')` | Persist an inline-edit to a hint/option. |
 | `pycmd('ai_hints_rate_good')` / `'ai_hints_rate_again'` | Auto-rate the card (optional auto-rate feature). |
 

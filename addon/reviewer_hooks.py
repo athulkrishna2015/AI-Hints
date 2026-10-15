@@ -1815,6 +1815,10 @@ def on_webview_did_receive_js_message(handled, message, context):
         clear_hints(card=card, web=web)
         return (True, None)
     if message == "ai_hints_remove_warning":
+        # Legacy path: older template.js builds rendered warnings with a
+        # dedicated "Remove Warning" button. Current templates delete warnings
+        # like any other hint (Ctrl/Cmd + ✕ via ai_hints_edit_item), so this
+        # only fires from stale cached pages.
         remove_warning_hint(card=card, web=web)
         return (True, None)
     if message == "ai_hints_refresh":

@@ -94,15 +94,13 @@
         @keyframes ai-hints-pregen-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
         @keyframes ai-hints-lingering-pulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
         .ai-hints-ctrl-active .ai-hints-hint-list li:hover,
-        .ai-hints-ctrl-active .ai-hints-list li:hover,
-        .ai-hints-ctrl-active .ai-hints-warning-item span:hover {
+        .ai-hints-ctrl-active .ai-hints-list li:hover {
             cursor: pointer;
             background-color: rgba(255, 235, 59, 0.15) !important;
             border-radius: 4px;
         }
         .nightMode.ai-hints-ctrl-active .ai-hints-hint-list li:hover,
-        .nightMode.ai-hints-ctrl-active .ai-hints-list li:hover,
-        .nightMode.ai-hints-ctrl-active .ai-hints-warning-item span:hover {
+        .nightMode.ai-hints-ctrl-active .ai-hints-list li:hover {
             background-color: rgba(255, 235, 59, 0.08) !important;
         }
         .ai-hints-inline-editor {
@@ -712,163 +710,125 @@
         list.className = title.toLowerCase().includes('hint') ? 'ai-hints-hint-list' : 'ai-hints-list';
         const listItems = items.map((text, index) => {
             const li = document.createElement('li');
-            const isWarning = text && (text.includes('⚠️') || text.includes('⚠'));
-            if (isWarning && isAddonActive) {
-                li.className = 'ai-hints-warning-item';
-                const span = document.createElement('span');
-                span.dataset.idx = index;
-                span.dataset.type = 'hints';
-                span.dataset.rawText = text;
-                span.innerHTML = convertMathDelimitersToTags(escapeHtml(text));
-                li.appendChild(span);
+            li.dataset.idx = index;
+            li.dataset.type = title.toLowerCase().includes('hint') ? 'hints' : 'options';
+            li.dataset.rawText = text;
+            li.innerHTML = convertMathDelimitersToTags(escapeHtml(text));
                 
-                if (isAddonActive) {
-                    span.addEventListener('click', (event) => {
-                        if (event.ctrlKey || event.metaKey) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            startInlineEditing(span);
-                        }
-                    });
+            const isCorrect = (correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text));
+                
+            // If this option is currently selected (or was selected on the question side)
+            const isSelected = selectedOptionIdx !== undefined && selectedOptionIdx !== null && selectedOptionIdx === index;
+                
+            if (isSelected) {
+                li.className = isCorrect ? 'ai-hints-selected-correct' : 'ai-hints-selected-wrong';
+            } else if (isCorrect) {
+                if (selectedOptionIdx !== undefined && selectedOptionIdx !== null) {
+                    // If any option was chosen, reveal the correct one in green
+                    li.className = 'ai-hints-selected-correct';
+                } else {
+                    // Standard correct highlight
+                    li.className = 'ai-hints-correct';
                 }
+            }
                 
-                const delBtn = document.createElement('span');
-                delBtn.className = 'ai-hints-del-warning-btn';
-                delBtn.textContent = ' ❌ Remove Warning';
-                delBtn.style.cursor = 'pointer';
-                delBtn.style.color = '#dc3545';
-                delBtn.style.marginLeft = '8px';
-                delBtn.style.fontSize = '0.8em';
-                delBtn.style.fontWeight = 'bold';
-                delBtn.title = "Permanently remove this warning hint from the note";
-                delBtn.onclick = (e) => {
-                    if (e) { e.stopPropagation(); e.preventDefault(); }
-                    if (confirm("Remove this warning hint from the note permanently?")) {
-                        pycmd('ai_hints_remove_warning');
-                    }
-                };
-                li.appendChild(delBtn);
-            } else {
-                li.dataset.idx = index;
-                li.dataset.type = title.toLowerCase().includes('hint') ? 'hints' : 'options';
-                li.dataset.rawText = text;
-                li.innerHTML = convertMathDelimitersToTags(escapeHtml(text));
-                
-                const isCorrect = (correctIndex !== undefined && correctIndex !== null && index === correctIndex) || (isCorrectFn && isCorrectFn(text));
-                
-                // If this option is currently selected (or was selected on the question side)
-                const isSelected = selectedOptionIdx !== undefined && selectedOptionIdx !== null && selectedOptionIdx === index;
-                
-                if (isSelected) {
-                    li.className = isCorrect ? 'ai-hints-selected-correct' : 'ai-hints-selected-wrong';
-                } else if (isCorrect) {
-                    if (selectedOptionIdx !== undefined && selectedOptionIdx !== null) {
-                        // If any option was chosen, reveal the correct one in green
-                        li.className = 'ai-hints-selected-correct';
-                    } else {
-                        // Standard correct highlight
-                        li.className = 'ai-hints-correct';
-                    }
-                }
-                
-                if (title.toLowerCase().includes('option')) {
-                    li.addEventListener('click', (event) => {
-                        if (isAddonActive && (event.ctrlKey || event.metaKey)) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            startInlineEditing(li);
-                            return;
-                        }
-                        
-                        // Ignore click if the element is currently in editing mode
-                        if (li.dataset.editing === 'true') return;
-                        
-                        // Ignore if we are already showing answer/locked
-                        if (isAnswerSide()) return;
-
-                        // Save the selected option index in state
-                        const ord = getCardOrd();
-                        let cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
-                        if (cardId === 'temp') {
-                            const firstJson = document.querySelector('.ai-hints-json');
-                            if (firstJson) {
-                                cardId = 'h' + hashCode(firstJson.textContent);
-                            } else {
-                                const qa = document.getElementById('qa') || document.body;
-                                cardId = 'h' + hashCode(qa.innerText || qa.textContent || '');
-                            }
-                        }
-                        const stateKey = 'state_' + cardId + '_' + ord;
-                        const persistence = getPersistence();
-                        const state = persistence.get(stateKey) || {};
-                        state.selectedOptionIdx = index;
-                        persistence.save(stateKey, state);
-
-                        // Reveal back side of the card immediately.
-                        // AnkiMobile (iOS) has NO JavaScript API for showing the answer:
-                        // calling pycmd('ans') or showAnswer() there navigates the WebView
-                        // to a blank page showing the literal string "undefined". So on iOS
-                        // we skip the JS reveal and let the native tap-to-reveal flip the
-                        // card (the saved selection still renders on the answer side).
-                        // Desktop and AnkiDroid use the platform JS APIs below as before.
-                        const isAnkiMobile = typeof window.anki !== 'undefined' &&
-                            typeof window.webkit !== 'undefined' &&
-                            !!(window.webkit.messageHandlers && window.webkit.messageHandlers.cb);
-                        if (!isAnkiMobile) {
-                            if (typeof pycmd === 'function') {
-                                pycmd('ans');
-                            } else if (typeof window.anki !== 'undefined' && typeof window.anki.showAnswer === 'function') {
-                                window.anki.showAnswer();
-                            } else if (typeof showAnswer === 'function') {
-                                showAnswer();
-                            } else {
-                                // AnkiWeb exposes no JS reveal API, so simulate the user
-                                // pressing the review screen's own "Show Answer" button
-                                // (rendered inside #ansarea by the AnkiWeb web app).
-                                const ansBtn = document.querySelector('#ansarea .btn.btn-primary.btn-lg') ||
-                                    document.querySelector('.btn.btn-primary.btn-lg');
-                                if (ansBtn && /show answer/i.test(ansBtn.textContent || '')) {
-                                    ansBtn.click();
-                                }
-                            }
-                        }
-                    });
-                } else if (isAddonActive) {
-                    li.addEventListener('click', (event) => {
-                        if (event.ctrlKey || event.metaKey) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            startInlineEditing(li);
-                        }
-                    });
-                }
-
-                // Ctrl-only ✕ that deletes this hint/option outright. An empty
-                // value is already the removal signal for ai_hints_edit_item,
-                // so this reuses the same handler as the inline editor rather
-                // than adding a second Python path.
-                if (isAddonActive) {
-                    const delItem = document.createElement('span');
-                    delItem.className = 'ai-hints-del-item';
-                    delItem.textContent = '✕';
-                    delItem.title = 'Delete this ' + (li.dataset.type === 'hints' ? 'hint' : 'option');
-                    delItem.addEventListener('click', (event) => {
+            if (title.toLowerCase().includes('option')) {
+                li.addEventListener('click', (event) => {
+                    if (isAddonActive && (event.ctrlKey || event.metaKey)) {
                         event.preventDefault();
                         event.stopPropagation();
-                        if (li.dataset.editing === 'true') return;
-                        // No confirmation: this is undoable with Ctrl+Alt+Z,
-                        // same as an AI write or an inline edit.
-                        if (typeof pycmd === 'function') {
-                            pycmd(JSON.stringify({
-                                action: "ai_hints_edit_item",
-                                type: li.dataset.type,
-                                index: parseInt(li.dataset.idx),
-                                value: ""
-                            }));
+                        startInlineEditing(li);
+                        return;
+                    }
+                        
+                    // Ignore click if the element is currently in editing mode
+                    if (li.dataset.editing === 'true') return;
+                        
+                    // Ignore if we are already showing answer/locked
+                    if (isAnswerSide()) return;
+
+                    // Save the selected option index in state
+                    const ord = getCardOrd();
+                    let cardId = window.aiHintsCurrentCard ? window.aiHintsCurrentCard.id : 'temp';
+                    if (cardId === 'temp') {
+                        const firstJson = document.querySelector('.ai-hints-json');
+                        if (firstJson) {
+                            cardId = 'h' + hashCode(firstJson.textContent);
+                        } else {
+                            const qa = document.getElementById('qa') || document.body;
+                            cardId = 'h' + hashCode(qa.innerText || qa.textContent || '');
                         }
-                    });
-                    li.appendChild(delItem);
-                }
+                    }
+                    const stateKey = 'state_' + cardId + '_' + ord;
+                    const persistence = getPersistence();
+                    const state = persistence.get(stateKey) || {};
+                    state.selectedOptionIdx = index;
+                    persistence.save(stateKey, state);
+
+                    // Reveal back side of the card immediately.
+                    // AnkiMobile (iOS) has NO JavaScript API for showing the answer:
+                    // calling pycmd('ans') or showAnswer() there navigates the WebView
+                    // to a blank page showing the literal string "undefined". So on iOS
+                    // we skip the JS reveal and let the native tap-to-reveal flip the
+                    // card (the saved selection still renders on the answer side).
+                    // Desktop and AnkiDroid use the platform JS APIs below as before.
+                    const isAnkiMobile = typeof window.anki !== 'undefined' &&
+                        typeof window.webkit !== 'undefined' &&
+                        !!(window.webkit.messageHandlers && window.webkit.messageHandlers.cb);
+                    if (!isAnkiMobile) {
+                        if (typeof pycmd === 'function') {
+                            pycmd('ans');
+                        } else if (typeof window.anki !== 'undefined' && typeof window.anki.showAnswer === 'function') {
+                            window.anki.showAnswer();
+                        } else if (typeof showAnswer === 'function') {
+                            showAnswer();
+                        } else {
+                            // AnkiWeb exposes no JS reveal API, so simulate the user
+                            // pressing the review screen's own "Show Answer" button
+                            // (rendered inside #ansarea by the AnkiWeb web app).
+                            const ansBtn = document.querySelector('#ansarea .btn.btn-primary.btn-lg') ||
+                                document.querySelector('.btn.btn-primary.btn-lg');
+                            if (ansBtn && /show answer/i.test(ansBtn.textContent || '')) {
+                                ansBtn.click();
+                            }
+                        }
+                    }
+                });
+            } else if (isAddonActive) {
+                li.addEventListener('click', (event) => {
+                    if (event.ctrlKey || event.metaKey) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        startInlineEditing(li);
+                    }
+                });
+            }
+
+            // Ctrl-only ✕ that deletes this hint/option outright. An empty
+            // value is already the removal signal for ai_hints_edit_item,
+            // so this reuses the same handler as the inline editor rather
+            // than adding a second Python path.
+            if (isAddonActive) {
+                const delItem = document.createElement('span');
+                delItem.className = 'ai-hints-del-item';
+                delItem.textContent = '✕';
+                delItem.title = 'Delete this ' + (li.dataset.type === 'hints' ? 'hint' : 'option');
+                delItem.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (li.dataset.editing === 'true') return;
+                    // No confirmation: this is undoable with Ctrl+Alt+Z,
+                    // same as an AI write or an inline edit.
+                    if (typeof pycmd === 'function') {
+                        pycmd(JSON.stringify({
+                            action: "ai_hints_edit_item",
+                            type: li.dataset.type,
+                            index: parseInt(li.dataset.idx),
+                            value: ""
+                        }));
+                    }
+                });
+                li.appendChild(delItem);
             }
             return li;
         });
