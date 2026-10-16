@@ -141,7 +141,7 @@ Release invariants:
 - **`README.md` must stay under 65,535 bytes** — it *is* the AnkiWeb listing description. AnkiWeb rejects an over-limit description and the listing then silently keeps its previous text, so CI fails the build up front instead.
 - **One-time secrets:** `ANKIWEB_USERNAME` / `ANKIWEB_PASSWORD` in repo Settings → Secrets and variables → Actions. Never commit or echo them.
 - The listing (AnkiWeb addon `2119980872`, "AI-Hints and Options", branch `2.1.1-26.05+`) has its title, tags and support page re-sent on every upload — change those in the workflow, not by hand.
-- Uploads go through [`athulkrishna2015/ankiweb-api`](https://github.com/athulkrishna2015/ankiweb-api). Its `terminal_ankiweb.py` is the right way to verify a listing afterwards; two traps make a good upload look lost — older revisions parsed descriptions over 5,000 bytes as empty, and `item-info` is cached for 10 minutes without its `cb` cache-buster.
+- Uploads go through [`athulkrishna2015/ankiweb-api`](https://github.com/athulkrishna2015/ankiweb-api). Its `terminal_ankiweb.py` is the right way to verify a listing afterwards; two traps make a good upload look lost — older revisions parsed descriptions over 5,000 bytes as empty, and `item-info` is cached for 10 minutes without its `cb` cache-buster. For a byte-level check, `sha256sum` the file from `ankicli.py download <id>` against the GitHub release asset — the hashes must match.
 
 ## Common edit pitfalls
 
