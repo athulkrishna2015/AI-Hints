@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.2 (2026-10-19)
+- **Batch Generation No Longer Reports Success on an Empty Write**: A single-card batch job could log "All 1 cards successfully have hints now" and "Successfully processed all 1 cards" while writing nothing to the note — the verifier trusted the in-memory pre-generation cache, which had just been populated by the generation attempt itself, instead of checking the note. The verifier now consults the on-disk note only (hints or options present), treats unresolvable cards as missing rather than "done", and no longer reports success when nothing was written.
+- **Test Suite Fully Green**: Fixed the remaining `test_batch_manager` failure (the `_missing_hint_cids_on_main` helper was accidentally de-indented out of the class during the edit) and the `test_group_same_models` teardown fix. All 42 test files pass individually.
+
 ## 8.6.1 (2026-10-15)
 - **Warning Hints Delete Like Any Other Hint**: Factual-error ⚠️ hints no longer carry their own `❌ Remove Warning` button with a confirmation popup. They render exactly like normal hints — hold `Ctrl`/`Cmd` and click the red **✕** to remove one, `Ctrl`+click to edit it in place — and the deletion is undoable with `Ctrl+Alt+Z` like every other inline edit.
 - **Test Suite Fully Green**: Fixed the `test_group_same_models` failure (the module's `sys.modules` teardown removed the `aqt` fakes that `logger.tooltip()` needs at call time) and removed the dedicated warning-removal path from the reviewer template. All 42 test files pass individually.

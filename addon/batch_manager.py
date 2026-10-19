@@ -927,36 +927,85 @@ class BatchManager:
         not thread-safe) and blocks the calling worker until the result is
         back. Falls back to reporting everything as missing if the main loop
         is unreachable, which conservatively triggers another pass.
-        """
-        import threading as _threading
-        result = {}
-        evt = _threading.Event()
 
-        def _task():
-            try:
-                from .reviewer_hooks import card_has_hints, _get_card_from_collection
-                from .card_parser import CardParser
-                _parser = CardParser()
-                missing = []
-                for cid in cid_list:
-                    card = _get_card_from_collection(cid)
-                    if card is None:
-                        continue
-                    if card_has_hints(card):
-                        continue
-                    try:
-                        note = card.note()
-                        if _parser.is_card_skipped(note, card):
-                            continue
-                    except Exception:
-                        pass
+        Only the on-disk note is consulted here -- never the in-memory
+        pre-generation cache or the hint-block cache.  Those caches can be
+        populated by an in-flight generation that never committed its write
+        to the note, and trusting them made a single-card job report
+        "All 1 cards successfully have hints now." with nothing actually
+        written.  A card is "done" only when its note positively carries
+        hints or options; anything unresolvable is treated as missing so it
+        gets retried (or surfaced as an error) instead of being silently
+        dropped.
+        """
+    import threading as _threading
+    result = {}
+    evt = _threading.Event()
+
+    def _task():
+        try:
+            from .reviewer_hooks import _get_card_from_collection
+            from .card_parser import CardParser
+            _parser = CardParser()
+            missing = []
+            for cid in cid_list:
+                card = _get_card_from_collection(cid)
+                if card is None:
+                    # Unresolvable card: cannot confirm it has hints, so
+                    # treat it as missing rather than silently "done".
                     missing.append(cid)
-                result["value"] = missing
-            except Exception as e:
-                logger.error(f"AI-Hints: hint verification failed: {e}")
-                result["value"] = list(cid_list)
-            finally:
-                evt.set()
+                    continue
+                try:
+                    note = card.note()
+                except Exception:
+                    missing.append(cid)
+                    continue
+                # Consult the NOTE directly, bypassing the in-memory caches.
+                try:
+                    block = _parser.find_hints_block(note, card)
+                except Exception:
+                    block = None
+                has_hints = False
+                if block:
+                    try:
+                        import re, html, json
+                        m = re.search(
+                            r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
+                            block, re.DOTALL | re.IGNORECASE,
+                        )
+                        if m:
+                            parsed = _parser._parse_json_payload(html.unescape(m.group(1) or ""))
+                            if isinstance(parsed, dict):
+                                # Keyed payload (c1, c2, ...): check the
+                                # active cloze's entry; otherwise the flat
+                                # payload itself.
+                                card_ord = getattr(card, "ord", None)
+                                card_key = f"c{card_ord + 1}" if card_ord is not None else None
+                                data = parsed.get(card_key, parsed) if (card_key and card_key in parsed) else parsed
+                                if isinstance(data, dict) and (data.get("hints") or data.get("options")):
+                                    has_hints = True
+                                elif (parsed.get("hints") or parsed.get("options")):
+                                    has_hints = True
+                    except Exception:
+                        # Could not parse -> cannot confirm hints -> missing.
+                        has_hints = False
+                # A skipped card is a legitimate "done" state (the user
+                # opted out), but only when we can positively confirm the
+                # skip marker on the note.  Otherwise treat as missing.
+                is_skipped = False
+                try:
+                    is_skipped = bool(_parser.is_card_skipped(note, card))
+                except Exception:
+                    is_skipped = False
+                if has_hints or is_skipped:
+                    continue
+                missing.append(cid)
+            result["value"] = missing
+        except Exception as e:
+            logger.error(f"AI-Hints: hint verification failed: {e}")
+            result["value"] = list(cid_list)
+        finally:
+            evt.set()
 
         try:
             mw.taskman.run_on_main(_task)
@@ -965,6 +1014,10 @@ class BatchManager:
             return list(cid_list)
         evt.wait(timeout=120)
         return result.get("value", list(cid_list))
+
+    @staticmethod
+    def _missing_hint_cids_on_main_end():
+        return None
 
     def _run_local_queue(self, config: Dict, provider_override: str):
         """Core iterative engine thread that drives the sequential queue, processing multiple jobs."""
@@ -1141,6 +1194,8 @@ class BatchManager:
                 if self.local_queue_jobs and self.local_queue_jobs[0].get("id") == current_job_id:
                     # Calculate final error count for stats (main-thread hop)
                     final_missing = self._missing_hint_cids_on_main(original_request)
+                    if final_missing is None:
+                        final_missing = []
                     
                     self.last_run_stats = {
                         "total": self.local_queue_total,
