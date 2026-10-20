@@ -734,6 +734,17 @@
                 
             if (title.toLowerCase().includes('option')) {
                 li.addEventListener('click', (event) => {
+                    // A click landing on the per-item ✕ must never start inline
+                    // editing, even when Ctrl/Cmd is still held (Anki's webview
+                    // can deliver a stray modifier-less click right after a fast
+                    // Ctrl+click). Route it through the delete handler below.
+                    if (event.target && event.target.classList &&
+                        event.target.classList.contains('ai-hints-del-item')) {
+                        // Let the delItem's own handler (which calls
+                        // stopImmediatePropagation) do the work; never start
+                        // inline editing from a click on the delete button.
+                        return;
+                    }
                     if (isAddonActive && (event.ctrlKey || event.metaKey)) {
                         event.preventDefault();
                         event.stopPropagation();
@@ -816,6 +827,7 @@
                 delItem.addEventListener('click', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
+                    event.stopImmediatePropagation();
                     if (li.dataset.editing === 'true') return;
                     // No confirmation: this is undoable with Ctrl+Alt+Z,
                     // same as an AI write or an inline edit.
