@@ -295,6 +295,25 @@ class GeneralTabMixin:
         tag_hinted_row.addStretch()
         show_layout.addRow(tag_hinted_container)
 
+        # Auto-update model lists
+        auto_update_container = QWidget()
+        auto_update_row = QHBoxLayout(auto_update_container)
+        auto_update_row.setContentsMargins(0, 0, 0, 0)
+        auto_update_row.setSpacing(5)
+        self.auto_update_models_cb = QCheckBox("Auto-Update Model Lists")
+        self.auto_update_models_cb.setToolTip(
+            "Automatically fetch each provider's current model list and remove "
+            "deprecated / no-longer-returned models from the per-provider and "
+            "global fallback priority lists. Runs in the background at most once "
+            "per day (and on demand via 'Update Now'). Default: on."
+        )
+        auto_update_row.addWidget(self.auto_update_models_cb)
+        self.update_models_now_btn = QPushButton("Update Now")
+        self.update_models_now_btn.setToolTip("Fetch and prune model lists immediately.")
+        auto_update_row.addWidget(self.update_models_now_btn)
+        auto_update_row.addStretch()
+        show_layout.addRow(auto_update_container)
+
         # Tag skipped notes
         tag_skipped_container = QWidget()
         tag_skipped_row = QHBoxLayout(tag_skipped_container)

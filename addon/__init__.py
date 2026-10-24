@@ -128,6 +128,14 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
             except Exception as e:
                 logger.error(f"AI-Hints: Failed to reload batch state on startup: {e}")
             
+            # Auto-update model lists (fetch + prune deprecated/non-returned),
+            # throttled to once per day. Runs in a background thread.
+            try:
+                from .model_updater import maybe_auto_update
+                maybe_auto_update()
+            except Exception as e:
+                logger.error(f"AI-Hints: Failed to schedule model auto-update: {e}")
+            
         QTimer.singleShot(2000, _delayed_startup)
 
     def on_profile_will_close():

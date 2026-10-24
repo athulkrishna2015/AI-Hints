@@ -101,6 +101,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.ui_initializing = False
 
+        # Wire the "Update Now" button for model lists (if present).
+        if hasattr(self, "update_models_now_btn"):
+            self.update_models_now_btn.clicked.connect(self._update_models_now)
+
         # Unsaved-changes tracking for the close warning.
         self._dirty = False
         self._connect_dirty_tracking()
@@ -281,8 +285,38 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             QTimer.singleShot(100, self.update_batch_ui_for_selection)
 
     def load_config_into_ui(self):
+        """Load configuration values into UI elements."""
         c = self.config
         # Provider rows read these during construction — assign before
+
+    def _update_models_now(self):
+        try:
+            from ..model_updater import run_auto_update
+            import threading
+            def _run():
+                summary = run_auto_update()
+                removed = summary.get("removed", 0)
+                errors = summary.get("errors", [])
+                msg = f"Model lists updated. Pruned {removed} deprecated/removed entr{'y' if removed == 1 else 'ies'}."
+                if errors:
+                    msg += " Errors: " + "; ".join(errors[:3])
+                try:
+                    from aqt.utils import tooltip
+                    tooltip(msg)
+                except Exception:
+                    pass
+            threading.Thread(target=_run, daemon=True, name="ai-hints-model-update-now").start()
+            try:
+                from aqt.utils import tooltip
+                tooltip("Updating model lists in the background...")
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                from aqt.utils import tooltip
+                tooltip(f"Model update failed: {e}")
+            except Exception:
+                pass
         # refresh_custom_list() builds them.
         self.model_fallbacks_data = (c.get("model_fallbacks", {}) or {}).copy()
         disabled_models = c.get("disabled_fallback_models", {}) or {}
@@ -357,6 +391,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self.tag_hinted_notes_cb.setChecked(c.get("tag_hinted_notes", True))
             self.hint_tag_edit.setText(c.get("hint_tag", "ai-hints"))
             self.hint_tag_edit.setEnabled(self.tag_hinted_notes_cb.isChecked())
+        if hasattr(self, "auto_update_models_cb"):
+            self.auto_update_models_cb.setChecked(c.get("auto_update_models", True))
         if hasattr(self, "tag_skipped_notes_cb"):
             self.tag_skipped_notes_cb.setChecked(c.get("tag_skipped_notes", True))
             self.skip_tag_edit.setText(c.get("skip_tag", "ai-hints::skipped"))
@@ -1214,6 +1250,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             if hasattr(self, "tag_hinted_notes_cb"):
                 new_config["tag_hinted_notes"] = self.tag_hinted_notes_cb.isChecked()
                 new_config["hint_tag"] = self.hint_tag_edit.text().strip() or "ai-hints"
+            if hasattr(self, "auto_update_models_cb"):
+                new_config["auto_update_models"] = self.auto_update_models_cb.isChecked()
             if hasattr(self, "tag_skipped_notes_cb"):
                 new_config["tag_skipped_notes"] = self.tag_skipped_notes_cb.isChecked()
                 new_config["skip_tag"] = self.skip_tag_edit.text().strip() or "ai-hints::skipped"
@@ -1460,6 +1498,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("batch_full_scan", False)
         config.setdefault("tag_hinted_notes", True)
         config.setdefault("tag_skipped_notes", True)
+        config.setdefault("auto_update_models", True)
         
         # Mobile Support Defaults
         config.setdefault("mobile_use_emojis", False)
