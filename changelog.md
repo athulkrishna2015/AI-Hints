@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.5 (2026-10-24)
+- **Config Dialog Crash Fix**: Fixed `'ConfigDialog' object has no attribute 'model_fallbacks_data'` when saving settings. The attribute was only being set inside the "Update Now" button handler; it is now initialized during normal config load.
+
 ## 8.6.4 (2026-10-24)
 - **Auto-Update Model Lists**: New "Auto-Update Model Lists" toggle (General tab, default on) that periodically fetches each configured provider's current model list and prunes deprecated / no-longer-returned entries from both the per-provider and global fallback priority lists. Runs in the background at most once per day; "Update Now" runs it immediately.
 
