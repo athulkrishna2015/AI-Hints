@@ -202,21 +202,55 @@ def set_orphans_check_time(ts):
     atomic_write_json(_orphans_state_path(), data)
 
 
-def _log_write(addon_package, mode, on_disk, merged):
-    """Emit an audit line for every meta.json write so misbehaving write paths
-    can be diagnosed from ai_hints.log after the fact."""
+def _log_write(addon_package, mode, on_disk, merged, changed_keys=None):
+    """Emit an audit line for every real meta.json write.
+
+    No-op writes are filtered out before this is called (see
+    :func:`_canonical_config`), so each line here represents an actual
+    on-disk change. ``changed_keys`` keeps the line short and actionable
+    instead of dumping whole-key counts.
+
+    Writes that only touch a trivial UI preference (``last_active_tab``) are
+    logged at DEBUG: they are user-driven, harmless, and used to flood the
+    log with one line per config-tab click.
+    """
     try:
         on_disk_keys = set(on_disk) if isinstance(on_disk, dict) else set()
         merged_keys = merged.get("api_keys") if isinstance(merged, dict) else None
         merged_decks = merged.get("deck_last_scan_nid") if isinstance(merged, dict) else None
-        logger.info(
+        detail = ""
+        if changed_keys:
+            shown = sorted(changed_keys)[:8]
+            detail = f" changed={','.join(shown)}" + ("..." if len(changed_keys) > 8 else "")
+        line = (
             f"AI-Hints: meta.json written [{mode}] package={addon_package} "
             f"on_disk_keys={len(on_disk_keys)} written_keys={len(merged or {})} "
             f"api_keys={len(merged_keys) if isinstance(merged_keys, dict) else 0} "
             f"scan_cursors={len(merged_decks) if isinstance(merged_decks, dict) else 0}"
+            f"{detail}"
         )
+        if changed_keys and set(changed_keys) <= {"last_active_tab"}:
+            logger.debug(line)
+        else:
+            logger.info(line)
     except Exception:
         pass
+
+
+def _canonical_config(obj):
+    """Stable JSON rendering used to detect no-op config writes."""
+    try:
+        return json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
+    except Exception:
+        return None
+
+
+def _changed_config_keys(old, new):
+    """Top-level keys whose canonical value differs between two configs."""
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return set()
+    return {k for k in set(old) | set(new)
+            if _canonical_config(old.get(k)) != _canonical_config(new.get(k))}
 
 
 _write_lock = threading.Lock()
@@ -279,7 +313,10 @@ def write_pretty_config_preserve_keys(addon_package, config):
         # preserved set is the fingerprint of a defaults-snapshot bug.
         preserved = set(on_disk) - set(incoming)
         if preserved:
-            logger.info(
+            # Partial payloads (e.g. {"last_active_tab": 3}) legitimately
+            # preserve almost every key, so this is only interesting at debug
+            # level. It used to log at INFO on every tab switch.
+            logger.debug(
                 f"AI-Hints: preserve-merge keeping {len(preserved)} on-disk key(s) not "
                 f"present in incoming snapshot: {sorted(preserved)[:10]}..."
             )
@@ -301,10 +338,20 @@ def write_pretty_config_preserve_keys(addon_package, config):
                     merged_keys[p] = v
         merged["api_keys"] = merged_keys
 
+        # Skip the write entirely when the merged result is identical to what
+        # is already on disk. Without this, every tab switch / timer tick that
+        # persisted a trivial preference rewrote (and logged) the whole config.
+        if _canonical_config(merged) == _canonical_config(on_disk):
+            logger.debug("AI-Hints: config write skipped (no change).")
+            return True
+
         try:
             from aqt import mw
 
             mw.addonManager.writeConfig(addon_package, merged)
-            _log_write(addon_package, "addonManager(preserve-merge)", on_disk, merged)
+            _log_write(addon_package, "addonManager(preserve-merge)", on_disk, merged,
+                       _changed_config_keys(on_disk, merged))
+            return True
         except Exception as e:
             logger.error(f"AI-Hints: preserve-merge write via addonManager failed: {e}")
+            return False
