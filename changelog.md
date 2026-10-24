@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.4 (2026-10-24)
+- **Auto-Update Model Lists**: New "Auto-Update Model Lists" toggle (General tab, default on) that periodically fetches each configured provider's current model list and prunes deprecated / no-longer-returned entries from both the per-provider and global fallback priority lists. Runs in the background at most once per day; "Update Now" runs it immediately.
+
 ## 8.6.3 (2026-10-20)
 - **Delete Button Reliability Fix**: Clicking the red ✕ now deletes the hint/option instead of sometimes falling through to inline-edit mode. Hardened the click handler with `stopImmediatePropagation` and a target check so a stray modifier-less click delivered right after a fast Ctrl+click can no longer start editing. Warning hints delete the same way.
 
