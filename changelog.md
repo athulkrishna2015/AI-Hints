@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.7 (2026-10-24)
+- **Release Pipeline Check**: Version bump with no behaviour changes, used to verify the automated GitHub release → AnkiWeb upload path end to end (build from tag, asset attach, byte-for-byte listing verification).
+
 ## 8.6.6 (2026-10-24)
 - **Config Dialog Restored**: v8.6.4/v8.6.5 shipped a truncated `config_ui/main_dialog.py` that was missing 21 methods. Opening the dialog could fail with `'ConfigDialog' object has no attribute 'model_fallbacks_data'` on save, and provider/model management methods (`refresh_custom_list`, `on_fetch_models`, `on_add_custom`, …) were gone. The complete dialog is restored, and a new static regression test fails the build if the loader is ever truncated again.
 - **Quieter Config Writes**: `meta.json` is no longer rewritten (or logged) when the merged result is identical to what is already on disk. Switching config tabs now persists only `last_active_tab` instead of silently saving the whole unsaved dialog state, which was the source of the repeated `meta.json written` lines.
