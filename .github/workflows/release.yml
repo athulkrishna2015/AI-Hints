@@ -135,7 +135,7 @@ jobs:
           export PYTHONPATH="$PWD/.ci-stubs${PYTHONPATH:+:$PYTHONPATH}"
           # One interpreter per file: some suites share global mocks and
           # pollute each other inside a single combined run.
-          for t in test_ai_undo test_card_parser test_cloze_scenarios test_pregeneration_logic test_race_condition_fix; do
+          for t in test_ai_undo test_card_parser test_cloze_scenarios test_pregeneration_logic test_race_condition_fix test_config_dialog_skeleton; do
             python3 -m unittest "tests.$t"
           done
           python3 tests/test_edit_item.py
