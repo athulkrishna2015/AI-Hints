@@ -301,6 +301,26 @@ class GlobalDialogTableTests(unittest.TestCase):
         self.assertEqual(self._disabled_order(dlg), [("a", "m1")])
         self.assertEqual(dlg.get_disabled_list(), [("a", "m1")])
 
+    def test_unpopulated_rows_are_tolerated(self):
+        """Rows created by setRowCount() have no items yet.
+
+        Qt can deliver a synchronous Show/Resize to the viewport in that
+        window, which runs ``_ensure_visible_widgets`` through the event
+        filter. On Anki 26.08 / Qt 6.11 this crashed with
+        ``TypeError: 'NoneType' object is not subscriptable`` in ``_row_pair``.
+        """
+        dlg = self._make_dialog([("openai", "gpt-4o")])
+        for table in (dlg.enabled_table, dlg.disabled_table):
+            table.setRowCount(table.rowCount() + 3)  # empty rows, no items
+
+        # Event-filter path and the harvest/read helpers must all no-op.
+        dlg._ensure_visible_widgets()
+        dlg._harvest_widgets()
+        self.assertEqual(dlg._all_pairs(), {("openai", "gpt-4o")})
+        self.assertEqual(dlg.get_ordered_list(), [("openai", "gpt-4o")])
+        self.assertEqual(dlg.get_disabled_list(), [])
+        self.assertIsNone(dlg._row_pair_opt(dlg.enabled_table, dlg.enabled_table.rowCount() - 1))
+
     def test_check_in_disabled_moves_to_enabled(self):
         from PyQt6.QtCore import Qt
 

@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.8 (2026-10-28)
+- **Global Fallback Priority Crash Fix**: Opening or resizing the Advanced → Global Fallback Priority dialog on Anki 26.08 / Qt 6.11 could raise `TypeError: 'NoneType' object is not subscriptable` in `_row_pair`. Qt now delivers a synchronous show/resize while `setRowCount()` has created rows but before their items are attached, so the lazy widget materializer unpacked `None`. Unpopulated rows are now skipped by the materializer, harvester, filter text, row capture, and list readers; they are materialized on the next show/resize once their items exist.
+
 ## 8.6.7 (2026-10-24)
 - **Release Pipeline Check**: Version bump with no behaviour changes, used to verify the automated GitHub release → AnkiWeb upload path end to end (build from tag, asset attach, byte-for-byte listing verification).
 

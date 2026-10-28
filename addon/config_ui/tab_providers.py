@@ -1869,11 +1869,32 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         pair = item.data(Qt.ItemDataRole.UserRole) if item else None
         return (pair[0], pair[1])
 
+    def _row_pair_opt(self, table, row):
+        """Return ``(provider, model)`` for a row, or ``None`` when the row is
+        not populated yet.
+
+        ``setRowCount()`` creates empty rows before the items (and their
+        UserRole pair) are attached. Qt can deliver a synchronous Show/Resize
+        to the viewport during that window, which reaches
+        ``_ensure_visible_widgets`` via the event filter. Callers on that path
+        must tolerate unpopulated rows instead of unpacking ``None``.
+        """
+        if row < 0 or row >= table.rowCount():
+            return None
+        item = table.item(row, 0)
+        pair = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if not isinstance(pair, (tuple, list)) or len(pair) < 2:
+            return None
+        return (pair[0], pair[1])
+
     def _row_key(self, table, row):
         return self._row_pair(table, row)
 
     def _row_search_text(self, table, row):
-        provider, model = self._row_pair(table, row)
+        pair = self._row_pair_opt(table, row)
+        if pair is None:
+            return ""
+        provider, model = pair
         return f"{provider} {model}"
 
     def _sort_entry_key(self, table, col):
@@ -1891,10 +1912,12 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
     def _capture_rows(self, table):
         data = []
         for r in range(table.rowCount()):
+            pair = self._row_pair_opt(table, r)
+            if pair is None:
+                continue
             item = table.item(r, 0)
-            pair = item.data(Qt.ItemDataRole.UserRole)
             data.append({
-                "pair": (pair[0], pair[1]),
+                "pair": pair,
                 "checked": item.checkState() == Qt.CheckState.Checked,
                 "hidden": table.isRowHidden(r),
                 "selected": item.isSelected(),
@@ -1983,7 +2006,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
     def _find_row(self, provider, model):
         for table in self._tables():
             for r in range(table.rowCount()):
-                if self._row_pair(table, r) == (provider, model):
+                if self._row_pair_opt(table, r) == (provider, model):
                     return table, r
         return None, -1
 
@@ -2093,7 +2116,12 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
     def _materialize_row_widgets(self, table, row):
         if table.cellWidget(row, 2) is not None:
             return
-        provider, model = self._row_pair(table, row)
+        pair = self._row_pair_opt(table, row)
+        if pair is None:
+            # Row was created by setRowCount() but its items are not attached
+            # yet; a later show/resize will materialize it.
+            return
+        provider, model = pair
         combo = NoWheelComboBox()
         combo.addItems(["off", "low", "medium", "high"])
         combo.setCurrentText(str(self._g_thinking.get(provider, {}).get(model, "off")))
@@ -2144,16 +2172,20 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 spin = table.cellWidget(r, 3)
                 if combo is None and spin is None:
                     continue
-                provider, model = self._row_pair(table, r)
+                pair = self._row_pair_opt(table, r)
+                if pair is None:
+                    continue
+                provider, model = pair
                 if combo is not None:
                     self._g_thinking.setdefault(provider, {})[model] = combo.currentText()
                 if spin is not None:
                     self._g_timeouts.setdefault(provider, {})[model] = spin.value()
 
     def _refresh_row_widgets(self, table, row):
-        if row < 0 or row >= table.rowCount():
+        pair = self._row_pair_opt(table, row)
+        if pair is None:
             return
-        provider, model = self._row_pair(table, row)
+        provider, model = pair
         combo = table.cellWidget(row, 2)
         if combo is not None:
             combo.setCurrentText(str(self._g_thinking.get(provider, {}).get(model, "off")))
@@ -2171,7 +2203,13 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                     self._refresh_row_widgets(table, r)
 
     def _all_pairs(self):
-        return {self._row_pair(t, r) for t in self._tables() for r in range(t.rowCount())}
+        pairs = set()
+        for table in self._tables():
+            for r in range(table.rowCount()):
+                pair = self._row_pair_opt(table, r)
+                if pair is not None:
+                    pairs.add(pair)
+        return pairs
 
     def get_global_thinking_levels(self):
         self._harvest_widgets()
@@ -2489,10 +2527,12 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         self._ensure_visible_widgets()
         
     def get_ordered_list(self):
-        return [self._row_pair(self.enabled_table, r) for r in range(self.enabled_table.rowCount())]
+        return [p for p in (self._row_pair_opt(self.enabled_table, r)
+                            for r in range(self.enabled_table.rowCount())) if p is not None]
 
     def get_disabled_list(self):
-        return [self._row_pair(self.disabled_table, r) for r in range(self.disabled_table.rowCount())]
+        return [p for p in (self._row_pair_opt(self.disabled_table, r)
+                            for r in range(self.disabled_table.rowCount())) if p is not None]
         
     def on_fetch_all(self):
         fetch_key = "global_fallback_fetch"
