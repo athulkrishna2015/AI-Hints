@@ -36,7 +36,7 @@ sys.modules['logger'] = mock_logger
 sys.modules['.logger'] = mock_logger
 
 # 2. Import our patcher
-from addon.tts_addon_patch import setup_tts_addon_patch
+from addon.patches.tts_addon_patch import setup_tts_addon_patch
 
 def test_live_tts_patch():
     print("--- Running LIVE TTS Integration Patch Tests ---")

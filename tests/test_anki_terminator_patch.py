@@ -6,7 +6,7 @@ sys.dont_write_bytecode = True
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
 
-from addon.anki_terminator_patch import clean_ai_hints_from_text, CleanNoteProxy, CleanCardProxy
+from addon.patches.anki_terminator_patch import clean_ai_hints_from_text, CleanNoteProxy, CleanCardProxy
 
 class FakeNote(dict):
     def __init__(self, fields, fields_list=None):

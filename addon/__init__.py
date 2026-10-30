@@ -155,14 +155,14 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
 
     # Enable Anki Terminator addon support
     try:
-        from .anki_terminator_patch import setup_anki_terminator_patch
+        from .patches.anki_terminator_patch import setup_anki_terminator_patch
         setup_anki_terminator_patch()
     except Exception:
         pass
 
     # Enable PiperTTS addon support
     try:
-        from .tts_addon_patch import setup_tts_addon_patch
+        from .patches.tts_addon_patch import setup_tts_addon_patch
         setup_tts_addon_patch()
     except Exception:
         pass

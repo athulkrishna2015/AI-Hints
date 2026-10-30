@@ -356,7 +356,7 @@ class TestC2TerminatorGating(unittest.TestCase):
         return anki_mod, notes_mod
 
     def test_no_patch_without_terminator(self):
-        from addon import anki_terminator_patch as atp
+        from addon.patches import anki_terminator_patch as atp
         anki_mod, notes_mod = self._fresh_modules()
         mods = {"anki": anki_mod, "anki.notes": notes_mod}
         # Ensure no dock_web_view modules exist
@@ -372,7 +372,7 @@ class TestC2TerminatorGating(unittest.TestCase):
             sys.modules.update(saved)
 
     def test_patch_with_terminator(self):
-        from addon import anki_terminator_patch as atp
+        from addon.patches import anki_terminator_patch as atp
         anki_mod, notes_mod = self._fresh_modules()
 
         dwv = ModuleType("1234567.dock_web_view")

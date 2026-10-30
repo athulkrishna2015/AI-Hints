@@ -19,7 +19,7 @@ aqt.editor = MagicMock()
 sys.modules['aqt.editor'] = aqt.editor
 from aqt.editor import EditorMode
 
-from addon.tts_addon_patch import setup_tts_addon_patch
+from addon.patches.tts_addon_patch import setup_tts_addon_patch
 
 def test_tts_addon_patch():
     print("--- Running TTS Patch tests ---")

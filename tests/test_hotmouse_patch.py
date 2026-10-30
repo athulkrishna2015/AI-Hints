@@ -84,7 +84,7 @@ _install_aqt_mocks()
 if not os.path.isdir(HOTMOUSE_ADDON):
     raise unittest.SkipTest("Review-Hotmouse-plus-overview not found next to AI-Hints")
 
-from addon import hotmouse_patch  # noqa: E402
+from addon.patches import hotmouse_patch  # noqa: E402
 
 # Real hotmouse code reads mw.state / mw.web at call time; give it a live
 # mock BEFORE loading it, now that addon/__init__ has been skipped

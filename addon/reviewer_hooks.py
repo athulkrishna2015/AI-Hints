@@ -1385,7 +1385,7 @@ window.aiHintsUiConfig = {ui_payload};
     # Safety net: if a picker was somehow destroyed without sending its
     # 'closed' message, make sure Hotmouse is not left suspended forever.
     try:
-        from . import hotmouse_patch
+        from .patches import hotmouse_patch
         hotmouse_patch.resume_hotmouse()
     except Exception:
         pass
@@ -1796,7 +1796,7 @@ def on_webview_did_receive_js_message(handled, message, context):
             if isinstance(data, dict) and data.get("action") == "ai_hints_model_picker":
                 # Suspend/Resume Hotmouse while the picker popup is open so the
                 # wheel scrolls the list instead of flipping cards.
-                from . import hotmouse_patch
+                from .patches import hotmouse_patch
                 if data.get("state") == "open":
                     hotmouse_patch.suspend_hotmouse()
                 else:
