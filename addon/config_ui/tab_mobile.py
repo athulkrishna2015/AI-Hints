@@ -225,10 +225,11 @@ class MobileTabMixin:
         count = 0
         templates_updated = 0
         
+        errors = []
         try:
             for model in mw.col.models.all():
                 model_changed = False
-                
+
                 # We now always use the first field to ensure it is rendered on front
                 if not model['flds']:
                     continue
@@ -236,50 +237,56 @@ class MobileTabMixin:
 
                 pattern = r"<!-- AI-HINTS-BEGIN -->.*?<!-- AI-HINTS-END -->"
                 is_cloze = (model.get('type') == 1)
-                for tmpl in model['tmpls']:
-                    # Update Front and Back
-                    for side in ['qfmt', 'afmt']:
-                        old_html = tmpl[side]
-                        clean_html = re.sub(pattern, "", old_html, flags=re.DOTALL)
-                        new_block = self._get_full_template_block(
-                            field_name, clean_html, is_cloze=is_cloze, is_front=(side == 'qfmt')
-                        )
-                        # Check if block exists
-                        if "<!-- AI-HINTS-BEGIN -->" in old_html:
-                            new_html = self._insert_template_block(
-                                clean_html, new_block, is_cloze=is_cloze, is_front=(side == 'qfmt')
+                try:
+                    for tmpl in model['tmpls']:
+                        # Update Front and Back
+                        for side in ['qfmt', 'afmt']:
+                            old_html = tmpl[side]
+                            clean_html = re.sub(pattern, "", old_html, flags=re.DOTALL)
+                            new_block = self._get_full_template_block(
+                                field_name, clean_html, is_cloze=is_cloze, is_front=(side == 'qfmt')
                             )
-                            if new_html != old_html:
-                                tmpl[side] = new_html
+                            # Check if block exists
+                            if "<!-- AI-HINTS-BEGIN -->" in old_html:
+                                new_html = self._insert_template_block(
+                                    clean_html, new_block, is_cloze=is_cloze, is_front=(side == 'qfmt')
+                                )
+                                if new_html != old_html:
+                                    tmpl[side] = new_html
+                                    model_changed = True
+                                    templates_updated += 1
+                            else:
+                                tmpl[side] = self._insert_template_block(
+                                    old_html, new_block, is_cloze=is_cloze, is_front=(side == 'qfmt')
+                                )
                                 model_changed = True
                                 templates_updated += 1
+
+                    if model_changed:
+                        if hasattr(mw.col.models, "update_dict"):
+                            mw.col.models.update_dict(model)
                         else:
-                            tmpl[side] = self._insert_template_block(
-                                old_html, new_block, is_cloze=is_cloze, is_front=(side == 'qfmt')
-                            )
-                            model_changed = True
-                            templates_updated += 1
-                
-                if model_changed:
-                    if hasattr(mw.col.models, "update_dict"):
-                        mw.col.models.update_dict(model)
-                    else:
-                        mw.col.models.save(model)
-                    count += 1
-            
+                            mw.col.models.save(model)
+                        count += 1
+                except Exception as e:
+                    errors.append(f"{model.get('name', '?')}: {e}")
+                    logger.error(f"AI-Hints: template install failed for note type '{model.get('name', '?')}': {e}")
+                    continue
+
             if count > 0:
                 if hasattr(mw.col, "set_modified"):
                     mw.col.set_modified()
                 elif hasattr(mw.col, "mark_dirty"):
                     mw.col.mark_dirty()
-            
+
             self.status_label.setStyleSheet("color: #28a745; font-weight: bold; font-size: 11px;")
-            self.status_label.setText(
-                f"✅ Successfully updated {count} note types ({templates_updated} cards)!\n"
-                "🔄 Triggering AnkiWeb Sync to apply changes to mobile..."
-            )
+            msg = f"✅ Successfully updated {count} note types ({templates_updated} cards)!"
+            if errors:
+                msg += f"\n⚠️ Skipped {len(errors)} note type(s) with pre-existing template errors:\n" + "\n".join(errors[:5])
+            msg += "\n🔄 Triggering AnkiWeb Sync to apply changes to mobile..."
+            self.status_label.setText(msg)
             QTimer.singleShot(8000, lambda: self.status_label.setText(""))
-            
+
             if count > 0 and hasattr(mw, "onSync"):
                 mw.onSync()
         except Exception as e:
@@ -300,21 +307,25 @@ class MobileTabMixin:
         try:
             for model in mw.col.models.all():
                 model_changed = False
-                for tmpl in model['tmpls']:
-                    for side in ['qfmt', 'afmt']:
-                        old_html = tmpl[side]
-                        if "<!-- AI-HINTS-BEGIN -->" in old_html:
-                            new_html = re.sub(pattern, "", old_html, flags=re.DOTALL)
-                            if new_html != old_html:
-                                tmpl[side] = new_html.strip()
-                                model_changed = True
-                
-                if model_changed:
-                    if hasattr(mw.col.models, "update_dict"):
-                        mw.col.models.update_dict(model)
-                    else:
-                        mw.col.models.save(model)
-                    count += 1
+                try:
+                    for tmpl in model['tmpls']:
+                        for side in ['qfmt', 'afmt']:
+                            old_html = tmpl[side]
+                            if "<!-- AI-HINTS-BEGIN -->" in old_html:
+                                new_html = re.sub(pattern, "", old_html, flags=re.DOTALL)
+                                if new_html != old_html:
+                                    tmpl[side] = new_html.strip()
+                                    model_changed = True
+
+                    if model_changed:
+                        if hasattr(mw.col.models, "update_dict"):
+                            mw.col.models.update_dict(model)
+                        else:
+                            mw.col.models.save(model)
+                        count += 1
+                except Exception as e:
+                    logger.error(f"AI-Hints: template removal failed for note type '{model.get('name', '?')}': {e}")
+                    continue
             
             # Automatically delete the _ai_hints_template.js file from media directory
             script_deleted = False
