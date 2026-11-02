@@ -1103,9 +1103,14 @@
     }
 
     // 3. Main Init
-    function init(manualData, isManualAction) {
-        // manualData presence indicates an update from Python after generation
+    function init(manualData, isManualAction, authoritative) {
+        // manualData presence indicates an update from Python after generation.
+        // authoritative means Python already validated the note/cache for this
+        // exact card, so raw .ai-hints-json blocks in the DOM must NOT be used
+        // as a fallback. This is what prevents a stale cN entry from a removed
+        // or edited cloze from being rendered as if it belonged to this card.
         const hasOverrideData = !!manualData;
+        const hasAuthoritativeData = authoritative === true;
         
         pruneStaleJsonBlocks();
         
@@ -1139,8 +1144,10 @@
                         existingContainer.getAttribute('data-ai-hints-card-id') === String(cardId) &&
                         existingContainer.getAttribute('data-ai-hints-card-ord') === String(ord);
         
-        // If we are already rendered and this is not a manual override, we might be able to bail early
-        if (!hasOverrideData && sameCard && window.aiHintsLastAnswerState === onAnswer) {
+        // If we are already rendered and this is not a manual override, we might be able to bail early.
+        // Authoritative empty state must bypass this so a container rendered
+        // from a stale raw block is cleared and replaced with the empty state.
+        if (!hasAuthoritativeData && !hasOverrideData && sameCard && window.aiHintsLastAnswerState === onAnswer) {
             // Further check: do we have new JSON blocks that need rendering?
             const unrenderedBlocks = Array.from(document.querySelectorAll('.ai-hints-json')).filter(block => {
                 try {
@@ -1308,14 +1315,22 @@
             state.options = autoShow.optionsAnswer;
         }
 
-        // Process existing blocks or containers
-        let targetBlocks = manualData ? [null] : Array.from(jsonBlocks).filter(block => {
-            try {
-                const blockData = JSON.parse(block.textContent);
-                if (blockBelongsToCurrentCard(block, blockData, cardKey, cardId, ord)) return true;
-            } catch (e) {}
-            return false;
-        });
+        // Process existing blocks or containers. When Python supplied
+        // authoritative data (even explicit null for "no valid data"), never
+        // scan the DOM for a fallback payload: the raw note block may contain a
+        // stale cN entry left behind by an external cloze edit.
+        let targetBlocks;
+        if (manualData || hasAuthoritativeData) {
+            targetBlocks = [null];
+        } else {
+            targetBlocks = Array.from(jsonBlocks).filter(block => {
+                try {
+                    const blockData = JSON.parse(block.textContent);
+                    if (blockBelongsToCurrentCard(block, blockData, cardKey, cardId, ord)) return true;
+                } catch (e) {}
+                return false;
+            });
+        }
 
         // Mobile Fallback: If no JSON blocks were found but we have HTML containers, treat them as targets
         if (targetBlocks.length === 0 && !isAddonActive && containers.length > 0) {
@@ -1365,7 +1380,8 @@
                 // Track this setup to prevent redundant calls from Python
                 window.aiHintsLastSetupKey = JSON.stringify({ 
                     card: { id: String(cardId), ord: ord }, 
-                    hints: data || null 
+                    hints: data || null,
+                    authoritative: hasAuthoritativeData
                 });
                 window.aiHintsLastAnswerState = onAnswer;
 
@@ -1379,6 +1395,12 @@
                 if (isAddonActive) container.setAttribute('contenteditable', 'false');
                 container.setAttribute('data-ai-hints-card-id', String(cardId));
                 if (ord !== undefined && ord !== null) container.setAttribute('data-ai-hints-card-ord', String(ord));
+                if (hasAuthoritativeData) {
+                    // Marker lets aiHintsSetup distinguish a correct
+                    // authoritative-empty container from a stale one that was
+                    // rendered from a raw note block.
+                    container.setAttribute('data-ai-hints-authoritative', manualData ? 'data' : 'empty');
+                }
                 
                 const btnBox = document.createElement('div');
                 btnBox.className = 'ai-hints-btn-box';
@@ -2050,7 +2072,11 @@
             }
         });
     };
-    window.aiHintsSetup = (card, hints, uiConfig) => {
+    window.aiHintsSetup = (card, hints, uiConfig, authoritative) => {
+        // Python is the authority on whether the current card has valid hints.
+        // When authoritative is true, an explicit null means "no valid data",
+        // not "fall back to whatever .ai-hints-json block is in the DOM".
+        const hasAuthoritativeData = authoritative === true;
         pruneStaleJsonBlocks();
         if (window.aiHintsAutoRateTimeout) {
             clearTimeout(window.aiHintsAutoRateTimeout);
@@ -2077,24 +2103,45 @@
             window.aiHintsUiConfig.is_lingering = false;
         }
 
-        const setupKey = JSON.stringify({ card: { id: String(calcId), ord: ord }, hints: hints || null });
+        const setupKey = JSON.stringify({ card: { id: String(calcId), ord: ord }, hints: hints || null, authoritative: hasAuthoritativeData });
         const currentAnswerState = isAnswerSide();
         const existingContainer = document.querySelector('.ai-hints-container');
-        const hasData = hints != null || document.querySelector('.ai-hints-json');
+        const hasData = hints != null || (!hasAuthoritativeData && document.querySelector('.ai-hints-json'));
         const isEmptyContainer = existingContainer && !existingContainer.querySelector('.ai-hints-list') && !existingContainer.querySelector('.ai-hints-hint-list');
         const existingCardId = existingContainer && existingContainer.getAttribute ? existingContainer.getAttribute('data-ai-hints-card-id') : null;
         const existingCardOrd = existingContainer && existingContainer.getAttribute ? existingContainer.getAttribute('data-ai-hints-card-ord') : null;
         const sameRenderedCard = existingContainer && card &&
             String(existingCardId) === String(card.id) &&
             (existingCardOrd === null || existingCardOrd === undefined || existingCardOrd === '' || String(existingCardOrd) === String(card.ord));
-        
-        // If we have an existing container but we are doing a fresh setup (e.g. card changed),
-        // we must ensure we don't bail out due to a stale setupKey.
-        if (window.aiHintsLastSetupKey === setupKey && existingContainer && (!hasData || !isEmptyContainer) && window.aiHintsLastAnswerState === currentAnswerState) {
+        const existingAuthoritative = existingContainer && existingContainer.getAttribute
+            ? existingContainer.getAttribute('data-ai-hints-authoritative')
+            : null;
+
+        // A correct authoritative-empty container is idempotent; keep it to
+        // avoid flicker on repeated hook calls for a card with no valid data.
+        if (hasAuthoritativeData && hints == null && sameRenderedCard &&
+            existingAuthoritative === 'empty' &&
+            window.aiHintsLastAnswerState === currentAnswerState) {
+            window.aiHintsLastSetupKey = setupKey;
+            window.aiHintsCurrentCard = card;
             return;
         }
 
-        if (hints == null && sameRenderedCard && !isEmptyContainer && !hasData) {
+        // If we have an existing container but we are doing a fresh setup (e.g. card changed),
+        // we must ensure we don't bail out due to a stale setupKey.
+        // Authoritative-null must always be allowed through so a container
+        // rendered from a stale raw block is replaced.
+        if (!(hasAuthoritativeData && hints == null) &&
+            window.aiHintsLastSetupKey === setupKey && existingContainer &&
+            (!hasData || !isEmptyContainer) && window.aiHintsLastAnswerState === currentAnswerState) {
+            return;
+        }
+
+        // Non-authoritative null (e.g. the front-side hook firing after the
+        // back-side already rendered) must not erase a valid data container.
+        // Authoritative null is different: Python has explicitly reported that
+        // this card has no valid data, so a data container is stale.
+        if (!hasAuthoritativeData && hints == null && sameRenderedCard && !isEmptyContainer && !hasData) {
             window.aiHintsLastSetupKey = setupKey;
             window.aiHintsLastAnswerState = currentAnswerState;
             window.aiHintsCurrentCard = card;
@@ -2109,7 +2156,7 @@
             document.querySelectorAll('.ai-hints-container').forEach(e => e.remove());
         }
         document.querySelectorAll('.ai-hints-json').forEach(e => delete e.dataset.aiHintsRendered);
-        init(hints); 
+        init(hints, undefined, hasAuthoritativeData);
     };
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init());

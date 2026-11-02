@@ -762,4 +762,52 @@ eval(scriptContent);
 const missingC2Controls = mobileMissingC2.getRendered().filter(el => el.className && el.className.includes('ai-hints-container'));
 if (missingC2Controls.length !== 0) throw new Error("Mobile c2 card without c2 data should render no AI-Hints container or controls");
 
+console.log("\n--- TEST 30: AUTHORITATIVE NULL IGNORES A STALE RAW C2 BLOCK ---");
+global.window.aiHintsCurrentCard = { id: 'stale_c2_card', ord: 1 };
+global.window.aiHintsUiConfig = { is_generating: false };
+const staleC2Test = createMockDOM({ isAddonActive: true, hasData: false, isAnswerSide: false });
+staleC2Test.addJsonBlock({
+    c1: { hints: ["Karakoram hint"], options: ["Karakoram"], correct_answer: "Karakoram", _src: "Karakoram" },
+    c2: { hints: ["Dementia hint"], options: ["Dementia"], correct_answer: "Dementia", _src: "Dementia" }
+}, { 'data-ai-hints-card-id': 'stale_c2_card', 'data-ai-hints-card-ord': '1' });
+eval(scriptContent);
+const staleBefore = staleC2Test.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+if (!staleBefore) throw new Error("Stale raw c2 block should render before authoritative setup (test precondition)");
+if (!staleBefore.querySelector('.ai-hints-btn-box').querySelectorAll('button').some(b => b.textContent.includes("Regenerate"))) {
+    throw new Error("Stale raw c2 block should look generated before authoritative setup (test precondition)");
+}
+
+// Python validated the note and reports explicit null for this card: the raw
+// block contains a c2 entry from a removed/edited cloze and must be ignored.
+window.aiHintsSetup({ id: 'stale_c2_card', ord: 1 }, null, { is_generating: false }, true);
+const staleAfter = staleC2Test.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+if (!staleAfter) throw new Error("Authoritative empty state should render a Generate container");
+const staleAfterLabels = staleAfter.querySelector('.ai-hints-btn-box').querySelectorAll('button').map(b => b.textContent);
+if (staleAfterLabels.includes("Regenerate")) throw new Error("Stale raw c2 data must not be treated as current data");
+if (!staleAfterLabels.includes("Generate AI Hints")) throw new Error("Authoritative null should render the Generate state");
+if (staleAfter.querySelector('.ai-hints-hint-list') || staleAfter.querySelector('.ai-hints-list')) {
+    throw new Error("Authoritative null must not render hints/options from the stale raw block");
+}
+if (staleAfter.querySelector('.ai-hints-json-view')) throw new Error("Authoritative null must not expose stale raw JSON");
+if (staleAfter.getAttribute('data-ai-hints-authoritative') !== 'empty') {
+    throw new Error("Authoritative empty container should carry the empty marker");
+}
+
+// Repeated authoritative-null calls for the same card/state are idempotent.
+window.aiHintsSetup({ id: 'stale_c2_card', ord: 1 }, null, { is_generating: false }, true);
+const staleAfterSecond = staleC2Test.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+if (staleAfterSecond !== staleAfter) throw new Error("Repeated authoritative-null setup should not rebuild the container");
+
+// Authoritative data must win over the stale raw block too.
+window.aiHintsSetup(
+    { id: 'stale_c2_card', ord: 1 },
+    { hints: ["Ladakh hint"], options: ["Ladakh"], correct_answer: "Ladakh", _src: "Ladakh" },
+    { is_generating: false },
+    true
+);
+const staleWithRealData = staleC2Test.getRendered().find(el => el.className && el.className.includes('ai-hints-container'));
+const staleWithRealHints = staleWithRealData.querySelector('.ai-hints-hint-list').querySelectorAll('li').map(li => li.innerHTML || li.textContent);
+if (!staleWithRealHints.includes("Ladakh hint")) throw new Error("Authoritative data should render for the current card");
+if (staleWithRealHints.includes("Dementia hint")) throw new Error("Stale raw c2 data must never render when authoritative data is present");
+
 console.log("\nALL JS TESTS PASSED."); process.exit(0);

@@ -199,6 +199,61 @@ class TestClozeScenarios(unittest.TestCase):
         block = self.parser.find_hints_block(note, card_c2)
         self.assertIsNone(block)
 
+    def test_reused_c2_slot_does_not_leak_previous_cloze_hints(self):
+        # Real-world shape: the c2 cloze text was replaced (Ladakh) while the
+        # stored c2 payload still belongs to an unrelated cloze (dementia).
+        # c1 must remain valid, but c2 must be reported as having no data.
+        text = (
+            "{{c2::ലഡാക്കിലെ}} {{c1::കാരക്കോറം}} മലനിരകളിലാണ് ഗാൽവൻ താഴ്‌വര സ്ഥിതി ചെയ്യുന്നത്."
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"Karakoram hint\"], \"options\": [\"കാരക്കോറം\"], \"correct_answer\": \"കാരക്കോറം\", \"_src\": \"കാരക്കോറം\"}, "
+            "\"c2\": {\"hints\": [\"Dementia hint\"], \"options\": [\"ഡിമെൻഷ്യ\"], \"correct_answer\": \"ഡിമെൻഷ്യ\", \"_src\": \"ഡിമെൻഷ്യ\"}}"
+            "</div>"
+        )
+        note = MockNote({"Text": text}, model_name="Cloze")
+
+        card_c1 = MockCard(0)
+        block_c1 = self.parser.find_hints_block(note, card_c1)
+        self.assertIsNotNone(block_c1)
+        self.assertIn("Karakoram hint", block_c1)
+
+        card_c2 = MockCard(1)
+        block_c2 = self.parser.find_hints_block(note, card_c2)
+        self.assertIsNone(block_c2)
+
+    def test_stale_cloze_in_second_field_is_detected(self):
+        # The cloze deletion can live in a later field. Stale detection must
+        # scan every field, not just the first one, or a removed/re-added c2
+        # would still be treated as valid.
+        text = (
+            "Some prompt text. "
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"capital\"]}, \"c2\": {\"hints\": [\"music award\"], \"correct_answer\": \"Grammy\", \"_src\": \"City of Lakes\"}}"
+            "</div>"
+        )
+        note = MockNote({
+            "Prompt": text,
+            "Text": "{{c2::Fictional City}} is the answer.",
+        }, model_name="Cloze")
+        card_c2 = MockCard(1)
+        block = self.parser.find_hints_block(note, card_c2)
+        self.assertIsNone(block)
+
+    def test_matching_src_in_second_field_is_valid(self):
+        text = (
+            "Some prompt text. "
+            "<div class=\"ai-hints-json\" style=\"display:none\">"
+            "{\"c1\": {\"hints\": [\"capital\"]}, \"c2\": {\"hints\": [\"city of lakes\"], \"correct_answer\": \"City of Lakes\", \"_src\": \"City of Lakes\"}}"
+            "</div>"
+        )
+        note = MockNote({
+            "Prompt": text,
+            "Text": "{{c2::City of Lakes}} is the answer.",
+        }, model_name="Cloze")
+        card_c2 = MockCard(1)
+        block = self.parser.find_hints_block(note, card_c2)
+        self.assertIsNotNone(block)
+
     def test_update_note_with_hints_stores_src_snapshot(self):
         text = (
             "{{c1::Bhopal}} is a city. "
@@ -212,6 +267,17 @@ class TestClozeScenarios(unittest.TestCase):
         self.assertTrue(self.parser.update_note_with_hints(note, new_data, card=card_c1))
         payload = json.loads(re.search(r'class="ai-hints-json"[^>]*>(.*?)</div>', note["Text"], re.DOTALL).group(1))
         self.assertEqual(payload["c1"]["_src"], "Bhopal")
+
+    def test_update_note_with_hints_stores_src_from_second_field(self):
+        note = MockNote({
+            "Prompt": "Some prompt text.",
+            "Text": "{{c2::City of Lakes}} is the answer.",
+        }, model_name="Cloze")
+        card_c2 = MockCard(1)
+        new_data = {"hints": ["city of lakes"], "options": ["City of Lakes", "River"], "correct_answer": "City of Lakes"}
+        self.assertTrue(self.parser.update_note_with_hints(note, new_data, card=card_c2))
+        payload = json.loads(re.search(r'class="ai-hints-json"[^>]*>(.*?)</div>', note["Prompt"], re.DOTALL).group(1))
+        self.assertEqual(payload["c2"]["_src"], "City of Lakes")
 
     def test_update_note_with_hints_purges_orphaned_cloze(self):
         # Note text has only c1, JSON has c1 and c2

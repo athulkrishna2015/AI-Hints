@@ -506,7 +506,7 @@ class CardParser:
             iteration_limit -= 1
         return text
 
-    def _focus_current_cloze(self, text: str, card=None) -> Tuple[str, str, bool]:
+    def _focus_current_cloze(self, text: str, card=None, log_focus: bool = True) -> Tuple[str, str, bool]:
         """Mark the cloze deletion for the current card and extract all active answers."""
         from .logger import logger
         cloze_number = self._card_ord(card)
@@ -514,7 +514,8 @@ class CardParser:
             return text, "", False
         cloze_number += 1
         
-        logger.debug(f"AI-Hints CardParser focusing cloze #{cloze_number} (card.ord={self._card_ord(card)})")
+        if log_focus:
+            logger.debug(f"AI-Hints CardParser focusing cloze #{cloze_number} (card.ord={self._card_ord(card)})")
 
         answers_map = {} # {original_pos: cleaned_ans}
 
@@ -1380,6 +1381,31 @@ class CardParser:
                     active_cloze_nums.add(int(m.group(1)))
         return active_cloze_nums
 
+    def current_cloze_answer(self, note, card) -> Tuple[str, bool]:
+        """Return the current card's cloze answer from any note field.
+
+        The cloze deletion is not guaranteed to live in the first field (some
+        note types put it in a later field), so stale-detection must scan every
+        field instead of assuming ``fields[0]``.
+        """
+        if not note or card is None:
+            return "", False
+        fields_to_scan = []
+        if hasattr(note, "values") and callable(note.values):
+            try:
+                fields_to_scan = list(note.values())
+            except Exception:
+                fields_to_scan = []
+        elif hasattr(note, "fields"):
+            fields_to_scan = getattr(note, "fields", [])
+        for field_val in fields_to_scan:
+            if not isinstance(field_val, str):
+                continue
+            _, answer, found = self._focus_current_cloze(field_val, card, log_focus=False)
+            if found:
+                return answer, True
+        return "", False
+
     def purge_orphaned_cloze_keys(self, parsed: dict, note) -> dict:
         """Purges any cN keys from a keyed payload if the corresponding {{cN::}} tag is missing from the note."""
         if not isinstance(parsed, dict) or not note:
@@ -1421,21 +1447,7 @@ class CardParser:
             model_name = model["name"].lower() if model and isinstance(model, dict) and "name" in model else ""
             if not (model and ("cloze" in model_name or model.get("type") == 1)):
                 return
-            field_text = None
-            if hasattr(note, "values") and callable(note.values):
-                for f in list(note.values()):
-                    if isinstance(f, str) and "{{c" in f:
-                        field_text = f
-                        break
-            if field_text is None:
-                target = self._find_target_field(note)
-                if target:
-                    v = note.get(target, "")
-                    if isinstance(v, str):
-                        field_text = v
-            if not field_text:
-                return
-            _, ans, found = self._focus_current_cloze(field_text, card)
+            ans, found = self.current_cloze_answer(note, card)
             if found and ans:
                 data["_src"] = ans
         except Exception:
@@ -1520,11 +1532,9 @@ class CardParser:
                             return False
                         
                         if card:
-                            fields_to_scan = list(note.values()) if hasattr(note, "values") else getattr(note, "fields", [])
-                            if fields_to_scan and isinstance(fields_to_scan[0], str):
-                                _, cloze_ans, found = self._focus_current_cloze(fields_to_scan[0], card)
-                                if found and not self._answers_match(cloze_ans, card_data):
-                                    return False
+                            cloze_ans, found = self.current_cloze_answer(note, card)
+                            if found and not self._answers_match(cloze_ans, card_data):
+                                return False
 
             return True
             

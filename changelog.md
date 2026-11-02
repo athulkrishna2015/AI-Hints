@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.11 (2026-11-02)
+- **No More Hints From a Removed or Replaced Cloze**: A newly added or re-added `cN` could display hints/options that belonged to an earlier cloze (or to another card) until the card was regenerated. External edits such as `Remove Clozes` leave the old keyed `cN` payload in the note's hidden JSON; Python correctly detected the `_src` mismatch and reported "no valid data", but the reviewer script then fell back to the raw note block and rendered the stale entry anyway. Python now passes an authoritative per-card payload (including an explicit "no data" state) and the frontend no longer reads raw `.ai-hints-json` blocks when that authoritative answer is present. The card shows the Generate state immediately and auto-generation fills in the correct hints for the current cloze.
+- **Stale Cloze Detection Covers Every Field**: The `_src` check previously looked only at the first note field, so note types that keep the cloze deletion in a later field could still trust stale data. Detection and `_src` snapshots now scan all fields, and the regression suite covers a reused `c2` slot plus a cloze stored in a second field.
+
 ## 8.6.10 (2026-10-31)
 - **Mobile Template Install No Longer Aborts on a Broken Note Type**: "Install templates" previously wrapped the whole loop in one try/except, so a single note type whose template referenced a missing field (e.g. `Field '* Make 2 cards?...' not found`) aborted the entire install and left every other note type untouched. Each note type is now processed and saved independently; failing ones are skipped and reported in the status label, while the rest still get the AI-Hints block. Same hardening applied to "Remove templates".
 

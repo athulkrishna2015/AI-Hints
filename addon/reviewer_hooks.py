@@ -915,12 +915,10 @@ def _cached_hints_for_card(card):
                     if (card_ord + 1) not in active_nums:
                         _generated_hint_cache.pop(key, None)
                         return None
-                    field_val = list(note.values())[0] if hasattr(note, "values") else (getattr(note, "fields", [""])[0])
-                    if isinstance(field_val, str) and field_val:
-                        _, cloze_ans, found = parser._focus_current_cloze(field_val, card)
-                        if not found or not parser._answers_match(cloze_ans, cached.get("data") or {}):
-                            _generated_hint_cache.pop(key, None)
-                            return None
+                    cloze_ans, found = parser.current_cloze_answer(note, card)
+                    if not found or not parser._answers_match(cloze_ans, cached.get("data") or {}):
+                        _generated_hint_cache.pop(key, None)
+                        return None
         except Exception:
             pass
     return cached
@@ -992,7 +990,7 @@ def _push_hint_data_to_frontend(web, card, data, is_manual=True) -> bool:
                         return;
                     }}
                     if (typeof window.aiHintsSetup === 'function') {{
-                        window.aiHintsSetup(card, hintData);
+                        window.aiHintsSetup(card, hintData, undefined, true);
                         return;
                     }}
                 }}
@@ -1479,7 +1477,12 @@ def _trigger_frontend_setup(card=None, web=None):
         logger.debug(f"AI-Hints: _trigger_frontend_setup hint lookup failed: {e}")
 
     hint_data_json = json.dumps(hint_data)  # null if no data
-    logger.debug(f"AI-Hints: _trigger_frontend_setup evaluating JS for Card ID: {card.id}, Ord: {card.ord}, has_hints={hint_data is not None}")
+    # If has_hints is true but the payload could not be extracted, do not claim
+    # authority: fall back to the DOM block rather than hiding valid data after
+    # a transient read/parse failure. A clean "no valid data" result is
+    # authoritative and must suppress the stale raw block.
+    authoritative = not (hint_data is None and has_hints)
+    logger.debug(f"AI-Hints: _trigger_frontend_setup evaluating JS for Card ID: {card.id}, Ord: {card.ord}, has_hints={hint_data is not None}, authoritative={authoritative}")
     if web:
         _safe_web_eval(web, f"""
             (function() {{
@@ -1491,7 +1494,11 @@ def _trigger_frontend_setup(card=None, web=None):
                 function applySetup() {{
                     if (window.aiHintsSetupToken !== token) return;
                     if (typeof window.aiHintsSetup === 'function') {{
-                        window.aiHintsSetup(data, hintData, uiConfig);
+                        // When Python has a definitive answer for this exact
+                        // card, pass authoritative=true so the frontend never
+                        // falls back to a stale raw .ai-hints-json block when
+                        // hintData is null.
+                        window.aiHintsSetup(data, hintData, uiConfig, {json.dumps(authoritative)});
                     }}
                 }}
                 var attempts = 0;
