@@ -107,6 +107,15 @@ class BatchTabMixin:
                   continue
              seen.add(prov)
              self.batch_provider_cb.addItem(prov.capitalize(), prov)
+        # Include user-configured custom providers (e.g. coherence, cline, kilo)
+        # so the Force Provider dropdown reflects the active provider set rather
+        # than only the built-in defaults.
+        custom_providers = self.config.get("custom_providers") if isinstance(self.config, dict) else None
+        if isinstance(custom_providers, dict):
+            for prov in custom_providers.keys():
+                if prov and prov not in seen:
+                    seen.add(prov)
+                    self.batch_provider_cb.addItem(str(prov).capitalize(), prov)
         if "local" not in seen:
              self.batch_provider_cb.addItem("Local", "local")
         
@@ -366,7 +375,7 @@ class BatchTabMixin:
         return tab
 
     def _update_batch_model_suggestions(self):
-        """Pulls available pre-seeded list suggestions from shared constants file."""
+        """Populate the Force Model dropdown with the configured/active models for the selected provider."""
         self.batch_model_cb.clear()
         self.batch_model_cb.addItem("⚡ System Default (Configured Primary Model)")
         
@@ -375,11 +384,52 @@ class BatchTabMixin:
              return
              
         prov = self.batch_provider_cb.itemData(combo_idx)
-        if prov:
-             from ..ai_client import MODEL_SUGGESTIONS
-             suggs = MODEL_SUGGESTIONS.get(prov, [])
-             for s in suggs:
-                  self.batch_model_cb.addItem(s)
+        if not prov:
+             return
+
+        cfg = self.config if isinstance(getattr(self, "config", None), dict) else {}
+        seen_models = set()
+        collected = []
+
+        def _add_model(model):
+            m = str(model).strip() if model is not None else ""
+            if m and m not in seen_models:
+                seen_models.add(m)
+                collected.append(m)
+
+        models_cfg = cfg.get("models") or {}
+        if isinstance(models_cfg, dict):
+            _add_model(models_cfg.get(prov, ""))
+
+        fallbacks_cfg = cfg.get("model_fallbacks") or {}
+        fb = fallbacks_cfg.get(prov) if isinstance(fallbacks_cfg, dict) else None
+        if isinstance(fb, str):
+            _add_model(fb)
+        elif isinstance(fb, list):
+            for m in fb:
+                _add_model(m)
+
+        custom = cfg.get("custom_providers") or {}
+        if isinstance(custom, dict) and prov in custom:
+            cp = custom.get(prov) or {}
+            if isinstance(cp, dict):
+                _add_model(cp.get("model", ""))
+                fb2 = cp.get("model_fallbacks") or []
+                if isinstance(fb2, str):
+                    _add_model(fb2)
+                elif isinstance(fb2, list):
+                    for m in fb2:
+                        _add_model(m)
+
+        if prov == "local":
+            local_cfg = cfg.get("local_providers") or {}
+            if isinstance(local_cfg, dict):
+                for lc in local_cfg.values():
+                    if isinstance(lc, dict):
+                        _add_model(lc.get("model", ""))
+
+        for m in collected:
+            self.batch_model_cb.addItem(m)
 
     def _on_batch_method_changed(self):
         """Updates descriptions, buttons, and valid providers when toggle flips."""
