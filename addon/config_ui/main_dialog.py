@@ -991,7 +991,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
                         if not silent: tooltip(f"Found {len(clean_models)} models for {provider.capitalize()}")
                     else:
-                        if not silent: info(f"Could not fetch models for {provider.capitalize()}. Check connection.")
+                        if not silent:
+                            if last_err is not None:
+                                info(f"Could not fetch models for {provider.capitalize()}: {last_err}")
+                            else:
+                                info(f"Could not fetch models for {provider.capitalize()}. Check connection / API key.")
                 mw.taskman.run_on_main(_done)
             except Exception as e:
                 logger.error(f"Fetch error: {e}")

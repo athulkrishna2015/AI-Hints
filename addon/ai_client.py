@@ -2700,7 +2700,11 @@ class AIClient:
                         return self._chat_only_models([m.get("id") for m in result.get("data", []) if m.get("id")])
 
                 elif provider == "huggingface":
-                    return MODEL_SUGGESTIONS.get("huggingface", [])
+                    url = "https://router.huggingface.co/v1/models"
+                    headers = self._json_headers(api_key)
+                    result = self._get_json(url, headers)
+                    FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
+                    return self._chat_only_models([_model_id(m) for m in result.get("data", []) if _model_id(m)])
 
             except Exception as e:
                 logger.debug(f"AI-Hints: model fetch failed for {provider}: {e}")
