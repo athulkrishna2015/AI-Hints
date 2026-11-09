@@ -56,7 +56,7 @@ class TestRaceConditionFix(unittest.TestCase):
 
         # Verify both data exist in the single block
         match = re.search(r'ai-hints-json.*?>(.*?)</div>', note["Front"], re.DOTALL)
-        payload = self.parser._parse_json_payload(match.group(1))
+        payload = json.loads(html.unescape(match.group(1)))
         self.assertIn("c1", payload)
         self.assertIn("c2", payload)
         self.assertEqual(payload["c1"]["hints"], ["Hint for C1"])

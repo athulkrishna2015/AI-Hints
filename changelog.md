@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.15 (2026-11-10)
+- **Emergency revert of v8.6.14**: The nested `<script>` wrapper introduced in v8.6.14 is stripped by Anki's contenteditable editor, leaving empty hint blocks and breaking auto-generation. This release reverts to the raw-JSON block format and runs a one-time recovery migration that converts any script-wrapped blocks back to raw JSON, preserving all hints/options data.
 ## 8.6.14 (2026-11-09)
 - **Hidden Hints JSON No Longer Appears in the Browser**: The hidden `ai-hints-json` block was stored as plain text inside a `<div>`, so Anki's Sort Field column (and any HTML-stripping view) showed the raw JSON whenever the block was in the first field. The payload is now wrapped in a nested `<script type="application/json">` element, which Anki's `strip_html` ignores while the reviewer and mobile scripts can still read it. Existing notes are migrated automatically in the background on the first launch after updating.
 

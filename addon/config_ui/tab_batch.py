@@ -1261,15 +1261,16 @@ class BatchTabMixin:
                             if has_hints and _need_version:
                                 try:
                                     # Inline version extraction without extra DB hop
-                                    import re as _re
-                                    from ..card_parser import parse_hint_payload
+                                    import re as _re, html as _html
+                                    from ..card_parser import _safe_loads
                                     saved_ver = ""
                                     for fval in (fields or []):
                                         if not isinstance(fval, str):
                                             continue
                                         for m in _re.finditer(r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>', fval, _re.DOTALL | _re.IGNORECASE):
+                                            raw = _html.unescape(m.group(1) or "")
                                             try:
-                                                parsed = parse_hint_payload(m.group(1) or "")
+                                                parsed = _safe_loads(raw)
                                             except Exception:
                                                 continue
                                             if isinstance(parsed, dict):

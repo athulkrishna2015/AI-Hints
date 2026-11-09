@@ -161,7 +161,7 @@ class TestM17DepthAwareScanner(unittest.TestCase):
         # Exactly ONE block remains and it parses cleanly
         blocks = list(_iter_hint_blocks(out))
         self.assertEqual(len(blocks), 1)
-        parsed = self.parser._parse_json_payload(blocks[0].group(1))
+        parsed = json.loads(html.unescape(blocks[0].group(1)))
         self.assertEqual(parsed["c1"]["hints"], ["new"])
         self.assertNotIn("STALE", out)
         self.assertNotIn('class="legacy"', out)

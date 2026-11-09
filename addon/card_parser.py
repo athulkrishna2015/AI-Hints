@@ -758,31 +758,12 @@ class CardParser:
     def _build_block(self, payload: Dict[str, Any], toggles: Dict[str, bool] = None, card=None, minimal: bool = False) -> str:
         """Serialize a payload into the hidden JSON div wrapper.
 
-        The JSON lives inside a nested `<script type="application/json">` so
-        Anki's ``strip_html`` (and therefore the browser's Sort Field column)
-        ignores it.  A plain text payload inside the div leaks the raw JSON
-        into the browser table.
-
         Skipped cards get a bare `<div class="ai-hints-json" style="display:none">`
         wrapper: the addon-id/contenteditable/toggle attrs are decorative and
         unnecessary for a card that carries no hints UI.
         """
         attrs = "" if minimal else f" {self._build_attrs(toggles, card)}"
-        return f'<div class="{self.json_class}"{attrs} style="display:none">{self._wrap_script_payload(payload)}</div>'
-
-    def _serialize_json_for_script(self, data: Dict[str, Any]) -> str:
-        """Serialize JSON as raw script text.
-
-        Script content is not HTML-decoded by the DOM, so HTML entities would
-        leak into ``textContent`` and break ``JSON.parse``.  Escape the only
-        characters that can terminate/confuse the tag as JSON unicode escapes;
-        ``json.loads``/``JSON.parse`` decode them back to the original text.
-        """
-        raw = json.dumps(data, indent=2, ensure_ascii=False)
-        return raw.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
-
-    def _wrap_script_payload(self, data: Dict[str, Any]) -> str:
-        return f'<script type="application/json">{self._serialize_json_for_script(data)}</script>'
+        return f'<div class="{self.json_class}"{attrs} style="display:none">{self.serialize_json_payload(payload)}</div>'
 
     def _is_skip_only_payload(self, data) -> bool:
         """True when the payload holds nothing but skip markers (no hints/options)."""
@@ -924,8 +905,9 @@ class CardParser:
                 inner_iter = list(_iter_hint_blocks(block))
                 if not inner_iter:
                     continue
+                raw = html.unescape(inner_iter[0].group(1) or "")
                 try:
-                    parsed = self._parse_json_payload(inner_iter[0].group(1) or "")
+                    parsed = _safe_loads(raw)
                 except Exception:
                     continue
                 if isinstance(parsed, dict) and self._is_keyed_payload(parsed):
@@ -1071,7 +1053,7 @@ class CardParser:
                                                 break
                                                 
                                         if has_active_data:
-                                            new_payload = self._wrap_script_payload(parsed)
+                                            new_payload = self.serialize_json_payload(parsed)
                                             new_val = new_val[:match.start(2)] + new_payload + new_val[match.end(2):]
                                             field_cleared = True
                                         else:
@@ -1084,7 +1066,7 @@ class CardParser:
                                     del parsed["_skipped"]
                                     # If it still has other data, update the JSON. Otherwise, remove the block.
                                     if parsed.get("hints") or parsed.get("options"):
-                                        new_payload = self._wrap_script_payload(parsed)
+                                        new_payload = self.serialize_json_payload(parsed)
                                         new_val = new_val[:match.start(2)] + new_payload + new_val[match.end(2):]
                                         field_cleared = True
                                     else:
@@ -1172,7 +1154,7 @@ class CardParser:
                             del parsed[card_key]
                             if parsed:
                                 # Re-save updated JSON
-                                new_payload = self._wrap_script_payload(parsed)
+                                new_payload = self.serialize_json_payload(parsed)
                                 # We only replace the inner payload, keep the outer div
                                 new_val = new_val[:match.start(1)] + new_payload + new_val[match.end(1):]
                                 field_cleared = True
@@ -1189,14 +1171,9 @@ class CardParser:
                     new_val = _strip_block_with_ws(new_val, match)
                     field_cleared = True
 
-            # 2. Clean naked/raw JSON strings left behind by older versions or failures.
-            # Never touch JSON that still lives inside an ai-hints block (matched
-            # or not): a block scoped to another card must survive untouched.
+            # 2. Clean naked/raw JSON strings left behind by older versions or failures
             import json
-            block_spans = [(m.start(), m.end()) for m in _iter_hint_blocks(new_val)]
             for start_idx, end_idx, candidate in reversed(find_json_candidates(new_val)):
-                if any(s <= start_idx and end_idx <= e for s, e in block_spans):
-                    continue
                 try:
                     # Clean candidate of internal HTML tags for parsing safety
                     clean_candidate = re.sub(r'<[^>]+>', '', candidate)
@@ -1293,7 +1270,7 @@ class CardParser:
                                         block_modified = True
                                         
                             if block_modified:
-                                new_payload = self._wrap_script_payload(parsed)
+                                new_payload = self.serialize_json_payload(parsed)
                                 new_attrs = block_html.split(">", 1)[0].replace(f'<div class="{self.json_class}"', "").strip()
                                 new_block = f'<div class="{self.json_class}" {new_attrs} style="display:none">{new_payload}</div>'
                                 new_val = new_val[:match.start()] + new_block + new_val[match.end():]
@@ -1641,8 +1618,8 @@ class CardParser:
                     if is_flat:
                         parsed = {"c1": parsed}
                         
-                    # 2. Serialize to pretty format inside the script wrapper
-                    formatted_payload = self._wrap_script_payload(parsed)
+                    # 2. Serialize to pretty format
+                    formatted_payload = self.serialize_json_payload(parsed)
                     
                     # 3. If either it was flat, or raw_payload has unicode escapes, or has different whitespace:
                     if is_flat or raw_payload != formatted_payload:
@@ -1658,65 +1635,17 @@ class CardParser:
                 
         return note_changed
 
-    def migrate_json_blocks_to_script(self, note) -> bool:
-        """Wrap legacy raw-JSON payloads in a nested script element.
 
-        Anki's ``strip_html`` keeps text inside a ``<div>`` but removes
-        ``<script>`` content.  Old blocks therefore leaked their JSON into the
-        browser's Sort Field column; the nested wrapper hides it while the
-        reviewer/mobile scripts can still read ``textContent``.
+def migrate_script_blocks_to_raw(col) -> int:
+    """Emergency recovery: convert script-wrapped hint payloads back to raw JSON.
 
-        Returns True when the note was modified.
-        """
-        modified = False
-        fields = list(note.keys()) if hasattr(note, "keys") else []
-        for f_name in fields:
-            val = note[f_name]
-            if not isinstance(val, str) or self.json_class not in val:
-                continue
-            new_val = val
-            for match in reversed(list(_iter_hint_blocks(val))):
-                block_html = match.group(0)
-                if self.json_class not in block_html:
-                    continue
-                if not re.match(r"<div\b", block_html, flags=re.IGNORECASE):
-                    continue
-                raw_payload = match.group(1)
-                if re.match(
-                    r'\s*<script\b[^>]*type\s*=\s*["\']application/json["\']',
-                    raw_payload,
-                    flags=re.IGNORECASE,
-                ):
-                    continue
-                try:
-                    parsed = self._parse_json_payload(raw_payload)
-                except Exception:
-                    continue
-                if not isinstance(parsed, dict) or not parsed:
-                    continue
-                new_payload = self._wrap_script_payload(parsed)
-                new_val = new_val[:match.start(1)] + new_payload + new_val[match.end(1):]
-                modified = True
-            if new_val != val:
-                note[f_name] = new_val
-        return modified
-
-
-def parse_hint_payload(raw_payload: str) -> Any:
-    """Parse the inner payload of an ai-hints-json block.
-
-    Accepts both legacy raw-JSON text and the current nested
-    ``<script type="application/json">`` wrapper.
+    v8.6.14 wrapped payloads in a nested ``<script type="application/json">``
+    so Anki's ``strip_html`` would ignore them.  Anki's contenteditable editor
+    strips ``<script>`` elements, leaving empty divs and breaking auto-generation.
+    This converts any remaining script-wrapped blocks back to the raw-JSON format
+    used by v8.6.13 and earlier.
     """
-    return CardParser()._parse_json_payload(raw_payload)
-
-
-def migrate_all_json_blocks_to_script(col) -> int:
-    """Wrap legacy raw-JSON hint payloads in a nested script element.
-
-    Returns the number of notes changed.  Intended to run once in the
-    background after startup; it is a no-op for already-migrated notes.
-    """
+    import re
     from .logger import logger
 
     parser = CardParser()
@@ -1729,9 +1658,39 @@ def migrate_all_json_blocks_to_script(col) -> int:
     for nid in nids:
         try:
             note = col.get_note(nid)
-            if parser.migrate_json_blocks_to_script(note):
+            modified = False
+            fields = list(note.keys()) if hasattr(note, "keys") else []
+            for f_name in fields:
+                val = note[f_name]
+                if not isinstance(val, str) or parser.json_class not in val:
+                    continue
+                new_val = val
+                for match in reversed(list(_iter_hint_blocks(val))):
+                    block_html = match.group(0)
+                    if parser.json_class not in block_html:
+                        continue
+                    raw_payload = match.group(1)
+                    if not re.match(
+                        r"\s*<script\b[^>]*type\s*=\s*[\"']application/json[\"']",
+                        raw_payload,
+                        flags=re.IGNORECASE,
+                    ):
+                        continue
+                    try:
+                        parsed = parser._parse_json_payload(raw_payload)
+                    except Exception:
+                        continue
+                    if not isinstance(parsed, dict) or not parsed:
+                        continue
+                    new_payload = parser.serialize_json_payload(parsed)
+                    new_val = new_val[: match.start(1)] + new_payload + new_val[match.end(1) :]
+                    modified = True
+                if new_val != val:
+                    note[f_name] = new_val
+                    modified = True
+            if modified:
                 col.update_note(note, skip_undo_entry=True)
                 changed += 1
         except Exception as e:
-            logger.error(f"AI-Hints: Failed to migrate hints block in note {nid}: {e}")
+            logger.error(f"AI-Hints: Failed to recover script block in note {nid}: {e}")
     return changed

@@ -136,24 +136,24 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
             except Exception as e:
                 logger.error(f"AI-Hints: Failed to schedule model auto-update: {e}")
 
-            # One-time migration: old hint blocks stored raw JSON directly
-            # inside a <div>, which leaked into the browser's Sort Field
-            # column. Wrap the payload in a nested <script> so Anki's
-            # strip_html ignores it. Runs in the background once per profile.
+            # Emergency recovery: v8.6.14 wrapped hint payloads in a nested
+            # <script>, which Anki's contenteditable editor strips, leaving
+            # empty divs and breaking auto-generation. Convert any remaining
+            # script-wrapped blocks back to the raw-JSON format.
             try:
                 from .config_io import resolve_data_file
-                marker = resolve_data_file("hints_script_migration_v1.done")
+                marker = resolve_data_file("script_to_raw_migration_v1.done")
             except Exception:
                 marker = ""
             if not marker or not os.path.exists(marker):
-                def _migrate_worker():
-                    from .card_parser import migrate_all_json_blocks_to_script
+                def _recover_worker():
+                    from .card_parser import migrate_script_blocks_to_raw
                     col = mw.col
                     if col is None:
                         return 0
-                    return migrate_all_json_blocks_to_script(col)
+                    return migrate_script_blocks_to_raw(col)
 
-                def _migrate_done(fut_or_result):
+                def _recover_done(fut_or_result):
                     try:
                         changed = (
                             fut_or_result.result()
@@ -161,33 +161,21 @@ if mw is not None and getattr(mw, "addonManager", None) is not None:
                             else fut_or_result
                         )
                     except Exception as e:
-                        logger.error(f"AI-Hints: Hints block migration failed: {e}")
+                        logger.error(f"AI-Hints: Script-to-raw recovery failed: {e}")
                         return
-                    logger.info(
-                        f"AI-Hints: Migrated {changed} note(s) to script-wrapped hints JSON."
-                    )
+                    logger.info(f"AI-Hints: Recovered {changed} note(s) from script-wrapped hints JSON.")
                     try:
                         if marker:
                             os.makedirs(os.path.dirname(marker), exist_ok=True)
                             with open(marker, "w", encoding="utf-8") as fh:
                                 fh.write("done\n")
                     except Exception as e:
-                        logger.error(
-                            f"AI-Hints: Failed to write hints migration marker: {e}"
-                        )
-                    # If the browser was restored at startup, refresh its rows so
-                    # the cleaned Sort Field values are visible immediately.
-                    try:
-                        browser = getattr(mw, "browser", None)
-                        if browser is not None and changed:
-                            browser.table.reset()
-                    except Exception:
-                        pass
+                        logger.error(f"AI-Hints: Failed to write recovery marker: {e}")
 
                 try:
-                    mw.taskman.run_in_background(_migrate_worker, on_done=_migrate_done)
+                    mw.taskman.run_in_background(_recover_worker, on_done=_recover_done)
                 except Exception:
-                    _migrate_done(_migrate_worker())
+                    _recover_done(_recover_worker())
 
         QTimer.singleShot(2000, _delayed_startup)
 

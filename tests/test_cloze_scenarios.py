@@ -10,17 +10,6 @@ sys.path.insert(0, ROOT_DIR)
 
 from addon.card_parser import CardParser
 
-def payload_from_field(text):
-    """Parse an ai-hints-json block, tolerating the nested script wrapper."""
-    match = re.search(r'class="ai-hints-json"[^>]*>(.*?)</div>', text, re.DOTALL)
-    if not match:
-        raise AssertionError("No AI-Hints JSON block found")
-    raw = match.group(1)
-    raw = re.sub(r'^\s*<script\b[^>]*>', '', raw, flags=re.IGNORECASE)
-    raw = re.sub(r'</script>\s*$', '', raw, flags=re.IGNORECASE)
-    return json.loads(raw)
-
-
 class MockCard:
     def __init__(self, ord, id=12345):
         self.ord = ord
@@ -276,7 +265,7 @@ class TestClozeScenarios(unittest.TestCase):
         card_c1 = MockCard(0)
         new_data = {"hints": ["new hint"], "options": ["Bhopal", "Indore"], "correct_answer": "Bhopal"}
         self.assertTrue(self.parser.update_note_with_hints(note, new_data, card=card_c1))
-        payload = payload_from_field(note["Text"])
+        payload = json.loads(re.search(r'class="ai-hints-json"[^>]*>(.*?)</div>', note["Text"], re.DOTALL).group(1))
         self.assertEqual(payload["c1"]["_src"], "Bhopal")
 
     def test_update_note_with_hints_stores_src_from_second_field(self):
@@ -287,7 +276,7 @@ class TestClozeScenarios(unittest.TestCase):
         card_c2 = MockCard(1)
         new_data = {"hints": ["city of lakes"], "options": ["City of Lakes", "River"], "correct_answer": "City of Lakes"}
         self.assertTrue(self.parser.update_note_with_hints(note, new_data, card=card_c2))
-        payload = payload_from_field(note["Prompt"])
+        payload = json.loads(re.search(r'class="ai-hints-json"[^>]*>(.*?)</div>', note["Prompt"], re.DOTALL).group(1))
         self.assertEqual(payload["c2"]["_src"], "City of Lakes")
 
     def test_update_note_with_hints_purges_orphaned_cloze(self):
