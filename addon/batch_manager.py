@@ -967,13 +967,13 @@ class BatchManager:
                     has_hints = False
                     if block:
                         try:
-                            import re, html, json
+                            import re, json
                             m = re.search(
                                 r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
                                 block, re.DOTALL | re.IGNORECASE,
                             )
                             if m:
-                                parsed = _parser._parse_json_payload(html.unescape(m.group(1) or ""))
+                                parsed = _parser._parse_json_payload(m.group(1) or "")
                                 if isinstance(parsed, dict):
                                     # Keyed payload (c1, c2, ...): check the
                                     # active cloze's entry; otherwise the flat

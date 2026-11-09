@@ -36,7 +36,11 @@ def json_payload_from_field(value):
     )
     if not match:
         raise AssertionError("No AI-Hints JSON block found")
-    return json.loads(html.unescape(match.group(1)))
+    raw = match.group(1)
+    # Current blocks wrap the JSON in a nested <script type="application/json">.
+    raw = re.sub(r'^\s*<script\b[^>]*>', '', raw, flags=re.IGNORECASE)
+    raw = re.sub(r'</script>\s*$', '', raw, flags=re.IGNORECASE)
+    return json.loads(html.unescape(raw))
 
 
 class CardParserTests(unittest.TestCase):
@@ -158,9 +162,16 @@ class CardParserTests(unittest.TestCase):
             }
         )
 
-        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", block)
         self.assertNotIn("<script>alert(1)</script>", block)
-        self.assertIn("&lt;anki-mathjax&gt;x&lt;/anki-mathjax&gt;", block)
+        self.assertNotIn("<anki-mathjax>x</anki-mathjax>", block)
+        match = re.search(
+            r'<script\b[^>]*type=["\']application/json["\'][^>]*>(.*?)</script>',
+            block,
+            re.DOTALL | re.IGNORECASE,
+        )
+        parsed = parser._parse_json_payload(match.group(1))
+        self.assertEqual(parsed["hints"][0], "<script>alert(1)</script>")
+        self.assertEqual(parsed["hints"][1], "<anki-mathjax>x</anki-mathjax>")
 
     def test_missing_cloze_returns_empty_content(self):
         note = FakeNote("Cloze", {"Text": "This is {{c1::cloze 1}}."})
@@ -380,6 +391,59 @@ class CardParserTests(unittest.TestCase):
         self.assertIn('c2', result)
         self.assertNotIn('c1', result)
         self.assertIn('</div>', result)
+
+    def test_build_block_hides_json_inside_nested_script(self):
+        parser = CardParser()
+        block = parser.build_hints_block({"hints": ["H1"], "options": ["O1"]})
+        self.assertIn('<div class="ai-hints-json"', block)
+        self.assertIn('<script type="application/json">', block)
+        m = re.search(
+            r'<script\b[^>]*type=["\']application/json["\'][^>]*>(.*?)</script>',
+            block,
+            re.DOTALL | re.IGNORECASE,
+        )
+        self.assertIsNotNone(m)
+        # Nothing outside the script survives Anki's strip_html, so the
+        # browser's Sort Field column cannot show the JSON payload.
+        outside = block[:m.start()] + block[m.end():]
+        self.assertEqual(re.sub(r'<[^>]+>', '', outside).strip(), "")
+        parsed = parser._parse_json_payload(m.group(1))
+        self.assertEqual(parsed["hints"], ["H1"])
+
+    def test_migrate_legacy_block_to_script_wrapper(self):
+        parser = CardParser()
+        note = FakeNote(
+            "Cloze",
+            {
+                "Text": 'Prompt\n\n<div class="ai-hints-json" style="display:none">'
+                '{"c1": {"hints": ["H1"]}}</div>'
+            },
+        )
+        self.assertTrue(parser.migrate_json_blocks_to_script(note))
+        self.assertIn('<script type="application/json">', note["Text"])
+        match = re.search(
+            r'class="ai-hints-json"[^>]*>(.*?)</div>', note["Text"], re.DOTALL
+        )
+        self.assertEqual(
+            parser._parse_json_payload(match.group(1))["c1"]["hints"], ["H1"]
+        )
+        # Running again is a no-op.
+        self.assertFalse(parser.migrate_json_blocks_to_script(note))
+
+    def test_script_payload_escapes_tag_breakers(self):
+        parser = CardParser()
+        block = parser.build_hints_block(
+            {"hints": ["a < b & c > d"], "options": ["</script>"]}
+        )
+        # Only the wrapper's own closing tag may appear literally.
+        self.assertEqual(block.count("</script>"), 1)
+        match = re.search(
+            r'<script\b[^>]*>(.*?)</script>', block, re.DOTALL | re.IGNORECASE
+        )
+        parsed = parser._parse_json_payload(match.group(1))
+        self.assertEqual(parsed["hints"], ["a < b & c > d"])
+        self.assertEqual(parsed["options"], ["</script>"])
+
 
 if __name__ == "__main__":
     unittest.main()

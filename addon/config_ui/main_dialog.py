@@ -2065,7 +2065,7 @@ def _build_orphans_cleanup_dialog(parent, orphaned_hints, parser):
                                     keys_removed += 1
                             if keys_removed > 0:
                                 if parsed:
-                                    new_payload = parser.serialize_json_payload(parsed)
+                                    new_payload = parser._wrap_script_payload(parsed)
                                     new_val = new_val[:match.start(1)] + new_payload + new_val[match.end(1):]
                                     note_changed = True
                                 else:

@@ -9,6 +9,7 @@ from aqt.qt import QMessageBox, QMenu, QAction, QPoint, Qt, QDialog, QVBoxLayout
 from .logger import logger, info, tooltip, state
 from .card_parser import _iter_hint_blocks as _cp_iter_hint_blocks
 from .card_parser import _json_size_depth_guard as _cp_json_guard
+from .card_parser import parse_hint_payload
 
 ADDON_PACKAGE = __name__.split(".")[0]
 
@@ -1455,15 +1456,14 @@ def _trigger_frontend_setup(card=None, web=None):
                     pass
                 block_html = _cached_find_hints_block(parser, note, card)
                 if block_html:
-                    import re, html as _html
+                    import re
                     m = re.search(
                         r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
                         block_html, re.DOTALL | re.IGNORECASE
                     )
                     if m:
                         import json as _json
-                        raw = _html.unescape(m.group(1) or "")
-                        parsed = _safe_loads(raw)
+                        parsed = parse_hint_payload(m.group(1) or "")
                         # Unwrap keyed payload for this card
                         card_ord = getattr(card, "ord", None)
                         if card_ord is not None:
@@ -1567,7 +1567,6 @@ def _load_stale_hints_for_card(note, card, parser):
 
     Returns (data_dict_or_None, toggles_or_None).
     """
-    import html as _html
     try:
         if hasattr(note, "values") and callable(note.values):
             fields = list(note.values())
@@ -1589,8 +1588,7 @@ def _load_stale_hints_for_card(note, card, parser):
             try:
                 if not parser._block_matches_card(block, card):
                     continue
-                raw = _html.unescape(match.group(1) or "")
-                parsed = parser._parse_json_payload(raw)
+                parsed = parser._parse_json_payload(match.group(1) or "")
                 if isinstance(parsed, dict) and card_key and card_key in parsed and "hints" not in parsed:
                     card_data = parsed[card_key]
                 else:
@@ -1631,7 +1629,7 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
     if not data or not toggles:
         block_html = parser.find_hints_block(note, card)
         if block_html:
-            import re, html as _html
+            import re
             m = re.search(
                 r'<div\b[^>]*class=["\'][^"\']*ai-hints-json[^"\']*["\'][^>]*>(.*?)</div>',
                 block_html, re.DOTALL | re.IGNORECASE
@@ -1639,8 +1637,7 @@ def edit_item(card, web, item_type: str, index: int, new_value: str):
             if m:
                 import json as _json
                 try:
-                    raw = _html.unescape(m.group(1) or "")
-                    parsed = _safe_loads(raw)
+                    parsed = parse_hint_payload(m.group(1) or "")
                     card_ord = getattr(card, "ord", None)
                     card_key = None
                     if card_ord is not None:
@@ -3470,7 +3467,6 @@ def _card_saved_version(card) -> str:
             return str(ver)
     try:
         import re
-        import html as _html
         note = card.note()
         fields = getattr(note, "fields", [])
         if not fields and hasattr(note, "values"):
@@ -3483,9 +3479,8 @@ def _card_saved_version(card) -> str:
                 field_val, re.DOTALL | re.IGNORECASE
             )
             if m:
-                raw = _html.unescape(m.group(1) or "")
                 try:
-                    parsed = _safe_loads(raw)
+                    parsed = parse_hint_payload(m.group(1) or "")
                     # Handle keyed payload (cloze)
                     card_ord = getattr(card, "ord", None)
                     if card_ord is not None:
@@ -3529,7 +3524,6 @@ def _card_saved_generation_time(card) -> str:
             return str(time_str)
     try:
         import re
-        import html as _html
         note = card.note()
         fields = getattr(note, "fields", [])
         if not fields and hasattr(note, "values"):
@@ -3542,9 +3536,8 @@ def _card_saved_generation_time(card) -> str:
                 field_val, re.DOTALL | re.IGNORECASE
             )
             if m:
-                raw = _html.unescape(m.group(1) or "")
                 try:
-                    parsed = _safe_loads(raw)
+                    parsed = parse_hint_payload(m.group(1) or "")
                     card_ord = getattr(card, "ord", None)
                     if card_ord is not None:
                         card_key = f"c{card_ord + 1}"
