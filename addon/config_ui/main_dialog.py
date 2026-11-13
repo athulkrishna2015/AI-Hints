@@ -81,7 +81,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         GLOBAL_MISSING_FROM_FETCH.clear()
         
         self.setup_ui()
-        self.load_config_into_ui()
+        # Defer config loading so the dialog appears immediately; tabs are
+        # built (and their config applied) shortly after via lazy loading.
+        QTimer.singleShot(0, self._deferred_load_config)
 
         self._migration_running = False
         self._migration_stop_requested = False
@@ -329,6 +331,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         # Apply initial selection if any
         if self.selected_card_ids:
             QTimer.singleShot(100, self.update_batch_ui_for_selection)
+
+    def _deferred_load_config(self):
+        """Build all tabs and load config into them after the dialog is shown."""
+        for idx in range(len(self._tab_builders)):
+            self._ensure_tab_built(idx)
+        self.load_config_into_ui()
 
     def load_config_into_ui(self):
         """Load configuration values into UI elements."""
