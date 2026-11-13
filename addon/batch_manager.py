@@ -48,6 +48,8 @@ class BatchManager:
         
         self.active_threads_status = {}
         self._db_lock = threading.RLock()
+        self._thread_local = threading.local()
+        self._job_threads = {}  # job_id -> Thread for parallel jobs
         
         self.load_state()
 
@@ -74,11 +76,18 @@ class BatchManager:
 
     @property
     def local_queue(self) -> List[int]:
+        job = getattr(self._thread_local, "job", None)
+        if job is not None:
+            return job.setdefault("queue", [])
         self._ensure_current_job()
         return self.local_queue_jobs[0].setdefault("queue", [])
 
     @local_queue.setter
     def local_queue(self, val: List[int]):
+        job = getattr(self._thread_local, "job", None)
+        if job is not None:
+            job["queue"] = val
+            return
         self._ensure_current_job()
         self.local_queue_jobs[0]["queue"] = val
 
@@ -822,9 +831,27 @@ class BatchManager:
              )
              t.start()
         else:
-             self.save_state()
-             from aqt.utils import tooltip
-             tooltip(f"📋 Queued {len(card_ids)} cards to local queue.")
+             # Check if the new job uses a different provider than the
+             # currently running job. If so, run it in parallel.
+             current_job = self.local_queue_jobs[0] if self.local_queue_jobs else None
+             current_prov = (current_job.get("provider") if current_job else None) or (self.saved_config or {}).get("ai_provider", "")
+             new_prov = provider_override or (config or {}).get("ai_provider", "")
+             
+             if current_prov and new_prov and current_prov != new_prov:
+                 # Run in parallel
+                 self._job_threads[new_job["id"]] = threading.Thread(
+                     target=self._run_local_queue,
+                     args=(config, provider_override, new_job["id"]),
+                     daemon=True
+                 )
+                 self._job_threads[new_job["id"]].start()
+                 self.save_state()
+                 from aqt.utils import tooltip
+                 tooltip(f"📋 Queued {len(card_ids)} cards to run in parallel ({new_prov}).")
+             else:
+                 self.save_state()
+                 from aqt.utils import tooltip
+                 tooltip(f"📋 Queued {len(card_ids)} cards to local queue.")
              
         return True
 
@@ -1018,7 +1045,7 @@ class BatchManager:
     def _missing_hint_cids_on_main_end():
         return None
 
-    def _run_local_queue(self, config: Dict, provider_override: str):
+    def _run_local_queue(self, config: Dict, provider_override: str, target_job_id: str = None):
         """Core iterative engine thread that drives the sequential queue, processing multiple jobs."""
         if not hasattr(self, "_db_lock"):
              self._db_lock = threading.RLock()
@@ -1028,13 +1055,23 @@ class BatchManager:
                 if not getattr(self, "local_queue_jobs", []):
                     break
                 # Fetch the active job
-                job = self.local_queue_jobs[0]
+                if target_job_id:
+                    job = None
+                    for j in self.local_queue_jobs:
+                        if j.get("id") == target_job_id:
+                            job = j
+                            break
+                    if job is None:
+                        break
+                else:
+                    job = self.local_queue_jobs[0]
                 current_job_id = job.get("id", "default")
                 
             logger.info(f"STARTING local sequential queue job {current_job_id} for {self.local_queue_total} cards.")
             self.card_attempts = {}
             self.active_threads_status = {}
-            
+            self._thread_local.job = job
+
             client = AIClient(self.saved_config)
             parser = CardParser()
             original_request = list(self.local_queue)
@@ -1042,8 +1079,14 @@ class BatchManager:
             while self.local_queue_active:
                 # Double check that we are still on the same job
                 with self._db_lock:
-                    if not self.local_queue_jobs or self.local_queue_jobs[0].get("id") != current_job_id:
+                    if not self.local_queue_jobs:
                         break
+                    if target_job_id:
+                        if not any(j.get("id") == current_job_id for j in self.local_queue_jobs):
+                            break
+                    else:
+                        if self.local_queue_jobs[0].get("id") != current_job_id:
+                            break
                         
                 use_multithread = self.saved_config.get("multithread_providers", False)
                 if use_multithread and (not self.saved_provider or self.saved_provider == "Standard Config (Follows Fallback Matrix)"):
@@ -1069,7 +1112,7 @@ class BatchManager:
                 for prov in providers:
                      t = threading.Thread(
                           target=self._run_local_queue_thread,
-                          args=(prov, parser, self.saved_config),
+                          args=(prov, parser, self.saved_config, job),
                           daemon=True
                      )
                      threads.append(t)
@@ -1142,8 +1185,14 @@ class BatchManager:
                 if not self.local_queue_active:
                     break
                 with self._db_lock:
-                    if not self.local_queue_jobs or self.local_queue_jobs[0].get("id") != current_job_id:
+                    if not self.local_queue_jobs:
                         break
+                    if target_job_id:
+                        if not any(j.get("id") == current_job_id for j in self.local_queue_jobs):
+                            break
+                    else:
+                        if self.local_queue_jobs[0].get("id") != current_job_id:
+                            break
 
                 # Check if any cards from the original request are still missing hints
                 # (collection access is marshalled to the main thread).
@@ -1190,7 +1239,7 @@ class BatchManager:
 
             # Check if this job finished or was aborted/skipped
             with self._db_lock:
-                if self.local_queue_jobs and self.local_queue_jobs[0].get("id") == current_job_id:
+                if any(j.get("id") == current_job_id for j in self.local_queue_jobs):
                     # Calculate final error count for stats (main-thread hop)
                     final_missing = self._missing_hint_cids_on_main(original_request)
                     if final_missing is None:
@@ -1210,7 +1259,12 @@ class BatchManager:
                         logger.info(f"FINISHED local sequential queue job {current_job_id}. Processed {self.local_queue_total - len(final_missing)} cards. {len(final_missing)} cards failed.")
                         mw.taskman.run_on_main(lambda m=len(final_missing): tooltip(f"✨ Batch Finished. {m} cards failed all retry attempts."))
                     
-                    self.local_queue_jobs.pop(0)
+                    # Remove the finished job from the list by ID
+                    with self._db_lock:
+                        for i, j in enumerate(self.local_queue_jobs):
+                            if j.get("id") == current_job_id:
+                                self.local_queue_jobs.pop(i)
+                                break
                     self.save_state()
                 else:
                     logger.info(f"Job {current_job_id} was removed/discarded from queue.")
@@ -1221,6 +1275,20 @@ class BatchManager:
                 time.sleep(1)
             else:
                 break
+
+        # For parallel (single-job) threads, don't deactivate the global
+        # queue if other job threads are still running.
+        if getattr(self, "_thread_local", None) and getattr(self._thread_local, "job", None):
+            job_id = self._thread_local.job.get("id")
+            self._job_threads.pop(job_id, None)
+            with self._db_lock:
+                still_active = bool(self._job_threads) or bool(self.local_queue_jobs)
+            if not still_active:
+                self.local_queue_active = False
+                self._force_online = False
+                self.active_threads_status = {}
+                self.save_state()
+            return
 
         self.local_queue_active = False
         self._force_online = False
@@ -1278,7 +1346,7 @@ class BatchManager:
         expire, short enough that a genuinely dead key can't pin the pass open."""
         return float(self.saved_config.get("batch_request_timeout", 120)) + 60.0
 
-    def _run_local_queue_thread(self, provider: str, parser: CardParser, config: Dict):
+    def _run_local_queue_thread(self, provider: str, parser: CardParser, config: Dict, job: Dict = None):
         from .reviewer_hooks import _get_card_from_collection
 
         # Each worker thread gets its OWN AIClient instance. AIClient mutates
@@ -1287,6 +1355,9 @@ class BatchManager:
         # is_batch selects batch_request_timeout (default 120s) instead of the
         # shorter foreground request_timeout — nobody watches a spinner here.
         client = AIClient(config or {}, is_batch=True)
+
+        if job is not None:
+            self._thread_local.job = job
 
         try:
              models = client._provider_models(provider)

@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.16 (2026-11-13)
+- **Parallel batch jobs**: When a new batch job is queued while another is already running and uses a different provider, it now runs in parallel instead of waiting for the first job to finish. Jobs sharing the same provider still queue sequentially.
 ## 8.6.15 (2026-11-10)
 - **Emergency revert of v8.6.14**: The nested `<script>` wrapper introduced in v8.6.14 is stripped by Anki's contenteditable editor, leaving empty hint blocks and breaking auto-generation. This release reverts to the raw-JSON block format and runs a one-time recovery migration that converts any script-wrapped blocks back to raw JSON, preserving all hints/options data.
 ## 8.6.14 (2026-11-09)
