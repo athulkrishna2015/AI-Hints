@@ -37,3 +37,4 @@ session*.md
 # Test-generated state files (redirected by AIHINTS_DATA_DIR)
 tests/.aihints_data/
 .ci-stubs/
+.ci-stubs/
