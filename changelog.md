@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.17 (2026-11-13)
+- **Faster config dialog**: Tabs are now built lazily (on first selection) instead of all 8 being constructed up front, reducing the dialog open time significantly.
 ## 8.6.16 (2026-11-13)
 - **Parallel batch jobs**: When a new batch job is queued while another is already running and uses a different provider, it now runs in parallel instead of waiting for the first job to finish. Jobs sharing the same provider still queue sequentially.
 ## 8.6.15 (2026-11-10)

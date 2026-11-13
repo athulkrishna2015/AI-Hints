@@ -142,6 +142,36 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 except Exception:
                     pass
 
+
+    def _connect_dirty_tracking_for_tab(self, tab):
+        """Connect dirty tracking for widgets in a single tab."""
+        if tab is None:
+            return
+        # The live Logs tab updates its text constantly; ignore it.
+        tab_text = ""
+        try:
+            idx = self.tabs.indexOf(tab)
+            if idx >= 0:
+                tab_text = self.tabs.tabText(idx)
+        except Exception:
+            pass
+        if tab_text == "Logs":
+            return
+        for w in tab.findChildren(QWidget):
+            try:
+                if isinstance(w, QCheckBox):
+                    w.toggled.connect(self._mark_dirty)
+                elif isinstance(w, (QLineEdit, QTextEdit, QPlainTextEdit, QKeySequenceEdit)):
+                    if hasattr(w, "isReadOnly") and w.isReadOnly():
+                        continue
+                    w.textChanged.connect(self._mark_dirty)
+                elif isinstance(w, QComboBox):
+                    w.currentIndexChanged.connect(self._mark_dirty)
+                    w.currentTextChanged.connect(self._mark_dirty)
+                elif isinstance(w, (QSpinBox, QDoubleSpinBox, QDateTimeEdit)):
+                    w.valueChanged.connect(self._mark_dirty)
+            except Exception:
+                pass
     def reject(self):
         super().reject()
 
@@ -191,30 +221,46 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         layout = QVBoxLayout()
         self.tabs = QTabWidget()
         
-        # Build Tabs using inherited Mixin methods
-        general = self._create_general_tab()
-        providers = self._create_providers_tab()
-        advanced = self._create_advanced_tab()
-        shortcuts = self._create_shortcuts_tab()
-        batch = self._create_batch_tab()
-        mobile = self._create_mobile_tab()
-        support = self._create_support_tab()
-        logs = self._create_log_tab()
-        
-        # Assemble Tabs in desired visual order
-        self.tabs.addTab(general, "General")
-        self.tabs.addTab(providers, "AI Providers")
-        self.tabs.addTab(advanced, "Advanced")
-        self.tabs.addTab(shortcuts, "Shortcuts")
-        self.tabs.addTab(batch, "Batch Generation")
-        self.tabs.addTab(mobile, "Mobile Support")
-        self.tabs.addTab(support, "Support Authors")
-        self.tabs.addTab(logs, "Logs")
-        
+        # Lazy tab builders: build each tab on first selection to avoid
+        # paying the construction cost of all 8 tabs up front (the Providers
+        # tab alone is ~3000 lines).  Only the initially selected tab and its
+        # immediate neighbours are built eagerly.
+        self._tab_builders = [
+            ("General", self._create_general_tab),
+            ("AI Providers", self._create_providers_tab),
+            ("Advanced", self._create_advanced_tab),
+            ("Shortcuts", self._create_shortcuts_tab),
+            ("Batch Generation", self._create_batch_tab),
+            ("Mobile Support", self._create_mobile_tab),
+            ("Support Authors", self._create_support_tab),
+            ("Logs", self._create_log_tab),
+        ]
+        self._tab_widgets = [None] * len(self._tab_builders)
+        self._tab_built = [False] * len(self._tab_builders)
+
         # Restore previously selected tab preference
         saved_index = self.config.get("last_active_tab", 0)
+        if not (0 <= saved_index < len(self._tab_builders)):
+            saved_index = 0
+
+        # Build the selected tab + adjacent tabs eagerly so switching is instant.
+        for idx in {saved_index, max(0, saved_index - 1), min(len(self._tab_builders) - 1, saved_index + 1)}:
+            self._ensure_tab_built(idx)
+
+        # Add placeholder tabs for the rest (built on demand).
+        for idx, (name, _) in enumerate(self._tab_builders):
+            if self._tab_widgets[idx] is not None:
+                self.tabs.addTab(self._tab_widgets[idx], name)
+            else:
+                placeholder = QWidget()
+                placeholder.setLayout(QVBoxLayout())
+                placeholder.layout().addWidget(QLabel(f"Loading {name}..."))
+                self.tabs.addTab(placeholder, name)
+
         if 0 <= saved_index < self.tabs.count():
              self.tabs.setCurrentIndex(saved_index)
+
+        self.tabs.currentChanged.connect(self._on_lazy_tab_changed)
         
         # Set tracking connector
         self.tabs.currentChanged.connect(self._on_tab_changed_tracker)
@@ -565,6 +611,40 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 self.models_layout.addWidget(w)
             self.provider_timeout_spins = {p: w.timeout_spin for p, w in self.provider_widgets.items()}
             
+
+    def _ensure_tab_built(self, index):
+        """Build a tab on demand if it hasn't been built yet."""
+        if index < 0 or index >= len(self._tab_builders):
+            return
+        if self._tab_built[index]:
+            return
+        name, builder = self._tab_builders[index]
+        try:
+            widget = builder()
+        except Exception as e:
+            logger.error(f"AI-Hints: failed to build tab '{name}': {e}")
+            widget = QWidget()
+            widget.setLayout(QVBoxLayout())
+            widget.layout().addWidget(QLabel(f"Error loading {name}: {e}"))
+        self._tab_widgets[index] = widget
+        self._tab_built[index] = True
+        # Replace placeholder if present
+        if index < self.tabs.count():
+            self.tabs.removeTab(index)
+            self.tabs.insertTab(index, widget, name)
+        # Connect dirty tracking for this tab's widgets
+        if hasattr(self, "_connect_dirty_tracking_for_tab"):
+            self._connect_dirty_tracking_for_tab(widget)
+
+    def _on_lazy_tab_changed(self, index):
+        self._ensure_tab_built(index)
+        # Also pre-build adjacent tabs for instant switching
+        for adj in (index - 1, index + 1):
+            if 0 <= adj < len(self._tab_builders):
+                QTimer.singleShot(0, lambda a=adj: self._ensure_tab_built(a))
+        if hasattr(self, "_on_tab_changed_tracker"):
+            self._on_tab_changed_tracker(index)
+
     def _on_tab_changed_tracker(self, index):
         global LAST_ACTIVE_TAB_INDEX
         LAST_ACTIVE_TAB_INDEX = index
