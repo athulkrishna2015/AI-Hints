@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.18 (2026-11-13)
+- **Fix config dialog crash**: Deferred config loading so all tabs are built before accessing their widgets, fixing the `mod_ctrl` AttributeError when opening Settings with lazy-loaded tabs.
 ## 8.6.17 (2026-11-13)
 - **Faster config dialog**: Tabs are now built lazily (on first selection) instead of all 8 being constructed up front, reducing the dialog open time significantly.
 ## 8.6.16 (2026-11-13)
