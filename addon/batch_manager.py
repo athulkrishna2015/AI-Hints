@@ -1302,8 +1302,10 @@ class BatchManager:
                     if cfg.get("batch_sync_after", True):
                         import aqt as _aqt
                         _mw = _aqt.mw
-                        auth = _mw.pm.sync_auth()
-                        if auth:
+                        def _do_sync():
+                            auth = _mw.pm.sync_auth()
+                            if not auth:
+                                return
                             def _on_sync_done(fut):
                                 try:
                                     out = fut.result()
@@ -1317,6 +1319,7 @@ class BatchManager:
                                 lambda: _mw.col.sync_collection(auth, _mw.pm.media_syncing_enabled()),
                                 _on_sync_done
                             )
+                        _mw.taskman.run_on_main(_do_sync)
                 except Exception as e:
                     logger.debug(f"Post-batch sync failed: {e}")
             return
@@ -1331,8 +1334,10 @@ class BatchManager:
             if cfg.get("batch_sync_after", True):
                 import aqt as _aqt
                 _mw = _aqt.mw
-                auth = _mw.pm.sync_auth()
-                if auth:
+                def _do_sync():
+                    auth = _mw.pm.sync_auth()
+                    if not auth:
+                        return
                     def _on_sync_done(fut):
                         try:
                             out = fut.result()
@@ -1346,6 +1351,7 @@ class BatchManager:
                         lambda: _mw.col.sync_collection(auth, _mw.pm.media_syncing_enabled()),
                         _on_sync_done
                     )
+                _mw.taskman.run_on_main(_do_sync)
         except Exception as e:
             logger.debug(f"Post-batch sync failed: {e}")
 
