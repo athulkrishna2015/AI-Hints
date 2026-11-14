@@ -50,6 +50,8 @@ class BatchManager:
         self._db_lock = threading.RLock()
         self._thread_local = threading.local()
         self._job_threads = {}  # job_id -> Thread for parallel jobs
+        self._sleep_inhibitor_proc = None
+        self._sleep_inhibitor_active = False
         
         self.load_state()
 
@@ -823,6 +825,12 @@ class BatchManager:
              self.local_queue_active = True
              self.local_queue_paused = False
              self.save_state()
+             try:
+                 cfg = config or self.saved_config or {}
+                 if cfg.get("batch_prevent_sleep", False):
+                     self._start_sleep_inhibitor()
+             except Exception:
+                 pass
              
              t = threading.Thread(
                  target=self._run_local_queue,
@@ -1288,12 +1296,92 @@ class BatchManager:
                 self._force_online = False
                 self.active_threads_status = {}
                 self.save_state()
+                self._stop_sleep_inhibitor()
+                try:
+                    cfg = self.saved_config or {}
+                    if cfg.get("batch_sync_after", True):
+                        import aqt as _aqt
+                        _mw = _aqt.mw
+                        _mw.taskman.run_on_main(lambda: _mw._sync_collection_and_media(_mw._refresh_after_sync))
+                except Exception as e:
+                    logger.debug(f"Post-batch sync failed: {e}")
             return
 
         self.local_queue_active = False
         self._force_online = False
         self.active_threads_status = {}
         self.save_state()
+        self._stop_sleep_inhibitor()
+        try:
+            cfg = self.saved_config or {}
+            if cfg.get("batch_sync_after", True):
+                import aqt as _aqt
+                _mw = _aqt.mw
+                _mw.taskman.run_on_main(lambda: _mw._sync_collection_and_media(_mw._refresh_after_sync))
+        except Exception as e:
+            logger.debug(f"Post-batch sync failed: {e}")
+
+    def _start_sleep_inhibitor(self):
+        if self._sleep_inhibitor_active:
+            return
+        self._sleep_inhibitor_active = True
+        threading.Thread(target=self._sleep_inhibitor_loop, daemon=True, name="ai-hints-sleep-inhibitor").start()
+
+    def _sleep_inhibitor_loop(self):
+        import platform
+        system = platform.system()
+        if system == "Windows":
+            try:
+                import ctypes
+                ES_CONTINUOUS = 0x80000000
+                ES_SYSTEM_REQUIRED = 0x00000001
+                ES_DISPLAY_REQUIRED = 0x00000002
+                while self._sleep_inhibitor_active and self.local_queue_active:
+                    ctypes.windll.kernel32.SetThreadExecutionState(
+                        ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+                    )
+                    time.sleep(30)
+                ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+            except Exception as e:
+                logger.debug(f"Sleep inhibitor (Windows) failed: {e}")
+        elif system == "Darwin":
+            try:
+                import subprocess
+                self._sleep_inhibitor_proc = subprocess.Popen(
+                    ["caffeinate", "-dimsu"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                while self._sleep_inhibitor_active and self.local_queue_active:
+                    time.sleep(5)
+                if self._sleep_inhibitor_proc:
+                    self._sleep_inhibitor_proc.terminate()
+                    self._sleep_inhibitor_proc = None
+            except Exception as e:
+                logger.debug(f"Sleep inhibitor (macOS) failed: {e}")
+        else:
+            try:
+                import subprocess
+                self._sleep_inhibitor_proc = subprocess.Popen(
+                    ["systemd-inhibit", "--what=sleep", "--who=AI-Hints", "--why=Batch generation",
+                     "sleep", "infinity"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                while self._sleep_inhibitor_active and self.local_queue_active:
+                    time.sleep(5)
+                if self._sleep_inhibitor_proc:
+                    self._sleep_inhibitor_proc.terminate()
+                    self._sleep_inhibitor_proc = None
+            except Exception as e:
+                logger.debug(f"Sleep inhibitor (Linux) failed: {e}")
+
+    def _stop_sleep_inhibitor(self):
+        self._sleep_inhibitor_active = False
+        if self._sleep_inhibitor_proc:
+            try:
+                self._sleep_inhibitor_proc.terminate()
+            except Exception:
+                pass
+            self._sleep_inhibitor_proc = None
 
     def _handle_card_failure(self, cid: int, provider: str):
         failed_provs = self.card_attempts.setdefault(cid, [])

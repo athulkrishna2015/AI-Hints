@@ -230,6 +230,18 @@ class BatchTabMixin:
         self.batch_multithread_cb.setToolTip("Generates cards in parallel using all of your ready and enabled providers. Bypasses provider overrides.")
         self.batch_multithread_cb.setChecked(self.config.get("multithread_providers", False))
         s_layout.addRow(self.batch_multithread_cb)
+
+        # ⏹ Sync after batch
+        self.batch_sync_after_cb = QCheckBox("Trigger AnkiWeb sync after batch generation completes")
+        self.batch_sync_after_cb.setToolTip("Automatically sync your collection with AnkiWeb once the batch finishes (default: on).")
+        self.batch_sync_after_cb.setChecked(self.config.get("batch_sync_after", True))
+        s_layout.addRow(self.batch_sync_after_cb)
+
+        # 💤 Prevent sleep during batch
+        self.batch_prevent_sleep_cb = QCheckBox("Prevent computer sleep during batch generation")
+        self.batch_prevent_sleep_cb.setToolTip("Keeps the system awake while a batch is running (default: off).")
+        self.batch_prevent_sleep_cb.setChecked(self.config.get("batch_prevent_sleep", False))
+        s_layout.addRow(self.batch_prevent_sleep_cb)
         
         self.batch_regen_version_cb.toggled.connect(
             lambda enabled: self.batch_regen_min_version_edit.setEnabled(enabled)
@@ -940,6 +952,8 @@ class BatchTabMixin:
         # 2. Build config with an optional model override (mirrors the main batch path).
         config = self.config.copy()
         config["multithread_providers"] = self.batch_multithread_cb.isChecked()
+        config["batch_sync_after"] = self.batch_sync_after_cb.isChecked()
+        config["batch_prevent_sleep"] = self.batch_prevent_sleep_cb.isChecked()
 
         combo_idx = self.batch_provider_cb.currentIndex()
         prov_override = None
@@ -1533,6 +1547,8 @@ class BatchTabMixin:
 
             config = self.config.copy()
             config["multithread_providers"] = self.batch_multithread_cb.isChecked()
+        config["batch_sync_after"] = self.batch_sync_after_cb.isChecked()
+        config["batch_prevent_sleep"] = self.batch_prevent_sleep_cb.isChecked()
             if force:
                 # Forced run: ignore offline detection so wrongly-parked
                 # 🌐 Offline queues proceed. Transient, not saved.
