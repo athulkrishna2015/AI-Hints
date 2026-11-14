@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.20 (2026-11-14)
+- **Improved batch sync**: Switched post-batch sync to headless `sync_collection` (like Auto-Sync addon) so it runs in the background without stealing focus.
 ## 8.6.19 (2026-11-14)
 - **Batch sync & sleep prevention**: Added two options to the Batch Generation tab — "Trigger AnkiWeb sync after batch completes" (default on) and "Prevent computer sleep during batch generation" (default off).
 ## 8.6.18 (2026-11-13)

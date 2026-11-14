@@ -1302,7 +1302,21 @@ class BatchManager:
                     if cfg.get("batch_sync_after", True):
                         import aqt as _aqt
                         _mw = _aqt.mw
-                        _mw.taskman.run_on_main(lambda: _mw._sync_collection_and_media(_mw._refresh_after_sync))
+                        auth = _mw.pm.sync_auth()
+                        if auth:
+                            def _on_sync_done(fut):
+                                try:
+                                    out = fut.result()
+                                    _mw.col._load_scheduler()
+                                    _mw.pm.set_host_number(out.host_number)
+                                    if out.new_endpoint:
+                                        _mw.pm.set_current_sync_url(out.new_endpoint)
+                                except Exception as e:
+                                    logger.debug(f"Post-batch sync error: {e}")
+                            _mw.taskman.run_in_background(
+                                lambda: _mw.col.sync_collection(auth, _mw.pm.media_syncing_enabled()),
+                                _on_sync_done
+                            )
                 except Exception as e:
                     logger.debug(f"Post-batch sync failed: {e}")
             return
@@ -1317,7 +1331,21 @@ class BatchManager:
             if cfg.get("batch_sync_after", True):
                 import aqt as _aqt
                 _mw = _aqt.mw
-                _mw.taskman.run_on_main(lambda: _mw._sync_collection_and_media(_mw._refresh_after_sync))
+                auth = _mw.pm.sync_auth()
+                if auth:
+                    def _on_sync_done(fut):
+                        try:
+                            out = fut.result()
+                            _mw.col._load_scheduler()
+                            _mw.pm.set_host_number(out.host_number)
+                            if out.new_endpoint:
+                                _mw.pm.set_current_sync_url(out.new_endpoint)
+                        except Exception as e:
+                            logger.debug(f"Post-batch sync error: {e}")
+                    _mw.taskman.run_in_background(
+                        lambda: _mw.col.sync_collection(auth, _mw.pm.media_syncing_enabled()),
+                        _on_sync_done
+                    )
         except Exception as e:
             logger.debug(f"Post-batch sync failed: {e}")
 
