@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.21 (2026-11-14)
+- **Fix post-batch sync thread error**: Scheduled the sync on the main thread via `run_on_main` to avoid `run_in_background` being called from a background thread.
 ## 8.6.20 (2026-11-14)
 - **Improved batch sync**: Switched post-batch sync to headless `sync_collection` (like Auto-Sync addon) so it runs in the background without stealing focus.
 ## 8.6.19 (2026-11-14)
