@@ -1547,8 +1547,8 @@ class BatchTabMixin:
 
             config = self.config.copy()
             config["multithread_providers"] = self.batch_multithread_cb.isChecked()
-        config["batch_sync_after"] = self.batch_sync_after_cb.isChecked()
-        config["batch_prevent_sleep"] = self.batch_prevent_sleep_cb.isChecked()
+            config["batch_sync_after"] = self.batch_sync_after_cb.isChecked()
+            config["batch_prevent_sleep"] = self.batch_prevent_sleep_cb.isChecked()
             if force:
                 # Forced run: ignore offline detection so wrongly-parked
                 # 🌐 Offline queues proceed. Transient, not saved.
