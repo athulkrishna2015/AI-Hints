@@ -1080,7 +1080,10 @@ class BatchManager:
             self.active_threads_status = {}
             self._thread_local.job = job
 
-            client = AIClient(self.saved_config)
+            # Use job-specific config/provider when available (parallel jobs)
+            job_config = (job.get("config") if job else None) or self.saved_config or {}
+            job_provider = (job.get("provider") if job else None) or self.saved_provider
+            client = AIClient(job_config)
             parser = CardParser()
             original_request = list(self.local_queue)
 
@@ -1096,9 +1099,9 @@ class BatchManager:
                         if self.local_queue_jobs[0].get("id") != current_job_id:
                             break
                         
-                use_multithread = self.saved_config.get("multithread_providers", False)
-                if use_multithread and (not self.saved_provider or self.saved_provider == "Standard Config (Follows Fallback Matrix)"):
-                     primary = self.saved_config.get("ai_provider", "openai")
+                use_multithread = job_config.get("multithread_providers", False)
+                if use_multithread and (not job_provider or job_provider == "Standard Config (Follows Fallback Matrix)"):
+                     primary = job_config.get("ai_provider", "openai")
                      providers = client._candidate_providers(primary)
                      if not providers:
                           logger.error("No configured providers are ready for multithreading.")
@@ -1106,7 +1109,7 @@ class BatchManager:
                           self.save_state()
                           return
                 else:
-                     target_prov = self.saved_provider or self.saved_config.get("ai_provider", "openai")
+                     target_prov = job_provider or job_config.get("ai_provider", "openai")
                      providers = [target_prov]
                      
                 self.active_providers = providers
@@ -1120,7 +1123,7 @@ class BatchManager:
                 for prov in providers:
                      t = threading.Thread(
                           target=self._run_local_queue_thread,
-                          args=(prov, parser, self.saved_config, job),
+                          args=(prov, parser, job_config, job),
                           daemon=True
                      )
                      threads.append(t)
