@@ -700,9 +700,15 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         # Also local
         if hasattr(self, 'local_model_edit'):
             providers_to_fetch.append(("local", self.local_model_edit))
-        
+
+        # Skip disabled providers: they are never used for generation, so
+        # refreshing their model lists is pointless API traffic.
+        disabled_raw = self.config.get("disabled_providers") or []
+        disabled = set(disabled_raw) if isinstance(disabled_raw, list) else set()
+        providers_to_fetch = [(p, cb) for p, cb in providers_to_fetch if p not in disabled]
+
         if not providers_to_fetch:
-            tooltip("No providers configured to fetch.")
+            tooltip("No enabled providers to fetch.")
             return
             
         self.batch_fetch_active = True

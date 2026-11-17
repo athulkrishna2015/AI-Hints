@@ -1,0 +1,134 @@
+import unittest
+import os
+import sys
+import urllib.error
+from unittest.mock import patch
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from addon.ai_client import AIClient
+from addon.model_updater import _providers_to_update
+
+
+def _http_error(code: int) -> urllib.error.HTTPError:
+    msg = {429: "Too Many Requests", 404: "Not Found", 401: "Unauthorized"}.get(code, "Error")
+    return urllib.error.HTTPError("http://test", code, msg, None, None)
+
+
+class TestFetchModelsKeyRotation(unittest.TestCase):
+    """Key rotation in fetch_models must stop on URL/quote-level errors."""
+
+    def _client(self):
+        return AIClient({
+            "api_keys": {"gemini": "k1, k2, k3"},
+            "models": {"gemini": "gemini-flash-latest"},
+        })
+
+    def test_429_stops_rotation(self):
+        """A rate limit means every key will fail identically: exactly one request."""
+        client = self._client()
+        calls = []
+        with patch.object(AIClient, "_get_json", side_effect=lambda url, headers: calls.append(url) or self._raise(429)):
+            models = client.fetch_models("gemini")
+        self.assertEqual(models, [])
+        self.assertEqual(len(calls), 1, "429 must break the key-rotation loop after the first attempt")
+
+    def test_404_stops_rotation(self):
+        """A 404 is a URL-level error: rotating keys cannot fix it, so one request only."""
+        client = self._client()
+        calls = []
+        with patch.object(AIClient, "_get_json", side_effect=lambda url, headers: calls.append(url) or self._raise(404)):
+            models = client.fetch_models("gemini")
+        self.assertEqual(models, [])
+        self.assertEqual(len(calls), 1, "404 must break the key-rotation loop after the first attempt")
+
+    def test_401_rotates_to_next_key(self):
+        """Auth failures are per-key: rotation must continue through all keys."""
+        client = self._client()
+        calls = []
+        with patch.object(AIClient, "_get_json", side_effect=lambda url, headers: calls.append(url) or self._raise(401)):
+            models = client.fetch_models("gemini")
+        self.assertEqual(models, [])
+        self.assertEqual(len(calls), 3, "401 should keep rotating through every key")
+
+    def test_rotation_recovers_on_second_key(self):
+        """First key dead (401), second key works: models are still returned."""
+        client = self._client()
+        calls = []
+
+        def _fake_get(url, headers):
+            calls.append(url)
+            if len(calls) == 1:
+                raise self._raise(401)
+            return {"models": [{"name": "models/gemini-flash-latest",
+                                "supportedGenerationMethods": ["generateContent"]}]}
+
+        with patch.object(AIClient, "_get_json", side_effect=_fake_get):
+            models = client.fetch_models("gemini")
+        self.assertEqual(models, ["gemini-flash-latest"])
+        self.assertEqual(len(calls), 2)
+
+    @staticmethod
+    def _raise(code):
+        raise _http_error(code)
+
+
+class TestProvidersToUpdate(unittest.TestCase):
+    """The background updater must skip disabled providers entirely."""
+
+    def test_disabled_custom_provider_skipped(self):
+        config = {
+            "custom_providers": {"opecode multi auth": {"url": "http://localhost:8080/v1"}},
+            "disabled_providers": ["opecode multi auth"],
+        }
+        providers = _providers_to_update(config)
+        self.assertNotIn("opecode multi auth", providers)
+
+    def test_enabled_custom_provider_kept(self):
+        config = {
+            "custom_providers": {"CLIProxyAPI": {"url": "https://example.com/v1"}},
+        }
+        providers = _providers_to_update(config)
+        self.assertIn("CLIProxyAPI", providers)
+
+    def test_disabled_local_provider_skipped(self):
+        config = {
+            "local_providers": {
+                "off-node": {"base_url": "http://localhost:11434/v1", "enabled": False},
+                "on-node": {"base_url": "http://localhost:21434/v1", "enabled": True},
+            },
+        }
+        providers = _providers_to_update(config)
+        self.assertNotIn("off-node", providers)
+        self.assertIn("on-node", providers)
+
+    def test_disabled_builtin_provider_skipped(self):
+        """A built-in provider in disabled_providers is not added even with keys stored."""
+        config = {
+            "api_keys": {"gemini": "k1", "openai": "k2"},
+            "disabled_providers": ["openai"],
+        }
+        providers = _providers_to_update(config)
+        self.assertIn("gemini", providers)
+        self.assertNotIn("openai", providers)
+
+    def test_disabled_provider_with_fallbacks_skipped(self):
+        """Fallback lists alone must not resurrect a disabled provider."""
+        config = {
+            "model_fallbacks": {"gemini": ["m1"], "sambanova": ["m2"]},
+            "disabled_providers": ["sambanova"],
+        }
+        providers = _providers_to_update(config)
+        self.assertIn("gemini", providers)
+        self.assertNotIn("sambanova", providers)
+
+    def test_local_endpoint_respects_disabled(self):
+        config = {"local_endpoint": {"base_url": "http://localhost:11434/v1"},
+                  "disabled_providers": ["local"]}
+        providers = _providers_to_update(config)
+        self.assertNotIn("local", providers)
+
+
+if __name__ == "__main__":
+    unittest.main()
