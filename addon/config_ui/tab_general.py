@@ -46,6 +46,14 @@ class GeneralTabMixin:
             "Turning BOTH off effectively disables the addon and stops making any API calls."
         )
         gen_switch_layout.addRow(self.generate_options_enabled_cb)
+        self.mnemonic_hint_enabled_cb = QCheckBox("4th Mnemonic Hint (memory trick)")
+        self.mnemonic_hint_enabled_cb.setToolTip(
+            "Adds a 4th hint after the 3 conceptual ones: a short mnemonic, acronym, "
+            "association or mental image that helps you recall the correct answer. "
+            "Applies to new generation everywhere (manual, auto, pre-generation, and batch). "
+            "Existing hints are untouched until regenerated. Default: off."
+        )
+        gen_switch_layout.addRow(self.mnemonic_hint_enabled_cb)
         gen_switch_group.setLayout(gen_switch_layout)
 
         # --- Button Visibility Group ---

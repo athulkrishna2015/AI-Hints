@@ -397,6 +397,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
 
         self.generate_hints_enabled_cb.setChecked(c.get("generate_hints_enabled", True))
         self.generate_options_enabled_cb.setChecked(c.get("generate_options_enabled", True))
+        self.mnemonic_hint_enabled_cb.setChecked(c.get("mnemonic_hint_enabled", False))
         
         self.auto_show_hints_cb.setChecked(c.get("auto_show_hints", True))
         self.auto_show_options_cb.setChecked(c.get("auto_show_options", True))
@@ -1350,6 +1351,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["pregen_direct_save"] = self.pregen_direct_save_cb.isChecked()
             new_config["generate_hints_enabled"] = self.generate_hints_enabled_cb.isChecked()
             new_config["generate_options_enabled"] = self.generate_options_enabled_cb.isChecked()
+            new_config["mnemonic_hint_enabled"] = self.mnemonic_hint_enabled_cb.isChecked()
             new_config["auto_show_hints"] = self.auto_show_hints_cb.isChecked()
             new_config["auto_show_options"] = self.auto_show_options_cb.isChecked()
             new_config["auto_show_hints_answer"] = self.auto_show_hints_answer_cb.isChecked()
@@ -1607,6 +1609,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("options_before_hints", True)
         config.setdefault("generate_hints_enabled", True)
         config.setdefault("generate_options_enabled", True)
+        config.setdefault("mnemonic_hint_enabled", False)
         config.setdefault("manual_show_hints", True)
         config.setdefault("manual_show_options", False)
         config.setdefault("maint_only_modified", True)

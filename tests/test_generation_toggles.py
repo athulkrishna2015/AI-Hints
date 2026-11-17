@@ -97,6 +97,40 @@ class GenerationToggleTests(unittest.TestCase):
         self.assertIn("hints", res)
         self.assertIn("options", res)
 
+    def test_mnemonic_disabled_by_default(self):
+        """Without the flag, the prompt must ask for exactly 3 conceptual hints."""
+        client = self._make_client()
+        client.generate_options(self.front, self.back)
+        system_prompt = self.calls[0][1]
+        self.assertIn("exactly 3 conceptual hints", system_prompt)
+        self.assertNotIn("MNEMONIC HINT", system_prompt)
+
+    def test_mnemonic_enabled_asks_for_4th_hint(self):
+        """With mnemonic_hint_enabled, the prompt must request a 4th mnemonic hint."""
+        client = self._make_client(mnemonic_hint_enabled=True)
+        res = client.generate_options(self.front, self.back)
+        system_prompt = self.calls[0][1]
+        self.assertIn("MNEMONIC HINT", system_prompt)
+        self.assertIn("4 hints (3 conceptual + 1 mnemonic)", system_prompt)
+        # Result shape unchanged: the mnemonic is just a 4th entry in 'hints'.
+        self.assertIn("hints", res)
+
+    def test_mnemonic_enabled_hints_only_mode(self):
+        """Hints-only mode must also request the mnemonic as a 4th hint."""
+        client = self._make_client(mnemonic_hint_enabled=True, generate_options_enabled=False)
+        client.generate_options(self.front, self.back)
+        system_prompt = self.calls[0][1]
+        self.assertIn("MNEMONIC HINT", system_prompt)
+        self.assertIn("4 hints (3 conceptual + 1 mnemonic hint) ONLY", system_prompt)
+
+    def test_mnemonic_off_when_hints_disabled(self):
+        """Options-only generation must never mention the mnemonic section."""
+        client = self._make_client(mnemonic_hint_enabled=True, generate_hints_enabled=False)
+        client.generate_options(self.front, self.back)
+        system_prompt = self.calls[0][1]
+        self.assertNotIn("MNEMONIC HINT", system_prompt)
+        self.assertIn("NO hints", system_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
