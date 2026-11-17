@@ -111,17 +111,33 @@ class GenerationToggleTests(unittest.TestCase):
         res = client.generate_options(self.front, self.back)
         system_prompt = self.calls[0][1]
         self.assertIn("MNEMONIC HINT", system_prompt)
-        self.assertIn("4 hints (3 conceptual + 1 mnemonic)", system_prompt)
-        # Result shape unchanged: the mnemonic is just a 4th entry in 'hints'.
+        self.assertIn("(3) mnemonic/memory trick", system_prompt)
+        self.assertIn("(4) discriminating clue", system_prompt)
+        # Result shape unchanged: the mnemonic is just an extra entry in 'hints'.
         self.assertIn("hints", res)
 
     def test_mnemonic_enabled_hints_only_mode(self):
-        """Hints-only mode must also request the mnemonic as a 4th hint."""
+        """Hints-only mode must also request the mnemonic as hint 3."""
         client = self._make_client(mnemonic_hint_enabled=True, generate_options_enabled=False)
         client.generate_options(self.front, self.back)
         system_prompt = self.calls[0][1]
         self.assertIn("MNEMONIC HINT", system_prompt)
-        self.assertIn("4 hints (3 conceptual + 1 mnemonic hint) ONLY", system_prompt)
+        self.assertIn("4 hints ONLY, in this order: (1) brief context, (2) key concept, (3) mnemonic/memory trick, (4) discriminating clue", system_prompt)
+
+    def test_mnemonic_moves_warning_to_hint_4(self):
+        """Factually-wrong warning (⚠️) must move to hint 4 when the mnemonic is hint 3."""
+        client = self._make_client(mnemonic_hint_enabled=True)
+        client.generate_options(self.front, self.back)
+        system_prompt = self.calls[0][1]
+        self.assertIn("hint 4 must begin exactly with '⚠️'", system_prompt)
+        self.assertIn("overrides any earlier instruction placing the warning on hint 3", system_prompt)
+
+    def test_warning_stays_on_hint_3_without_mnemonic(self):
+        """Default (mnemonic off) keeps the original warning-on-hint-3 behavior."""
+        client = self._make_client()
+        client.generate_options(self.front, self.back)
+        system_prompt = self.calls[0][1]
+        self.assertIn("hint 3 begin exactly with `⚠️`", system_prompt)
 
     def test_mnemonic_off_when_hints_disabled(self):
         """Options-only generation must never mention the mnemonic section."""

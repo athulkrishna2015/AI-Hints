@@ -732,15 +732,21 @@ class AIClient:
             return {"hints": [], "options": []}
 
         if hints_enabled and options_enabled:
-            hint_count = "exactly 4 hints (3 conceptual + 1 mnemonic)" if mnemonic_enabled else "exactly 3 conceptual hints"
+            hint_count = (
+                "exactly 4 hints in this order: (1) brief context, (2) key concept, (3) mnemonic/memory trick, (4) discriminating clue"
+                if mnemonic_enabled else "exactly 3 conceptual hints"
+            )
             mode_instructions = (
                 f"- Generate exactly {count} total options (1 correct, {count-1} distractors) and {hint_count}.\n"
                 "- If using 'distractors' key, provide only incorrect options. If 'options', include the correct answer.\n"
             )
         elif hints_enabled:
-            hint_count = "4 hints (3 conceptual + 1 mnemonic hint)" if mnemonic_enabled else "3 conceptual hints"
+            hint_count = (
+                "4 hints ONLY, in this order: (1) brief context, (2) key concept, (3) mnemonic/memory trick, (4) discriminating clue"
+                if mnemonic_enabled else "3 conceptual hints ONLY"
+            )
             mode_instructions = (
-                f"- Generate {hint_count} ONLY. Do NOT generate any multiple-choice options, correct_answer, or distractors.\n"
+                f"- Generate {hint_count}. Do NOT generate any multiple-choice options, correct_answer, or distractors.\n"
                 "- Return a JSON object containing ONLY the 'hints' key.\n"
             )
         else:
@@ -750,16 +756,19 @@ class AIClient:
                 "- If using 'distractors' key, provide only incorrect options. If 'options', include the correct answer.\n"
             )
 
-        # Optional 4th mnemonic hint: appended before the CRITICAL block so the
+        # Optional mnemonic hint: appended before the CRITICAL block so the
         # authoritative counts above and formatting rules below stay last.
         if mnemonic_enabled and hints_enabled:
             system_prompt += (
-                "\n\nMNEMONIC HINT (4th hint)\n"
-                "- After the 3 progressive hints, add a 4th hint: a short mnemonic, acronym, memory trick, "
-                "association, or mental image that helps recall the CORRECT answer.\n"
-                "- Keep it concise and genuinely memorable. It may point at the correct answer's shape, sound, "
-                "pattern, or a memorable link, but must not restate the full answer verbatim (unless it is an acronym of it).\n"
-                "- Write it in the same language as the card.\n"
+                "\n\nMNEMONIC HINT (hint order override)\n"
+                "- Produce exactly 4 hints in this order: (1) brief context, (2) the key concept or mechanism, "
+                "(3) a mnemonic, (4) a discriminating clue or common error.\n"
+                "- Hint 3 is a short mnemonic, acronym, memory trick, association, or mental image that helps recall "
+                "the CORRECT answer. Keep it concise and genuinely memorable. It may point at the correct answer's shape, "
+                "sound, pattern, or a memorable link, but must not restate the full answer verbatim (unless it is an acronym of it).\n"
+                "- If the card is factually wrong, hint 4 must begin exactly with '⚠️' and explain the error and the correct fact "
+                "(this overrides any earlier instruction placing the warning on hint 3).\n"
+                "- Write the mnemonic in the same language as the card.\n"
             )
         
         # Add strict formatting every time; user-provided prompts often omit the exact count.
