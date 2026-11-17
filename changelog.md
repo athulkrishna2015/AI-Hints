@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.22 (2026-11-17)
+- **Smarter model-fetch key rotation**: Rate-limit (429) and not-found (404) responses now stop key rotation after the first attempt instead of burning through every stored key — one request instead of one per key.
+- **Disabled providers are no longer fetched**: The daily background model-list update and the "Fetch All" button now skip providers you've disabled, eliminating pointless API traffic (and errors from offline/wrong-URL disabled providers).
+- **New tests**: 10 unit tests covering rotation stop-on-429/404 and disabled-provider filtering.
 ## 8.6.21 (2026-11-14)
 - **Fix post-batch sync thread error**: Scheduled the sync on the main thread via `run_on_main` to avoid `run_in_background` being called from a background thread.
 ## 8.6.20 (2026-11-14)
