@@ -2718,6 +2718,15 @@ class AIClient:
                         f"Skipping remaining keys — retry in a minute."
                     )
                     break
+                if e.code == 404:
+                    # Not found: the models URL itself is wrong (or the service
+                    # doesn't expose that path). Rotating keys can't fix a
+                    # URL-level error, so stop after the first attempt.
+                    logger.warning(
+                        f"AI-Hints: {provider} models endpoint returned 404. "
+                        f"Check the provider's URL in settings — key rotation won't help."
+                    )
+                    break
                 continue
             except Exception as e:
                 logger.debug(f"AI-Hints: model fetch failed for {provider}: {e}")
