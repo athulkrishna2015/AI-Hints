@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 8.6.23 (2026-11-18)
+- **Priority-window Fetch All skips disabled providers**: The "Fetch All" button in the Advanced Fallback Priority window no longer fetches model lists for providers you've disabled — matching the main dialog and background updater.
 ## 8.6.22 (2026-11-17)
 - **Smarter model-fetch key rotation**: Rate-limit (429) and not-found (404) responses now stop key rotation after the first attempt instead of burning through every stored key — one request instead of one per key.
 - **Disabled providers are no longer fetched**: The daily background model-list update and the "Fetch All" button now skip providers you've disabled, eliminating pointless API traffic (and errors from offline/wrong-URL disabled providers).
