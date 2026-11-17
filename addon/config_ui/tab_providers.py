@@ -2569,7 +2569,13 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 if cp_data and isinstance(cp_data, dict) and str(cp_data.get("url", "") or "").strip():
                     if cp not in providers_to_fetch:
                         providers_to_fetch.append(cp)
-        
+
+        # Skip disabled providers: they are never used for generation, so
+        # refreshing their model lists is pointless API traffic.
+        disabled_raw = self.main_dialog.config.get("disabled_providers") or []
+        disabled = set(disabled_raw) if isinstance(disabled_raw, list) else set()
+        providers_to_fetch = [p for p in providers_to_fetch if p not in disabled]
+
         if not providers_to_fetch:
             tooltip("No providers configured to fetch.")
             self.list_fetch_btn.setText("Fetch All")
