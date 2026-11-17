@@ -51,23 +51,36 @@ def _addon_package():
 
 
 def _providers_to_update(config: Dict[str, Any]) -> List[str]:
+    # Respect the same disabled list the generation path uses: a disabled
+    # provider is never queried, so refreshing its model list is pointless
+    # noise (and can hit offline local endpoints or wrong URLs).
+    disabled_raw = config.get("disabled_providers")
+    disabled: Set[str] = set(disabled_raw) if isinstance(disabled_raw, list) else set()
+
     providers: Set[str] = set()
     fb = config.get("model_fallbacks") or {}
     if isinstance(fb, dict):
-        providers.update(fb.keys())
+        providers.update(str(k) for k in fb.keys() if k not in disabled)
     cp = config.get("custom_providers") or {}
     if isinstance(cp, dict):
-        providers.update(cp.keys())
+        providers.update(str(k) for k in cp.keys() if k not in disabled)
     lp = config.get("local_providers") or {}
     if isinstance(lp, dict):
-        providers.update(lp.keys())
-    if config.get("local_endpoint"):
+        for name, cfg in lp.items():
+            if name in disabled:
+                continue
+            if isinstance(cfg, dict) and not cfg.get("enabled", True):
+                continue
+            providers.add(str(name))
+    if config.get("local_endpoint") and "local" not in disabled:
         providers.add("local")
     try:
         client = AIClient(config)
         for p in ("anthropic", "openai", "deepseek", "grok", "gemini",
                   "openrouter", "huggingface", "groq", "sambanova", "nvidia",
                   "mistral", "cerebras"):
+            if p in disabled:
+                continue
             try:
                 if client._available_api_keys(p):
                     providers.add(p)
