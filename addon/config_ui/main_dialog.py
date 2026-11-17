@@ -639,8 +639,19 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self._tab_built[index] = True
         # Replace placeholder if present
         if index < self.tabs.count():
-            self.tabs.removeTab(index)
-            self.tabs.insertTab(index, widget, name)
+            # removeTab() on the CURRENT tab shifts the current index to a
+            # neighbor (e.g. opening "Batch Generation" from the browser
+            # right-click landed on "Mobile Support"). Swap the placeholder
+            # with signals blocked and restore the current index afterwards.
+            prev_current = self.tabs.currentIndex()
+            self.tabs.blockSignals(True)
+            try:
+                self.tabs.removeTab(index)
+                self.tabs.insertTab(index, widget, name)
+                if 0 <= prev_current < self.tabs.count():
+                    self.tabs.setCurrentIndex(prev_current)
+            finally:
+                self.tabs.blockSignals(False)
         # Connect dirty tracking for this tab's widgets
         if hasattr(self, "_connect_dirty_tracking_for_tab"):
             self._connect_dirty_tracking_for_tab(widget)
