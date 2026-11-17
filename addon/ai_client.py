@@ -2706,11 +2706,26 @@ class AIClient:
                     FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
                     return self._chat_only_models([_model_id(m) for m in result.get("data", []) if _model_id(m)])
 
+            except urllib.error.HTTPError as e:
+                logger.debug(f"AI-Hints: model fetch failed for {provider}: {e}")
+                last_err = e
+                if e.code == 429:
+                    # Rate limited: every key returns the same model list, and
+                    # rapid-fire retries just deepen the throttle. Stop here and
+                    # tell the user to wait, instead of burning through all keys.
+                    logger.warning(
+                        f"AI-Hints: {provider} is rate limiting model fetches (429). "
+                        f"Skipping remaining keys — retry in a minute."
+                    )
+                    break
+                continue
             except Exception as e:
                 logger.debug(f"AI-Hints: model fetch failed for {provider}: {e}")
                 last_err = e
                 continue
-        if last_err:
+        if isinstance(last_err, urllib.error.HTTPError) and last_err.code == 429:
+            logger.error(f"AI-Hints: Failed to fetch models for {provider}: rate limited (429). Wait a minute and retry.")
+        elif last_err:
             logger.error(f"AI-Hints: Failed to fetch models for {provider}: {last_err}")
         return []
 
