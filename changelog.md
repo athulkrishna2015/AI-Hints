@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 9.0.1 (2026-11-18)
+- **Fix: browser right-click "Batch Generation..." now opens the Batch Generation tab** (previously landed on Mobile Support due to a lazy-tab index shift when replacing placeholder tabs).
 ## 9.0.0 (2026-11-18)
 - **Optional 4th Mnemonic Hint** (new General-tab toggle, off by default): when enabled, generation produces 4 hints in a research-backed order — (1) brief context, (2) key concept, (3) a mnemonic/memory trick for the correct answer, (4) discriminating clue or common error.
 - The factually-wrong ⚠️ warning moves to hint 4 while the mnemonic is enabled, so the correction is the last thing you read.
