@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 9.0.2 (2026-11-19)
+- **New: Test → Test Newly Fetched** in both the per-provider Fallback Priority and the Advanced Global Fallback Priority windows. Tests every 🆕 model from the last fetch in one run, searching both the Enabled and Disabled lists, so newly discovered models can be validated without checking or highlighting each row.
+- **Fix: multithreaded batch generation is now genuinely on by default.** `config.json` already defaulted `multithread_providers` to true, but three code paths fell back to `false` when the key was absent, so one settings save could persist `false` permanently. Missing keys now mean true, and re-showing an already-open settings dialog refreshes the checkbox from disk unless the user changed it.
+- **Fix: zero-quota 429s no longer exhaust every key and model.** A 429 whose body reports `quota_limit_value: 0` (project/region has no quota at all) now parks the provider process-wide for 30 minutes instead of walking 13 keys × 13 models and blacklisting each combination. The park is honored by provider selection, the standard fallback loop, the global-priority loop, and batch's single-provider path.
 ## 9.0.1 (2026-11-18)
 - **Fix: browser right-click "Batch Generation..." now opens the Batch Generation tab** (previously landed on Mobile Support due to a lazy-tab index shift when replacing placeholder tabs).
 ## 9.0.0 (2026-11-18)
