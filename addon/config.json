@@ -121,6 +121,8 @@
   "hint_tag": "ai-hints",
   "skip_tag": "ai-hints::skipped",
   "batch_full_scan": false,
+  "batch_sync_after": true,
+  "batch_prevent_sleep": false,
   "deck_last_scan_nid": {},
   "auto_update_models": true
 }

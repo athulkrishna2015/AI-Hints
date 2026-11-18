@@ -529,6 +529,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self._multithread_user_touched = False
         if hasattr(self, "batch_full_scan_cb"):
             self.batch_full_scan_cb.setChecked(c.get("batch_full_scan", False))
+        if hasattr(self, "batch_sync_after_cb"):
+            self.batch_sync_after_cb.setChecked(c.get("batch_sync_after", True))
+        if hasattr(self, "batch_prevent_sleep_cb"):
+            self.batch_prevent_sleep_cb.setChecked(c.get("batch_prevent_sleep", False))
 
     def _update_models_now(self):
         """Manually trigger a model-list fetch + prune in the background."""
@@ -1486,6 +1490,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 new_config["multithread_providers"] = self.batch_multithread_cb.isChecked()
             if hasattr(self, "batch_full_scan_cb"):
                 new_config["batch_full_scan"] = self.batch_full_scan_cb.isChecked()
+            if hasattr(self, "batch_sync_after_cb"):
+                new_config["batch_sync_after"] = self.batch_sync_after_cb.isChecked()
+            if hasattr(self, "batch_prevent_sleep_cb"):
+                new_config["batch_prevent_sleep"] = self.batch_prevent_sleep_cb.isChecked()
 
             # Mobile Config
             new_config["mobile_use_emojis"] = self.mobile_emojis_cb.isChecked()

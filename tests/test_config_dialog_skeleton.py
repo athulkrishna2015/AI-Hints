@@ -198,5 +198,44 @@ class ConfigDialogLoadSaveContractTests(unittest.TestCase):
         )
 
 
+    def test_batch_settings_survive_save_and_reload(self):
+        """Batch-tab toggles must be written by save and restored by load.
+
+        Regression (v9.0.2): ``batch_prevent_sleep`` and ``batch_sync_after``
+        were read from the checkboxes when a batch started, but ``save_config``
+        never wrote them and ``load_config_into_ui`` never restored them.  The
+        checkbox looked enabled until the dialog was reopened, then silently
+        reverted to its default, so the setting could never be saved.
+        """
+        keys = (
+            "batch_limit",
+            "batch_full_scan",
+            "batch_sync_after",
+            "batch_prevent_sleep",
+            "multithread_providers",
+        )
+
+        def string_constants(func):
+            return {
+                n.value for n in ast.walk(func)
+                if isinstance(n, ast.Constant) and isinstance(n.value, str)
+            }
+
+        saved = string_constants(self.ast.method("save_config"))
+        loaded = string_constants(self.ast.method("load_config_into_ui"))
+        missing_save = [k for k in keys if k not in saved]
+        missing_load = [k for k in keys if k not in loaded]
+        self.assertEqual(
+            missing_save, [],
+            "save_config does not persist batch setting(s) %r; toggling them "
+            "in the Batch tab is lost when the config dialog reloads." % (missing_save,),
+        )
+        self.assertEqual(
+            missing_load, [],
+            "load_config_into_ui does not restore batch setting(s) %r; the "
+            "checkbox silently reverts to its default on reopen." % (missing_load,),
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
