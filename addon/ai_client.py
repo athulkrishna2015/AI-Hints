@@ -392,6 +392,17 @@ _DEPRECATION_MARKER_KEYS = (
 )
 
 
+def _prompt_cache_key(system_prompt: str) -> str:
+    """Stable, non-reversible key for the shared (system) prompt prefix.
+
+    Providers that need a cache key (OpenAI, Mistral, xAI) route requests
+    with the same key to the same cache. Every card reuses the same system
+    prompt, so hashing it gives a key that is stable across cards while never
+    containing the prompt itself.
+    """
+    return hashlib.sha256(system_prompt.encode("utf-8", errors="ignore")).hexdigest()[:32]
+
+
 def _model_id(item):
     """Extract a model identifier from a list-models response entry.
 
@@ -1506,6 +1517,24 @@ class AIClient:
                 if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "sambanova", "cerebras", "nvidia"]:
                     data["response_format"] = {"type": "json_object"}
 
+                # Prompt caching. The system prompt is the only stable prefix
+                # (the card text changes every request), so make it easy for
+                # providers to reuse:
+                #   openai/mistral: prompt_cache_key routes equal prefixes to
+                #                   the same cache (automatic caching).
+                #   grok:           x-grok-conv-id keeps requests on the same
+                #                   server for cache hits (automatic caching).
+                #   openrouter:     top-level cache_control enables Anthropic
+                #                   caching; other models cache automatically.
+                #   groq/deepseek/cerebras/sambanova: automatic, no field.
+                cache_key = _prompt_cache_key(system_prompt)
+                if provider in ("openai", "mistral"):
+                    data["prompt_cache_key"] = cache_key
+                elif provider == "grok":
+                    headers["x-grok-conv-id"] = cache_key
+                elif provider == "openrouter" and model.lower().lstrip("~").startswith("anthropic/"):
+                    data["cache_control"] = {"type": "ephemeral"}
+
                 try:
                     logger.debug(f"AI-Hints {provider}/{model} request: {json.dumps(_compact_request_data(data))}")
                     _log_full_request(provider, model, data)
@@ -1600,7 +1629,16 @@ class AIClient:
 
                 data = {
                     "model": model,
-                    "system": system_prompt,
+                    # Explicit cache breakpoint: the system prompt is
+                    # identical for every card, so Anthropic can reuse it
+                    # (5-minute TTL, refreshed by each hit). Prompts below
+                    # the model's minimum cacheable length simply aren't
+                    # cached; the request still succeeds.
+                    "system": [{
+                        "type": "text",
+                        "text": system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }],
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 1024
                 }
@@ -2956,14 +2994,32 @@ class AIClient:
         if not isinstance(result, dict):
             return
         usage = result.get("usage")
-        if not isinstance(usage, dict) or not usage:
+        meta = result.get("usageMetadata")  # Gemini
+        if not isinstance(usage, dict) and not isinstance(meta, dict):
             return
         try:
             parts = []
-            for k in ("input_tokens", "prompt_tokens", "output_tokens", "completion_tokens", "total_tokens"):
-                v = usage.get(k)
-                if v not in (None, 0):
-                    parts.append(f"{k}:{v}")
+            if isinstance(usage, dict):
+                for k in ("input_tokens", "prompt_tokens", "output_tokens", "completion_tokens", "total_tokens"):
+                    v = usage.get(k)
+                    if v not in (None, 0):
+                        parts.append(f"{k}:{v}")
+                # Cache savings, in each provider's spelling.
+                details = usage.get("prompt_tokens_details")
+                if isinstance(details, dict) and details.get("cached_tokens"):
+                    parts.append(f"cached_tokens:{details['cached_tokens']}")
+                for k in ("cache_read_input_tokens", "cache_creation_input_tokens",
+                          "prompt_cache_hit_tokens", "prompt_cache_miss_tokens"):
+                    v = usage.get(k)
+                    if v not in (None, 0):
+                        parts.append(f"{k}:{v}")
+            if isinstance(meta, dict):
+                for k in ("promptTokenCount", "candidatesTokenCount",
+                          "cachedContentTokenCount", "thoughtsTokenCount",
+                          "totalTokenCount"):
+                    v = meta.get(k)
+                    if v not in (None, 0):
+                        parts.append(f"{k}:{v}")
             if not parts:
                 return
             model = result.get("model", "")
