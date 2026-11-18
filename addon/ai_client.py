@@ -205,6 +205,13 @@ def _load_addon_version() -> str:
 
 USER_AGENT = f"Anki-AI-Hints/{_load_addon_version()}"
 
+# API versions. Gemini's v1 channel is the stable one and exposes
+# generateContent, batchGenerateContent and models.list (v1beta is the beta
+# channel for features this add-on does not use). Anthropic requires an
+# explicit anthropic-version header; keep it in one place so it cannot drift.
+GEMINI_API_VERSION = "v1"
+ANTHROPIC_API_VERSION = "2026-10-21"
+
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 MODEL_COOLDOWN_SECONDS = 3600  # 1 hour
 TRANSIENT_PROVIDER_ERROR_CODES = {429, 503}
@@ -372,7 +379,7 @@ BUILTIN_PROVIDER_URLS = {
     "sambanova": "https://api.sambanova.ai/v1/chat/completions",
     "cerebras": "https://api.cerebras.ai/v1/chat/completions",
     "anthropic": "https://api.anthropic.com/v1/messages",
-    "gemini": "https://generativelanguage.googleapis.com/v1beta/models",
+    "gemini": f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models",
 }
 
 # Cache of models flagged as deprecated by the provider's own API response
@@ -1588,7 +1595,7 @@ class AIClient:
                 headers = self._json_headers()
                 headers.update({
                     "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01"
+                    "anthropic-version": ANTHROPIC_API_VERSION
                 })
 
                 data = {
@@ -1685,7 +1692,7 @@ class AIClient:
                 headers["x-goog-api-key"] = api_key
 
                 model_path = urllib.parse.quote(model, safe="")
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_path}:generateContent"
+                url = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{model_path}:generateContent"
                 logger.debug(f"Calling Gemini with model: {model}")
 
                 data = {
@@ -1789,7 +1796,7 @@ class AIClient:
         
         model = models[0] # Use best available model
         model_path = urllib.parse.quote(model, safe="")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_path}:batchGenerateContent"
+        url = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{model_path}:batchGenerateContent"
         
         request_items = []
         for item in batch_requests:
@@ -1880,7 +1887,7 @@ class AIClient:
             raise ValueError("No available Gemini API keys.")
             
         job_name = job_name.lstrip("/")
-        url = f"https://generativelanguage.googleapis.com/v1beta/{job_name}"
+        url = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/{job_name}"
         
         models = self._models_for_provider("gemini")
         model = models[0] if models else DEFAULT_MODELS.get("gemini", "")
@@ -2741,6 +2748,33 @@ class AIClient:
                     FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
                     return self._chat_only_models([_model_id(m) for m in result.get("data", []) if _model_id(m)])
 
+                if provider == "anthropic":
+                    # Anthropic exposes GET /v1/models with cursor pagination
+                    # (limit defaults to 20; after_id walks the next page).
+                    base_url = "https://api.anthropic.com/v1/models"
+                    headers = {
+                        "x-api-key": api_key,
+                        "anthropic-version": ANTHROPIC_API_VERSION,
+                        "Accept": "application/json",
+                    }
+                    models = []
+                    after_id = None
+                    for _ in range(20):  # hard stop; pagination is cursor-based
+                        query = {"limit": 1000}
+                        if after_id:
+                            query["after_id"] = after_id
+                        url = base_url + "?" + urllib.parse.urlencode(query)
+                        result = self._get_json(url, headers)
+                        for m in result.get("data", []) or []:
+                            mid = _model_id(m)
+                            if mid:
+                                models.append(mid)
+                        last_id = result.get("last_id")
+                        if not result.get("has_more") or not last_id or last_id == after_id:
+                            break
+                        after_id = last_id
+                    return self._chat_only_models(models)
+
                 if provider == "openrouter":
                     url = "https://openrouter.ai/api/v1/models"
                     headers = self._json_headers(api_key)
@@ -2756,7 +2790,7 @@ class AIClient:
                     # single unpaginated request silently drops newer models
                     # (Gemini 4 Carbon/Hydrogen live beyond the first page).
                     # Ask for the maximum page size and follow nextPageToken.
-                    base_url = "https://generativelanguage.googleapis.com/v1beta/models"
+                    base_url = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models"
                     headers = {"x-goog-api-key": api_key}
                     models = []
                     deprecated = set()

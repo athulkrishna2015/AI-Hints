@@ -10,7 +10,12 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from addon.ai_client import AIClient, PROVIDER_ZERO_QUOTA_UNTIL, LAST_FETCH_ERROR
+from addon.ai_client import (
+    AIClient,
+    PROVIDER_ZERO_QUOTA_UNTIL,
+    LAST_FETCH_ERROR,
+    ANTHROPIC_API_VERSION,
+)
 from addon.model_updater import _providers_to_update
 
 
@@ -233,6 +238,70 @@ class TestProvidersToUpdate(unittest.TestCase):
                   "disabled_providers": ["local"]}
         providers = _providers_to_update(config)
         self.assertNotIn("local", providers)
+
+
+class TestAnthropicModelFetch(unittest.TestCase):
+    """Anthropic has its own GET /v1/models with cursor pagination."""
+
+    def _client(self):
+        return AIClient({"api_keys": {"anthropic": "ak-test"}})
+
+    def test_fetches_models_with_version_header_and_pagination(self):
+        client = self._client()
+        urls = []
+        headers_seen = []
+
+        def _fake_get(url, headers):
+            urls.append(url)
+            headers_seen.append(dict(headers))
+            if "after_id" not in url:
+                return {
+                    "data": [{"id": "claude-opus-4-6"}, {"id": "claude-sonnet-4-6"}],
+                    "has_more": True,
+                    "last_id": "claude-sonnet-4-6",
+                }
+            return {"data": [{"id": "claude-haiku-4-6"}], "has_more": False}
+
+        with patch.object(AIClient, "_get_json", side_effect=_fake_get):
+            models = client.fetch_models("anthropic")
+
+        self.assertEqual(
+            models,
+            ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-6"],
+        )
+        self.assertEqual(len(urls), 2)
+        self.assertIn("after_id=claude-sonnet-4-6", urls[1])
+        self.assertEqual(headers_seen[0].get("anthropic-version"), ANTHROPIC_API_VERSION)
+        self.assertEqual(headers_seen[0].get("x-api-key"), "ak-test")
+
+    def test_reports_fetch_error_instead_of_silently_returning_nothing(self):
+        client = self._client()
+        with patch.object(AIClient, "_get_json", side_effect=_http_error(401)):
+            models = client.fetch_models("anthropic")
+
+        self.assertEqual(models, [])
+        self.assertIn("401", LAST_FETCH_ERROR.get("anthropic", ""))
+
+
+class TestGeminiStableApiVersion(unittest.TestCase):
+    def test_fetch_uses_v1_not_v1beta(self):
+        client = AIClient({"api_keys": {"gemini": "gk"}})
+        urls = []
+
+        def _fake_get(url, headers):
+            urls.append(url)
+            return {"models": [
+                {"name": "models/gemini-4-argon",
+                 "supportedGenerationMethods": ["generateContent"]},
+            ]}
+
+        with patch.object(AIClient, "_get_json", side_effect=_fake_get):
+            models = client.fetch_models("gemini")
+
+        self.assertEqual(models, ["gemini-4-argon"])
+        self.assertTrue(urls[0].startswith(
+            "https://generativelanguage.googleapis.com/v1/models"))
+        self.assertNotIn("v1beta", urls[0])
 
 
 if __name__ == "__main__":

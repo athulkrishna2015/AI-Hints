@@ -356,5 +356,20 @@ class TestKeyRotation(unittest.TestCase):
         self.assertIn(("gemini", "gemini-2.5-pro", "key_gemini_1"), FAILED_COMBOS_CACHE)
         self.assertNotIn(("gemini", "gemini-2.5-pro", "key_gemini_2"), FAILED_COMBOS_CACHE)
 
+    @patch("urllib.request.urlopen")
+    def test_gemini_generation_uses_stable_v1(self, mock_urlopen):
+        resp_success = MagicMock()
+        resp_success.read.return_value = b'{"candidates": [{"content": {"parts": [{"text": "{\\"hints\\": [\\"h1\\"], \\"options\\": [\\"o1\\"]}"}]}}]}'
+        resp_success.__enter__.return_value = resp_success
+        mock_urlopen.return_value = resp_success
+
+        result = self.client._call_gemini("sys_prompt", "prompt")
+
+        self.assertEqual(result["hints"], ["h1"])
+        url = mock_urlopen.call_args[0][0].full_url
+        self.assertIn("/v1/models/", url)
+        self.assertNotIn("v1beta", url)
+
+
 if __name__ == "__main__":
     unittest.main()
