@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 9.0.3 (2026-11-19)
+- **Fix: "Prevent computer sleep during batch generation" (and "Trigger AnkiWeb sync after batch generation completes") now save and persist.** Both checkboxes were read when a batch started, but `save_config` never wrote `batch_prevent_sleep` / `batch_sync_after` and `load_config_into_ui` never restored them. Saving the dialog dropped the keys entirely, so the checkbox reverted to its default the next time the dialog opened. Both are now stored in `config.json` and restored on load; existing configs pick up the defaults (sleep prevention off, sync after batch on).
 ## 9.0.2 (2026-11-19)
 - **New: Test → Test Newly Fetched** in both the per-provider Fallback Priority and the Advanced Global Fallback Priority windows. Tests every 🆕 model from the last fetch in one run, searching both the Enabled and Disabled lists, so newly discovered models can be validated without checking or highlighting each row.
 - **Fix: multithreaded batch generation is now genuinely on by default.** `config.json` already defaulted `multithread_providers` to true, but three code paths fell back to `false` when the key was absent, so one settings save could persist `false` permanently. Missing keys now mean true, and re-showing an already-open settings dialog refreshes the checkbox from disk unless the user changed it.
