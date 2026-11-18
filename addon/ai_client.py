@@ -216,6 +216,10 @@ TRANSIENT_PROVIDER_ERROR_CODES = {429, 503}
 ZERO_QUOTA_COOLDOWN_SECONDS = 1800
 PROVIDER_ZERO_QUOTA_UNTIL: Dict[str, float] = {}
 
+# Last model-fetch failure reason per provider, so the UI can explain *why*
+# a fetch returned nothing instead of always blaming the connection.
+LAST_FETCH_ERROR: Dict[str, str] = {}
+
 
 def _reports_zero_quota(body: str) -> bool:
     """True when a Google 429 body says the quota limit itself is zero."""
@@ -2648,6 +2652,7 @@ class AIClient:
 
     def fetch_models(self, provider: str) -> List[str]:
         """Fetch available models from the provider's API."""
+        LAST_FETCH_ERROR.pop(provider, None)
         local_providers = self.config.get("local_providers") or {}
         if not isinstance(local_providers, dict):
             local_providers = {}
@@ -2701,7 +2706,11 @@ class AIClient:
             return []
 
         last_err = None
+        zero_quota_keys = 0
+        rate_limited_keys = 0
+        attempted_keys = 0
         for api_key in keys:
+            attempted_keys += 1
             try:
                 # Check custom_providers first — applies to any provider
                 custom_providers = self.config.get("custom_providers", {}) or {}
@@ -2815,17 +2824,32 @@ class AIClient:
                     return self._chat_only_models([_model_id(m) for m in result.get("data", []) if _model_id(m)])
 
             except urllib.error.HTTPError as e:
+                body = ""
+                try:
+                    body = e.read().decode("utf-8", "replace")
+                except Exception:
+                    pass
                 logger.debug(f"AI-Hints: model fetch failed for {provider}: {e}")
                 last_err = e
                 if e.code == 429:
-                    # Rate limited: every key returns the same model list, and
-                    # rapid-fire retries just deepen the throttle. Stop here and
-                    # tell the user to wait, instead of burning through all keys.
-                    logger.warning(
-                        f"AI-Hints: {provider} is rate limiting model fetches (429). "
-                        f"Skipping remaining keys — retry in a minute."
-                    )
-                    break
+                    # A 429 is scoped to the key's project (and region), not to
+                    # the provider: the next key may belong to a project with
+                    # quota.  Rotate instead of giving up after the first key.
+                    if _reports_zero_quota(body):
+                        zero_quota_keys += 1
+                        logger.warning(
+                            f"AI-Hints: {provider} key {self._key_identifier(provider, api_key)} "
+                            f"reports zero quota for its project/region "
+                            f"(quota_limit_value=0); trying the next key."
+                        )
+                    else:
+                        rate_limited_keys += 1
+                        logger.debug(
+                            f"AI-Hints: {provider} key "
+                            f"{self._key_identifier(provider, api_key)} was rate limited "
+                            f"while listing models; trying the next key."
+                        )
+                    continue
                 if e.code == 404:
                     # Not found: the models URL itself is wrong (or the service
                     # doesn't expose that path). Rotating keys can't fix a
@@ -2840,9 +2864,32 @@ class AIClient:
                 logger.debug(f"AI-Hints: model fetch failed for {provider}: {e}")
                 last_err = e
                 continue
-        if isinstance(last_err, urllib.error.HTTPError) and last_err.code == 429:
-            logger.error(f"AI-Hints: Failed to fetch models for {provider}: rate limited (429). Wait a minute and retry.")
+        if zero_quota_keys and zero_quota_keys == attempted_keys:
+            PROVIDER_ZERO_QUOTA_UNTIL[provider] = time.time() + ZERO_QUOTA_COOLDOWN_SECONDS
+            LAST_FETCH_ERROR[provider] = (
+                f"all {attempted_keys} keys report zero quota (quota_limit_value=0) "
+                f"for their project/region — add a key from a project with quota, "
+                f"enable billing, or use a different region"
+            )
+            logger.error(
+                f"AI-Hints: Failed to fetch models for {provider}: every key reports "
+                f"zero quota (quota_limit_value=0) for its project/region. Retrying "
+                f"will not help — add a key from a project with quota, enable billing, "
+                f"or use a different region."
+            )
+        elif rate_limited_keys and rate_limited_keys == attempted_keys:
+            LAST_FETCH_ERROR[provider] = (
+                f"rate limited on all {attempted_keys} keys — retry in a minute"
+            )
+            logger.error(
+                f"AI-Hints: Failed to fetch models for {provider}: rate limited on all "
+                f"{attempted_keys} keys. Retry in a minute."
+            )
+        elif isinstance(last_err, urllib.error.HTTPError) and last_err.code == 429:
+            LAST_FETCH_ERROR[provider] = "rate limited (429) — retry in a minute"
+            logger.error(f"AI-Hints: Failed to fetch models for {provider}: rate limited (429). Retry in a minute.")
         elif last_err:
+            LAST_FETCH_ERROR[provider] = str(last_err)
             logger.error(f"AI-Hints: Failed to fetch models for {provider}: {last_err}")
         return []
 

@@ -24,10 +24,11 @@ except Exception:
     logger = logging.getLogger("AI-Hints")
 
 try:
-    from .ai_client import AIClient, FETCHED_DEPRECATED_MODELS
+    from .ai_client import AIClient, FETCHED_DEPRECATED_MODELS, LAST_FETCH_ERROR
 except Exception:
     AIClient = None
     FETCHED_DEPRECATED_MODELS = {}
+    LAST_FETCH_ERROR = {}
 
 try:
     from .config_io import read_meta_config, write_pretty_config_preserve_keys
@@ -157,6 +158,10 @@ def run_auto_update(silent: bool = False) -> Dict[str, Any]:
                 summary["errors"].append(f"{provider}: {e}")
                 continue
             if not fetched:
+                reason = LAST_FETCH_ERROR.get(provider)
+                if reason:
+                    logger.warning(f"AI-Hints model updater: {provider} returned no models: {reason}")
+                    summary["errors"].append(f"{provider}: {reason}")
                 continue
             keep = set(fetched)
             deprecated = FETCHED_DEPRECATED_MODELS.get(provider, set()) or set()

@@ -1014,7 +1014,9 @@ class FallbackOrderDialog(FallbackPriorityDialog):
                         self._ensure_visible_widgets()
                         tooltip(f"Fetched {len(models_clean)} models ({added_count} new, {len(missing_set)} missing).")
                     else:
-                        info(f"Could not fetch models for {self.provider.capitalize()}. Check connection.")
+                        from ..ai_client import LAST_FETCH_ERROR
+                        reason = LAST_FETCH_ERROR.get(self.provider) or "check connection"
+                        info(f"Could not fetch models for {self.provider.capitalize()}: {reason}.")
                 mw.taskman.run_on_main(_update_ui)
             except Exception as e:
                 err_msg = str(e)
