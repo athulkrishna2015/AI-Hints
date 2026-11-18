@@ -2742,21 +2742,36 @@ class AIClient:
                 elif provider == "gemini":
                     # Pass the key via header, never the URL query string —
                     # URLs end up in proxy/server access logs.
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models"
+                    #
+                    # models.list paginates: the default page size is 50, so a
+                    # single unpaginated request silently drops newer models
+                    # (Gemini 4 Carbon/Hydrogen live beyond the first page).
+                    # Ask for the maximum page size and follow nextPageToken.
+                    base_url = "https://generativelanguage.googleapis.com/v1beta/models"
                     headers = {"x-goog-api-key": api_key}
-                    result = self._get_json(url, headers)
                     models = []
                     deprecated = set()
-                    for m in result.get("models", []):
-                        name = m.get("name", "")
-                        if "generateContent" in m.get("supportedGenerationMethods", []):
-                            if name.startswith("models/"):
-                                name = name[7:]
-                            models.append(name)
-                        else:
-                            dep_name = name[7:] if name.startswith("models/") else name
-                            if dep_name:
-                                deprecated.add(dep_name)
+                    page_token = None
+                    for _ in range(20):  # hard stop; 20 * 1000 models is plenty
+                        query = {"pageSize": 1000}
+                        if page_token:
+                            query["pageToken"] = page_token
+                        url = base_url + "?" + urllib.parse.urlencode(query)
+                        result = self._get_json(url, headers)
+                        for m in result.get("models", []):
+                            name = m.get("name", "")
+                            if "generateContent" in m.get("supportedGenerationMethods", []):
+                                if name.startswith("models/"):
+                                    name = name[7:]
+                                if name:
+                                    models.append(name)
+                            else:
+                                dep_name = name[7:] if name.startswith("models/") else name
+                                if dep_name:
+                                    deprecated.add(dep_name)
+                        page_token = result.get("nextPageToken")
+                        if not page_token:
+                            break
                     FETCHED_DEPRECATED_MODELS[provider] = deprecated
                     return self._chat_only_models(models)
 

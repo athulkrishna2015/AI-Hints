@@ -74,6 +74,43 @@ class TestFetchModelsKeyRotation(unittest.TestCase):
         raise _http_error(code)
 
 
+class TestFetchModelsPagination(unittest.TestCase):
+    """models.list is paginated (50/page by default); newer models such as
+    gemini-4-carbon/hydrogen sit on later pages and used to be dropped."""
+
+    def test_follows_next_page_token(self):
+        client = AIClient({
+            "api_keys": {"gemini": "k1"},
+            "models": {"gemini": "gemini-flash-latest"},
+        })
+        calls = []
+
+        def _fake_get(url, headers):
+            calls.append(url)
+            if "pageToken" not in url:
+                return {
+                    "models": [{"name": "models/gemini-4-argon",
+                                "supportedGenerationMethods": ["generateContent"]}],
+                    "nextPageToken": "page-2",
+                }
+            return {
+                "models": [
+                    {"name": "models/gemini-4-carbon",
+                     "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/gemini-4-hydrogen",
+                     "supportedGenerationMethods": ["generateContent"]},
+                ],
+            }
+
+        with patch.object(AIClient, "_get_json", side_effect=_fake_get):
+            models = client.fetch_models("gemini")
+
+        self.assertEqual(models, ["gemini-4-argon", "gemini-4-carbon", "gemini-4-hydrogen"])
+        self.assertEqual(len(calls), 2)
+        self.assertIn("pageSize=1000", calls[0])
+        self.assertIn("pageToken=page-2", calls[1])
+
+
 class TestProvidersToUpdate(unittest.TestCase):
     """The background updater must skip disabled providers entirely."""
 
