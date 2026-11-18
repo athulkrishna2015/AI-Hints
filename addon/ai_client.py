@@ -208,6 +208,38 @@ USER_AGENT = f"Anki-AI-Hints/{_load_addon_version()}"
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
 MODEL_COOLDOWN_SECONDS = 3600  # 1 hour
 TRANSIENT_PROVIDER_ERROR_CODES = {429, 503}
+
+# A 429 whose body reports quota_limit_value "0" is not a rate spike: the
+# project has no quota for that model/region at all. Rotating keys and models
+# then just burns time and creates one blacklist entry per combo, so the
+# provider is parked process-wide for a while instead.
+ZERO_QUOTA_COOLDOWN_SECONDS = 1800
+PROVIDER_ZERO_QUOTA_UNTIL: Dict[str, float] = {}
+
+
+def _reports_zero_quota(body: str) -> bool:
+    """True when a Google 429 body says the quota limit itself is zero."""
+    if not body or "quota_limit_value" not in body:
+        return False
+    try:
+        data = json.loads(body)
+        details = (data.get("error") or {}).get("details") or []
+    except Exception:
+        return '"quota_limit_value":"0"' in body.replace(" ", "")
+    for item in details:
+        metadata = item.get("metadata") or {}
+        if str(metadata.get("quota_limit_value", "")).strip() == "0":
+            return True
+    return False
+
+
+def _zero_quota_blocked(provider: str) -> bool:
+    expiry = PROVIDER_ZERO_QUOTA_UNTIL.get(provider, 0)
+    if expiry <= time.time():
+        if expiry:
+            PROVIDER_ZERO_QUOTA_UNTIL.pop(provider, None)
+        return False
+    return True
 FAILED_MODELS_CACHE: Dict[Tuple[str, str], float] = {}  # Legacy stub
 FAILED_KEYS_CACHE: Dict[Tuple[str, str], float] = {}    # Legacy stub
 FAILED_COMBOS_CACHE: Dict[Tuple[str, str, str], float] = {}  # (provider, model, api_key) -> expiry_timestamp
@@ -528,6 +560,21 @@ class AIClient:
             except Exception:
                 pass
 
+    def _note_zero_quota(self, provider: str, body: str) -> bool:
+        """Park a provider process-wide when its 429 reports a zero quota."""
+        if not _reports_zero_quota(body):
+            return False
+        first = provider not in PROVIDER_ZERO_QUOTA_UNTIL
+        PROVIDER_ZERO_QUOTA_UNTIL[provider] = time.time() + ZERO_QUOTA_COOLDOWN_SECONDS
+        if first:
+            logger.warning(
+                f"AI-Hints: {provider} reports zero quota for this project/region "
+                f"(quota_limit_value=0); parking the provider for "
+                f"{ZERO_QUOTA_COOLDOWN_SECONDS // 60} minutes instead of rotating "
+                f"keys/models."
+            )
+        return True
+
     def _skip_transient_provider_error(self, provider: str, code: int) -> bool:
         """Stop this provider for the rest of the current generation on a transient
         error. The caller marks the failed key, so the next generation rotates to
@@ -833,6 +880,9 @@ class AIClient:
                 # Skip if provider is not ready
                 if not self._is_provider_ready(provider, primary=True):
                     continue
+                # Skip if the provider is parked for reporting zero quota
+                if _zero_quota_blocked(provider):
+                    continue
                 # Skip if model is blacklisted on cooldown
                 if self._is_model_failed(provider, model):
                     continue
@@ -911,6 +961,12 @@ class AIClient:
             return {"hints": [], "options": []}
 
         # Otherwise fallback to standard provider-based priority logic
+        if only_this_provider and _zero_quota_blocked(primary_provider):
+            logger.warning(
+                f"AI-Hints: Skipping {primary_provider}: zero-quota park is still active "
+                f"({int(PROVIDER_ZERO_QUOTA_UNTIL.get(primary_provider, 0) - time.time())}s left)."
+            )
+            return {"hints": [], "options": []}
         if only_this_provider:
             all_potential = [primary_provider] if self._is_provider_ready(primary_provider, primary=True) else []
         else:
@@ -930,6 +986,9 @@ class AIClient:
                 logger.info("AI-Hints: Network unavailable; stopping provider fallback attempts.")
                 return {"hints": [], "options": []}
             if provider in network_failed_providers or provider in self._generation_skipped_providers:
+                continue
+            if _zero_quota_blocked(provider):
+                logger.debug(f"AI-Hints: Skipping {provider}: zero-quota park is still active.")
                 continue
 
             # Prefer a timed-out earlier candidate that finished in the
@@ -1043,7 +1102,13 @@ class AIClient:
         candidates = []
 
         if primary_provider not in disabled and self._is_provider_ready(primary_provider, primary=True):
-            candidates.append(primary_provider)
+            if _zero_quota_blocked(primary_provider):
+                logger.warning(
+                    f"AI-Hints: Primary provider '{primary_provider}' is parked for zero quota; "
+                    f"checking fallbacks."
+                )
+            else:
+                candidates.append(primary_provider)
         else:
             logger.warning(
                 f"AI-Hints: Primary provider '{primary_provider}' is not configured or is disabled; checking fallbacks."
@@ -1051,6 +1116,8 @@ class AIClient:
 
         for provider in priority:
             if provider == primary_provider or provider in candidates:
+                continue
+            if _zero_quota_blocked(provider):
                 continue
             if self._is_provider_ready(provider, primary=False):
                 candidates.append(provider)
@@ -1658,6 +1725,7 @@ class AIClient:
                 except urllib.error.HTTPError as e:
                     body = self._read_http_error(e)
                     logger.error(f"AI-Hints Error (Gemini, model {model}): {e} - {body}")
+                    self._note_zero_quota("gemini", body)
                     from .logger import log_context
                     if getattr(log_context, "source", None) == "model_test":
                         if idx == len(available_keys) - 1:

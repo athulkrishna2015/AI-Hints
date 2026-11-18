@@ -521,7 +521,12 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if hasattr(self, "batch_limit_spin"):
             self.batch_limit_spin.setValue(c.get("batch_limit", 1000))
         if hasattr(self, "batch_multithread_cb"):
-            self.batch_multithread_cb.setChecked(c.get("multithread_providers", False))
+            self._suppress_multithread_touch = True
+            try:
+                self.batch_multithread_cb.setChecked(c.get("multithread_providers", True))
+            finally:
+                self._suppress_multithread_touch = False
+            self._multithread_user_touched = False
         if hasattr(self, "batch_full_scan_cb"):
             self.batch_full_scan_cb.setChecked(c.get("batch_full_scan", False))
 
@@ -2004,6 +2009,10 @@ def on_config_dialog(parent=None, tab_index=None, card_ids=None, deck_name=None)
                      _config_dialog_instance.set_selected_cards(card_ids)
                  if deck_name is not None:
                      _config_dialog_instance.set_selected_deck(deck_name)
+                 try:
+                     _config_dialog_instance.sync_batch_multithread_from_disk()
+                 except Exception:
+                     pass
                  _config_dialog_instance.raise_()
                  _config_dialog_instance.activateWindow()
                  return

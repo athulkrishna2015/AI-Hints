@@ -58,6 +58,35 @@ def _subtree_deck_names(deck_name):
     return [deck_name] + [d for d in names if d.startswith(prefix)]
 
 class BatchTabMixin:
+    def _on_batch_multithread_toggled(self, _checked):
+        """Remember explicit user intent so a value written by another path is
+        not reverted by a stale checkbox when this dialog saves its snapshot."""
+        if getattr(self, "_suppress_multithread_touch", False):
+            return
+        self._multithread_user_touched = True
+
+    def sync_batch_multithread_from_disk(self):
+        """Refresh the multithread checkbox from disk when the user has not
+        touched it. Called when an already-open config dialog is re-shown."""
+        if getattr(self, "_multithread_user_touched", False):
+            return
+        cb = getattr(self, "batch_multithread_cb", None)
+        if cb is None:
+            return
+        from ..config_io import read_meta_config
+
+        disk = read_meta_config()
+        if not isinstance(disk, dict) or "multithread_providers" not in disk:
+            return
+        value = bool(disk.get("multithread_providers"))
+        if cb.isChecked() == value:
+            return
+        self._suppress_multithread_touch = True
+        try:
+            cb.setChecked(value)
+        finally:
+            self._suppress_multithread_touch = False
+
     def _create_batch_tab(self):
         """Constructs the Tab 5: Batch Generation UI"""
         tab = QWidget()
@@ -228,7 +257,9 @@ class BatchTabMixin:
         # 🧵 Multithreading
         self.batch_multithread_cb = QCheckBox("Concurrent Multi-Provider Generation (Multithreaded)")
         self.batch_multithread_cb.setToolTip("Generates cards in parallel using all of your ready and enabled providers. Bypasses provider overrides.")
-        self.batch_multithread_cb.setChecked(self.config.get("multithread_providers", False))
+        self.batch_multithread_cb.setChecked(self.config.get("multithread_providers", True))
+        self._multithread_user_touched = False
+        self.batch_multithread_cb.toggled.connect(self._on_batch_multithread_toggled)
         s_layout.addRow(self.batch_multithread_cb)
 
         # ⏹ Sync after batch

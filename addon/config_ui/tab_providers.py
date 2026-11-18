@@ -49,6 +49,7 @@ def _build_test_menu(callback):
     menu = QMenu()
     menu.addAction("Test Checked", lambda: callback("checked"))
     menu.addAction("Test Row", lambda: callback("row"))
+    menu.addAction("Test Newly Fetched", lambda: callback("new"))
     menu.addAction("Test All", lambda: callback("all"))
     return menu
 
@@ -1107,7 +1108,10 @@ class FallbackOrderDialog(FallbackPriorityDialog):
 
         # Collect models based on mode, from the active list by default
         active = table if table is not None else self._focused_table()
-        if mode == "checked":
+        if mode == "new":
+            # Newly fetched models can land in either list, so search both.
+            tables = [self.enabled_table, self.disabled_table]
+        elif mode == "checked":
             tables = [self.enabled_table]
         else:
             tables = [active]
@@ -1123,6 +1127,10 @@ class FallbackOrderDialog(FallbackPriorityDialog):
                 if model_name in seen_models:
                     continue
                 if mode == "all":
+                    models.append(model_name)
+                    model_tables.append(table)
+                    seen_models.add(model_name)
+                elif mode == "new" and model_name in NEWLY_ADDED_MODELS.get(self.provider, ()):
                     models.append(model_name)
                     model_tables.append(table)
                     seen_models.add(model_name)
@@ -2674,7 +2682,10 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         self.add_btn.setEnabled(False)
 
         active = table if table is not None else self._focused_table()
-        if mode == "checked":
+        if mode == "new":
+            # Newly fetched models can land in either list, so search both.
+            tables = [self.enabled_table, self.disabled_table]
+        elif mode == "checked":
             tables = [self.enabled_table]
         else:
             tables = [active]
@@ -2685,6 +2696,9 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 return item.isSelected()
             if mode == "checked":
                 return item.checkState() == Qt.CheckState.Checked
+            if mode == "new":
+                pair = self._row_pair_opt(table, i)
+                return bool(pair and pair[1] in GLOBAL_NEWLY_ADDED_MODELS.get(pair[0], ()))
             return True
 
         items_data = []

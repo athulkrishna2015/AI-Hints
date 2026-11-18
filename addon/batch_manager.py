@@ -1099,7 +1099,7 @@ class BatchManager:
                         if self.local_queue_jobs[0].get("id") != current_job_id:
                             break
                         
-                use_multithread = job_config.get("multithread_providers", False)
+                use_multithread = job_config.get("multithread_providers", True)
                 if use_multithread and (not job_provider or job_provider == "Standard Config (Follows Fallback Matrix)"):
                      primary = job_config.get("ai_provider", "openai")
                      providers = client._candidate_providers(primary)
