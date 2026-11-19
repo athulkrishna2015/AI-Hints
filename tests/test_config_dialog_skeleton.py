@@ -152,6 +152,23 @@ class ConfigDialogLoadSaveContractTests(unittest.TestCase):
         for method in ("_create_model_variants_tab", "_collect_model_variants",
                        "_load_model_variants_into_ui"):
             self.assertIn(f"def {method}(", mixin)
+        # The table must be pre-filled from the saved model lists, not empty.
+        self.assertIn("known_model_pairs(self.config)", mixin)
+        self.assertIn("table.setRowCount(len(rows))", mixin)
+        # The old "Add from priority/fallback lists" button hung for minutes
+        # because it called insertRow + setCellWidget once per model (thousands
+        # of rows). Refresh must bulk-fill plain items with a shared delegate.
+        self.assertNotIn("setCellWidget", mixin)
+        load = next(
+            node for node in ast.walk(ast.parse(mixin))
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_load_model_variants_into_ui"
+        )
+        self.assertNotIn(
+            "insertRow",
+            {n.func.attr for n in ast.walk(load)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)},
+        )
 
     def test_load_config_into_ui_contains_no_nested_methods(self):
         """A nested ``def`` here means a method was spliced into the body."""

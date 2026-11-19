@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from addon.ai_client import AIClient
+from addon.model_variants import known_model_pairs
 from blacklist_helpers import isolate_blacklist
 
 
@@ -37,6 +38,21 @@ class TestModelVariants(unittest.TestCase):
     def _openai_result(self):
         return {"choices": [{"message": {"content": json.dumps(
             {"hints": ["h"], "options": ["o"]})}}]}
+
+    def test_known_pairs_include_every_fetched_model_source(self):
+        config = {
+            "models": {"openai": "gpt-active"},
+            "model_fallbacks": {"openai": ["gpt-active", "gpt-b"], "x": ["m1"]},
+            "disabled_fallback_models": {"x": ["m2"]},
+            "global_model_priority": [["g", "gm1"], ["g", "gm2"]],
+            "disabled_global_model_priority": [["g", "gm3"], "bad-entry"],
+        }
+        pairs = known_model_pairs(config)
+        self.assertEqual(pairs, sorted([
+            ("openai", "gpt-active"), ("openai", "gpt-b"),
+            ("x", "m1"), ("x", "m2"),
+            ("g", "gm1"), ("g", "gm2"), ("g", "gm3"),
+        ]))
 
     def test_sanitizes_bad_values(self):
         client = self._client("openai", "m", {
