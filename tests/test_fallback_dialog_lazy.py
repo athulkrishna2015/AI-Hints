@@ -7,7 +7,7 @@ rows on demand. This test verifies:
   1. Construction with 400 models is fast and creates only a few widgets.
   2. Scrolling materializes widgets for newly visible rows.
   3. Values round-trip through the name-keyed dicts even for rows whose
-     widgets were never created (thinking level / per-model timeout).
+     widgets were never created (per-model timeout).
   4. Row swaps keep widget contents in sync with their model.
 """
 import os
@@ -72,7 +72,6 @@ def make_dialog(n_models=400):
     # *_data attributes off the parent (the settings dialog in production).
     class FakeSettingsDialog(QtWidgets.QWidget):
         disabled_fallback_models_data = {}
-        thinking_levels_data = {"openrouter": {"model-005": "high"}}
         model_timeouts_data = {"openrouter": {"model-007": 42}}
 
     parent = FakeSettingsDialog()
@@ -136,23 +135,18 @@ app.processEvents()
 assert dlg.table.cellWidget(399, 1) is not None, "bottom row not materialized on scroll"
 print(f"after scroll-to-bottom: {count_widgets(dlg)} widgets")
 
-# Edit a materialized combo, then read back values for BOTH edited and
+# Edit a materialized timeout spin, then read back values for BOTH edited and
 # never-materialized rows.
-dlg.table.cellWidget(399, 1).setCurrentText("medium")
-levels = dlg.get_thinking_levels()
+dlg.table.cellWidget(399, 1).setValue(99)
 timeouts = dlg.get_model_timeouts()
-assert levels["model-399"] == "medium", levels.get("model-399")
-assert levels["model-005"] == "high", levels.get("model-005")  # dict-backed row
+assert timeouts["model-399"] == 99, timeouts.get("model-399")
 assert timeouts["model-007"] == 42, timeouts.get("model-007")  # dict-backed row
-assert len(levels) == 400 and len(timeouts) == 400
+assert len(timeouts) == 400
 
 # Swap top two rows; item order changes, dict values stay keyed by model.
 dlg._swap_rows(0, 1)
 assert dlg.table.item(0, 0).data(Qt.ItemDataRole.UserRole) == "model-001"
 assert dlg.table.item(1, 0).data(Qt.ItemDataRole.UserRole) == "model-000"
-levels2 = dlg.get_thinking_levels()
-assert levels2["model-001"] == "off" or levels2["model-001"] == levels["model-001"]
-assert levels2["model-005"] == "high"
 
 # Moving multiple selected rows must move them as a group. In particular,
 # selectRow() is not additive, so verify the selection survives the move too.
@@ -170,7 +164,6 @@ dlg.move_item(-1)
 names_after = [dlg.table.item(i, 0).data(Qt.ItemDataRole.UserRole) for i in range(4)]
 assert names_after[:4] == [names_before[1], names_before[2], names_before[0], names_before[3]]
 assert sorted(index.row() for index in dlg.table.selectionModel().selectedRows()) == [0, 1]
-assert dlg.get_thinking_levels()["model-005"] == "high"
 assert dlg.get_model_timeouts()["model-007"] == 42
 
 # Search filter hides rows; ensure does not choke.
@@ -184,7 +177,7 @@ dlg.table.item(50, 0).setCheckState(Qt.CheckState.Unchecked)
 assert dlg.disabled_table.rowCount() == 1
 dlg._on_header_clicked(0)
 assert dlg.table.item(0, 0).data(Qt.ItemDataRole.UserRole) != ""
-assert dlg.get_thinking_levels()["model-005"] == "high"
+assert dlg.get_model_timeouts()["model-007"] == 42
 
 print("ALL LAZY-FALLBACK CHECKS PASSED")
 

@@ -2281,7 +2281,7 @@ def on_browser_context_menu(browser, menu):
     
     def open_batch_ui(_checked=False, b=browser):
         from .config_ui import on_config_dialog
-        on_config_dialog(mw, tab_index=4, card_ids=_selected_browser_card_ids(b))
+        on_config_dialog(mw, tab_index=5, card_ids=_selected_browser_card_ids(b))
         
     act_batch_ui.triggered.connect(open_batch_ui)
     
@@ -2349,7 +2349,7 @@ def on_sidebar_context_menu(sidebar, menu, item, index) -> None:
     # Action 1: Batch Generation...
     act_batch = ai_menu.addAction("✨ Batch Generation...")
     act_batch.triggered.connect(
-        lambda _checked=False, cids=card_ids: on_config_dialog(mw, tab_index=4, card_ids=cids)
+        lambda _checked=False, cids=card_ids: on_config_dialog(mw, tab_index=5, card_ids=cids)
     )
 
     # Action 2: Skip AI for Group
@@ -2447,7 +2447,7 @@ def on_deck_browser_context_menu(menu, did) -> None:
         def on_success(deck_name: str) -> None:
             if deck_name:
                 from .config_ui import on_config_dialog
-                on_config_dialog(mw, tab_index=4, deck_name=deck_name)
+                on_config_dialog(mw, tab_index=5, deck_name=deck_name)
         QueryOp(
             parent=mw,
             op=get_deck_name,

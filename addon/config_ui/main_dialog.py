@@ -36,7 +36,7 @@ from .tab_providers import (
 )
 from ..config_io import write_pretty_config_preserve_keys
 
-LAST_ACTIVE_TAB_INDEX = 7  # Fallback static state
+LAST_ACTIVE_TAB_INDEX = 8  # Fallback static state (Logs is the last tab)
 
 def _set_test_status(status_label, provider, st, tt, col, model_name):
     PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
@@ -238,19 +238,29 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self._tab_builders = [
             ("General", self._create_general_tab),
             ("AI Providers", self._create_providers_tab),
+            ("Model Variants", self._create_model_variants_tab),
             ("Advanced", self._create_advanced_tab),
             ("Shortcuts", self._create_shortcuts_tab),
             ("Batch Generation", self._create_batch_tab),
             ("Mobile Support", self._create_mobile_tab),
             ("Support Authors", self._create_support_tab),
             ("Logs", self._create_log_tab),
-            ("Model Variants", self._create_model_variants_tab),
         ]
         self._tab_widgets = [None] * len(self._tab_builders)
         self._tab_built = [False] * len(self._tab_builders)
 
-        # Restore previously selected tab preference
+        # Restore previously selected tab preference. Tabs 2..8 shifted by one
+        # when Model Variants was inserted after AI Providers; the old last
+        # tab (Model Variants at 8) now lives at index 2.
         saved_index = self.config.get("last_active_tab", 0)
+        try:
+            saved_index = int(saved_index)
+        except (TypeError, ValueError):
+            saved_index = 0
+        if saved_index == 8:
+            saved_index = 2
+        elif 2 <= saved_index <= 7:
+            saved_index += 1
         if not (0 <= saved_index < len(self._tab_builders)):
             saved_index = 0
 
@@ -502,9 +512,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.disabled_global_model_priority_data = list(c.get("disabled_global_model_priority", []))
         self.local_providers_data = (c.get("local_providers", {}) or {}).copy()
         self.custom_providers_data = (c.get("custom_providers", {}) or {}).copy()
-        self.thinking_levels_data = (c.get("thinking_levels", {}) or {}).copy()
         self.model_timeouts_data = (c.get("model_timeouts", {}) or {}).copy()
-        self.global_thinking_levels_data = (c.get("global_thinking_levels", {}) or {}).copy()
         self.global_model_timeouts_data = (c.get("global_model_timeouts", {}) or {}).copy()
         if hasattr(self, "model_variants_table"):
             self._load_model_variants_into_ui()
@@ -1194,8 +1202,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 data[new_name] = data.pop(old_name)
 
         for attr in ("model_fallbacks_data", "disabled_fallback_models_data",
-                     "thinking_levels_data", "model_timeouts_data",
-                     "global_thinking_levels_data", "global_model_timeouts_data",
+                     "model_timeouts_data", "global_model_timeouts_data",
                      "transient_skip_data"):
             _move_key(self, attr)
 
@@ -1493,11 +1500,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["model_fallbacks"] = self.model_fallbacks_data
             new_config["disabled_fallback_models"] = self.disabled_fallback_models_data
             new_config["transient_skip_providers"] = getattr(self, "transient_skip_data", {})
-            new_config["thinking_levels"] = self.thinking_levels_data
             new_config["model_timeouts"] = self.model_timeouts_data
             new_config["global_model_priority"] = self.global_model_priority_data
             new_config["disabled_global_model_priority"] = self.disabled_global_model_priority_data
-            new_config["global_thinking_levels"] = self.global_thinking_levels_data
             new_config["global_model_timeouts"] = self.global_model_timeouts_data
             new_config["model_variants"] = self._collect_model_variants()
             new_config["use_global_model_priority"] = self.advanced_fallback_cb.isChecked()
@@ -2122,11 +2127,16 @@ def check_support_on_update():
                 def _open_support():
                     if not mw or not mw.col:
                         return
-                    # Open dialog and switch to Support tab (Index 6)
+                    # Open dialog and switch to Support tab (by name, so
+                    # reordering tabs cannot break this).
                     on_config_dialog(mw)
                     def _switch_tab():
                         if _config_dialog_instance:
-                            _config_dialog_instance.tabs.setCurrentIndex(6)
+                            tabs = _config_dialog_instance.tabs
+                            for i in range(tabs.count()):
+                                if tabs.tabText(i) == "Support Authors":
+                                    tabs.setCurrentIndex(i)
+                                    break
                     QTimer.singleShot(1000, _switch_tab) # Wait for UI to stabilize
                 
                 QTimer.singleShot(5000, _open_support)

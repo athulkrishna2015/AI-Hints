@@ -267,7 +267,7 @@ class GlobalDialogTableTests(unittest.TestCase):
                     table.horizontalHeader().sectionResizeMode(c),
                     _qw.QHeaderView.ResizeMode.Interactive,
                 )
-        self.assertEqual(dlg.enabled_table.columnCount(), 5)
+        self.assertEqual(dlg.enabled_table.columnCount(), 4)
         self.assertEqual(dlg.enabled_table.rowCount(), 2)
         self.assertEqual(dlg.disabled_table.rowCount(), 0)
         self.assertEqual(dlg.enabled_table.item(0, 0).text(), "Openai")
@@ -330,46 +330,36 @@ class GlobalDialogTableTests(unittest.TestCase):
         self.assertEqual(self._order(dlg), [("b", "m2"), ("a", "m1")])
         self.assertEqual(dlg.get_ordered_list(), [("b", "m2"), ("a", "m1")])
 
-    def _make_dialog_with_values(self, rows, thinking=None, timeouts=None, per_thinking=None, per_timeouts=None):
+    def _make_dialog_with_values(self, rows, timeouts=None, per_timeouts=None):
         parent = QtWidgets.QWidget()
         parent.config = {}
         parent.custom_providers_data = {}
         parent.disabled_global_model_priority_data = []
-        parent.global_thinking_levels_data = thinking or {}
         parent.global_model_timeouts_data = timeouts or {}
-        parent.thinking_levels_data = per_thinking or {}
         parent.model_timeouts_data = per_timeouts or {}
         return GlobalFallbackOrderDialog(parent, rows)
 
-    def test_thinking_timeout_seeded_from_per_provider(self):
+    def test_timeout_seeded_from_per_provider(self):
         dlg = self._make_dialog_with_values(
             [("openai", "gpt-4o")],
-            per_thinking={"openai": {"gpt-4o": "high"}},
             per_timeouts={"openai": {"gpt-4o": 45}},
         )
-        levels = dlg.get_global_thinking_levels()
-        timeouts = dlg.get_global_model_timeouts()
-        self.assertEqual(levels["openai"]["gpt-4o"], "high")
-        self.assertEqual(timeouts["openai"]["gpt-4o"], 45)
+        self.assertEqual(dlg.get_global_model_timeouts()["openai"]["gpt-4o"], 45)
 
-    def test_saved_global_values_win_over_per_provider(self):
+    def test_saved_global_timeout_wins_over_per_provider(self):
         dlg = self._make_dialog_with_values(
             [("openai", "gpt-4o")],
-            thinking={"openai": {"gpt-4o": "low"}},
-            per_thinking={"openai": {"gpt-4o": "high"}},
+            timeouts={"openai": {"gpt-4o": 12}},
+            per_timeouts={"openai": {"gpt-4o": 45}},
         )
-        self.assertEqual(dlg.get_global_thinking_levels()["openai"]["gpt-4o"], "low")
+        self.assertEqual(dlg.get_global_model_timeouts()["openai"]["gpt-4o"], 12)
 
     def test_edited_widgets_saved(self):
         dlg = self._make_dialog([("openai", "gpt-4o")])
         dlg._ensure_visible_widgets()
-        combo = dlg.enabled_table.cellWidget(0, 2)
-        spin = dlg.enabled_table.cellWidget(0, 3)
-        self.assertIsNotNone(combo)
+        spin = dlg.enabled_table.cellWidget(0, 2)
         self.assertIsNotNone(spin)
-        combo.setCurrentText("medium")
         spin.setValue(90)
-        self.assertEqual(dlg.get_global_thinking_levels()["openai"]["gpt-4o"], "medium")
         self.assertEqual(dlg.get_global_model_timeouts()["openai"]["gpt-4o"], 90)
 
     def test_header_click_sorts_provider_asc_then_desc(self):
@@ -442,7 +432,7 @@ class GlobalDialogTableTests(unittest.TestCase):
         for row, pair in enumerate(self._order(dlg)):
             self.assertEqual(
                 tuple(dlg.enabled_table.item(row, column).data(Qt.ItemDataRole.UserRole)
-                      for column in (0, 1, 4)),
+                      for column in (0, 1, 3)),
                 (pair, pair, pair),
             )
         self.assertEqual(
@@ -560,7 +550,6 @@ class GlobalDialogTableTests(unittest.TestCase):
 
             get_ordered_list = real_dlg.get_ordered_list
             get_disabled_list = real_dlg.get_disabled_list
-            get_global_thinking_levels = real_dlg.get_global_thinking_levels
             get_global_model_timeouts = real_dlg.get_global_model_timeouts
 
         fake = FakeDialog()
@@ -660,7 +649,6 @@ class ProviderDialogHeaderSortTests(unittest.TestCase):
     def _make_dialog(self):
         class FakeSettingsDialog(QtWidgets.QWidget):
             disabled_fallback_models_data = {}
-            thinking_levels_data = {"p": {"m-high": "high", "m-low": "low"}}
             model_timeouts_data = {"p": {"m-slow": 42}}
 
         parent = FakeSettingsDialog()
@@ -676,21 +664,14 @@ class ProviderDialogHeaderSortTests(unittest.TestCase):
         dlg._on_header_clicked(0)
         names = self._names(dlg)
         self.assertEqual(names, sorted(names, key=lambda n: (normalized_model_key(n), n.casefold())))
-        self.assertEqual(dlg.get_thinking_levels()["m-high"], "high")
-        self.assertEqual(dlg.get_thinking_levels()["m-low"], "low")
         self.assertEqual(dlg.get_model_timeouts()["m-slow"], 42)
         dlg._on_header_clicked(0)
         self.assertEqual(self._names(dlg), list(reversed(names)))
 
-    def test_header_click_sorts_thinking_then_timeout(self):
+    def test_header_click_sorts_timeout(self):
         dlg = self._make_dialog()
         dlg._on_header_clicked(1)
-        self.assertEqual(
-            self._names(dlg),
-            ["m-zed", "m-slow", "m-low", "m-high"],
-            self._names(dlg),
-        )
-        dlg._on_header_clicked(2)
+        # Only m-slow has an override (42s); the other rows all use 0.
         self.assertEqual(self._names(dlg)[-1], "m-slow")
 
     def _names_in(self, dlg, table):

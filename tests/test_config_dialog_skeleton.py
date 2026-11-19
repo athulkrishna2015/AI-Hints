@@ -165,6 +165,11 @@ class ConfigDialogLoadSaveContractTests(unittest.TestCase):
             dialog_src = fh.read()
         self.assertIn('name == "Model Variants"', dialog_src)
         self.assertIn("self._deferred_load_done", dialog_src)
+        providers = dialog_src.index('("AI Providers", self._create_providers_tab)')
+        variants = dialog_src.index('("Model Variants", self._create_model_variants_tab)')
+        logs = dialog_src.index('("Logs", self._create_log_tab)')
+        self.assertLess(providers, variants, "Model Variants must follow AI Providers")
+        self.assertLess(variants, logs, "Logs must remain the last tab")
         load = next(
             node for node in ast.walk(ast.parse(mixin))
             if isinstance(node, ast.FunctionDef)
@@ -175,6 +180,15 @@ class ConfigDialogLoadSaveContractTests(unittest.TestCase):
             {n.func.attr for n in ast.walk(load)
              if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)},
         )
+
+    def test_fallback_dialogs_have_no_thinking_column(self):
+        """Thinking is configured in Model Variants, not the fallback tables."""
+        path = os.path.join(PROJECT_ROOT, "addon", "config_ui", "tab_providers.py")
+        with open(path, "r", encoding="utf-8") as fh:
+            source = fh.read()
+        self.assertNotIn('"Thinking Level"', source)
+        self.assertNotIn("_g_thinking", source)
+        self.assertNotIn("_thinking_levels", source)
 
     def test_load_config_into_ui_contains_no_nested_methods(self):
         """A nested ``def`` here means a method was spliced into the body."""

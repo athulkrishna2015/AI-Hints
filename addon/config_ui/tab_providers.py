@@ -235,11 +235,9 @@ class FallbackPriorityDialog(QDialog):
                 provider, model = self._row_pair(table, row)
                 if provider != old_name:
                     continue
-                for col in (0, 1, 4):
+                for col in (0, 1, 3):
                     table.item(row, col).setData(Qt.ItemDataRole.UserRole, (new_name, model))
                 self._render_row(table, row, new_name, model)
-        if old_name in self._g_thinking:
-            self._g_thinking.setdefault(new_name, {}).update(self._g_thinking.pop(old_name))
         if old_name in self._g_timeouts:
             self._g_timeouts.setdefault(new_name, {}).update(self._g_timeouts.pop(old_name))
 
@@ -676,23 +674,22 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
         layout.addWidget(info_label)
 
-        # Columns: [Model Name] [Thinking Level] [Timeout]
-        headers = ["Model Name", "Thinking Level", "Timeout (s)"]
-        self._build_split_lists(layout, headers, {0: 320, 1: 120, 2: 100},
+        # Columns: [Model Name] [Timeout] — thinking settings now live in
+        # the Model Variants tab.
+        headers = ["Model Name", "Timeout (s)"]
+        self._build_split_lists(layout, headers, {0: 320, 1: 120},
                                 "Enabled priority (first row is Active):",
                                 "Disabled / available:",
                                 "Search models...")
 
         disabled_models = getattr(parent, "disabled_fallback_models_data", {}).get(provider, [])
         fallback_statuses = PERSISTENT_TEST_STATUSES.get(f"{provider}_fallback_statuses", {})
-        thinking_levels = getattr(parent, "thinking_levels_data", {}).get(provider, {})
         model_timeouts = getattr(parent, "model_timeouts_data", {}).get(provider, {})
 
         # Authoritative per-model values. The combo/spin cell widgets are
         # created lazily for visible rows only (providers like OpenRouter ship
         # 400+ models), so these dicts — not the widgets — are the source of
         # truth and are harvested back before every structural/read operation.
-        self._thinking_levels = dict(thinking_levels or {})
         self._model_timeouts = dict(model_timeouts or {})
 
         # Build the initial lists: active model first in Enabled, then the
@@ -819,7 +816,6 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             row = table.rowCount()
             table.insertRow(row)
         # Seed authoritative values; cell widgets are created lazily.
-        self._thinking_levels.setdefault(model_name, "off")
         self._model_timeouts.setdefault(model_name, 0)
 
         # Column 0: Model name with checkbox
@@ -854,17 +850,12 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             return
         name = item.data(Qt.ItemDataRole.UserRole)
 
-        combo = NoWheelComboBox()
-        combo.addItems(["off", "low", "medium", "high"])
-        combo.setCurrentText(self._thinking_levels.get(name, "off"))
-        table.setCellWidget(row, 1, combo)
-
         spin = QSpinBox()
         spin.setRange(0, 300)
         spin.setSuffix(" s")
         spin.setToolTip("Request timeout in seconds. 0 = use provider/global timeout.")
         spin.setValue(self._model_timeouts.get(name, 0))
-        table.setCellWidget(row, 2, spin)
+        table.setCellWidget(row, 1, spin)
 
     def _visible_row_range(self, table):
         count = table.rowCount()
@@ -912,10 +903,7 @@ class FallbackOrderDialog(FallbackPriorityDialog):
                 name = item.data(Qt.ItemDataRole.UserRole)
                 if not name:
                     continue
-                combo = table.cellWidget(i, 1)
-                if combo is not None:
-                    self._thinking_levels[name] = combo.currentText()
-                spin = table.cellWidget(i, 2)
+                spin = table.cellWidget(i, 1)
                 if spin is not None:
                     self._model_timeouts[name] = spin.value()
 
@@ -925,10 +913,7 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         if not item:
             return
         name = item.data(Qt.ItemDataRole.UserRole)
-        combo = table.cellWidget(row, 1)
-        if combo is not None:
-            combo.setCurrentText(self._thinking_levels.get(name, "off"))
-        spin = table.cellWidget(row, 2)
+        spin = table.cellWidget(row, 1)
         if spin is not None:
             spin.setValue(self._model_timeouts.get(name, 0))
 
@@ -1045,10 +1030,7 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         self._ensure_visible_widgets()
 
     def _sort_entry_key(self, table, col):
-        ranks = {"off": 0, "low": 1, "medium": 2, "high": 3}
         if col == 1:
-            return lambda name, row: ranks.get(self._thinking_levels.get(name, "off"), 0)
-        if col == 2:
             return lambda name, row: self._model_timeouts.get(name, 0)
         return lambda name, row: (normalized_model_key(name), (name or "").casefold())
 
@@ -1362,7 +1344,6 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         return {
             "name": name,
             "checked": item.checkState() == Qt.CheckState.Checked if item else True,
-            "think": self._thinking_levels.get(name, "off"),
             "timeout": self._model_timeouts.get(name, 0),
         }
 
@@ -1610,7 +1591,6 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         for table, rows in by_table.items():
             for i in sorted(set(rows), reverse=True):
                 name = table.item(i, 0).data(Qt.ItemDataRole.UserRole)
-                self._thinking_levels.pop(name, None)
                 self._model_timeouts.pop(name, None)
                 table.removeRow(i)
                 removed += 1
@@ -1619,7 +1599,6 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         tooltip(f"Removed {removed} model(s).")
 
     def restore_defaults(self):
-        self._thinking_levels = {}
         self._model_timeouts = {}
         defaults = MODEL_FALLBACKS.get(self.provider, [])
         full_list = []
@@ -1672,11 +1651,6 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             for i in range(table.rowCount())
             if table.item(i, 0)
         }
-
-    def get_thinking_levels(self):
-        self._harvest_widgets()
-        names = self._current_model_names()
-        return {k: v for k, v in self._thinking_levels.items() if k in names}
 
     def get_model_timeouts(self):
         self._harvest_widgets()
@@ -1776,13 +1750,11 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
         layout.addWidget(info_label)
 
-        self._g_thinking = {p: dict(m) for p, m in (getattr(parent, "global_thinking_levels_data", {}) or {}).items() if isinstance(m, dict)}
         self._g_timeouts = {p: dict(m) for p, m in (getattr(parent, "global_model_timeouts_data", {}) or {}).items() if isinstance(m, dict)}
-        self._per_thinking = getattr(parent, "thinking_levels_data", {}) or {}
         self._per_timeouts = getattr(parent, "model_timeouts_data", {}) or {}
 
-        headers = ["Provider", "Model", "Thinking Level", "Timeout (s)", "Status"]
-        self._build_split_lists(layout, headers, {0: 150, 1: 280, 2: 110, 3: 90, 4: 160},
+        headers = ["Provider", "Model", "Timeout (s)", "Status"]
+        self._build_split_lists(layout, headers, {0: 150, 1: 280, 2: 90, 3: 160},
                                 "Enabled priority order:",
                                 "Disabled / available:",
                                 "Search providers/models...")
@@ -1913,11 +1885,8 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         if col == 1:
             return lambda pair, row: (normalized_model_key(pair[1]), pair[1].casefold())
         if col == 2:
-            ranks = {"off": 0, "low": 1, "medium": 2, "high": 3}
-            return lambda pair, row: ranks.get(str(self._g_thinking.get(pair[0], {}).get(pair[1], "off")), 0)
-        if col == 3:
             return lambda pair, row: int(self._g_timeouts.get(pair[0], {}).get(pair[1], 0) or 0)
-        return lambda pair, row: table.item(row, 4).text().casefold()
+        return lambda pair, row: table.item(row, 3).text().casefold()
 
     def _capture_rows(self, table):
         data = []
@@ -1931,10 +1900,10 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 "checked": item.checkState() == Qt.CheckState.Checked,
                 "hidden": table.isRowHidden(r),
                 "selected": item.isSelected(),
-                "texts": {c: table.item(r, c).text() for c in (0, 1, 4)},
-                "tips": {c: table.item(r, c).toolTip() for c in (0, 1, 4)},
-                "bg": {c: table.item(r, c).background() for c in (0, 1, 4)},
-                "fg": {c: table.item(r, c).foreground() for c in (0, 1, 4)},
+                "texts": {c: table.item(r, c).text() for c in (0, 1, 3)},
+                "tips": {c: table.item(r, c).toolTip() for c in (0, 1, 3)},
+                "bg": {c: table.item(r, c).background() for c in (0, 1, 3)},
+                "fg": {c: table.item(r, c).foreground() for c in (0, 1, 3)},
             })
         return data
 
@@ -1942,14 +1911,14 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         p, m = d["pair"]
         row = table.rowCount()
         table.insertRow(row)
-        for col in (0, 1, 4):
+        for col in (0, 1, 3):
             item = QTableWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, (p, m))
             if col == 0:
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             table.setItem(row, col, item)
         table.item(row, 0).setCheckState(Qt.CheckState.Checked if d["checked"] else Qt.CheckState.Unchecked)
-        for col in (0, 1, 4):
+        for col in (0, 1, 3):
             item = table.item(row, col)
             item.setText(d["texts"][col])
             item.setToolTip(d["tips"][col])
@@ -2061,10 +2030,6 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             self._moving_rows = False
 
     def _seed_row_values(self, provider, model):
-        think = self._g_thinking.setdefault(provider, {})
-        if model not in think:
-            per = self._per_thinking.get(provider, {}) or {}
-            think[model] = per.get(model, "off") if isinstance(per, dict) else "off"
         timeouts = self._g_timeouts.setdefault(provider, {})
         if model not in timeouts:
             per = self._per_timeouts.get(provider, {}) or {}
@@ -2086,7 +2051,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         texts = {
             0: self._provider_display(provider),
             1: f"{new_mark}{model}",
-            4: f"({core}){dep_mark}{missing_mark}" if (core or dep_mark or missing_mark) else "",
+            3: f"({core}){dep_mark}{missing_mark}" if (core or dep_mark or missing_mark) else "",
         }
         if bl:
             tt = "This model is currently on cooldown due to recent failures."
@@ -2111,7 +2076,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         try:
             row = table.rowCount() if row is None else row
             table.insertRow(row)
-            for col in (0, 1, 4):
+            for col in (0, 1, 3):
                 item = QTableWidgetItem()
                 item.setData(Qt.ItemDataRole.UserRole, (provider, model))
                 if col == 0:
@@ -2132,10 +2097,6 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             # yet; a later show/resize will materialize it.
             return
         provider, model = pair
-        combo = NoWheelComboBox()
-        combo.addItems(["off", "low", "medium", "high"])
-        combo.setCurrentText(str(self._g_thinking.get(provider, {}).get(model, "off")))
-        table.setCellWidget(row, 2, combo)
         spin = QSpinBox()
         spin.setRange(0, 300)
         spin.setSuffix(" s")
@@ -2144,7 +2105,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             spin.setValue(int(self._g_timeouts.get(provider, {}).get(model, 0) or 0))
         except (TypeError, ValueError):
             spin.setValue(0)
-        table.setCellWidget(row, 3, spin)
+        table.setCellWidget(row, 2, spin)
 
     def _ensure_table_widgets(self, table):
         count = table.rowCount()
@@ -2178,28 +2139,21 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
     def _harvest_widgets(self):
         for table in self._tables():
             for r in range(table.rowCount()):
-                combo = table.cellWidget(r, 2)
-                spin = table.cellWidget(r, 3)
-                if combo is None and spin is None:
+                spin = table.cellWidget(r, 2)
+                if spin is None:
                     continue
                 pair = self._row_pair_opt(table, r)
                 if pair is None:
                     continue
                 provider, model = pair
-                if combo is not None:
-                    self._g_thinking.setdefault(provider, {})[model] = combo.currentText()
-                if spin is not None:
-                    self._g_timeouts.setdefault(provider, {})[model] = spin.value()
+                self._g_timeouts.setdefault(provider, {})[model] = spin.value()
 
     def _refresh_row_widgets(self, table, row):
         pair = self._row_pair_opt(table, row)
         if pair is None:
             return
         provider, model = pair
-        combo = table.cellWidget(row, 2)
-        if combo is not None:
-            combo.setCurrentText(str(self._g_thinking.get(provider, {}).get(model, "off")))
-        spin = table.cellWidget(row, 3)
+        spin = table.cellWidget(row, 2)
         if spin is not None:
             try:
                 spin.setValue(int(self._g_timeouts.get(provider, {}).get(model, 0) or 0))
@@ -2220,12 +2174,6 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 if pair is not None:
                     pairs.add(pair)
         return pairs
-
-    def get_global_thinking_levels(self):
-        self._harvest_widgets()
-        pairs = self._all_pairs()
-        return {p: {m: v for m, v in models.items() if (p, m) in pairs}
-                for p, models in self._g_thinking.items() if isinstance(models, dict)}
 
     def get_global_model_timeouts(self):
         self._harvest_widgets()
@@ -2432,7 +2380,6 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             for i in reversed([j for j in range(t.rowCount()) if self._row_pair(t, j)[0] == provider]):
                 t.removeRow(i)
                 removed += 1
-        self._g_thinking.pop(provider, None)
         self._g_timeouts.pop(provider, None)
         self._update_counts()
         tooltip(f"Removed {removed} model(s) for {provider}.")
@@ -2512,8 +2459,6 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             for i in sorted(set(rows), reverse=True):
                 provider, model = self._row_pair(table, i)
                 table.removeRow(i)
-                if provider in self._g_thinking and model in self._g_thinking[provider]:
-                    del self._g_thinking[provider][model]
                 if provider in self._g_timeouts and model in self._g_timeouts[provider]:
                     del self._g_timeouts[provider][model]
                 removed += 1
@@ -2531,7 +2476,6 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             for f in fallbacks:
                 if f != active_m:
                     defaults.append((p, f))
-        self._g_thinking = {}
         self._g_timeouts = {}
         self.populate_list(defaults)
         self._ensure_visible_widgets()
@@ -2728,7 +2672,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 def _update_testing(prov=provider, name=model):
                     table, row = self._find_row(prov, name)
                     if row >= 0:
-                        table.item(row, 4).setText(f"(⏳ Testing...)")
+                        table.item(row, 3).setText(f"(⏳ Testing...)")
                 mw.taskman.run_on_main(_update_testing)
                 
                 status = "✅ Working"
@@ -3006,9 +2950,9 @@ class ProvidersTabMixin:
             self.disabled_global_model_priority_data = dlg.get_disabled_list()
             self.global_model_priority_data = dlg.get_ordered_list() + self.disabled_global_model_priority_data
 
-            # This row's own thinking/timeout values live in the global
-            # scope and override the per-provider ones at runtime.
-            self.global_thinking_levels_data = dlg.get_global_thinking_levels()
+            # This row's own timeout value lives in the global scope and
+            # overrides the per-provider one at runtime. Thinking settings
+            # are configured in the Model Variants tab.
             self.global_model_timeouts_data = dlg.get_global_model_timeouts()
             tooltip("Advanced fallback priority and disabled states updated. Click Save to apply.")
 
