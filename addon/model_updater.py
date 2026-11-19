@@ -149,6 +149,7 @@ def run_auto_update(silent: bool = False) -> Dict[str, Any]:
 
         providers = _providers_to_update(config)
         changed = False
+        changed_keys = set()
         removed_total = 0
         for provider in providers:
             try:
@@ -178,6 +179,7 @@ def run_auto_update(silent: bool = False) -> Dict[str, Any]:
                     fb[provider] = new_list
                     config["model_fallbacks"] = fb
                     changed = True
+                    changed_keys.add("model_fallbacks")
                     removed_total += len(before) - len(new_list)
 
             # Per-provider disabled fallbacks
@@ -191,6 +193,7 @@ def run_auto_update(silent: bool = False) -> Dict[str, Any]:
                     dfb[provider] = new_list
                     config["disabled_fallback_models"] = dfb
                     changed = True
+                    changed_keys.add("disabled_fallback_models")
 
             # Global fallback priority (list of [provider, model] pairs)
             for key in ("global_model_priority", "disabled_global_model_priority"):
@@ -205,11 +208,14 @@ def run_auto_update(silent: bool = False) -> Dict[str, Any]:
                     if new_list != before:
                         config[key] = new_list
                         changed = True
+                        changed_keys.add(key)
                         removed_total += len(before) - len(new_list)
 
             summary["providers"] += 1
 
-        config["last_model_update"] = time.time()
+        # A run where every fetch failed must not consume the daily slot.
+        if summary["providers"] > 0:
+            config["last_model_update"] = time.time()
 
         # Marshal the write to the main thread so addonManager is never
         # touched from a worker thread.
@@ -218,10 +224,18 @@ def run_auto_update(silent: bool = False) -> Dict[str, Any]:
 
         def _save():
             try:
+                # Re-read the on-disk config: this fetch loop can take minutes,
+                # and the user may have saved settings while it ran. Only the
+                # keys this updater actually changed may be overwritten.
+                fresh = read_meta_config() or {}
+                for key in changed_keys:
+                    fresh[key] = config[key]
+                if "last_model_update" in config:
+                    fresh["last_model_update"] = config["last_model_update"]
                 # write_pretty_config_preserve_keys swallows exceptions
                 # internally, so verify success by re-reading the persisted
                 # last_model_update timestamp afterwards.
-                write_pretty_config_preserve_keys(_addon_package(), config)
+                write_pretty_config_preserve_keys(_addon_package(), fresh)
                 persisted = read_meta_config() or {}
                 if persisted.get("last_model_update") == config.get("last_model_update"):
                     write_ok["ok"] = True

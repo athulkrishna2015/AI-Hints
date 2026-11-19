@@ -16,7 +16,7 @@ from addon.ai_client import (
     LAST_FETCH_ERROR,
     ANTHROPIC_API_VERSION,
 )
-from addon.model_updater import _providers_to_update
+from addon.model_updater import _providers_to_update, run_auto_update
 
 
 def _http_error(code: int) -> urllib.error.HTTPError:
@@ -302,6 +302,50 @@ class TestGeminiStableApiVersion(unittest.TestCase):
         self.assertTrue(urls[0].startswith(
             "https://generativelanguage.googleapis.com/v1/models"))
         self.assertNotIn("v1beta", urls[0])
+
+
+class TestModelTestDoesNotParkProvider(unittest.TestCase):
+    def test_zero_quota_during_model_test_is_not_persisted(self):
+        from addon.logger import log_context
+
+        PROVIDER_ZERO_QUOTA_UNTIL.pop("gemini", None)
+        client = AIClient({
+            "api_keys": {"gemini": "test-key"},
+            "models": {"gemini": "gemini-2.5-flash"},
+        })
+        body = json.dumps({"error": {"details": [{
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            "metadata": {"quota_limit_value": "0"},
+        }]}}).encode()
+        err = urllib.error.HTTPError("http://test", 429, "Too Many Requests", {}, io.BytesIO(body))
+        previous = getattr(log_context, "source", None)
+        log_context.source = "model_test"
+        try:
+            with patch.object(AIClient, "_timed_post", side_effect=err):
+                try:
+                    client._call_gemini("sys", "prompt")
+                except Exception:
+                    pass
+        finally:
+            log_context.source = previous
+        self.assertNotIn(
+            "gemini", PROVIDER_ZERO_QUOTA_UNTIL,
+            "a diagnostic test must not park real generation for 30 minutes",
+        )
+
+
+class TestAutoUpdateThrottle(unittest.TestCase):
+    def test_failed_update_does_not_advance_daily_timestamp(self):
+        config = {"auto_update_models": True, "last_model_update": 100.0}
+
+        with patch("addon.model_updater.read_meta_config", return_value=config), \
+             patch("addon.model_updater.write_pretty_config_preserve_keys"), \
+             patch.object(AIClient, "fetch_models", return_value=[]):
+            summary = run_auto_update(silent=True)
+
+        self.assertEqual(summary["providers"], 0)
+        self.assertEqual(config.get("last_model_update"), 100.0,
+                         "a run where every fetch failed must not consume the daily slot")
 
 
 if __name__ == "__main__":

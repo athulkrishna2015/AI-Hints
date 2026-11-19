@@ -167,13 +167,15 @@ jobs:
         if: steps.ref.outputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.ref.outputs.ref }}
+          VERSION: ${{ steps.version.outputs.version }}
+          ASSET: ${{ steps.build.outputs.ankiaddon }}
         run: |
           set -euo pipefail
-          TAG="${{ steps.ref.outputs.ref }}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "AI-Hints ${{ steps.version.outputs.version }}" --generate-notes
+            gh release create "$TAG" --title "AI-Hints $VERSION" --generate-notes
           fi
-          gh release upload "$TAG" "${{ steps.build.outputs.ankiaddon }}" --clobber
+          gh release upload "$TAG" "$ASSET" --clobber
 
       - name: Upload to AnkiWeb
         if: steps.ref.outputs.dry_run != 'true'

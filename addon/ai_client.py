@@ -29,7 +29,7 @@ ADDON_PATH = os.path.dirname(__file__)
 # worker threads). Written atomically via a temp file + os.replace so a
 # reader never sees a partial/empty file. Stored in the profile data dir
 # (migrated from the addon folder on first use) so it survives addon updates.
-_blacklist_lock = threading.Lock()
+_blacklist_lock = threading.RLock()
 
 BLACKLIST_FILE = os.path.join(ADDON_PATH, "blacklist.json")
 _blacklist_path_resolved = False
@@ -79,6 +79,11 @@ def _extract_system_text(data: Any) -> str:
         sys = data.get("system")
         if isinstance(sys, str):
             return sys
+        if isinstance(sys, list):
+            # Anthropic sends system blocks (with cache_control).
+            for block in sys:
+                if isinstance(block, dict) and isinstance(block.get("text"), str):
+                    return block["text"]
         si = data.get("system_instruction")
         if isinstance(si, dict):
             parts = si.get("parts")
@@ -110,6 +115,13 @@ def _elide_system(data: Any, sys_hash: str) -> Any:
                 out["messages"].append(m)
     if isinstance(out.get("system"), str):
         out["system"] = marker
+    elif isinstance(out.get("system"), list):
+        out["system"] = [
+            dict(block, text=marker)
+            if isinstance(block, dict) and isinstance(block.get("text"), str)
+            else block
+            for block in out["system"]
+        ]
     if isinstance(out.get("system_instruction"), dict):
         out["system_instruction"] = {"parts": [{"text": marker}]}
     return out
@@ -1388,6 +1400,11 @@ class AIClient:
         return {"hints": [], "options": []}
 
     def _call_openai_compatible(self, provider: str, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
+        # Bind once for the whole function: both the local-provider and the
+        # built-in error paths check the model-test context. Importing it only
+        # in the latter made `log_context` a local name and raised
+        # UnboundLocalError in the former.
+        from .logger import log_context
         models = [override_model] if override_model else self._models_for_provider(provider)
         
         base_url = "https://api.openai.com/v1"
@@ -1482,6 +1499,9 @@ class AIClient:
                             }
                             if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "sambanova", "cerebras", "nvidia"]:
                                 data["response_format"] = {"type": "json_object"}
+                            # Local and named-local endpoints honour the same
+                            # per-model overrides as built-in providers.
+                            self._apply_variant_openai(data, provider, local_model_name)
                             try:
                                 logger.debug(f"AI-Hints {provider}/{local_model_name} request: {json.dumps(_compact_request_data(data))}")
                                 _log_full_request(provider, local_model_name, data)
@@ -1490,6 +1510,7 @@ class AIClient:
                                 content = self._extract_content(result)
                                 logger.debug(f"AI-Hints {provider}/{local_model_name} response: {content[:2000]}")
                                 _log_full_response(provider, local_model_name, content)
+                                self._log_usage(result)
                                 parsed = self._parse_json_result(content)
                                 if self._result_is_corrupt(parsed):
                                     logger.warning(f"AI-Hints: discarding corrupt {provider} model '{local_model_name}' output containing U+FFFD replacement characters.")
@@ -1572,7 +1593,6 @@ class AIClient:
                 except urllib.error.HTTPError as e:
                     body = self._read_http_error(e)
                     logger.error(f"AI-Hints Error ({provider}, model {model}): {e} - {body}")
-                    from .logger import log_context
                     if getattr(log_context, "source", None) == "model_test":
                         if idx == len(available_keys) - 1:
                             raise Exception(f"{e} - {body}")
@@ -1795,9 +1815,12 @@ class AIClient:
                 except urllib.error.HTTPError as e:
                     body = self._read_http_error(e)
                     logger.error(f"AI-Hints Error (Gemini, model {model}): {e} - {body}")
-                    self._note_zero_quota("gemini", body)
                     from .logger import log_context
-                    if getattr(log_context, "source", None) == "model_test":
+                    is_model_test = getattr(log_context, "source", None) == "model_test"
+                    # A diagnostic test must not park Gemini for real generations.
+                    if not is_model_test:
+                        self._note_zero_quota("gemini", body)
+                    if is_model_test:
                         if idx == len(available_keys) - 1:
                             raise Exception(f"{e} - {body}")
                         else:
@@ -2088,6 +2111,7 @@ class AIClient:
         which reasoning models may use to carry the JSON. Returns the first
         parse that yields usable hints/options, or the (empty) content parse.
         """
+        self._log_usage(result)
         parsed = self._parse_json_result(self._extract_content(result))
         if self._result_is_corrupt(parsed):
             logger.warning("AI-Hints: discarding corrupt model output containing U+FFFD replacement characters; will retry with a fallback model.")
@@ -2315,16 +2339,17 @@ class AIClient:
             logger.info(f"AI-Hints: Skipping blacklist for {provider}/{model} ({api_key}) because network appears offline.")
             return
 
-        streak_key = (provider, model, api_key)
-        streak = RATE_LIMIT_STREAK.get(streak_key, 0) + 1
-        RATE_LIMIT_STREAK[streak_key] = streak
-        if delay_seconds is None:
-            # Apply streak-based cooldown for ALL failures to prevent repeated lag
-            delay_seconds = self._cooldown_seconds() * streak
-            
-        expiry = time.time() + delay_seconds
-        FAILED_COMBOS_CACHE[streak_key] = expiry
-        self._save_blacklist()
+        with _blacklist_lock:
+            streak_key = (provider, model, api_key)
+            streak = RATE_LIMIT_STREAK.get(streak_key, 0) + 1
+            RATE_LIMIT_STREAK[streak_key] = streak
+            if delay_seconds is None:
+                # Apply streak-based cooldown for ALL failures to prevent repeated lag
+                delay_seconds = self._cooldown_seconds() * streak
+
+            expiry = time.time() + delay_seconds
+            FAILED_COMBOS_CACHE[streak_key] = expiry
+            self._save_blacklist()
         
         # Format for log
         mins, secs = divmod(int(delay_seconds), 60)
@@ -2337,20 +2362,21 @@ class AIClient:
     def _on_combo_success(self, provider: str, model: str, api_key: str):
         if not api_key:
             api_key = ""
-        key = (provider, model, api_key)
-        needs_save = False
-        if key in RATE_LIMIT_STREAK:
-            logger.debug(f"AI-Hints: Resetting failure streak for {provider}/{model} ({api_key}) after success.")
-            del RATE_LIMIT_STREAK[key]
-            needs_save = True
-        
-        # If it was blacklisted, remove it
-        if key in FAILED_COMBOS_CACHE:
-            del FAILED_COMBOS_CACHE[key]
-            needs_save = True
-            
-        if needs_save:
-            self._save_blacklist()
+        with _blacklist_lock:
+            key = (provider, model, api_key)
+            needs_save = False
+            if key in RATE_LIMIT_STREAK:
+                logger.debug(f"AI-Hints: Resetting failure streak for {provider}/{model} ({api_key}) after success.")
+                del RATE_LIMIT_STREAK[key]
+                needs_save = True
+
+            # If it was blacklisted, remove it
+            if key in FAILED_COMBOS_CACHE:
+                del FAILED_COMBOS_CACHE[key]
+                needs_save = True
+
+            if needs_save:
+                self._save_blacklist()
 
     def _is_combo_failed(self, provider: str, model: str, api_key: str) -> bool:
         if not api_key:
@@ -2359,21 +2385,22 @@ class AIClient:
         if not _BLACKLIST_LOADED:
             self._load_blacklist()
             
-        key = (provider, model, api_key)
-        expiry = FAILED_COMBOS_CACHE.get(key)
-        if expiry is None:
-            return False
-        
-        if time.time() > expiry:
-            # Cooldown expired, remove from cache
-            try:
-                del FAILED_COMBOS_CACHE[key]
-                self._save_blacklist()
-            except KeyError:
-                pass
-            return False
-            
-        return True
+        with _blacklist_lock:
+            key = (provider, model, api_key)
+            expiry = FAILED_COMBOS_CACHE.get(key)
+            if expiry is None:
+                return False
+
+            if time.time() > expiry:
+                # Cooldown expired, remove from cache
+                try:
+                    del FAILED_COMBOS_CACHE[key]
+                    self._save_blacklist()
+                except KeyError:
+                    pass
+                return False
+
+            return True
 
     def _is_model_failed(self, provider: str, model: str) -> bool:
         """Returns True if the model is failed for all keys under this provider."""
@@ -2484,9 +2511,11 @@ class AIClient:
         high-churn meta.json write path entirely.
         """
         try:
-            # Convert tuple keys to strings for JSON
-            expiries = {f"{p}|{m}|{k}": e for (p, m, k), e in FAILED_COMBOS_CACHE.items()}
-            streaks = {f"{p}|{m}|{k}": s for (p, m, k), s in RATE_LIMIT_STREAK.items()}
+            # Snapshot both dicts under the same lock that guards mutations,
+            # otherwise a batch worker can change their size mid-iteration.
+            with _blacklist_lock:
+                expiries = {f"{p}|{m}|{k}": e for (p, m, k), e in FAILED_COMBOS_CACHE.items()}
+                streaks = {f"{p}|{m}|{k}": s for (p, m, k), s in RATE_LIMIT_STREAK.items()}
 
             data = {
                 "combos_expiries": expiries,
@@ -2531,22 +2560,23 @@ class AIClient:
 
         try:
             now = time.time()
-            FAILED_COMBOS_CACHE.clear()
-            RATE_LIMIT_STREAK.clear()
+            with _blacklist_lock:
+                FAILED_COMBOS_CACHE.clear()
+                RATE_LIMIT_STREAK.clear()
 
-            if data.get("version") == 3:
-                expiries = data.get("combos_expiries", {})
-                streaks = data.get("streaks", {})
+                if data.get("version") == 3:
+                    expiries = data.get("combos_expiries", {})
+                    streaks = data.get("streaks", {})
 
-                for key, expiry in expiries.items():
-                    parts = key.split("|")
-                    if len(parts) == 3 and expiry > now:
-                        FAILED_COMBOS_CACHE[(parts[0], parts[1], parts[2])] = expiry
+                    for key, expiry in expiries.items():
+                        parts = key.split("|")
+                        if len(parts) == 3 and expiry > now:
+                            FAILED_COMBOS_CACHE[(parts[0], parts[1], parts[2])] = expiry
 
-                for key, streak in streaks.items():
-                    parts = key.split("|")
-                    if len(parts) == 3:
-                        RATE_LIMIT_STREAK[(parts[0], parts[1], parts[2])] = streak
+                    for key, streak in streaks.items():
+                        parts = key.split("|")
+                        if len(parts) == 3:
+                            RATE_LIMIT_STREAK[(parts[0], parts[1], parts[2])] = streak
         except Exception as e:
             logger.error(f"AI-Hints: Failed to parse blacklist: {e}")
 
@@ -2791,7 +2821,8 @@ class AIClient:
                 generation["temperature"] = variant["temperature"]
             if "max_tokens" in variant:
                 generation["maxOutputTokens"] = variant["max_tokens"]
-            if variant.get("thinking_budget"):
+            if "thinking_budget" in variant:
+                # 0 is a deliberate "no thinking" override, not "unset".
                 generation.setdefault("thinkingConfig", {})["thinkingBudget"] = variant["thinking_budget"]
             if variant.get("response_format") == "none":
                 generation.pop("responseMimeType", None)
@@ -3130,7 +3161,6 @@ class AIClient:
             pass
 
     def _extract_content(self, result: Any) -> str:
-        self._log_usage(result)
         if not isinstance(result, dict):
             return str(result)
         # Some gateways (e.g. the Cline BYOK API) wrap the chat completion in a

@@ -44,7 +44,7 @@ class ModelVariantsTabMixin:
     _EFFORTS = ["auto", "none", "minimal", "low", "medium", "high", "xhigh", "max"]
     _FORMATS = ["auto", "json_object", "none"]
     _CACHE = ["Yes", "No"]
-    _COLUMN_WIDTHS = [150, 340, 70, 90, 130, 120, 130, 70]
+    _COLUMN_WIDTHS = [130, 300, 60, 80, 110, 100, 110, 60]
 
     def _create_model_variants_tab(self):
         tab = QWidget()
@@ -53,21 +53,33 @@ class ModelVariantsTabMixin:
         info = QLabel(
             "Per-model overrides. Every fetched model is pre-filled; each row "
             "applies only to that provider/model pair. Leave a field empty (or "
-            "'auto' / 'Yes') to use the add-on default. Thinking budget is used "
-            "by Gemini and Anthropic (Anthropic also requires Max tokens above "
-            "the budget and a budget of at least 1024)."
+            "'auto' / 'Yes') to use the add-on default. Click a column header "
+            "to sort. Thinking budget is used by Gemini and Anthropic "
+            "(Anthropic also requires Max tokens above the budget and a budget "
+            "of at least 1024)."
         )
         info.setWordWrap(True)
         info.setStyleSheet("color: #666; font-size: 11px;")
         layout.addWidget(info)
 
+        search_layout = QHBoxLayout()
+        self.model_variant_search = QLineEdit()
+        self.model_variant_search.setPlaceholderText(
+            "Filter models by provider or name...")
+        self.model_variant_search.textChanged.connect(
+            self._apply_model_variant_filter)
+        self.model_variant_count = QLabel()
+        search_layout.addWidget(self.model_variant_search)
+        search_layout.addWidget(self.model_variant_count)
+        layout.addLayout(search_layout)
+
         table = QTableWidget(0, len(self._VARIANT_COLUMNS))
         self.model_variants_table = table
         table.setHorizontalHeaderLabels(self._VARIANT_COLUMNS)
         header = table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         for col, width in enumerate(self._COLUMN_WIDTHS):
             table.setColumnWidth(col, width)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.setToolTip(
             "Temp: sampling temperature. Max tokens: output cap. Reasoning effort: "
@@ -78,12 +90,25 @@ class ModelVariantsTabMixin:
         table.setItemDelegateForColumn(4, _VariantComboDelegate(self._EFFORTS, table))
         table.setItemDelegateForColumn(6, _VariantComboDelegate(self._FORMATS, table))
         table.setItemDelegateForColumn(7, _VariantComboDelegate(self._CACHE, table))
+        table.setSortingEnabled(True)
+        header.sortIndicatorChanged.connect(
+            lambda *_: QTimer.singleShot(0, self._apply_model_variant_filter))
         layout.addWidget(table)
 
         buttons = QHBoxLayout()
         add_btn = QPushButton("Add variant")
+        add_btn.setToolTip(
+            "Add a blank row for a provider/model that is not in the fetched "
+            "lists (for example a model you type manually). Fill in the "
+            "provider and model, then set the overrides you want."
+        )
         add_btn.clicked.connect(lambda: self._add_model_variant_row())
         remove_btn = QPushButton("Remove selected")
+        remove_btn.setToolTip(
+            "Remove the selected rows from this table. On Save their overrides "
+            "are deleted; the model stays in the provider's own priority and "
+            "fallback lists."
+        )
         remove_btn.clicked.connect(self._remove_selected_model_variant)
         refresh_btn = QPushButton("Refresh models from lists")
         refresh_btn.setToolTip(
@@ -98,17 +123,51 @@ class ModelVariantsTabMixin:
         layout.addLayout(buttons)
 
         table.itemChanged.connect(self._mark_model_variants_dirty)
-        self._load_model_variants_into_ui()
+        # load_config_into_ui() is the single init point when tabs are built
+        # eagerly. For tabs built lazily later, load on first construction.
+        if getattr(self, "_model_variants_loaded", False):
+            self._load_model_variants_into_ui()
         return tab
 
     def _mark_model_variants_dirty(self, *_args):
         self._dirty = True
 
+    def _apply_model_variant_filter(self):
+        """Hide non-matching rows; hidden rows still keep their values."""
+        table = getattr(self, "model_variants_table", None)
+        if table is None:
+            return
+        search = getattr(self, "model_variant_search", None)
+        term = search.text().strip().lower() if search is not None else ""
+        visible = 0
+        for row in range(table.rowCount()):
+            provider = table.item(row, 0)
+            model = table.item(row, 1)
+            text = f"{provider.text() if provider else ''} {model.text() if model else ''}".lower()
+            match = not term or term in text
+            table.setRowHidden(row, not match)
+            if match:
+                visible += 1
+        count = getattr(self, "model_variant_count", None)
+        if count is not None:
+            count.setText(f"{visible} of {table.rowCount()} shown")
+
     def _add_model_variant_row(self, provider="", model="", values=None):
         table = self.model_variants_table
+        # With sorting enabled, insertRow() can immediately move the new row,
+        # so writing to the original index lands on a different model.
+        was_sorting = table.isSortingEnabled()
+        table.setSortingEnabled(False)
         row = table.rowCount()
         table.insertRow(row)
         self._set_variant_row(row, provider, model, values)
+        table.setSortingEnabled(was_sorting)
+        if was_sorting:
+            header = table.horizontalHeader()
+            table.sortItems(header.sortIndicatorSection(), header.sortIndicatorOrder())
+        if provider and model and hasattr(self, "_removed_model_variant_keys"):
+            self._removed_model_variant_keys.discard(f"{provider}|{model}")
+        self._apply_model_variant_filter()
         return row
 
     def _set_variant_row(self, row, provider="", model="", values=None):
@@ -135,12 +194,19 @@ class ModelVariantsTabMixin:
 
     def _load_model_variants_into_ui(self):
         table = self.model_variants_table
-        # Preserve anything typed but not yet saved.
-        current = self._collect_model_variants() if table.rowCount() else {}
+        # The table is authoritative: a value cleared in the UI must not be
+        # resurrected from the stale on-disk snapshot on the next refresh.
+        current = self._collect_model_variant_rows() if table.rowCount() else {}
         variants = self.config.get("model_variants") or {}
         saved = variants if isinstance(variants, dict) else {}
-        merged = dict(current)
-        merged.update(saved)
+        merged = dict(saved)
+        for key, values in current.items():
+            if values:
+                merged[key] = values
+            else:
+                merged.pop(key, None)
+        for key in getattr(self, "_removed_model_variant_keys", set()):
+            merged.pop(key, None)
 
         rows = []
         seen = set()
@@ -155,7 +221,17 @@ class ModelVariantsTabMixin:
                 continue
             seen.add((provider, model))
             rows.append((provider, model, {}))
+        # Keep rows the user added or reset to defaults, even when they are
+        # not part of any fetched model list.
+        for key in current:
+            provider, sep, model = str(key).partition("|")
+            if not sep or not provider or not model or (provider, model) in seen:
+                continue
+            seen.add((provider, model))
+            rows.append((provider, model, {}))
 
+        was_sorting = table.isSortingEnabled()
+        table.setSortingEnabled(False)
         table.blockSignals(True)
         was_updating = table.updatesEnabled()
         table.setUpdatesEnabled(False)
@@ -166,20 +242,35 @@ class ModelVariantsTabMixin:
         finally:
             table.setUpdatesEnabled(was_updating)
             table.blockSignals(False)
+            table.setSortingEnabled(was_sorting)
+            self._apply_model_variant_filter()
 
     def _remove_selected_model_variant(self):
         table = self.model_variants_table
         rows = sorted({idx.row() for idx in table.selectedIndexes()}, reverse=True)
+        removed = set()
         for row in rows:
+            p, m = table.item(row, 0), table.item(row, 1)
+            if p and m and p.text().strip() and m.text().strip():
+                removed.add(f"{p.text().strip()}|{m.text().strip()}")
             table.removeRow(row)
         if rows:
+            if not hasattr(self, "_removed_model_variant_keys"):
+                self._removed_model_variant_keys = set()
+            self._removed_model_variant_keys.update(removed)
+            saved = self.config.get("model_variants")
+            if isinstance(saved, dict):
+                for key in removed:
+                    saved.pop(key, None)
             self._dirty = True
+            self._apply_model_variant_filter()
 
-    def _collect_model_variants(self):
+    def _collect_model_variant_rows(self):
+        """Lossless snapshot of the table: every row, even all-default ones."""
         table = getattr(self, "model_variants_table", None)
         if table is None:
-            return self.config.get("model_variants") or {}
-        variants = {}
+            return {}
+        rows = {}
         for row in range(table.rowCount()):
             p = table.item(row, 0)
             m = table.item(row, 1)
@@ -224,6 +315,12 @@ class ModelVariantsTabMixin:
             if _text(7) in ("no", "false", "0", "off"):
                 values["prompt_caching"] = False
 
-            if values:
-                variants[f"{provider}|{model}"] = values
-        return variants
+            rows[f"{provider}|{model}"] = values
+        return rows
+
+    def _collect_model_variants(self):
+        """Only non-default values are persisted in config."""
+        table = getattr(self, "model_variants_table", None)
+        if table is None:
+            return self.config.get("model_variants") or {}
+        return {k: v for k, v in self._collect_model_variant_rows().items() if v}

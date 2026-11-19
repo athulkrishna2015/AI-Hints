@@ -30,7 +30,10 @@ from .widgets import (CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE,
                       PERSISTENT_TEST_STATUSES, FETCH_CANCELLATIONS,
                       NEWLY_ADDED_MODELS, MISSING_FROM_FETCH,
                       GLOBAL_NEWLY_ADDED_MODELS, GLOBAL_MISSING_FROM_FETCH)
-from .tab_providers import cancel_other_model_tests, TEST_CANCELLATIONS
+from .tab_providers import (
+    cancel_other_model_tests, TEST_CANCELLATIONS,
+    DEFAULT_TEST_QUESTION, DEFAULT_TEST_ANSWER,
+)
 from ..config_io import write_pretty_config_preserve_keys
 
 LAST_ACTIVE_TAB_INDEX = 7  # Fallback static state
@@ -83,6 +86,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         GLOBAL_MISSING_FROM_FETCH.clear()
         
         self.setup_ui()
+        if hasattr(self, "raw_toggle"):
+            self.raw_toggle.toggled.connect(self._on_raw_toggle_changed)
         # Defer config loading so the dialog appears immediately; tabs are
         # built (and their config applied) shortly after via lazy loading.
         QTimer.singleShot(0, self._deferred_load_config)
@@ -335,6 +340,14 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if self.selected_card_ids:
             QTimer.singleShot(100, self.update_batch_ui_for_selection)
 
+    def _on_raw_toggle_changed(self, checked):
+        """The raw editor must show current state, not the load-time snapshot."""
+        if not checked:
+            return
+        config = dict(self.config)
+        config["model_variants"] = self._collect_model_variants()
+        self.raw_editor.setPlainText(json.dumps(config, indent=4, ensure_ascii=False))
+
     def _deferred_load_config(self):
         """Build all tabs and load config into them after the dialog is shown."""
         for idx in range(len(self._tab_builders)):
@@ -479,6 +492,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.global_model_timeouts_data = (c.get("global_model_timeouts", {}) or {}).copy()
         if hasattr(self, "model_variants_table"):
             self._load_model_variants_into_ui()
+        self._model_variants_loaded = True
         self.advanced_fallback_cb.setChecked(c.get("use_global_model_priority", False))
         self.update_fallback_ui_states()
         if hasattr(self, "refresh_local_providers_list"):
@@ -954,7 +968,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                 model_name = combobox.currentText().strip()
                 status = "✅ Success"
                 detail = ""
-                
+                test_front = self.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION
+                test_back = self.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
+
                 try:
                     temp_config = self.config.copy()
                     if api_key:
@@ -971,9 +987,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                         temp_config["local_endpoint"] = self._local_test_endpoint(model_name)
                     
                     client = AIClient(temp_config)
-                    from .tab_providers import DEFAULT_TEST_QUESTION, DEFAULT_TEST_ANSWER
-                    test_front = self.test_question_edit.text().strip() or DEFAULT_TEST_QUESTION
-                    test_back = self.test_answer_edit.text().strip() or DEFAULT_TEST_ANSWER
                     res = client.generate_options(test_front, test_back, override_provider=provider, only_this_provider=True)
                     if not (res and (res.get("hints") or res.get("options"))):
                         status = "❌ Failed"
@@ -1002,11 +1015,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
                     )
                     
                 # Update UI to result
-                def _end(c=combobox, s=status_label, st=status, d=detail, m=model_name):
+                def _end(c=combobox, s=status_label, st=status, d=detail, m=model_name, p=provider):
                     c.setEnabled(True)
                     if s:
                         color = "green" if "Success" in st else "red"
-                        PERSISTENT_TEST_STATUSES[provider] = (st, d, color, m)
+                        PERSISTENT_TEST_STATUSES[p] = (st, d, color, m)
                         s.setText(st)
                         s.setToolTip(d)
                         s.setStyleSheet(f"font-weight: bold; color: {color}; margin-left: 5px;")
@@ -1237,6 +1250,13 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         elif tab_text == "Advanced":
             if askUser("⚠️ WARNING: This will immediately restore system prompt and field settings. Continue?"):
                 self.on_restore_advanced()
+        elif tab_text == "Model Variants":
+            if askUser("⚠️ WARNING: This will remove all per-model overrides. Continue?"):
+                self.config["model_variants"] = {}
+                if hasattr(self, "_removed_model_variant_keys"):
+                    self._removed_model_variant_keys.clear()
+                self._load_model_variants_into_ui()
+                self._dirty = True
         else:
             tooltip("No defaults to restore for this tab.")
 
@@ -1337,8 +1357,11 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         try:
             if hasattr(self, 'raw_toggle') and self.raw_toggle.isChecked():
                 raw_config = json.loads(self.raw_editor.toPlainText() or "{}")
-                from ..config_io import write_pretty_config
-                write_pretty_config(ADDON_PACKAGE, self._normalize_config(raw_config))
+                # Edits made in the Model Variants table must never be lost
+                # just because the raw editor is open.
+                raw_config["model_variants"] = self._collect_model_variants()
+                write_pretty_config_preserve_keys(
+                    ADDON_PACKAGE, self._normalize_config(raw_config))
                 NEWLY_ADDED_MODELS.clear()
                 MISSING_FROM_FETCH.clear()
                 GLOBAL_NEWLY_ADDED_MODELS.clear()

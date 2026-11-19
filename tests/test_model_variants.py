@@ -110,6 +110,42 @@ class TestModelVariants(unittest.TestCase):
             client._call_anthropic("sys", "card")
         self.assertNotIn("thinking", captured["data"])
 
+    def test_zero_thinking_budget_overrides_default(self):
+        result = {"candidates": [{"content": {"parts": [{"text": json.dumps(
+            {"hints": ["h"], "options": ["o"]})}]}}]}
+        client = self._client("gemini", "gemini-2.5-flash", {"thinking_budget": 0})
+        captured, fake = self._capture(result)
+        with patch.object(AIClient, "_timed_post", side_effect=fake):
+            client._call_gemini("sys", "card")
+        self.assertEqual(
+            captured["data"]["generationConfig"]["thinkingConfig"]["thinkingBudget"],
+            0,
+        )
+
+    def test_local_provider_variant_applied(self):
+        client = AIClient({
+            "local_providers": {"mylocal": {
+                "base_url": "http://localhost:11434/v1", "model": "local-model",
+            }},
+            "models": {"mylocal": "local-model"},
+            "model_variants": {"mylocal|local-model": {"temperature": 0.2}},
+        })
+        captured, fake = self._capture(self._openai_result())
+        with patch.object(AIClient, "_timed_post", side_effect=fake):
+            client._call_openai_compatible("mylocal", "sys", "card")
+        self.assertEqual(captured["data"].get("temperature"), 0.2)
+
+    def test_usage_is_logged_once(self):
+        client = self._client("openai", "gpt-6-astra", {})
+        with patch("addon.ai_client.logger") as mocked:
+            response = self._openai_result()
+            response["usage"] = {"prompt_tokens": 10, "completion_tokens": 5}
+            with patch.object(AIClient, "_timed_post", return_value=response):
+                client._call_openai_compatible("openai", "sys", "card")
+        usage_lines = [c for c in mocked.info.call_args_list
+                       if "AI-Hints usage" in str(c[0][0])]
+        self.assertEqual(len(usage_lines), 1)
+
     def test_gemini_variant_applies_generation_config(self):
         result = {"candidates": [{"content": {"parts": [{"text": json.dumps(
             {"hints": ["h"], "options": ["o"]})}]}}]}

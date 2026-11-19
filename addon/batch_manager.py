@@ -154,18 +154,12 @@ class BatchManager:
         self.local_queue_jobs[0]["errors"] = val
 
     def _state_file_path(self) -> str:
-        """Returns the path to the batch state file, storing it in the active profile directory if available."""
+        """Use the canonical data-dir path (honours AIHINTS_DATA_DIR in tests)."""
         try:
-            from aqt import mw
-            if mw is not None and "Mock" not in type(mw).__name__ and getattr(mw, "pm", None) is not None:
-                profile_dir = mw.pm.profileFolder()
-                if profile_dir:
-                    p = os.path.join(profile_dir, "ai_hints_bin")
-                    os.makedirs(p, exist_ok=True)
-                    return os.path.join(p, "ai_hints_batch_state.json")
+            from ..config_io import resolve_data_file
+            return resolve_data_file("ai_hints_batch_state.json")
         except Exception:
-            pass
-        return os.path.join(ADDON_PATH, "batch_state.json")
+            return os.path.join(ADDON_PATH, "batch_state.json")
 
     def load_state(self):
         state_file = self._state_file_path()
@@ -1072,7 +1066,12 @@ class BatchManager:
                     if job is None:
                         break
                 else:
-                    job = self.local_queue_jobs[0]
+                    # Never drive a job that a dedicated parallel thread owns.
+                    dedicated = set(getattr(self, "_job_threads", {}) or {})
+                    job = next((j for j in self.local_queue_jobs
+                                if j.get("id") not in dedicated), None)
+                    if job is None:
+                        break
                 current_job_id = job.get("id", "default")
                 
             logger.info(f"STARTING local sequential queue job {current_job_id} for {self.local_queue_total} cards.")
@@ -1113,6 +1112,10 @@ class BatchManager:
                      providers = [target_prov]
                      
                 self.active_providers = providers
+                # Parallel job threads need their own provider list when a
+                # card fails; the manager-wide attribute belongs to whichever
+                # thread wrote it last.
+                self._thread_local.providers = providers
                 logger.info(f"Local Queue Pass #{self.local_queue_pass}: Running with {len(self.local_queue)} cards using providers: {providers}")
                 
                 # Reset the abort flag before (re)starting worker threads so a stale
@@ -1172,7 +1175,11 @@ class BatchManager:
                                 f"Local Queue watchdog: releasing pass; lone thread "
                                 f"{alive[0].name} {detail}."
                             )
-                            self._abort_threads.set()
+                            if not hung_state:
+                                # Only abort idle waiters. A thread with a real
+                                # in-flight request must be allowed to finish;
+                                # the settle window below gives it time.
+                                self._abort_threads.set()
                             break
                     else:
                         drained_since = None
@@ -1187,10 +1194,8 @@ class BatchManager:
                 # sees the final state (no duplicate generation, no phantom errors).
                 # In the normal path all threads have already exited, so this is
                 # almost always a no-op.
-                self._await_workers_settled(
-                    threads,
-                    int(self.saved_config.get("batch_request_timeout", 120)) + 20,
-                )
+                settle_timeout = self._max_batch_timeout(job_config) + 20
+                self._await_workers_settled(threads, settle_timeout)
                 
                 # --- Verification Pass Logic ---
                 if not self.local_queue_active:
@@ -1327,6 +1332,12 @@ class BatchManager:
                     logger.debug(f"Post-batch sync failed: {e}")
             return
 
+        # A parallel thread may still be driving its own job; deactivating
+        # the shared flag here would abort it at its next loop check.
+        if getattr(self, "_job_threads", None):
+            logger.info("Parallel job thread(s) still running; keeping the queue active.")
+            return
+
         self.local_queue_active = False
         self._force_online = False
         self.active_threads_status = {}
@@ -1425,10 +1436,11 @@ class BatchManager:
         if provider not in failed_provs:
             failed_provs.append(provider)
             
-        all_failed = all(p in failed_provs for p in self.active_providers)
+        providers = getattr(self._thread_local, "providers", None) or self.active_providers
+        all_failed = all(p in failed_provs for p in providers)
         with self._db_lock:
             if all_failed:
-                logger.warning(f"Card {cid} failed on all active providers {self.active_providers}. Counting as error.")
+                logger.warning(f"Card {cid} failed on all active providers {providers}. Counting as error.")
                 self.local_queue_errors += 1
                 if not hasattr(self, "local_queue_failed_cards"):
                     self.local_queue_failed_cards = []
@@ -1439,6 +1451,26 @@ class BatchManager:
                 logger.info(f"Card {cid} failed on {provider}. Requeuing for other providers to try.")
                 self.local_queue.insert(0, cid)
                 self._save_state_throttled()
+
+    @staticmethod
+    def _max_batch_timeout(config):
+        """Largest effective request timeout, including per-model overrides."""
+        try:
+            best = int(config.get("batch_request_timeout", 120))
+        except (TypeError, ValueError):
+            best = 120
+        for key in ("model_timeouts", "provider_timeouts"):
+            group = config.get(key) or {}
+            if not isinstance(group, dict):
+                continue
+            for value in group.values():
+                values = value.values() if isinstance(value, dict) else [value]
+                for raw in values:
+                    try:
+                        best = max(best, int(raw or 0))
+                    except (TypeError, ValueError):
+                        continue
+        return best
 
     def _await_workers_settled(self, threads, wait: float):
         """Block up to `wait` seconds for the given worker threads to exit.
