@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 9.1.2 (2026-11-19)
+- **UI: Model Variants now sits directly after AI Providers, and Logs is the last tab.** Saved tab positions are migrated automatically.
+- **UI: Thinking Level has been removed from both Fallback Priority windows.** Per-model thinking is now configured only in the Model Variants tab; the Timeout column remains in both windows.
 ## 9.1.1 (2026-11-19)
 - **Fix: opening the settings dialog and switching tabs is fast again.** The new Model Variants tab was being built several times per dialog open (as the saved tab, an adjacent tab, and again in the deferred load-all pass), each time creating thousands of table rows on the main thread. It is now built only when you actually open that tab.
 ## 9.1.0 (2026-11-19)
