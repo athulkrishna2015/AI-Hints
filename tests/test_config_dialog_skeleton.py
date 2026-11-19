@@ -159,6 +159,12 @@ class ConfigDialogLoadSaveContractTests(unittest.TestCase):
         # because it called insertRow + setCellWidget once per model (thousands
         # of rows). Refresh must bulk-fill plain items with a shared delegate.
         self.assertNotIn("setCellWidget", mixin)
+        # Building the 3.7k-row table eagerly on every dialog open makes the
+        # whole settings UI feel slow; the tab must be deferred.
+        with open(DIALOG_PATH, "r", encoding="utf-8") as fh:
+            dialog_src = fh.read()
+        self.assertIn('name == "Model Variants"', dialog_src)
+        self.assertIn("self._deferred_load_done", dialog_src)
         load = next(
             node for node in ast.walk(ast.parse(mixin))
             if isinstance(node, ast.FunctionDef)

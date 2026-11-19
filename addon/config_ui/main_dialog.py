@@ -58,6 +58,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         
         self.selected_card_ids = card_ids
         self.selected_deck_name = deck_name
+        self._deferred_load_done = False
         # Prefer the on-disk meta.json: addonManager.getConfig() falls back to
         # config.json defaults when the addon package name does not resolve to
         # this addon's folder, and a defaults-based snapshot would then destroy
@@ -254,8 +255,13 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             saved_index = 0
 
         # Build the selected tab + adjacent tabs eagerly so switching is instant.
+        # Model Variants is deliberately excluded: it pre-fills thousands of
+        # rows and is only needed once the user actually opens that tab.
         for idx in {saved_index, max(0, saved_index - 1), min(len(self._tab_builders) - 1, saved_index + 1)}:
-            self._ensure_tab_built(idx)
+            if self._tab_builders[idx][0] == "Model Variants":
+                QTimer.singleShot(0, lambda i=idx: self._ensure_tab_built(i))
+            else:
+                self._ensure_tab_built(idx)
 
         # Add placeholder tabs for the rest (built on demand).
         for idx, (name, _) in enumerate(self._tab_builders):
@@ -351,8 +357,18 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
     def _deferred_load_config(self):
         """Build all tabs and load config into them after the dialog is shown."""
         for idx in range(len(self._tab_builders)):
+            if self._tab_builders[idx][0] == "Model Variants":
+                continue
             self._ensure_tab_built(idx)
         self.load_config_into_ui()
+        self._deferred_load_done = True
+        variants_index = next(
+            (i for i, (name, _) in enumerate(self._tab_builders)
+             if name == "Model Variants"), None)
+        if (variants_index is not None
+                and self.tabs.currentIndex() == variants_index
+                and not self._tab_built[variants_index]):
+            QTimer.singleShot(0, lambda i=variants_index: self._ensure_tab_built(i))
 
     def load_config_into_ui(self):
         """Load configuration values into UI elements."""
@@ -685,10 +701,14 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self._connect_dirty_tracking_for_tab(widget)
 
     def _on_lazy_tab_changed(self, index):
-        self._ensure_tab_built(index)
+        if self._tab_builders[index][0] == "Model Variants" and not self._deferred_load_done:
+            # Initial selection: let the dialog finish loading first.
+            QTimer.singleShot(0, lambda i=index: self._ensure_tab_built(i))
+        else:
+            self._ensure_tab_built(index)
         # Also pre-build adjacent tabs for instant switching
         for adj in (index - 1, index + 1):
-            if 0 <= adj < len(self._tab_builders):
+            if 0 <= adj < len(self._tab_builders) and self._tab_builders[adj][0] != "Model Variants":
                 QTimer.singleShot(0, lambda a=adj: self._ensure_tab_built(a))
         if hasattr(self, "_on_tab_changed_tracker"):
             self._on_tab_changed_tracker(index)
