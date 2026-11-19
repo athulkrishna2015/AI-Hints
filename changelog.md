@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 9.1.1 (2026-11-19)
+- **Fix: opening the settings dialog and switching tabs is fast again.** The new Model Variants tab was being built several times per dialog open (as the saved tab, an adjacent tab, and again in the deferred load-all pass), each time creating thousands of table rows on the main thread. It is now built only when you actually open that tab.
 ## 9.1.0 (2026-11-19)
 - **Fix: model fetches no longer stop after the first 429 and no longer misreport zero quota as a rate spike.** All keys are tried (a 429 is per project), `quota_limit_value=0` is identified per key, and when every key is zero-quota the add-on says so plainly instead of telling you to retry in a minute. The UI now shows the real reason instead of "Check connection".
 - **Fix: Gemini's model list is fully paginated and uses the stable v1 API.** New models beyond the first 50 results are no longer silently dropped, and generateContent, batchGenerateContent, operation polling and model listing all use v1.
