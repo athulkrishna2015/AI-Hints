@@ -23,6 +23,7 @@ from .tab_batch import BatchTabMixin
 from .tab_support import SupportTabMixin
 from .tab_logs import LogTabMixin
 from .tab_mobile import MobileTabMixin
+from .tab_model_variants import ModelVariantsTabMixin
 
 # Import Support Widgets
 from .widgets import (CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE,
@@ -40,8 +41,9 @@ def _set_test_status(status_label, provider, st, tt, col, model_name):
     status_label.setToolTip(tt)
     status_label.setStyleSheet(f"font-weight: bold; color: {col}; margin-left: 5px;")
 
-class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin, 
-                   ShortcutsTabMixin, BatchTabMixin, SupportTabMixin, LogTabMixin, MobileTabMixin):
+class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin,
+                   ShortcutsTabMixin, BatchTabMixin, SupportTabMixin, LogTabMixin,
+                   MobileTabMixin, ModelVariantsTabMixin):
     
     def __init__(self, parent, card_ids=None, deck_name=None):
         super().__init__(parent)
@@ -236,6 +238,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             ("Mobile Support", self._create_mobile_tab),
             ("Support Authors", self._create_support_tab),
             ("Logs", self._create_log_tab),
+            ("Model Variants", self._create_model_variants_tab),
         ]
         self._tab_widgets = [None] * len(self._tab_builders)
         self._tab_built = [False] * len(self._tab_builders)
@@ -474,6 +477,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.model_timeouts_data = (c.get("model_timeouts", {}) or {}).copy()
         self.global_thinking_levels_data = (c.get("global_thinking_levels", {}) or {}).copy()
         self.global_model_timeouts_data = (c.get("global_model_timeouts", {}) or {}).copy()
+        if hasattr(self, "model_variants_table"):
+            self._load_model_variants_into_ui()
         self.advanced_fallback_cb.setChecked(c.get("use_global_model_priority", False))
         self.update_fallback_ui_states()
         if hasattr(self, "refresh_local_providers_list"):
@@ -1451,6 +1456,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["disabled_global_model_priority"] = self.disabled_global_model_priority_data
             new_config["global_thinking_levels"] = self.global_thinking_levels_data
             new_config["global_model_timeouts"] = self.global_model_timeouts_data
+            new_config["model_variants"] = self._collect_model_variants()
             new_config["use_global_model_priority"] = self.advanced_fallback_cb.isChecked()
             new_config["test_question_front"] = self.test_question_edit.text().strip()
             new_config["test_question_back"] = self.test_answer_edit.text().strip()

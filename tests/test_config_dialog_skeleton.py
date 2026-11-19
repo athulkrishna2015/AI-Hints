@@ -136,6 +136,23 @@ class ConfigDialogLoadSaveContractTests(unittest.TestCase):
             "ConfigDialog defines only %d methods; the class was truncated." % len(names),
         )
 
+    def test_model_variants_tab_is_wired(self):
+        """The per-model settings tab must be built, loaded and saved."""
+        with open(DIALOG_PATH, "r", encoding="utf-8") as fh:
+            dialog = fh.read()
+        mixin_path = os.path.join(PROJECT_ROOT, "addon", "config_ui",
+                                  "tab_model_variants.py")
+        with open(mixin_path, "r", encoding="utf-8") as fh:
+            mixin = fh.read()
+
+        self.assertIn("ModelVariantsTabMixin", dialog)
+        self.assertIn('("Model Variants", self._create_model_variants_tab)', dialog)
+        self.assertIn("self._collect_model_variants()", dialog)
+        self.assertIn("self._load_model_variants_into_ui()", dialog)
+        for method in ("_create_model_variants_tab", "_collect_model_variants",
+                       "_load_model_variants_into_ui"):
+            self.assertIn(f"def {method}(", mixin)
+
     def test_load_config_into_ui_contains_no_nested_methods(self):
         """A nested ``def`` here means a method was spliced into the body."""
         load = self.ast.method("load_config_into_ui")

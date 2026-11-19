@@ -392,6 +392,17 @@ _DEPRECATION_MARKER_KEYS = (
 )
 
 
+def _variant_number(value, kind, minimum=None):
+    """Return a sanitized number for a model variant, or None."""
+    try:
+        num = kind(value)
+    except (TypeError, ValueError):
+        return None
+    if minimum is not None and num < minimum:
+        return None
+    return num
+
+
 def _prompt_cache_key(system_prompt: str) -> str:
     """Stable, non-reversible key for the shared (system) prompt prefix.
 
@@ -1302,6 +1313,9 @@ class AIClient:
                 }
                 if body_params:
                     data.update(body_params)
+                # Per-model variant overrides (temperature, max tokens,
+                # reasoning effort, response format).
+                self._apply_variant_openai(data, provider_name, model)
                 # Apply per-model thinking level (overrides body_params)
                 thinking_levels = self.config.get("thinking_levels", {}) or {}
                 provider_levels = thinking_levels.get(provider_name, {}) if isinstance(thinking_levels, dict) else {}
@@ -1517,9 +1531,11 @@ class AIClient:
                 if provider in ["openai", "groq", "deepseek", "mistral", "openrouter", "sambanova", "cerebras", "nvidia"]:
                     data["response_format"] = {"type": "json_object"}
 
+                variant = self._apply_variant_openai(data, provider, model)
+
                 # Prompt caching. The system prompt is the only stable prefix
                 # (the card text changes every request), so make it easy for
-                # providers to reuse:
+                # providers to reuse. A per-model variant can turn it off.
                 #   openai/mistral: prompt_cache_key routes equal prefixes to
                 #                   the same cache (automatic caching).
                 #   grok:           x-grok-conv-id keeps requests on the same
@@ -1527,13 +1543,14 @@ class AIClient:
                 #   openrouter:     top-level cache_control enables Anthropic
                 #                   caching; other models cache automatically.
                 #   groq/deepseek/cerebras/sambanova: automatic, no field.
-                cache_key = _prompt_cache_key(system_prompt)
-                if provider in ("openai", "mistral"):
-                    data["prompt_cache_key"] = cache_key
-                elif provider == "grok":
-                    headers["x-grok-conv-id"] = cache_key
-                elif provider == "openrouter" and model.lower().lstrip("~").startswith("anthropic/"):
-                    data["cache_control"] = {"type": "ephemeral"}
+                if variant.get("prompt_caching", True):
+                    cache_key = _prompt_cache_key(system_prompt)
+                    if provider in ("openai", "mistral"):
+                        data["prompt_cache_key"] = cache_key
+                    elif provider == "grok":
+                        headers["x-grok-conv-id"] = cache_key
+                    elif provider == "openrouter" and model.lower().lstrip("~").startswith("anthropic/"):
+                        data["cache_control"] = {"type": "ephemeral"}
 
                 try:
                     logger.debug(f"AI-Hints {provider}/{model} request: {json.dumps(_compact_request_data(data))}")
@@ -1627,21 +1644,22 @@ class AIClient:
                     "anthropic-version": ANTHROPIC_API_VERSION
                 })
 
+                variant = self._model_variant("anthropic", model)
+                # Explicit cache breakpoint: the system prompt is identical
+                # for every card, so Anthropic can reuse it (5-minute TTL,
+                # refreshed by each hit). Prompts below the model's minimum
+                # cacheable length simply aren't cached. A per-model variant
+                # can turn the breakpoint off.
+                system_block = {"type": "text", "text": system_prompt}
+                if variant.get("prompt_caching", True):
+                    system_block["cache_control"] = {"type": "ephemeral"}
                 data = {
                     "model": model,
-                    # Explicit cache breakpoint: the system prompt is
-                    # identical for every card, so Anthropic can reuse it
-                    # (5-minute TTL, refreshed by each hit). Prompts below
-                    # the model's minimum cacheable length simply aren't
-                    # cached; the request still succeeds.
-                    "system": [{
-                        "type": "text",
-                        "text": system_prompt,
-                        "cache_control": {"type": "ephemeral"},
-                    }],
+                    "system": [system_block],
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 1024
                 }
+                self._apply_variant_anthropic(data, "anthropic", model)
 
                 try:
                     self._log_model_attempt("anthropic", model, models)
@@ -1756,6 +1774,9 @@ class AIClient:
                         "thinkingBudget": 1024
                     }
 
+                # Per-model variant values win over the defaults above.
+                self._apply_variant_gemini(data, "gemini", model)
+
                 try:
                     self._log_model_attempt("gemini", model, models)
                     _log_full_request("gemini", model, data)
@@ -1865,7 +1886,9 @@ class AIClient:
                     "includeThoughts": True,
                     "thinkingBudget": 1024
                 }
-            
+
+            self._apply_variant_gemini(inner_req, "gemini", model)
+
             request_items.append({
                 "request": inner_req,
                 "metadata": {"key": req_key}
@@ -2694,6 +2717,85 @@ class AIClient:
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         return headers
+
+    def _model_variant(self, provider: str, model: str) -> Dict[str, Any]:
+        """Sanitized per-model settings for a (provider, model) pair.
+
+        Stored as config["model_variants"]["provider|model"]. Values come from
+        the user, so accept only fields with the expected type; malformed
+        entries are ignored instead of producing an invalid API request.
+        """
+        variants = self.config.get("model_variants") or {}
+        if not isinstance(variants, dict):
+            return {}
+        item = variants.get(f"{provider}|{model}")
+        if not isinstance(item, dict):
+            return {}
+        out: Dict[str, Any] = {}
+        temperature = _variant_number(item.get("temperature"), float)
+        if temperature is not None:
+            out["temperature"] = temperature
+        max_tokens = _variant_number(item.get("max_tokens"), int, 1)
+        if max_tokens is not None:
+            out["max_tokens"] = max_tokens
+        thinking_budget = _variant_number(item.get("thinking_budget"), int, 0)
+        if thinking_budget is not None:
+            out["thinking_budget"] = thinking_budget
+        effort = str(item.get("reasoning_effort") or "").strip().lower()
+        if effort in ("none", "minimal", "low", "medium", "high", "xhigh", "max"):
+            out["reasoning_effort"] = effort
+        fmt = str(item.get("response_format") or "").strip().lower()
+        if fmt in ("json_object", "none"):
+            out["response_format"] = fmt
+        if isinstance(item.get("prompt_caching"), bool):
+            out["prompt_caching"] = item["prompt_caching"]
+        return out
+
+    def _apply_variant_openai(self, data: Dict[str, Any], provider: str, model: str) -> Dict[str, Any]:
+        """Apply a model variant to a chat-completions request body."""
+        variant = self._model_variant(provider, model)
+        if variant:
+            if "temperature" in variant:
+                data["temperature"] = variant["temperature"]
+            if "max_tokens" in variant:
+                data["max_tokens"] = variant["max_tokens"]
+            if "reasoning_effort" in variant:
+                data["reasoning_effort"] = variant["reasoning_effort"]
+            if variant.get("response_format") == "none":
+                data.pop("response_format", None)
+            elif variant.get("response_format") == "json_object":
+                data["response_format"] = {"type": "json_object"}
+        return variant
+
+    def _apply_variant_anthropic(self, data: Dict[str, Any], provider: str, model: str) -> Dict[str, Any]:
+        variant = self._model_variant(provider, model)
+        if variant:
+            if "max_tokens" in variant:
+                data["max_tokens"] = variant["max_tokens"]
+            if "temperature" in variant:
+                data["temperature"] = variant["temperature"]
+            budget = variant.get("thinking_budget", 0)
+            max_tokens = data.get("max_tokens", 0)
+            # Anthropic requires max_tokens > budget_tokens and a minimum
+            # budget; ignore the override otherwise instead of sending a
+            # request the API would reject.
+            if budget >= 1024 and max_tokens > budget:
+                data["thinking"] = {"type": "enabled", "budget_tokens": budget}
+        return variant
+
+    def _apply_variant_gemini(self, data: Dict[str, Any], provider: str, model: str) -> Dict[str, Any]:
+        variant = self._model_variant(provider, model)
+        if variant:
+            generation = data.setdefault("generationConfig", {})
+            if "temperature" in variant:
+                generation["temperature"] = variant["temperature"]
+            if "max_tokens" in variant:
+                generation["maxOutputTokens"] = variant["max_tokens"]
+            if variant.get("thinking_budget"):
+                generation.setdefault("thinkingConfig", {})["thinkingBudget"] = variant["thinking_budget"]
+            if variant.get("response_format") == "none":
+                generation.pop("responseMimeType", None)
+        return variant
 
     def fetch_models(self, provider: str) -> List[str]:
         """Fetch available models from the provider's API."""
