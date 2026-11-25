@@ -2637,6 +2637,10 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             name = dlg.name_edit.text().strip()
             if not name:
                 return
+            from ..ai_client import BUILTIN_PROVIDER_NAMES
+            if name in BUILTIN_PROVIDER_NAMES:
+                info("That name is a built-in provider. Use its pencil button to edit it instead of adding a duplicate.")
+                return
             if not hasattr(self.main_dialog, "custom_providers_data"):
                 self.main_dialog.custom_providers_data = {}
             self.main_dialog.custom_providers_data[name] = data
@@ -3214,6 +3218,10 @@ class ProvidersTabMixin:
             data = dlg.get_data()
             name = dlg.name_edit.text().strip()
             if not name:
+                return
+            from ..ai_client import BUILTIN_PROVIDER_NAMES
+            if name in BUILTIN_PROVIDER_NAMES:
+                info("That name is a built-in provider. Use its pencil button to edit it instead of adding a duplicate.")
                 return
             if not hasattr(self, "custom_providers_data"):
                 self.custom_providers_data = {}

@@ -136,6 +136,28 @@ class ConfigDialogLoadSaveContractTests(unittest.TestCase):
             "ConfigDialog defines only %d methods; the class was truncated." % len(names),
         )
 
+    def test_builtin_provider_edits_do_not_create_duplicate(self):
+        """Built-in providers are edited in place; no shadow custom provider."""
+        with open(DIALOG_PATH, "r", encoding="utf-8") as fh:
+            dialog = fh.read()
+        widgets_path = os.path.join(PROJECT_ROOT, "addon", "config_ui", "widgets.py")
+        with open(widgets_path, "r", encoding="utf-8") as fh:
+            widgets = fh.read()
+        providers_path = os.path.join(PROJECT_ROOT, "addon", "config_ui", "tab_providers.py")
+        with open(providers_path, "r", encoding="utf-8") as fh:
+            providers = fh.read()
+        client_path = os.path.join(PROJECT_ROOT, "addon", "ai_client.py")
+        with open(client_path, "r", encoding="utf-8") as fh:
+            client = fh.read()
+
+        self.assertIn("def _split_provider_configs(", dialog)
+        self.assertIn('new_config["provider_overrides"]', dialog)
+        self.assertIn('self.parent_dialog.provider_overrides_data[self.provider] = new_data', widgets)
+        self.assertIn("Built-in providers cannot be renamed", widgets)
+        self.assertIn("Use its pencil button to edit it instead of adding a duplicate", providers)
+        self.assertIn("def _builtin_override(self, provider: str)", client)
+        self.assertIn("BUILTIN_PROVIDER_NAMES", client)
+
     def test_model_parameters_live_in_fallback_dialogs(self):
         """Per-model parameters are edited in both fallback dialogs, not a separate tab."""
         with open(DIALOG_PATH, "r", encoding="utf-8") as fh:

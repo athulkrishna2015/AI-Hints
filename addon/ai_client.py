@@ -2372,6 +2372,26 @@ class AIClient:
         val = str(custom_cfg.get("api_key", "") or "").strip()
         return self._split_and_parse_keys(provider, val)
 
+    def _builtin_override(self, provider: str) -> Dict[str, Any]:
+        """User edits to a built-in provider, stored separately from custom providers."""
+        if not _is_builtin_provider(provider):
+            return {}
+        overrides = self.config.get("provider_overrides") or {}
+        if not isinstance(overrides, dict):
+            return {}
+        data = overrides.get(provider) or {}
+        # Legacy: a same-named custom-provider entry from before the split.
+        if not data:
+            cp = self.config.get("custom_providers") or {}
+            if isinstance(cp, dict):
+                data = cp.get(provider) or {}
+        return data if isinstance(data, dict) else {}
+
+    def _builtin_override_headers(self, provider: str) -> Dict[str, str]:
+        data = self._builtin_override(provider)
+        headers = data.get("headers")
+        return dict(headers) if isinstance(headers, dict) else {}
+
     def _available_api_keys(self, provider: str) -> List[str]:
         # Simply return all keys; filtering is done per-model inside the calling loops
         return self._api_keys_for(provider)
@@ -2999,6 +3019,7 @@ class AIClient:
                         continue
                     custom_headers = custom_cfg.get("headers", {})
                     headers = self._json_headers(api_key)
+                    headers.update(self._builtin_override_headers(provider))
                     if isinstance(custom_headers, dict):
                         headers.update(custom_headers)
                     result = self._get_json(models_url, headers)
@@ -3035,6 +3056,7 @@ class AIClient:
                 if provider == "openrouter":
                     url = "https://openrouter.ai/api/v1/models"
                     headers = self._json_headers(api_key)
+                    headers.update(self._builtin_override_headers(provider))
                     result = self._get_json(url, headers)
                     FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
                     return self._chat_only_models([m.get("id") for m in result.get("data", []) if m.get("id")])
@@ -3049,6 +3071,7 @@ class AIClient:
                     # Ask for the maximum page size and follow nextPageToken.
                     base_url = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models"
                     headers = {"x-goog-api-key": api_key}
+                    headers.update(self._builtin_override_headers(provider))
                     models = []
                     deprecated = set()
                     page_token = None
@@ -3078,6 +3101,7 @@ class AIClient:
                 elif provider == "groq":
                     url = "https://api.groq.com/openai/v1/models"
                     headers = self._json_headers(api_key)
+                    headers.update(self._builtin_override_headers(provider))
                     result = self._get_json(url, headers)
                     return self._chat_only_models([m.get("id") for m in result.get("data", []) if m.get("id")])
 
@@ -3104,12 +3128,14 @@ class AIClient:
                     url = urls.get(provider)
                     if url:
                         headers = self._json_headers(api_key)
+                        headers.update(self._builtin_override_headers(provider))
                         result = self._get_json(url, headers)
                         return self._chat_only_models([m.get("id") for m in result.get("data", []) if m.get("id")])
 
                 elif provider == "huggingface":
                     url = "https://router.huggingface.co/v1/models"
                     headers = self._json_headers(api_key)
+                    headers.update(self._builtin_override_headers(provider))
                     result = self._get_json(url, headers)
                     FETCHED_DEPRECATED_MODELS[provider] = _collect_deprecated_items(result.get("data", []))
                     return self._chat_only_models([_model_id(m) for m in result.get("data", []) if _model_id(m)])

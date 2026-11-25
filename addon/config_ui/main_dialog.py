@@ -12,7 +12,18 @@ from ..ai_client import (
     PROVIDER_ORDER, 
     AIClient,
     derive_active_provider,
+    BUILTIN_PROVIDER_NAMES,
 )
+
+
+def _split_provider_configs(cfg):
+    """Custom providers + built-in edits, migrating legacy shadow entries."""
+    custom = dict((cfg or {}).get("custom_providers") or {})
+    overrides = dict((cfg or {}).get("provider_overrides") or {})
+    for name in list(custom):
+        if name in BUILTIN_PROVIDER_NAMES:
+            overrides.setdefault(name, custom.pop(name))
+    return custom, overrides
 
 # Import Tab Mixins
 from .tab_general import GeneralTabMixin
@@ -77,7 +88,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             logger.error(f"Could not load default config: {e}")
             self.default_config = {}
 
-        self.custom_providers_data = (self.config.get("custom_providers", {}) or {}).copy()
+        self.custom_providers_data, self.provider_overrides_data = _split_provider_configs(self.config)
         self.local_providers_data = (self.config.get("local_providers", {}) or {}).copy()
         
         NEWLY_ADDED_MODELS.clear()
@@ -495,7 +506,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.global_model_priority_data = list(c.get("global_model_priority", []))
         self.disabled_global_model_priority_data = list(c.get("disabled_global_model_priority", []))
         self.local_providers_data = (c.get("local_providers", {}) or {}).copy()
-        self.custom_providers_data = (c.get("custom_providers", {}) or {}).copy()
+        self.custom_providers_data, self.provider_overrides_data = _split_provider_configs(c)
         self.model_timeouts_data = (c.get("model_timeouts", {}) or {}).copy()
         self.global_model_timeouts_data = (c.get("global_model_timeouts", {}) or {}).copy()
         # Per-model overrides are edited inside the two fallback dialogs and
@@ -1471,6 +1482,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["system_prompt"] = self.default_config.get("system_prompt", "")
             new_config["additional_system_instructions"] = self.system_prompt_edit.toPlainText()
             new_config["custom_providers"] = self.custom_providers_data
+            new_config["provider_overrides"] = getattr(self, "provider_overrides_data", {})
             new_config["model_fallbacks"] = self.model_fallbacks_data
             new_config["disabled_fallback_models"] = self.disabled_fallback_models_data
             new_config["transient_skip_providers"] = getattr(self, "transient_skip_data", {})
@@ -1666,6 +1678,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("generate_hints_enabled", True)
         config.setdefault("generate_options_enabled", True)
         config.setdefault("mnemonic_hint_enabled", False)
+        config.setdefault("provider_overrides", {})
         config.setdefault("fallback_column_order", [])
         config.setdefault("global_fallback_column_order", [])
         config.setdefault("manual_show_hints", True)

@@ -671,8 +671,14 @@ class ProviderRowWidget(QWidget):
 
     def on_edit_provider(self):
         from .tab_providers import CustomProviderDialog
+        from ..ai_client import BUILTIN_PROVIDER_NAMES
         custom_providers = getattr(self.parent_dialog, "custom_providers_data", {}) or {}
-        cp_data = custom_providers.get(self.provider)
+        is_builtin = self.provider in BUILTIN_PROVIDER_NAMES
+        cp_data = None
+        if is_builtin:
+            cp_data = (getattr(self.parent_dialog, "provider_overrides_data", {}) or {}).get(self.provider)
+        else:
+            cp_data = custom_providers.get(self.provider)
         if not cp_data:
             cp_data = {
                 "url": "",
@@ -689,6 +695,12 @@ class ProviderRowWidget(QWidget):
             new_name = dlg.name_edit.text().strip()
             if not new_name:
                 return
+            if new_name != self.provider and is_builtin:
+                info("Built-in providers cannot be renamed. Edit the built-in provider in place.")
+                return
+            if new_name in BUILTIN_PROVIDER_NAMES and new_name != self.provider:
+                info("A provider with that built-in name already exists. Choose a different name.")
+                return
             if new_name != self.provider:
                 if self.provider in custom_providers:
                     del custom_providers[self.provider]
@@ -704,10 +716,17 @@ class ProviderRowWidget(QWidget):
                 self.label.setText(f"<b>{new_name.capitalize()}</b>")
                 self.parent_dialog.api_key_edits[new_name] = self.key_edit
             else:
-                custom_providers[self.provider] = new_data
-                if not hasattr(self.parent_dialog, "custom_providers_data"):
-                    self.parent_dialog.custom_providers_data = {}
-                self.parent_dialog.custom_providers_data[self.provider] = new_data
+                if is_builtin:
+                    # Built-in edits never create a custom provider entry.
+                    if not hasattr(self.parent_dialog, "provider_overrides_data"):
+                        self.parent_dialog.provider_overrides_data = {}
+                    self.parent_dialog.provider_overrides_data[self.provider] = new_data
+                    custom_providers.pop(self.provider, None)
+                else:
+                    custom_providers[self.provider] = new_data
+                    if not hasattr(self.parent_dialog, "custom_providers_data"):
+                        self.parent_dialog.custom_providers_data = {}
+                    self.parent_dialog.custom_providers_data[self.provider] = new_data
             if new_data.get("api_key"):
                 if "api_keys" not in self.parent_dialog.config:
                     self.parent_dialog.config["api_keys"] = {}
