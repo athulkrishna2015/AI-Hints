@@ -142,6 +142,27 @@ class TestFetchModelsKeyRotation(unittest.TestCase):
         self.assertIn("zero quota", LAST_FETCH_ERROR.get("gemini", ""))
         self.assertNotIn("retry in a minute", LAST_FETCH_ERROR.get("gemini", "").lower())
 
+    def test_zero_quota_plus_invalid_key_reports_zero_quota(self):
+        """A bad key among zero-quota keys must not degrade to 'retry in a minute'."""
+        client = self._client()
+        failures = [
+            _http_error(400),                      # one invalid key
+            self._zero_quota_error(),              # two projects with zero quota
+            self._zero_quota_error(),
+        ]
+
+        def _fake(url, headers):
+            raise failures.pop(0)
+
+        with patch.object(AIClient, "_get_json", side_effect=_fake):
+            models = client.fetch_models("gemini")
+
+        self.assertEqual(models, [])
+        msg = LAST_FETCH_ERROR.get("gemini", "")
+        self.assertIn("zero quota", msg)
+        self.assertNotIn("retry in a minute", msg.lower())
+        self.assertGreater(PROVIDER_ZERO_QUOTA_UNTIL.get("gemini", 0), time.time())
+
     @staticmethod
     def _raise_zero_quota():
         raise TestFetchModelsKeyRotation._zero_quota_error()

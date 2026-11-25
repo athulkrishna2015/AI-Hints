@@ -3069,18 +3069,21 @@ class AIClient:
                 logger.debug(f"AI-Hints: model fetch failed for {provider}: {e}")
                 last_err = e
                 continue
-        if zero_quota_keys and zero_quota_keys == attempted_keys:
+        if zero_quota_keys and (
+            zero_quota_keys + rate_limited_keys == attempted_keys
+            or zero_quota_keys > rate_limited_keys
+        ):
+            # Zero quota is persistent (quota_limit_value=0), not a transient
+            # rate spike. Other keys may have failed with 400/invalid key, so
+            # don't require *every* key to be a zero-quota 429 to say so.
             PROVIDER_ZERO_QUOTA_UNTIL[provider] = time.time() + ZERO_QUOTA_COOLDOWN_SECONDS
             LAST_FETCH_ERROR[provider] = (
-                f"all {attempted_keys} keys report zero quota (quota_limit_value=0) "
-                f"for their project/region — add a key from a project with quota, "
-                f"enable billing, or use a different region"
+                f"{zero_quota_keys} of {attempted_keys} keys report zero quota (quota_limit_value=0) "
+                f"for their projects — enable the Gemini API/billing in those projects, use a key from a "
+                f"different project, or use another provider. Retrying won't help."
             )
             logger.error(
-                f"AI-Hints: Failed to fetch models for {provider}: every key reports "
-                f"zero quota (quota_limit_value=0) for its project/region. Retrying "
-                f"will not help — add a key from a project with quota, enable billing, "
-                f"or use a different region."
+                f"AI-Hints: Failed to fetch models for {provider}: {LAST_FETCH_ERROR[provider]}"
             )
         elif rate_limited_keys and rate_limited_keys == attempted_keys:
             LAST_FETCH_ERROR[provider] = (
