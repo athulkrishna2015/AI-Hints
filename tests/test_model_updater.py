@@ -41,6 +41,30 @@ class TestFetchModelsKeyRotation(unittest.TestCase):
             "models": {"gemini": "gemini-flash-latest"},
         })
 
+    def test_custom_provider_cannot_shadow_builtin_gemini(self):
+        """A custom provider named 'gemini' must not hijack built-in handling."""
+        cfg = {
+            "api_keys": {"gemini": "good-key"},
+            "custom_providers": {
+                "gemini": {"url": "https://bad.example/v1", "api_key": "bad-key"}
+            },
+        }
+        client = AIClient(cfg)
+        seen = []
+
+        def _fake(url, headers):
+            seen.append((url, headers))
+            return {"models": [{"name": "models/gemini-4-hydrogen",
+                                "supportedGenerationMethods": ["generateContent"]}]}
+
+        with patch.object(AIClient, "_get_json", side_effect=_fake):
+            models = client.fetch_models("gemini")
+
+        self.assertTrue(models)
+        self.assertIn("generativelanguage.googleapis.com", seen[0][0])
+        self.assertIn("x-goog-api-key", seen[0][1])
+        self.assertNotIn("Authorization", seen[0][1])
+
     def test_429_rotates_through_all_keys(self):
         """A 429 is scoped to the key's project, so later keys must be tried."""
         client = self._client()

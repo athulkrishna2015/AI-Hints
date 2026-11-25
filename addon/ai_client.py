@@ -399,6 +399,15 @@ BUILTIN_PROVIDER_URLS = {
     "gemini": f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models",
 }
 
+BUILTIN_PROVIDER_NAMES = set(PROVIDER_ORDER) | set(BUILTIN_PROVIDER_URLS) | {"local"}
+
+
+def _is_builtin_provider(provider: str) -> bool:
+    """Built-in names always use built-in handling — a custom provider with
+    the same name must never shadow it (it would send the wrong auth headers)."""
+    return str(provider or "") in BUILTIN_PROVIDER_NAMES
+
+
 # Cache of models flagged as deprecated by the provider's own API response
 # during the most recent fetch_models() call. Populated online per provider.
 FETCHED_DEPRECATED_MODELS: Dict[str, set] = {}
@@ -1192,7 +1201,7 @@ class AIClient:
         custom_providers = self.config.get("custom_providers") or {}
         if not isinstance(custom_providers, dict):
             custom_providers = {}
-        if provider in custom_providers:
+        if provider in custom_providers and not _is_builtin_provider(provider):
             custom_cfg = custom_providers[provider]
             if not isinstance(custom_cfg, dict):
                 return False
@@ -1265,8 +1274,13 @@ class AIClient:
         custom_providers = self.config.get("custom_providers") or {}
         if not isinstance(custom_providers, dict):
             custom_providers = {}
-        custom_cfg = custom_providers.get(provider, {}) or {}
+        custom_cfg = {} if _is_builtin_provider(provider) else (custom_providers.get(provider, {}) or {})
         custom_url = str(custom_cfg.get("url", "") or "").strip()
+        if _is_builtin_provider(provider) and provider in custom_providers:
+            logger.warning(
+                f"AI-Hints: custom provider '{provider}' shadows a built-in provider; "
+                f"using built-in handling. Rename the custom provider to use it."
+            )
         try:
             if custom_url:
                 return self._call_custom_provider(provider, system_prompt, prompt, override_model=override_model)
@@ -2443,7 +2457,7 @@ class AIClient:
     def _is_model_failed(self, provider: str, model: str) -> bool:
         """Returns True if the model is failed for all keys under this provider."""
         custom_providers = self.config.get("custom_providers") or {}
-        if provider in custom_providers:
+        if provider in custom_providers and not _is_builtin_provider(provider):
             custom_cfg = custom_providers.get(provider, {})
             keys = self._api_keys_for_custom(provider, custom_cfg)
         else:
@@ -2687,7 +2701,7 @@ class AIClient:
             return hit[1]
         custom_providers = self.config.get("custom_providers") or {}
         cp = custom_providers.get(provider)
-        if provider in custom_providers:
+        if provider in custom_providers and not _is_builtin_provider(provider):
             resolved = self._custom_provider_models(provider, cp if isinstance(cp, dict) else {})
         else:
             resolved = self._models_for_provider(provider)
@@ -2933,7 +2947,11 @@ class AIClient:
         if not isinstance(custom_providers, dict):
             custom_providers = {}
         custom_provider_match = None
-        if provider in custom_providers:
+        if provider in custom_providers and not _is_builtin_provider(provider):
+            logger.warning(
+                f"AI-Hints: custom provider '{provider}' shadows a built-in provider; "
+                f"ignoring it. Rename the custom provider to use it."
+            )
             custom_provider_match = provider
         else:
             for cp_name in custom_providers:
@@ -2960,8 +2978,10 @@ class AIClient:
                 custom_providers = self.config.get("custom_providers", {}) or {}
                 if not isinstance(custom_providers, dict):
                     custom_providers = {}
-                custom_cfg = custom_providers.get(provider) or {}
-                if not custom_cfg:
+                # Built-in names must never be redirected by a same-named
+                # custom provider (wrong auth scheme / endpoint).
+                custom_cfg = {} if _is_builtin_provider(provider) else (custom_providers.get(provider) or {})
+                if not custom_cfg and not _is_builtin_provider(provider):
                     for cp_name, cp_cfg in custom_providers.items():
                         if isinstance(cp_name, str) and cp_name.lower() == provider.lower() and isinstance(cp_cfg, dict):
                             custom_cfg = cp_cfg
