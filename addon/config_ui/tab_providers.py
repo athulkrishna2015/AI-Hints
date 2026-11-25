@@ -271,6 +271,54 @@ class _FallbackTable(QTableWidget):
 
 
 class FallbackPriorityDialog(QDialog):
+    def _init_column_order(self, attr_name):
+        """Restore drag-reordered columns and persist future moves."""
+        saved = getattr(self.main_dialog, attr_name, None)
+        order = list(saved) if isinstance(saved, list) else []
+        self._column_order_attr = attr_name
+        self._column_order = order
+        self._applying_column_order = True
+        try:
+            for table in self._tables():
+                header = table.horizontalHeader()
+                if (len(order) == table.columnCount()
+                        and set(order) == set(range(table.columnCount()))):
+                    for visual, logical in enumerate(order):
+                        if header.logicalIndex(visual) != logical:
+                            header.moveSection(header.visualIndex(logical), visual)
+                header.sectionMoved.connect(self._on_column_moved)
+        finally:
+            self._applying_column_order = False
+
+    def _on_column_moved(self, logical, old_visual, new_visual):
+        if getattr(self, "_applying_column_order", False):
+            return
+        tables = self._tables()
+        if not tables:
+            return
+        # Capture the order from the header the user actually dragged; the
+        # other list is then mirrored to it below.
+        sender = self.sender()
+        header = next(
+            (t.horizontalHeader() for t in tables if t.horizontalHeader() is sender),
+            tables[0].horizontalHeader(),
+        )
+        order = [header.logicalIndex(v) for v in range(header.count())]
+        self._column_order = order
+        setattr(self.main_dialog, self._column_order_attr, order)
+        # Mirror the order onto the other list in this dialog.
+        self._applying_column_order = True
+        try:
+            for table in tables:
+                if table.horizontalHeader() is header:
+                    continue
+                other = table.horizontalHeader()
+                for visual, logical_idx in enumerate(order):
+                    if other.logicalIndex(visual) != logical_idx:
+                        other.moveSection(other.visualIndex(logical_idx), visual)
+        finally:
+            self._applying_column_order = False
+
     def _init_variant_columns(self):
         """Install combo delegates for the parameter columns on both lists."""
         parent = self.main_dialog
@@ -344,6 +392,11 @@ class FallbackPriorityDialog(QDialog):
         table = _FallbackTable(self._handle_table_drop)
         table.setColumnCount(len(headers))
         table.setHorizontalHeaderLabels(headers)
+        # Columns can be reordered by dragging their headers; cell data is
+        # addressed by logical index, so moving a section never scrambles
+        # values, delegates, or the timeout spin boxes.
+        table.horizontalHeader().setSectionsMovable(True)
+        table.horizontalHeader().setToolTip("Drag column headers to reorder columns.")
         for c in range(len(headers)):
             table.horizontalHeader().setSectionResizeMode(c, QHeaderView.ResizeMode.Interactive)
             if init_widths and c in init_widths:
@@ -870,6 +923,7 @@ class FallbackOrderDialog(FallbackPriorityDialog):
 
         # Per-model parameters are editable columns in both lists.
         self._init_variant_columns()
+        self._init_column_order("fallback_column_order")
 
         # OK / Cancel
         dlg_btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
@@ -1981,6 +2035,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
 
         # Per-model parameters are editable columns in both lists.
         self._init_variant_columns()
+        self._init_column_order("global_fallback_column_order")
 
         # OK / Cancel
         dlg_btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)

@@ -44,6 +44,66 @@ from addon.config_ui.tab_providers import (  # noqa: E402
 )
 
 
+class ColumnReorderTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    def _parent(self):
+        parent = QtWidgets.QWidget()
+        parent.config = {}
+        parent.model_variants_data = {"p|m1": {"temperature": 0.3}}
+        parent.model_fallbacks_data = {}
+        parent.disabled_fallback_models_data = {}
+        parent.fallback_column_order = []
+        parent.global_fallback_column_order = []
+        return parent
+
+    def test_drag_updates_saved_order_and_other_list(self):
+        parent = self._parent()
+        dlg = FallbackOrderDialog(parent, "p", "m1", ["m1", "m2"], [])
+        header = dlg.enabled_table.horizontalHeader()
+        header.moveSection(2, 0)  # Temp column to the front
+        order = [header.logicalIndex(v) for v in range(header.count())]
+        self.assertEqual(order[0], 2)
+        self.assertEqual(parent.fallback_column_order, order)
+        other = [dlg.disabled_table.horizontalHeader().logicalIndex(v)
+                 for v in range(header.count())]
+        self.assertEqual(other, order)
+
+    def test_reorder_in_disabled_list_syncs_enabled_and_persists(self):
+        parent = self._parent()
+        dlg = FallbackOrderDialog(parent, "p", "m1", ["m1", "m2"], [])
+        header = dlg.disabled_table.horizontalHeader()
+        header.moveSection(3, 0)  # Max tokens to the front in Disabled
+        order = [header.logicalIndex(v) for v in range(header.count())]
+        self.assertEqual(order[0], 3)
+        self.assertEqual(parent.fallback_column_order, order)
+        enabled_order = [dlg.enabled_table.horizontalHeader().logicalIndex(v)
+                         for v in range(header.count())]
+        self.assertEqual(enabled_order, order)
+
+    def test_saved_order_restored_in_new_dialog(self):
+        parent = self._parent()
+        parent.fallback_column_order = [2, 0, 1, 3, 4, 5, 6, 7]
+        dlg = FallbackOrderDialog(parent, "p", "m1", ["m1"], [])
+        header = dlg.enabled_table.horizontalHeader()
+        self.assertEqual([header.logicalIndex(v) for v in range(header.count())],
+                         parent.fallback_column_order)
+        # Moving columns does not move the underlying row data.
+        self.assertEqual(dlg.get_ordered_list(), [])
+        self.assertAlmostEqual(dlg.get_variant_overrides()["p|m1"]["temperature"], 0.3)
+
+    def test_global_column_order(self):
+        parent = self._parent()
+        gdlg = GlobalFallbackOrderDialog(parent, [["p", "m1"]])
+        header = gdlg.enabled_table.horizontalHeader()
+        header.moveSection(4, 0)
+        order = [header.logicalIndex(v) for v in range(header.count())]
+        self.assertEqual(order[0], 4)
+        self.assertEqual(parent.global_fallback_column_order, order)
+
+
 class CrossWindowSyncTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

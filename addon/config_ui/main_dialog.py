@@ -501,6 +501,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         # Per-model overrides are edited inside the two fallback dialogs and
         # stored here; the standalone Model Variants table was removed.
         self.model_variants_data = (c.get("model_variants", {}) or {}).copy()
+        self.fallback_column_order = list(c.get("fallback_column_order") or [])
+        self.global_fallback_column_order = list(c.get("global_fallback_column_order") or [])
         self.advanced_fallback_cb.setChecked(c.get("use_global_model_priority", False))
         self.update_fallback_ui_states()
         if hasattr(self, "refresh_local_providers_list"):
@@ -1477,6 +1479,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["disabled_global_model_priority"] = self.disabled_global_model_priority_data
             new_config["global_model_timeouts"] = self.global_model_timeouts_data
             new_config["model_variants"] = self.model_variants_data
+            new_config["fallback_column_order"] = getattr(self, "fallback_column_order", [])
+            new_config["global_fallback_column_order"] = getattr(self, "global_fallback_column_order", [])
             new_config["use_global_model_priority"] = self.advanced_fallback_cb.isChecked()
             new_config["test_question_front"] = self.test_question_edit.text().strip()
             new_config["test_question_back"] = self.test_answer_edit.text().strip()
@@ -1662,6 +1666,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         config.setdefault("generate_hints_enabled", True)
         config.setdefault("generate_options_enabled", True)
         config.setdefault("mnemonic_hint_enabled", False)
+        config.setdefault("fallback_column_order", [])
+        config.setdefault("global_fallback_column_order", [])
         config.setdefault("manual_show_hints", True)
         config.setdefault("manual_show_options", False)
         config.setdefault("maint_only_modified", True)
