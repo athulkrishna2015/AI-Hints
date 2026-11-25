@@ -957,6 +957,13 @@ class FallbackOrderDialog(FallbackPriorityDialog):
     def apply_global_state(self, pair_states):
         """Acting global window wins: align this provider's rows to global state."""
         relevant = {m: on for (p, m), on in pair_states.items() if p == self.provider}
+        self._syncing_from_other_window = True
+        try:
+            return self._apply_global_state_inner(relevant)
+        finally:
+            self._syncing_from_other_window = False
+
+    def _apply_global_state_inner(self, relevant):
         for table in self._tables():
             for row in range(table.rowCount() - 1, -1, -1):
                 data = self._row_data(table, row)
@@ -1705,6 +1712,24 @@ class FallbackOrderDialog(FallbackPriorityDialog):
             self._update_counts()
         finally:
             self._moving_rows = False
+        # Mirror this enable/disable change into the Advanced window live.
+        if not getattr(self, "_syncing_from_other_window", False):
+            enabled_models, all_models = self.get_live_state()
+            if hasattr(self.main_dialog, "sync_from_provider"):
+                self.main_dialog.sync_from_provider(self.provider, enabled_models, all_models)
+
+    def get_live_state(self):
+        """(enabled model names, all model names) from the current tables."""
+        self._harvest_widgets()
+        enabled = [
+            self._row_data(self.enabled_table, r).get("name", "")
+            for r in range(self.enabled_table.rowCount())
+        ]
+        all_models = enabled + [
+            self._row_data(self.disabled_table, r).get("name", "")
+            for r in range(self.disabled_table.rowCount())
+        ]
+        return [m for m in enabled if m], [m for m in all_models if m]
 
     def move_item(self, delta):
         self.move_item_in(self._focused_table(), delta)
@@ -2458,18 +2483,39 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                 for p, models in self._g_timeouts.items() if isinstance(models, dict)}
 
     def match_provider_enabled(self):
-        """Match global membership to provider fallback enabled states only."""
-        enabled_pairs = set(provider_enabled_pairs(self.main_dialog))
-        self._moving_rows = True
-        try:
-            ordered = [self._row_key(table, r) for table in self._tables() for r in range(table.rowCount())]
-            enabled = [pair for pair in ordered if pair in enabled_pairs]
-            disabled = [pair for pair in ordered if pair not in enabled_pairs]
-            self._rebuild_global_membership(enabled, self.enabled_table)
-            self._rebuild_global_membership(disabled, self.disabled_table)
-        finally:
-            self._moving_rows = False
+        """Align global enabled/disabled with each provider's LIVE window.
+
+        Models enabled in the per-provider fallback window move to the Enabled
+        side here; disabled ones move to Disabled; newly fetched models are
+        added to the correct side. Existing global order is preserved.
+        """
+        for provider in self._all_provider_names():
+            if not hasattr(self.main_dialog, "provider_live_state"):
+                # Legacy/fake parent: fall back to saved parent data.
+                enabled_pairs = set(provider_enabled_pairs(self.main_dialog))
+                self._moving_rows = True
+                try:
+                    ordered = [self._row_key(t, r) for t in self._tables() for r in range(t.rowCount())]
+                    enabled = [p for p in ordered if p in enabled_pairs]
+                    disabled = [p for p in ordered if p not in enabled_pairs]
+                    self._rebuild_global_membership(enabled, self.enabled_table)
+                    self._rebuild_global_membership(disabled, self.disabled_table)
+                finally:
+                    self._moving_rows = False
+                continue
+            enabled_models, all_models = self.main_dialog.provider_live_state(provider)
+            if all_models:
+                self.apply_provider_state(provider, enabled_models, all_models)
         self._update_counts()
+
+    def _all_provider_names(self):
+        names = set()
+        for table in self._tables():
+            for r in range(table.rowCount()):
+                pair = self._row_pair_opt(table, r)
+                if pair:
+                    names.add(pair[0])
+        return names
 
     def _rebuild_global_membership(self, pairs, table):
         table.blockSignals(True)
@@ -3080,6 +3126,24 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
 
 class ProvidersTabMixin:
     # -- Cross-window list sync -------------------------------------------
+    def provider_live_state(self, provider):
+        """Read a provider's live fallback dialog if open, else saved config."""
+        for widget in (getattr(self, "provider_widgets", {}) or {}).values():
+            if getattr(widget, "provider", None) != provider:
+                continue
+            dlg = getattr(widget, "fallback_dialog", None)
+            if dlg is not None and hasattr(dlg, "get_live_state"):
+                try:
+                    enabled, all_models = dlg.get_live_state()
+                    if all_models:
+                        return enabled, all_models
+                except (RuntimeError, AttributeError):
+                    pass
+        fallbacks = (getattr(self, "model_fallbacks_data", {}) or {}).get(provider) or []
+        disabled = set((getattr(self, "disabled_fallback_models_data", {}) or {}).get(provider) or [])
+        enabled = [m for m in fallbacks if m not in disabled]
+        return enabled, list(fallbacks)
+
     def sync_from_provider(self, provider, enabled_models, all_models):
         """Per-provider window acted: mirror its membership into the global list."""
         self.model_fallbacks_data[provider] = list(all_models)

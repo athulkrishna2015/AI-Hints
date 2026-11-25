@@ -152,6 +152,23 @@ class CrossWindowSyncTests(unittest.TestCase):
         self.assertIn("m2", disabled)
         self.assertEqual(parent.model_fallbacks_data["p"], ["m1", "m3", "m2"])
 
+    def test_provider_toggle_auto_syncs_global(self):
+        parent = self._parent()
+        gdlg = GlobalFallbackOrderDialog(parent, [["p", "m1"], ["p", "m2"]])
+        parent.global_fallback_dlg = gdlg
+        parent.disabled_fallback_models_data = {"p": ["m2"]}
+        pdlg = FallbackOrderDialog(parent, "p", "m1", ["m1", "m2"], [])
+        parent.provider_widgets = {
+            "p": types.SimpleNamespace(fallback_dialog=pdlg, provider="p")
+        }
+        # Toggle m2 from Disabled to Enabled in the per-provider dialog.
+        row = next(r for r in range(pdlg.disabled_table.rowCount())
+                   if pdlg._row_data(pdlg.disabled_table, r).get("name") == "m2")
+        pdlg._move_row_to_other_table(pdlg.disabled_table, row, True)
+        enabled = self._pairs(gdlg, gdlg.enabled_table)
+        self.assertIn(("p", "m2"), enabled)
+        self.assertNotIn(("p", "m2"), self._pairs(gdlg, gdlg.disabled_table))
+
     def test_remove_propagates_to_both_open_dialogs(self):
         parent = self._parent()
         gdlg = GlobalFallbackOrderDialog(parent, [["p", "m1"], ["p", "m2"]])
