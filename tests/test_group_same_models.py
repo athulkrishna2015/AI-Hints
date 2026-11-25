@@ -579,6 +579,53 @@ class GlobalDialogTableTests(unittest.TestCase):
         self.assertIn(("openai", "m1"), [tuple(d) for d in owner.global_model_priority_data])
         self.assertIn(("openai", "m1"), [tuple(d) for d in owner.disabled_global_model_priority_data])
 
+    def test_ok_button_keeps_manual_reorder(self):
+        """Manual drag/sort order must survive OK (not be re-sorted by sync)."""
+        owner = QtWidgets.QWidget()
+        owner.config = {}
+        owner.global_model_priority_data = [["openai", "m1"], ["openai", "m2"], ["gemini", "g3"]]
+        owner.disabled_global_model_priority_data = []
+        owner.models_layout = None  # headless: built-in names used as fallback
+        real_dlg = GlobalFallbackOrderDialog(
+            owner, [("openai", "m1"), ("openai", "m2"), ("gemini", "g3")]
+        )
+        real_dlg.enabled_table.setCurrentCell(2, 0)
+        real_dlg.move_item_in(real_dlg.enabled_table, -1)
+        expected = [list(p) for p in real_dlg.get_ordered_list()]
+
+        from unittest.mock import patch
+        class Signal:
+            def connect(self, callback):
+                self.callback = callback
+
+        class FakeDialog:
+            def __init__(self):
+                self.accepted = Signal()
+                self.finished = Signal()
+
+            def setWindowModality(self, *args):
+                pass
+
+            def show(self):
+                self.accepted.callback()
+
+            def raise_(self):
+                pass
+
+            def activateWindow(self):
+                pass
+
+            get_ordered_list = real_dlg.get_ordered_list
+            get_disabled_list = real_dlg.get_disabled_list
+            get_global_model_timeouts = real_dlg.get_global_model_timeouts
+            apply_provider_state = real_dlg.apply_provider_state
+
+        fake = FakeDialog()
+        with patch.object(_TP_MOD, "GlobalFallbackOrderDialog", return_value=fake), \
+             patch.object(_TP_MOD, "tooltip"):
+            ProvidersTabMixin.on_advanced_fallback_clicked(owner)
+        self.assertEqual(owner.global_model_priority_data, expected)
+
     def test_group_large_list_completes(self):
         import time as _time
 

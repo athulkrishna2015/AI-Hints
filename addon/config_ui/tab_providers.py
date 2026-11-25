@@ -2099,15 +2099,30 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         layout.addWidget(dlg_btns)
 
     def apply_provider_state(self, provider, enabled_models, all_models):
-        """Acting per-provider window wins: align this provider's global rows."""
+        """Acting per-provider window wins: align this provider's global rows.
+
+        Rows moved between Enabled/Disabled keep their original position
+        instead of being appended — so sync never reshuffles manual ordering.
+        """
         enabled = set(enabled_models)
         for table in self._tables():
             for row in range(table.rowCount() - 1, -1, -1):
                 pair = self._row_pair_opt(table, row)
                 if not pair or pair[0] != provider:
                     continue
-                if (table is self.enabled_table) != (pair[1] in enabled):
-                    self._move_row_to_other_table(table, row, pair[1] in enabled)
+                want_enabled = pair[1] in enabled
+                if (table is self.enabled_table) == want_enabled:
+                    continue
+                target = self.enabled_table if want_enabled else self.disabled_table
+                insert_at = min(row, target.rowCount())
+                self._moving_rows = True
+                try:
+                    self._harvest_widgets()
+                    table.removeRow(row)
+                    self._add_table_row(target, pair[0], pair[1],
+                                        checked=want_enabled, row=insert_at)
+                finally:
+                    self._moving_rows = False
         existing = {
             self._row_pair_opt(t, r) for t in self._tables() for r in range(t.rowCount())
         }
@@ -3395,31 +3410,18 @@ class ProvidersTabMixin:
             tuple(p) for p in (self.global_model_priority_data or [])
             if isinstance(p, (list, tuple)) and len(p) == 2 and p[0] in known
         ]
-        # Snapshot the ORIGINAL order so cross-window sync / Match can never
-        # reshuffle the saved priority order when this dialog is accepted.
-        original_rank = {
-            pair: i for i, pair in enumerate(
-                [tuple(p) for p in (
-                    list(self.global_model_priority_data or [])
-                    + list(getattr(self, "disabled_global_model_priority_data", []) or [])
-                ) if isinstance(p, (list, tuple)) and len(p) == 2
-                ]
-            )
-        }
 
         dlg = GlobalFallbackOrderDialog(self, current_list)
         dlg.setWindowModality(Qt.WindowModality.NonModal)
         self.global_fallback_dlg = dlg
         def save_global_fallback():
-            # Keep membership from the dialog, but re-apply the original saved
-            # order to every surviving pair. New pairs land at the end.
-            enabled = [tuple(p) for p in dlg.get_ordered_list()]
-            disabled = [tuple(p) for p in dlg.get_disabled_list()]
+            # The dialog's current table order IS the saved order — including
+            # any manual drag/sort/move the user just performed.
+            enabled = [list(p) for p in dlg.get_ordered_list()]
+            disabled = [list(p) for p in dlg.get_disabled_list()]
             # global_model_priority_data is the FULL list (enabled + disabled);
             # disabled_global_model_priority_data marks which entries are off.
-            all_pairs = enabled + disabled
-            all_pairs.sort(key=lambda p: original_rank.get(p, len(original_rank)))
-            self.global_model_priority_data = all_pairs
+            self.global_model_priority_data = enabled + disabled
             self.disabled_global_model_priority_data = disabled
 
             # This row's own timeout value lives in the global scope and
