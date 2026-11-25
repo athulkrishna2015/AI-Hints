@@ -94,13 +94,34 @@ def prune_orphan_pairs(pairs, known_providers):
 
 
 def merge_provider_into_global(global_on, global_off, provider, enabled_models, all_models):
-    """Acting per-provider window wins: return updated (enabled, disabled) global lists."""
+    """Acting per-provider window wins, WITHOUT reshuffling global order.
+
+    Existing pairs keep their exact positions; only brand-new pairs are
+    appended. The user's Advanced Fallback Priority order is authoritative
+    for ordering even when membership comes from the per-provider window.
+    """
     enabled = set(enabled_models)
-    on = [list(p) for p in (global_on or []) if list(p)[0] != provider]
-    off = [list(p) for p in (global_off or []) if list(p)[0] != provider]
-    for model in all_models:
-        (on if model in enabled else off).append([provider, model])
-    return on, off
+    wanted = {m: (m in enabled) for m in all_models}
+
+    def rebuild(lst, want_enabled):
+        out = []
+        seen = set()
+        for entry in lst or []:
+            pair = tuple(entry)
+            if pair[0] != provider:
+                out.append(list(pair))
+                continue
+            model = pair[1]
+            if model not in wanted or wanted[model] != want_enabled:
+                continue
+            out.append(list(pair))
+            seen.add(model)
+        for model, is_enabled in wanted.items():
+            if model not in seen and is_enabled == want_enabled:
+                out.append([provider, model])
+        return out
+
+    return rebuild(global_on, True), rebuild(global_off, False)
 
 
 def merge_global_into_provider(fallbacks, disabled_fallbacks, pair_states):
@@ -1756,11 +1777,20 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         """Remove rows based on the requested removal type.
 
         kind in {"selected", "deprecated", "missing", "flagged"}.
-        Acts on the given table, defaulting to the highlighted (active) list.
+        Always scans BOTH Enabled and Disabled lists so a matching model is
+        removed from whichever list it currently sits in.
         """
-        tables = (table,) if table is not None else (self._focused_table(),)
+        tables = self._tables()
         if kind == "selected":
-            targets = [(t, i) for t in tables for i in self._selected_rows(t)]
+            targets = []
+            for t in tables:
+                rows = {idx.row() for idx in t.selectionModel().selectedRows()}
+                rows |= {idx.row() for idx in t.selectedIndexes()}
+                targets.extend((t, i) for i in sorted(rows))
+            if not targets:
+                active = self._focused_table()
+                if active is not None and active.currentRow() >= 0:
+                    targets = [(active, active.currentRow())]
             label = "selected"
         elif kind == "deprecated":
             targets = [(t, i) for t in tables for i in self._rows_matching(t, lambda m: is_model_deprecated(self.provider, m))]
@@ -2674,13 +2704,20 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         """Remove rows based on the requested removal type.
 
         kind in {"selected", "deprecated", "missing", "flagged"}.
-        Acts on the given table, defaulting to the highlighted (active) list.
+        Always scans BOTH Enabled and Disabled lists so a matching model is
+        removed from whichever list it currently sits in.
         """
-        tables = (table,) if table is not None else (self._focused_table(),)
+        tables = self._tables()
         targets = []
         if kind == "selected":
-            for table in tables:
-                targets.extend((table, i) for i in self._selected_rows(table))
+            for t in tables:
+                rows = {idx.row() for idx in t.selectionModel().selectedRows()}
+                rows |= {idx.row() for idx in t.selectedIndexes()}
+                targets.extend((t, i) for i in sorted(rows))
+            if not targets:
+                active = self._focused_table()
+                if active is not None and active.currentRow() >= 0:
+                    targets = [(active, active.currentRow())]
             label = "selected"
         elif kind == "deprecated":
             for table in tables:
@@ -3274,21 +3311,52 @@ class ProvidersTabMixin:
         if not hasattr(self, "global_model_priority_data"):
             self.global_model_priority_data = self.config.get("global_model_priority", [])
 
-        # Never drop rows here: a renamed or temporarily-removed provider's
-        # rows stay visible so the saved priority order is always respected.
-        # Genuinely dead rows can be removed with the lists' own Remove buttons.
-        current_list = [tuple(p) for p in (self.global_model_priority_data or [])
-                        if isinstance(p, (list, tuple)) and len(p) == 2]
+        # Only show providers that are currently ENABLED in the AI Providers
+        # tab. Disabled, removed or stale providers (e.g. "antigravity proxy")
+        # must not pollute the Advanced Fallback Priority window.
+        known = set()
+        if getattr(self, "models_layout", None) is not None:
+            from .widgets import ProviderRowWidget
+            for i in range(self.models_layout.count()):
+                w = self.models_layout.itemAt(i).widget()
+                if isinstance(w, ProviderRowWidget) and w.enabled_cb.isChecked():
+                    known.add(w.provider)
+        else:
+            # Headless / pre-build fallback: all built-ins + configured extras.
+            known = set(PROVIDER_ORDER)
+            known.update((getattr(self, "custom_providers_data", {}) or {}).keys())
+            known.update((getattr(self, "local_providers_data", {}) or {}).keys())
+            known.add("local")
+        current_list = [
+            tuple(p) for p in (self.global_model_priority_data or [])
+            if isinstance(p, (list, tuple)) and len(p) == 2 and p[0] in known
+        ]
+        # Snapshot the ORIGINAL order so cross-window sync / Match can never
+        # reshuffle the saved priority order when this dialog is accepted.
+        original_rank = {
+            pair: i for i, pair in enumerate(
+                [tuple(p) for p in (
+                    list(self.global_model_priority_data or [])
+                    + list(getattr(self, "disabled_global_model_priority_data", []) or [])
+                ) if isinstance(p, (list, tuple)) and len(p) == 2
+                ]
+            )
+        }
 
         dlg = GlobalFallbackOrderDialog(self, current_list)
         dlg.setWindowModality(Qt.WindowModality.NonModal)
         self.global_fallback_dlg = dlg
         def save_global_fallback():
-            # The full list must keep disabled rows too (they live in the
-            # Disabled table now); the separate disabled map marks which
-            # are off, and never touches per-provider fallback state.
-            self.disabled_global_model_priority_data = dlg.get_disabled_list()
-            self.global_model_priority_data = dlg.get_ordered_list() + self.disabled_global_model_priority_data
+            # Keep membership from the dialog, but re-apply the original saved
+            # order to every surviving pair. New pairs land at the end.
+            enabled = [tuple(p) for p in dlg.get_ordered_list()]
+            disabled = [tuple(p) for p in dlg.get_disabled_list()]
+            # global_model_priority_data is the FULL list (enabled + disabled);
+            # disabled_global_model_priority_data marks which entries are off.
+            all_pairs = enabled + disabled
+            all_pairs.sort(key=lambda p: original_rank.get(p, len(original_rank)))
+            self.global_model_priority_data = all_pairs
+            self.disabled_global_model_priority_data = disabled
 
             # This row's own timeout value lives in the global scope and
             # overrides the per-provider one at runtime.

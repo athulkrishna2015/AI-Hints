@@ -397,6 +397,26 @@ class GlobalDialogTableTests(unittest.TestCase):
         )
         self.assertEqual(self._disabled_order(dlg), [("z", "gpt-4o")])
 
+    def test_remove_missing_deletes_from_both_lists(self):
+        missing = _TP_MOD.GLOBAL_MISSING_FROM_FETCH
+        pairs = [
+            ("a", "keep-enabled"), ("a", "victim-enabled"),
+            ("c", "victim-disabled"), ("c", "keep-disabled"),
+        ]
+        dlg = self._make_dialog(
+            pairs,
+            disabled=[("c", "victim-disabled"), ("c", "keep-disabled")],
+        )
+        missing["a"] = {"victim-enabled"}
+        missing["c"] = {"victim-disabled"}
+        try:
+            dlg.remove_models("missing")
+            self.assertEqual(self._order(dlg), [("a", "keep-enabled")])
+            self.assertEqual(self._disabled_order(dlg), [("c", "keep-disabled")])
+        finally:
+            missing.pop("a", None)
+            missing.pop("c", None)
+
     def test_move_and_remove_rows(self):
         dlg = self._make_dialog([("a", "m1"), ("b", "m2"), ("c", "m3")])
         dlg.enabled_table.item(2, 0).setSelected(True)
@@ -523,9 +543,9 @@ class GlobalDialogTableTests(unittest.TestCase):
 
         owner = QtWidgets.QWidget()
         owner.config = {}
-        owner.global_model_priority_data = [["a", "m1"], ["b", "m2"]]
-        owner._known_global_providers = lambda: {"a", "b"}
-        real_dlg = GlobalFallbackOrderDialog(owner, [("a", "m1"), ("b", "m2")])
+        owner.global_model_priority_data = [["openai", "m1"], ["gemini", "m2"]]
+        owner.models_layout = None  # headless: built-in names used as fallback
+        real_dlg = GlobalFallbackOrderDialog(owner, [("openai", "m1"), ("gemini", "m2")])
         real_dlg.enabled_table.item(0, 0).setCheckState(Qt.CheckState.Unchecked)
         class Signal:
             def connect(self, callback):
@@ -556,8 +576,8 @@ class GlobalDialogTableTests(unittest.TestCase):
         with patch.object(_TP_MOD, "GlobalFallbackOrderDialog", return_value=fake), \
              patch.object(_TP_MOD, "tooltip"):
             ProvidersTabMixin.on_advanced_fallback_clicked(owner)
-        self.assertIn(("a", "m1"), [tuple(d) for d in owner.global_model_priority_data])
-        self.assertIn(("a", "m1"), [tuple(d) for d in owner.disabled_global_model_priority_data])
+        self.assertIn(("openai", "m1"), [tuple(d) for d in owner.global_model_priority_data])
+        self.assertIn(("openai", "m1"), [tuple(d) for d in owner.disabled_global_model_priority_data])
 
     def test_group_large_list_completes(self):
         import time as _time

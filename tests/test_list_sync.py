@@ -173,7 +173,7 @@ class MergeHelperTests(unittest.TestCase):
             [["gemini", "g1"], ["openai", "o1"]], [["gemini", "g2"]],
             "gemini", {"g1"}, ["g1", "g2", "g3"],
         )
-        self.assertEqual(on, [["openai", "o1"], ["gemini", "g1"]])
+        self.assertEqual(on, [["gemini", "g1"], ["openai", "o1"]])  # original order preserved
         self.assertEqual(off, [["gemini", "g2"], ["gemini", "g3"]])
 
     def test_global_fetch_wins_for_affected_providers(self):
