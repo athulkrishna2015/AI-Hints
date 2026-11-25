@@ -57,9 +57,10 @@ Example:
 
 | Key | Default | Purpose |
 |-----|---------|---------|
-| `thinking_levels` | `{}` | Per-model thinking level (`off`/`low`/`medium`/`high`). |
+| `model_variants` | `{}` | Per-model request overrides keyed `provider|model`: `temperature`, `max_tokens`, `thinking_budget` (0 disables), `reasoning_effort`, `response_format`, `prompt_caching: false`. Edited as columns in the Fallback Priority windows. |
 | `model_timeouts` | `{}` | Per-model request timeout overrides (seconds). |
-| `global_thinking_levels` | `{}` | Per-row thinking level for Advanced Global Fallback entries; overrides `thinking_levels` for that row at runtime (explicit `off` included). |
+| `provider_overrides` | `{}` | Edits to built-in providers (URL, models URL, headers, body params). Built-ins are edited in place — no duplicate custom provider entry. |
+| `fallback_column_order` / `global_fallback_column_order` | `[]` | Saved column order for the per-provider / global Fallback Priority lists (drag headers to reorder). |
 | `global_model_timeouts` | `{}` | Per-row timeout for Advanced Global Fallback entries; overrides `model_timeouts` for that row at runtime. |
 | `provider_timeouts` | `{}` | Per-provider request timeout (0 = use global). |
 | `request_timeout` | `60` | Global active-review request timeout (seconds). |

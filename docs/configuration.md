@@ -89,16 +89,18 @@ Each card resets to these defaults on a fresh show (including relearn/retries), 
 
 Top row buttons:
 
-- **Fetch All** — fetch the latest models for all providers that have API keys. When used in the Advanced Global Fallback dialog, it only updates the global list state and does not rewrite per-provider fallback checkboxes or ordering.
+- **Fetch All** — fetch the latest models for all providers that have API keys. In either Fallback Priority dialog it fetches and **syncs membership across both windows** (the window you act in is authoritative): fetched models appear in the correct Enabled/Disabled side of the other window too.
 - **Test All** — test all configured/enabled providers sequentially.
 - **Restore Defaults** — clear model names/fallbacks back to the blank factory template (the add-on ships no model names; use **Fetch** or type them in).
 
 Global fallback controls:
 
 - **Enable Advanced Fallback Priority (Global List)** — use a global priority list instead of per-provider nested fallbacks. When enabled, a green **"Mode: Advanced Global Fallback active"** banner appears, the **Advanced Fallback Priority...** button turns solid green, and the per-provider rows are visually dimmed for clarity — but every per-provider control stays fully interactive (keys, models, enable toggles, per-provider fallbacks, fetch/test/timeouts are all still read at runtime). When disabled, the banner switches to a neutral **"Standard per-provider fallbacks"** note and the rows return to full opacity.
-- **Advanced Fallback Priority...** — open the global priority dialog (non-modal — you can keep it open alongside the main config window) with two tables side by side behind a draggable splitter: **Enabled priority order** (rows actually tried, top to bottom) and **Disabled / available**. Unchecking moves a row to Disabled; checking moves it back to Enabled. Each table is a **Provider | Model | Thinking Level | Timeout (s) | Status** grid (click any column header to sort that list, click again to reverse) with its own ▲ Up / ▼ Down / ⏫ Top / ⏬ Bottom buttons and drag-and-drop reordering (drag selected rows to the desired position; multi-row selections move as a group). Each row carries its own thinking level and timeout, seeded from the per-provider values, which override the per-provider settings for that row at runtime. Newly fetched models land in Disabled.
+- **Advanced Fallback Priority...** — open the global priority dialog (non-modal — you can keep it open alongside the main config window) with two tables side by side behind a draggable splitter: **Enabled priority order** (rows actually tried, top to bottom) and **Disabled / available**. Unchecking moves a row to Disabled; checking moves it back to Enabled. Each table is a **Provider | Model | Timeout (s) | Status | Temp | Max tokens | Reasoning effort | Thinking budget | Response format | Cache** grid (click any column header to sort that list, click again to reverse; **drag column headers to rearrange columns**). It has its own ▲ Up / ▼ Down / ⏫ Top / ⏬ Bottom buttons and drag-and-drop row reordering (multi-row selections move as a group). Each row carries its own request parameters and timeout, seeded from the saved per-model overrides. Newly fetched models land in Disabled, then sync across from the per-provider window. Only providers enabled in the **AI Providers** tab appear here.
 - **Group Same Models** (inside the dialog) — cluster rows for the same model together across providers (vendor prefixes, `:free` suffixes, case, and `-`/`.`/`_`/`@` punctuation ignored) so a model served by several providers can be ordered once; fallback still tries rows top to bottom.
 - **Sort** (inside the dialog) — alphabetically reorder rows by provider or by model name before fine-tuning priority.
+- **Match Per-Provider Enabled** (inside the dialog) — align Enabled/Disabled membership with the **live** per-provider Fallbacks dialogs, adding newly fetched models where needed while preserving your manual priority order. Normal enable/disable/fetch/remove actions in a per-provider window already sync automatically, so this is mainly a catch-up button.
+- **Remove** acts on **both** Enabled and Disabled lists simultaneously (Selected / Deprecated / No Longer Returned / both).
 
 ### Per-Provider Rows
 
@@ -122,11 +124,12 @@ Each provider in your priority order has a row with:
 
 - Search field to filter models.
 - Two tables side by side behind a draggable splitter in one window: **Enabled priority** (first row is the Active model) and **Disabled / available** — uncheck to disable (Active promotes the next row), check to re-enable; each list has its own ▲ Up / ▼ Down / ⏫ Top / ⏬ Bottom buttons and supports drag-and-drop reordering (drag selected rows to the desired position; multi-row selections move together).
-- Tables with **Model Name**, **Thinking Level** (`off`/`low`/`medium`/`high`), and **Timeout (s)** per model — click any header to sort by it (again to reverse), drag any header boundary to resize the column.
+- Tables with **Model Name**, **Timeout (s)**, and the six parameter columns (**Temp / Max tokens / Reasoning effort / Thinking budget / Response format / Cache**) per model — click any header to sort (again to reverse), drag any header boundary to resize, or drag a header to a new position to reorder columns. Blank/`auto` cells use provider defaults.
 - Status markers: ⭐ active, 🆕 newly fetched (green), ⚠️ deprecated (red), ⚠️ no longer returned (amber). These markers are independent from the Advanced Global Fallback dialog.
 - Buttons: **Move Up / Move Down / Set Active**, **Remove** (Selected / Deprecated / No Longer Returned / both), **Test** (Checked / Row / Newly Fetched / All), **Rank Checked First**, **Fetch All**, **Restore Defaults**. Tests linger like live generations: a timed-out model is retried in the background and a late result still counts. Every request logs its elapsed time (`request took Xs`).
   - **Move Up / Move Down / Top / Bottom** reorder the selected model(s). Multiple rows can be selected at once (Ctrl/Shift-click) and are moved as a group; the selection is preserved after the move and each row keeps its per-model thinking level, timeout, checkbox state, and status highlights. Rows can also be dragged to any position within the same list.
 - Fetching models in this dialog preserves the current checked state for rows that already exist; newly fetched rows stay unchecked until you enable them.
+- Toggling a model here (enable/disable) or fetching/removing models immediately updates the open Advanced Global Fallback Priority window too — no need to press **Match Global Enabled**.
 
 ### Model Testing Prompt Settings
 

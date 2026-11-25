@@ -32,6 +32,8 @@ Bundles requests and submits them to a cloud provider's native async API. **Gemi
 - **Except if Generated Version <** — cards with a version older than this value are still queued.
 - **Batch Limit** — max cards to process (1–1,000,000).
 - **Concurrent Multi-Provider Generation (Multithreaded)** — generate in parallel using all ready/enabled providers (bypasses the Force Provider/Model overrides).
+- **Trigger AnkiWeb sync after batch generation completes** — on by default; runs a headless collection sync in the background once the batch finishes.
+- **Prevent computer sleep during batch generation** — off by default; holds a system sleep inhibitor (systemd-inhibit / caffeinate / SetThreadExecutionState) while the batch runs.
 - **Entire Collection** — process cards across all decks in the collection. This mode does not update a per-deck incremental scan cursor.
 - **⚡ Force Start** — starts the run bypassing the "No configured API Keys" readiness check and ignoring offline detection for that run only (saved settings are untouched; the dormant-queue resume prompt still applies). Use when a queue is wrongly parked with every thread on 🌐 Offline.
 

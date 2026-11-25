@@ -16,7 +16,7 @@ github:[https://github.com/athulkrishna2015/AI-Hints](https://github.com/athulkr
 - **API Key Rotation**: Register and rotate multiple API keys per provider to prevent exhaustion.
 - **Active Provider Auto-Derivation**: The primary provider is derived automatically from the first usable entry in your fallback priority list (first enabled provider with an API key, or the first custom provider) — no separate dropdown to maintain.
 - **Per-Card Model Override**: **Alt+click** Generate/Regenerate to open a theme-aware dialog and force a specific provider + model for that card's regeneration (all active models are listed, including ones on cooldown; it remembers your last choice).
-- **Unified Learning Prompt**: One refined system prompt drives every provider — SRS-friendly, cloze-aware, exactly 3 progressive hints, factual errors prefixed with ⚠️, subject-specific guidance, MathJax/JSON escaping, and a single canonical output schema.
+- **Unified Learning Prompt**: One refined system prompt drives every provider — SRS-friendly, cloze-aware, 3 progressive hints plus an optional 4th mnemonic/memory-trick hint (General tab toggle), factual errors prefixed with ⚠️, subject-specific guidance, MathJax/JSON escaping, and a single canonical output schema.
 
 ### 🎮 Interactive MCQ & Review UI
 - **Multiple-Choice Options**: Select MCQ options on the front side (via click, touch, or hotkeys `1-9`) with color-coded results (green for correct, red for incorrect).
@@ -74,7 +74,7 @@ Each generation flow has its own base request budget — `request_timeout` (expl
 2. **OpenAI** (GPT-4o)
 3. **DeepSeek** (Reasoner/V3)
 4. **Grok (xAI)** (Grok 2)
-5. **Gemini** (Gemini 2.0 Pro/Flash)
+5. **Gemini** (Gemini 4 / 3.x via the Interactions API)
 6. **OpenRouter** (Unified Router)
 7. **Hugging Face** (Serverless DeepSeek-V3 / Llama 3.3)
 8. **Groq**
@@ -162,9 +162,10 @@ Go to **Tools -> Add-ons -> AI-Hints -> Config** to open the graphical configura
     - **No API Key Required**: Local endpoints without authentication can leave the API Key field blank.
     - **Body Params**: Send extra JSON fields in the request body (e.g., `{"think": "low"}` to control model reasoning traces on thinking-capable models like GPT-OSS or Qwen3).
     - **Editable Name**: Provider names can be changed after creation via the Edit button.
-  - **Per-Model Thinking Levels & Timeouts**: In the **Fallbacks** dialog for any provider, each model has a Thinking Level dropdown (`off`/`low`/`medium`/`high`) and a Timeout spinbox. Set thinking to `"low"` for minimal reasoning traces on GPT-OSS or Qwen3, or `"off"` to disable (where supported). Timeout overrides the provider/global timeout for that specific model — and is honored by every generation flow (review, pregen, batch) whenever it is greater than that flow's base budget (extend-only).
+  - **Per-Model Parameters & Timeouts**: In the **Fallbacks** dialog for any provider — and in the **Advanced Fallback Priority** window — each model row has editable **Temp / Max tokens / Reasoning effort / Thinking budget / Response format / Cache** columns plus a Timeout spinbox. Leave a cell blank/`auto` to use the provider default; only overrides are saved. Column headers can be **dragged to reorder** the grid. (The old Model Variants tab was removed; these columns replace it.)
   - **Multi-Select Test Row**: Ctrl+click or Shift+click to select multiple rows, then click **Test → Test Row** to test them.
   - **Model Status Highlights**: Fallback lists highlight 🆕 newly fetched models (green), ⚠️ deprecated (red), and ⚠️ no-longer-returned (amber) models after a fetch, with a unified **Remove** dropdown to strip Selected / Deprecated / No Longer Returned / both flagged types, and a unified **Test** dropdown (Checked / Row / Newly Fetched / All).
+  - **Live cross-window sync**: enabling/disabling a model in a per-provider Fallbacks dialog immediately mirrors it into the open Advanced Fallback Priority window (and vice versa); fetching or removing a model updates both windows. **Match Per-Provider Enabled** catches up from the live per-provider lists and adds newly fetched models. Your manual priority order is preserved, and **Remove** deletes matching rows from *both* Enabled and Disabled lists at once.
   - **Token Usage Logging**: Every successful provider call logs its token usage (`prompt_tokens`/`completion_tokens`/`total_tokens`) to `ai_hints.log`, visible in the Logs tab.
   - **Debug Logging**: Enable "Debug logging" in the Logs tab to see full request/response payloads in the log file (`<Anki profile>/ai_hints_bin/ai_hints.log`).
 - **Mobile Support Tab**: Smart one-click installer for AnkiDroid/AnkiMobile with Emoji mode settings.

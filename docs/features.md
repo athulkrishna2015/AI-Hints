@@ -7,6 +7,8 @@ AI-Hints is a comprehensive AI study companion for Anki. This page describes eve
 - **Broad provider support**: OpenAI, Anthropic, Gemini, DeepSeek, Grok (xAI), Groq, OpenRouter, Hugging Face, SambaNova, NVIDIA, Mistral, Cerebras, and custom OpenAI-compatible endpoints (Ollama, LM Studio, vLLM).
 - **Automated fallbacks**: If a provider fails (rate limit, key exhaustion, network error), the add-on automatically tries the next model/provider in your priority list. Transient provider-wide outages — HTTP `429` (rate limited) and `503` (service unavailable) — skip the whole provider for the current generation and park it for a 60-second cooldown before retrying on a later generation, instead of hammering every key and model against a temporarily dead service. Model-test runs still rotate keys for diagnosis.
 - **API key rotation**: Register multiple keys per provider to prevent exhaustion and spread load.
+- **Per-model parameters**: Each model row in either Fallback Priority window has editable Temp / Max tokens / Reasoning effort / Thinking budget / Response format / Cache cells (blank = provider default) plus a timeout — so recall prompts can be tuned per model without leaving the priority list.
+- **Optional mnemonic hint**: Enable the General-tab toggle to generate a 4th hint with a memory trick for the correct answer; the ⚠️ factual-error warning moves to hint 4.
 - **Model cooldowns & blacklist**: Models that fail repeatedly are temporarily blacklisted to prevent lag, with configurable lockout duration.
 
 ### Intelligence-Ranked Fallback Hierarchy
@@ -17,7 +19,7 @@ Fallback providers are ranked by intelligence and reasoning capability. Default 
 2. OpenAI (GPT-4o)
 3. DeepSeek (Reasoner/V3)
 4. Grok (xAI)
-5. Gemini (Gemini 2.0 Pro/Flash)
+5. Gemini (Gemini 4 / 3.x, via the Interactions API)
 6. OpenRouter (Unified Router)
 7. Hugging Face (Serverless DeepSeek-V3 / Llama 3.3)
 8. Groq
