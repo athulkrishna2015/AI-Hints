@@ -198,7 +198,7 @@ class TestKeyRotation(unittest.TestCase):
         resp_400.read = MagicMock(return_value=b'{"error": {"status": "INVALID_ARGUMENT", "message": "API key not valid"}}')
         
         resp_success = MagicMock()
-        resp_success.read.return_value = b'{"candidates": [{"content": {"parts": [{"text": "{\\"hints\\": [\\"hint1\\"], \\"options\\": [\\"opt1\\"]}"}]}}]}'
+        resp_success.read.return_value = b'{"steps": [{"type": "model_output", "content": [{"text": "{\\"hints\\": [\\"hint1\\"], \\"options\\": [\\"opt1\\"]}"}]}]}'
         resp_success.__enter__.return_value = resp_success
         
         mock_urlopen.side_effect = [resp_400, resp_success]
@@ -308,7 +308,7 @@ class TestKeyRotation(unittest.TestCase):
         
         # Second call (gemini-flash-latest, key 2) succeeds
         resp_success = MagicMock()
-        resp_success.read.return_value = b'{"candidates": [{"content": {"parts": [{"text": "{\\"hints\\": [\\"hint_from_model_2\\"], \\"options\\": [\\"opt1\\"]}"}]}}]}'
+        resp_success.read.return_value = b'{"steps": [{"type": "model_output", "content": [{"text": "{\\"hints\\": [\\"hint_from_model_2\\"], \\"options\\": [\\"opt1\\"]}"}]}]}'
         resp_success.__enter__.return_value = resp_success
         
         mock_urlopen.side_effect = [resp_429, resp_success]
@@ -339,7 +339,7 @@ class TestKeyRotation(unittest.TestCase):
         resp_429.read = MagicMock(return_value=b'{"error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}}')
         
         resp_success = MagicMock()
-        resp_success.read.return_value = b'{"candidates": [{"content": {"parts": [{"text": "{\\"hints\\": [\\"hint_from_key_2\\"], \\"options\\": [\\"opt1\\"]}"}]}}]}'
+        resp_success.read.return_value = b'{"steps": [{"type": "model_output", "content": [{"text": "{\\"hints\\": [\\"hint_from_key_2\\"], \\"options\\": [\\"opt1\\"]}"}]}]}'
         resp_success.__enter__.return_value = resp_success
         
         # Model 1 key 1 fails, Model 1 key 2 fails.
@@ -359,7 +359,7 @@ class TestKeyRotation(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test_gemini_generation_uses_stable_v1(self, mock_urlopen):
         resp_success = MagicMock()
-        resp_success.read.return_value = b'{"candidates": [{"content": {"parts": [{"text": "{\\"hints\\": [\\"h1\\"], \\"options\\": [\\"o1\\"]}"}]}}]}'
+        resp_success.read.return_value = b'{"steps": [{"type": "model_output", "content": [{"text": "{\\"hints\\": [\\"h1\\"], \\"options\\": [\\"o1\\"]}"}]}]}'
         resp_success.__enter__.return_value = resp_success
         mock_urlopen.return_value = resp_success
 
@@ -367,8 +367,9 @@ class TestKeyRotation(unittest.TestCase):
 
         self.assertEqual(result["hints"], ["h1"])
         url = mock_urlopen.call_args[0][0].full_url
-        self.assertIn("/v1/models/", url)
-        self.assertNotIn("v1beta", url)
+        self.assertTrue(url.endswith("/v1beta/interactions"), url)
+        headers = {k.lower(): v for k, v in mock_urlopen.call_args[0][0].headers.items()}
+        self.assertEqual(headers.get("api-revision"), "2026-05-20")
 
 
 if __name__ == "__main__":

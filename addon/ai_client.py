@@ -222,6 +222,11 @@ USER_AGENT = f"Anki-AI-Hints/{_load_addon_version()}"
 # channel for features this add-on does not use). Anthropic requires an
 # explicit anthropic-version header; keep it in one place so it cannot drift.
 GEMINI_API_VERSION = "v1"
+# Gemini 4 / 3.x models are only served by the Interactions API; the legacy
+# generateContent endpoint returns 404 for them. REST shape is documented at
+# https://ai.google.dev/gemini-api/docs/interactions-overview
+GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+GEMINI_API_REVISION = "2026-05-20"
 ANTHROPIC_API_VERSION = "2026-10-21"
 
 GEMINI_PROVIDER_EXHAUSTED_STATUSES = {429}
@@ -1742,6 +1747,29 @@ class AIClient:
 
         return {"hints": [], "options": []}
 
+    def _gemini_interaction_to_chat(self, result: Any) -> Dict[str, Any]:
+        """Adapt an Interactions API response to the shared chat parser.
+
+        Interactions return a `steps` array (type-discriminated) instead of
+        `choices[].message.content`. We join the text of all model_output
+        steps; usage metadata is carried over for logging.
+        """
+        if not isinstance(result, dict):
+            return {"choices": [{"message": {"content": str(result)}}]}
+        texts = []
+        for step in result.get("steps") or []:
+            if not isinstance(step, dict) or step.get("type") != "model_output":
+                continue
+            for part in step.get("content") or []:
+                if isinstance(part, dict) and part.get("text"):
+                    texts.append(part["text"])
+        text = "".join(texts)
+        out: Dict[str, Any] = {"choices": [{"message": {"content": text}}]}
+        usage = result.get("usage_metadata") or result.get("usageMetadata") or result.get("usage")
+        if isinstance(usage, dict):
+            out["usageMetadata"] = usage
+        return out
+
     def _call_gemini(self, system_prompt: str, prompt: str, override_model: str = "") -> Dict[str, List[str]]:
         models = [override_model] if override_model else self._models_for_provider("gemini")
 
@@ -1766,33 +1794,35 @@ class AIClient:
 
                 headers = self._json_headers()
                 headers["x-goog-api-key"] = api_key
+                headers["Api-Revision"] = GEMINI_API_REVISION
 
-                model_path = urllib.parse.quote(model, safe="")
-                url = f"https://generativelanguage.googleapis.com/{GEMINI_API_VERSION}/models/{model_path}:generateContent"
-                logger.debug(f"Calling Gemini with model: {model}")
+                url = GEMINI_INTERACTIONS_URL
+                logger.debug(f"Calling Gemini (Interactions API) with model: {model}")
 
+                # Interactions API: model/system_instruction/input at top level,
+                # generation_config for knobs, response_format for strict JSON.
                 data = {
-                    "system_instruction": {"parts": [{"text": system_prompt}]},
-                    "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "responseMimeType": "application/json"
-                    },
+                    "model": model,
+                    "system_instruction": system_prompt,
+                    "input": prompt,
+                    "generation_config": {},
+                    "response_format": {"type": "text", "mime_type": "application/json"},
                 }
 
                 lower_model = model.lower()
                 supports_thinking = (
-                    "gemini-3" in lower_model or 
-                    "gemini-2.5" in lower_model or 
-                    "gemini-flash-latest" in lower_model or 
+                    "gemini-3" in lower_model or
+                    "gemini-4" in lower_model or
+                    "gemini-2.5" in lower_model or
+                    "gemini-flash-latest" in lower_model or
                     "gemini-pro-latest" in lower_model or
-                    "gemini-flash-lite-latest" in lower_model
+                    "gemini-flash-lite-latest" in lower_model or
+                    "gemma-4" in lower_model
                 )
-                
                 if supports_thinking:
-                    data["generationConfig"]["thinkingConfig"] = {
-                        "includeThoughts": True,
-                        "thinkingBudget": 1024
-                    }
+                    # thinking_level replaced the numeric thinking_budget in
+                    # Interactions. "low" matches the old 1024-token budget.
+                    data["generation_config"]["thinking_level"] = "low"
 
                 # Per-model variant values win over the defaults above.
                 self._apply_variant_gemini(data, "gemini", model)
@@ -1801,9 +1831,12 @@ class AIClient:
                     self._log_model_attempt("gemini", model, models)
                     _log_full_request("gemini", model, data)
                     result = self._timed_post(url, data, headers, f"gemini/{model}")
-                    content = self._extract_content(result)
+                    # Interactions responses are step-based; adapt to the
+                    # chat-completion shape the shared parser expects.
+                    chat_result = self._gemini_interaction_to_chat(result)
+                    content = self._extract_content(chat_result)
                     _log_full_response("gemini", model, content)
-                    parsed = self._parse_generation_result(result)
+                    parsed = self._parse_generation_result(chat_result)
                     if parsed.get("hints") or parsed.get("options") or parsed.get("distractors") or parsed.get("correct_answer"):
                         self._on_combo_success("gemini", model, api_key)
                         parsed["_provider"] = "gemini"
@@ -2032,6 +2065,11 @@ class AIClient:
                 logger.warning("AI-Hints: Provider response contained invalid JSON.")
                 return {"hints": [], "options": []}
 
+        # Some APIs (e.g. Gemini Interactions with JSON mime type but no
+        # schema) wrap the result in a one-element array. Unwrap the first
+        # object so the rest of the parser works unchanged.
+        if isinstance(parsed, list):
+            parsed = next((item for item in parsed if isinstance(item, dict)), {})
         if not isinstance(parsed, dict):
             return {"hints": [], "options": []}
 
@@ -2815,17 +2853,45 @@ class AIClient:
 
     def _apply_variant_gemini(self, data: Dict[str, Any], provider: str, model: str) -> Dict[str, Any]:
         variant = self._model_variant(provider, model)
-        if variant:
-            generation = data.setdefault("generationConfig", {})
+        if not variant:
+            return variant
+        # Gemini's native async batch still uses the legacy generateContent
+        # payload; keep that path working alongside the Interactions shape.
+        if "generationConfig" in data:
+            legacy = data["generationConfig"]
             if "temperature" in variant:
-                generation["temperature"] = variant["temperature"]
+                legacy["temperature"] = variant["temperature"]
             if "max_tokens" in variant:
-                generation["maxOutputTokens"] = variant["max_tokens"]
+                legacy["maxOutputTokens"] = variant["max_tokens"]
             if "thinking_budget" in variant:
-                # 0 is a deliberate "no thinking" override, not "unset".
-                generation.setdefault("thinkingConfig", {})["thinkingBudget"] = variant["thinking_budget"]
+                legacy.setdefault("thinkingConfig", {})["thinkingBudget"] = variant["thinking_budget"]
             if variant.get("response_format") == "none":
-                generation.pop("responseMimeType", None)
+                legacy.pop("responseMimeType", None)
+            return variant
+        generation = data.setdefault("generation_config", {})
+        lower = model.lower()
+        gemini4 = "gemini-4" in lower
+        if "temperature" in variant and not gemini4:
+            # Gemini 4 / 3.6+ ignore temperature (official docs); older
+            # models still honour it.
+            generation["temperature"] = variant["temperature"]
+        if "max_tokens" in variant:
+            mt = variant["max_tokens"]
+            # Gemini 4 shares one 1M window for input+thinking+output;
+            # docs require at least 32768 when max_output_tokens is set.
+            generation["max_output_tokens"] = max(32768, mt) if gemini4 else mt
+        if "thinking_budget" in variant:
+            budget = variant["thinking_budget"]
+            if gemini4:
+                # Gemini 4 rejects "minimal"; low/medium/high/xhigh only.
+                level = "low" if budget <= 0 else ("medium" if budget < 8192 else "high")
+            else:
+                level = "minimal" if budget <= 0 else (
+                    "low" if budget < 1024 else "medium" if budget < 8192 else "high"
+                )
+            generation["thinking_level"] = level
+        if variant.get("response_format") == "none":
+            data.pop("response_format", None)
         return variant
 
     def fetch_models(self, provider: str) -> List[str]:

@@ -13,6 +13,15 @@ from blacklist_helpers import isolate_blacklist
 
 
 class TestModelVariants(unittest.TestCase):
+    def test_interactions_wrapped_json_array_is_parsed(self):
+        """Gemini Interactions may wrap the object in a one-item array."""
+        client = AIClient({})
+        out = client._parse_json_result(
+            '[{"hints": ["h"], "options": ["a", "b"], "correct_answer": "b"}]'
+        )
+        self.assertEqual(out["hints"], ["h"])
+        self.assertEqual(out["options"], ["a", "b"])
+        self.assertEqual(out["correct_answer"], "b")
     def setUp(self):
         isolate_blacklist(self)
 
@@ -110,17 +119,14 @@ class TestModelVariants(unittest.TestCase):
             client._call_anthropic("sys", "card")
         self.assertNotIn("thinking", captured["data"])
 
-    def test_zero_thinking_budget_overrides_default(self):
-        result = {"candidates": [{"content": {"parts": [{"text": json.dumps(
-            {"hints": ["h"], "options": ["o"]})}]}}]}
+    def test_zero_thinking_budget_maps_to_lowest_level(self):
+        result = {"steps": [{"type": "model_output", "content": [
+            {"text": json.dumps({"hints": ["h"], "options": ["o"]})}]}]}
         client = self._client("gemini", "gemini-2.5-flash", {"thinking_budget": 0})
         captured, fake = self._capture(result)
         with patch.object(AIClient, "_timed_post", side_effect=fake):
             client._call_gemini("sys", "card")
-        self.assertEqual(
-            captured["data"]["generationConfig"]["thinkingConfig"]["thinkingBudget"],
-            0,
-        )
+        self.assertEqual(captured["data"]["generation_config"]["thinking_level"], "minimal")
 
     def test_local_provider_variant_applied(self):
         client = AIClient({
@@ -146,9 +152,9 @@ class TestModelVariants(unittest.TestCase):
                        if "AI-Hints usage" in str(c[0][0])]
         self.assertEqual(len(usage_lines), 1)
 
-    def test_gemini_variant_applies_generation_config(self):
-        result = {"candidates": [{"content": {"parts": [{"text": json.dumps(
-            {"hints": ["h"], "options": ["o"]})}]}}]}
+    def test_gemini_variant_applies_interactions_config(self):
+        result = {"steps": [{"type": "model_output", "content": [
+            {"text": json.dumps({"hints": ["h"], "options": ["o"]})}]}]}
         client = self._client("gemini", "gemini-4-hydrogen", {
             "temperature": 0.1, "max_tokens": 900,
             "thinking_budget": 512, "response_format": "none",
@@ -157,11 +163,15 @@ class TestModelVariants(unittest.TestCase):
         with patch.object(AIClient, "_timed_post", side_effect=fake):
             client._call_gemini("sys", "card")
 
-        gen = captured["data"]["generationConfig"]
-        self.assertEqual(gen["temperature"], 0.1)
-        self.assertEqual(gen["maxOutputTokens"], 900)
-        self.assertEqual(gen["thinkingConfig"]["thinkingBudget"], 512)
-        self.assertNotIn("responseMimeType", gen)
+        data = captured["data"]
+        self.assertEqual(data["model"], "gemini-4-hydrogen")
+        self.assertEqual(data["system_instruction"], "sys")
+        self.assertEqual(data["input"], "card")
+        gen = data["generation_config"]
+        self.assertNotIn("temperature", gen)  # ignored by Gemini 4
+        self.assertGreaterEqual(gen["max_output_tokens"], 32768)
+        self.assertEqual(gen["thinking_level"], "medium")
+        self.assertNotIn("response_format", data)
 
     def test_gemini_batch_applies_variant(self):
         client = self._client("gemini", "gemini-4-carbon", {
