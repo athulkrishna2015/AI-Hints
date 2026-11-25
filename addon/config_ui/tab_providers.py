@@ -90,6 +90,47 @@ def prune_orphan_pairs(pairs, known_providers):
     return current, orphaned
 
 
+def merge_provider_into_global(global_on, global_off, provider, enabled_models, all_models):
+    """Acting per-provider window wins: return updated (enabled, disabled) global lists."""
+    enabled = set(enabled_models)
+    on = [list(p) for p in (global_on or []) if list(p)[0] != provider]
+    off = [list(p) for p in (global_off or []) if list(p)[0] != provider]
+    for model in all_models:
+        (on if model in enabled else off).append([provider, model])
+    return on, off
+
+
+def merge_global_into_provider(fallbacks, disabled_fallbacks, pair_states):
+    """Acting global window wins: pair_states maps (provider, model) -> enabled bool."""
+    result_fb = dict(fallbacks or {})
+    result_off = dict(disabled_fallbacks or {})
+    by_provider = {}
+    for (provider, model), enabled in pair_states.items():
+        by_provider.setdefault(provider, []).append((model, enabled))
+    for provider, items in by_provider.items():
+        all_models = [model for model, _ in items]
+        enabled = [model for model, on in items if on]
+        enabled_set = set(enabled)
+        # Enabled rows first (in the acting window's order), then disabled —
+        # matches the existing get_ordered_list() + get_disabled_list() save.
+        result_fb[provider] = enabled + [m for m in all_models if m not in enabled_set]
+        result_off[provider] = [m for m in all_models if m not in enabled_set]
+    return result_fb, result_off
+
+
+def remove_pair_from_lists(fallbacks, disabled_fallbacks, global_on, global_off, provider, model):
+    """Remove one (provider, model) pair from all four priority lists."""
+    fb = dict(fallbacks or {})
+    off = dict(disabled_fallbacks or {})
+    if provider in fb:
+        fb[provider] = [m for m in fb[provider] if m != model]
+    if provider in off:
+        off[provider] = [m for m in off[provider] if m != model]
+    on_list = [list(p) for p in (global_on or []) if tuple(p) != (provider, model)]
+    off_list = [list(p) for p in (global_off or []) if tuple(p) != (provider, model)]
+    return fb, off, on_list, off_list
+
+
 def provider_enabled_pairs(main_dialog):
     """Return provider/model pairs enabled in the per-provider fallback data."""
     result = []
@@ -243,6 +284,20 @@ class FallbackPriorityDialog(QDialog):
 
     def get_variant_overrides(self):
         return dict(self._variant_overrides)
+
+    def remove_pair_rows(self, provider, model):
+        """Drop a pair from this dialog's tables after a cross-window removal."""
+        for table in self._tables():
+            for row in range(table.rowCount() - 1, -1, -1):
+                if hasattr(self, "_row_pair_opt"):
+                    match = self._row_pair_opt(table, row) == (provider, model)
+                else:
+                    item = table.item(row, 0)
+                    match = bool(item and item.data(Qt.ItemDataRole.UserRole) == model)
+                if match:
+                    table.removeRow(row)
+        self._update_counts()
+        self.update_item_labels()
 
     def rename_provider(self, old_name, new_name):
         if not old_name or not new_name or old_name == new_name:
@@ -692,8 +747,8 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         info_label.setStyleSheet("color: #666; margin-bottom: 5px;")
         layout.addWidget(info_label)
 
-        # Columns: [Model Name] [Timeout] — thinking settings now live in
-        # the Model Variants tab.
+        # Columns: [Model Name] [Timeout] — request parameters (including
+        # thinking settings) are edited in the Model Parameters panel below.
         headers = ["Model Name", "Timeout (s)"]
         self._build_split_lists(layout, headers, {0: 320, 1: 120},
                                 "Enabled priority (first row is Active):",
@@ -800,9 +855,34 @@ class FallbackOrderDialog(FallbackPriorityDialog):
 
     def _on_variant_selection(self):
         table = self._focused_table() or self.enabled_table
-        rows = self._selected_rows(table)
+        rows = self._selected_rows(table) or ([0] if table.rowCount() else [])
         model = self._row_data(table, rows[0]).get("name", "") if rows else ""
         self._variant_panel.load(self.provider, model)
+
+    def apply_global_state(self, pair_states):
+        """Acting global window wins: align this provider's rows to global state."""
+        relevant = {m: on for (p, m), on in pair_states.items() if p == self.provider}
+        for table in self._tables():
+            for row in range(table.rowCount() - 1, -1, -1):
+                data = self._row_data(table, row)
+                model = data.get("name")
+                if model not in relevant:
+                    continue
+                if (table is self.enabled_table) != relevant[model]:
+                    self._move_row_to_other_table(table, row, relevant[model])
+        existing = {
+            self._row_data(t, r).get("name")
+            for t in self._tables() for r in range(t.rowCount())
+        }
+        for model, on in relevant.items():
+            if model in existing:
+                continue
+            self._add_model_row(
+                self.enabled_table if on else self.disabled_table, model, on
+            )
+        self._update_counts()
+        self.update_item_labels()
+        self._ensure_visible_widgets()
 
     def _model_flags(self, model_name):
         """Return (is_newly_added, is_deprecated, is_missing_after_fetch) for a model."""
@@ -1027,6 +1107,18 @@ class FallbackOrderDialog(FallbackPriorityDialog):
                         self._update_counts()
                         self._ensure_visible_widgets()
                         tooltip(f"Fetched {len(models_clean)} models ({added_count} new, {len(missing_set)} missing).")
+                        # Keep the Advanced Global window in sync without
+                        # pressing "Match Global Enabled" (acting window wins).
+                        self._harvest_widgets()
+                        enabled_models = [
+                            self._row_data(self.enabled_table, r).get("name", "")
+                            for r in range(self.enabled_table.rowCount())
+                        ]
+                        all_models = enabled_models + [
+                            self._row_data(self.disabled_table, r).get("name", "")
+                            for r in range(self.disabled_table.rowCount())
+                        ]
+                        self.main_dialog.sync_from_provider(self.provider, enabled_models, all_models)
                     else:
                         from ..ai_client import LAST_FETCH_ERROR
                         reason = LAST_FETCH_ERROR.get(self.provider) or "check connection"
@@ -1617,15 +1709,22 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         for table, i in targets:
             by_table.setdefault(table, []).append(i)
         removed = 0
+        removed_models = []
         for table, rows in by_table.items():
             for i in sorted(set(rows), reverse=True):
                 name = table.item(i, 0).data(Qt.ItemDataRole.UserRole)
                 self._model_timeouts.pop(name, None)
+                removed_models.append(name)
                 table.removeRow(i)
                 removed += 1
         self.update_item_labels()
         self._update_counts()
         tooltip(f"Removed {removed} model(s).")
+        # A removal is global: drop the pair from the Advanced window and all
+        # parent priority lists too.
+        for name in removed_models:
+            if name and hasattr(self.main_dialog, "remove_pair_everywhere"):
+                self.main_dialog.remove_pair_everywhere(self.provider, name)
 
     def restore_defaults(self):
         self._model_timeouts = {}
@@ -1861,9 +1960,30 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
 
     def _on_variant_selection(self):
         table = self._focused_table() or self.enabled_table
-        rows = self._selected_rows(table)
+        rows = self._selected_rows(table) or ([0] if table.rowCount() else [])
         pair = self._row_pair_opt(table, rows[0]) if rows else None
         self._variant_panel.load(pair[0] if pair else "", pair[1] if pair else "")
+
+    def apply_provider_state(self, provider, enabled_models, all_models):
+        """Acting per-provider window wins: align this provider's global rows."""
+        enabled = set(enabled_models)
+        for table in self._tables():
+            for row in range(table.rowCount() - 1, -1, -1):
+                pair = self._row_pair_opt(table, row)
+                if not pair or pair[0] != provider:
+                    continue
+                if (table is self.enabled_table) != (pair[1] in enabled):
+                    self._move_row_to_other_table(table, row, pair[1] in enabled)
+        existing = {
+            self._row_pair_opt(t, r) for t in self._tables() for r in range(t.rowCount())
+        }
+        for model in all_models:
+            if (provider, model) in existing:
+                continue
+            target = self.enabled_table if model in enabled else self.disabled_table
+            self._add_table_row(target, provider, model, checked=model in enabled)
+        self._update_counts()
+        self.refresh_statuses()
 
     def _cancel_own_test(self):
         """Stop this dialog's model-test loop if it is still running in the
@@ -2494,15 +2614,22 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         for table, i in targets:
             by_table.setdefault(table, []).append(i)
         removed = 0
+        removed_pairs = []
         for table, rows in by_table.items():
             for i in sorted(set(rows), reverse=True):
                 provider, model = self._row_pair(table, i)
+                removed_pairs.append((provider, model))
                 table.removeRow(i)
                 if provider in self._g_timeouts and model in self._g_timeouts[provider]:
                     del self._g_timeouts[provider][model]
                 removed += 1
         self._update_counts()
         tooltip(f"Removed {removed} model(s).")
+        # A removal is global: drop the pair from every per-provider window
+        # and all parent priority lists too.
+        for provider, model in removed_pairs:
+            if hasattr(self.main_dialog, "remove_pair_everywhere"):
+                self.main_dialog.remove_pair_everywhere(provider, model)
             
     def restore_defaults(self):
         defaults = []
@@ -2630,6 +2757,17 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                             self.refresh_statuses()
                             if added_count > 0:
                                 tooltip(f"Added {added_count} new models for {self._provider_display(p)}.")
+                            # Keep the per-provider windows in sync without
+                            # pressing "Match Per-Provider Enabled" (this
+                            # window is authoritative after a fetch).
+                            self._harvest_widgets()
+                            pair_states = {}
+                            for table in self._tables():
+                                for r in range(table.rowCount()):
+                                    pair = self._row_pair_opt(table, r)
+                                    if pair:
+                                        pair_states[pair] = table is self.enabled_table
+                            self.main_dialog.sync_from_global(pair_states)
                         mw.taskman.run_on_main(_update_ui)
             except Exception as e:
                 err_msg = str(e)
@@ -2808,6 +2946,69 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
 
 
 class ProvidersTabMixin:
+    # -- Cross-window list sync -------------------------------------------
+    def sync_from_provider(self, provider, enabled_models, all_models):
+        """Per-provider window acted: mirror its membership into the global list."""
+        self.model_fallbacks_data[provider] = list(all_models)
+        self.disabled_fallback_models_data[provider] = [
+            m for m in all_models if m not in set(enabled_models)
+        ]
+        self.global_model_priority_data, self.disabled_global_model_priority_data = \
+            merge_provider_into_global(
+                self.global_model_priority_data,
+                self.disabled_global_model_priority_data,
+                provider, enabled_models, all_models,
+            )
+        dlg = getattr(self, "global_fallback_dlg", None)
+        if dlg is not None and hasattr(dlg, "apply_provider_state"):
+            try:
+                dlg.apply_provider_state(provider, enabled_models, all_models)
+            except (RuntimeError, AttributeError):
+                pass
+
+    def sync_from_global(self, pair_states):
+        """Global window acted: mirror its membership into per-provider lists."""
+        self.model_fallbacks_data, self.disabled_fallback_models_data = \
+            merge_global_into_provider(
+                self.model_fallbacks_data, self.disabled_fallback_models_data, pair_states
+            )
+        self.global_model_priority_data = [list(p) for p, on in pair_states.items() if on]
+        self.disabled_global_model_priority_data = [list(p) for p, on in pair_states.items() if not on]
+        for widget in (getattr(self, "provider_widgets", {}) or {}).values():
+            dlg = getattr(widget, "fallback_dialog", None)
+            if dlg is not None and hasattr(dlg, "apply_global_state"):
+                try:
+                    dlg.apply_global_state(pair_states)
+                except (RuntimeError, AttributeError):
+                    pass
+
+    def remove_pair_everywhere(self, provider, model):
+        """Remove a pair from both windows' lists and all parent data dicts."""
+        (self.model_fallbacks_data, self.disabled_fallback_models_data,
+         self.global_model_priority_data, self.disabled_global_model_priority_data) = \
+            remove_pair_from_lists(
+                self.model_fallbacks_data, self.disabled_fallback_models_data,
+                self.global_model_priority_data, self.disabled_global_model_priority_data,
+                provider, model,
+            )
+        for data in (getattr(self, "model_timeouts_data", {}),
+                     getattr(self, "global_model_timeouts_data", {})):
+            if provider in data and isinstance(data[provider], dict):
+                data[provider].pop(model, None)
+        dlg = getattr(self, "global_fallback_dlg", None)
+        if dlg is not None and hasattr(dlg, "remove_pair_rows"):
+            try:
+                dlg.remove_pair_rows(provider, model)
+            except (RuntimeError, AttributeError):
+                pass
+        for widget in (getattr(self, "provider_widgets", {}) or {}).values():
+            dlg = getattr(widget, "fallback_dialog", None)
+            if dlg is not None and hasattr(dlg, "remove_pair_rows"):
+                try:
+                    dlg.remove_pair_rows(provider, model)
+                except (RuntimeError, AttributeError):
+                    pass
+
     def _local_endpoint_for(self, model=""):
         """Build a local_endpoint dict from in-memory local_providers_data."""
         endpoint = dict(self.config.get("local_endpoint", {}) or {})

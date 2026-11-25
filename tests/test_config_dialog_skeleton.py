@@ -162,7 +162,7 @@ class ConfigDialogLoadSaveContractTests(unittest.TestCase):
         self.assertIn("prompt_caching", panel)
 
     def test_fallback_dialogs_have_no_thinking_column(self):
-        """Thinking is configured in Model Variants, not the fallback tables."""
+        """Thinking is configured in the embedded panel, not the fallback tables."""
         path = os.path.join(PROJECT_ROOT, "addon", "config_ui", "tab_providers.py")
         with open(path, "r", encoding="utf-8") as fh:
             source = fh.read()
