@@ -11,6 +11,7 @@ from .widgets import (CustomProviderDialog, ProviderRowWidget, NoWheelComboBox, 
                       GLOBAL_NEWLY_ADDED_MODELS, GLOBAL_MISSING_FROM_FETCH,
                       transient_skip_kwargs,
                       _get_blacklist_remaining)
+from .model_variant_panel import VariantPanel
 
 DEFAULT_TEST_QUESTION = "Why does a rotating magnet fall slower through a copper tube than a non-magnetic mass of the same size?"
 DEFAULT_TEST_ANSWER = "Due to Faraday's law of induction and Lenz's law, the falling magnet induces eddy currents in the copper tube, creating an opposing magnetic field that exerts an upward electromagnetic braking force."
@@ -226,6 +227,23 @@ class _FallbackTable(QTableWidget):
 
 
 class FallbackPriorityDialog(QDialog):
+    def _init_variant_panel(self, layout):
+        """Add the per-model parameter editor shared by both fallback dialogs."""
+        parent = self.main_dialog
+        overrides = getattr(parent, "model_variants_data", None)
+        if not isinstance(overrides, dict):
+            overrides = (getattr(parent, "config", {}) or {}).get("model_variants") or {}
+        # Work on a copy so Cancel never mutates the parent's config data.
+        self._variant_overrides = dict(overrides)
+        self._variant_panel = VariantPanel(self._variant_overrides, self)
+        layout.addWidget(self._variant_panel)
+        for table in self._tables():
+            table.itemSelectionChanged.connect(self._on_variant_selection)
+        return self._variant_panel
+
+    def get_variant_overrides(self):
+        return dict(self._variant_overrides)
+
     def rename_provider(self, old_name, new_name):
         if not old_name or not new_name or old_name == new_name:
             return
@@ -766,7 +784,12 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         btn_layout.addLayout(row1_layout)
         btn_layout.addLayout(row2_layout)
         layout.addLayout(btn_layout)
-        
+
+        # Per-model parameters for the selected row (replaces the old
+        # standalone Model Variants tab).
+        self._init_variant_panel(layout)
+        self._on_variant_selection()
+
         # OK / Cancel
         dlg_btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         dlg_btns.accepted.connect(self.accept)
@@ -774,6 +797,12 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         layout.addWidget(dlg_btns)
         
         self.update_item_labels()
+
+    def _on_variant_selection(self):
+        table = self._focused_table() or self.enabled_table
+        rows = self._selected_rows(table)
+        model = self._row_data(table, rows[0]).get("name", "") if rows else ""
+        self._variant_panel.load(self.provider, model)
 
     def _model_flags(self, model_name):
         """Return (is_newly_added, is_deprecated, is_missing_after_fetch) for a model."""
@@ -1819,12 +1848,22 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         btn_layout.addLayout(row1_layout)
         btn_layout.addLayout(row2_layout)
         layout.addLayout(btn_layout)
-        
+
+        # Per-model parameters for the selected (provider, model) row.
+        self._init_variant_panel(layout)
+        self._on_variant_selection()
+
         # OK / Cancel
         dlg_btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         dlg_btns.accepted.connect(self.accept)
         dlg_btns.rejected.connect(self.reject)
         layout.addWidget(dlg_btns)
+
+    def _on_variant_selection(self):
+        table = self._focused_table() or self.enabled_table
+        rows = self._selected_rows(table)
+        pair = self._row_pair_opt(table, rows[0]) if rows else None
+        self._variant_panel.load(pair[0] if pair else "", pair[1] if pair else "")
 
     def _cancel_own_test(self):
         """Stop this dialog's model-test loop if it is still running in the
@@ -2951,9 +2990,12 @@ class ProvidersTabMixin:
             self.global_model_priority_data = dlg.get_ordered_list() + self.disabled_global_model_priority_data
 
             # This row's own timeout value lives in the global scope and
-            # overrides the per-provider one at runtime. Thinking settings
-            # are configured in the Model Variants tab.
+            # overrides the per-provider one at runtime.
             self.global_model_timeouts_data = dlg.get_global_model_timeouts()
+
+            # Parameters edited in the dialog's Model Parameters panel.
+            if hasattr(dlg, "get_variant_overrides"):
+                self.model_variants_data = dlg.get_variant_overrides()
             tooltip("Advanced fallback priority and disabled states updated. Click Save to apply.")
 
         def clear_global_fallback(*args):

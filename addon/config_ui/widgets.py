@@ -803,6 +803,10 @@ class ProviderRowWidget(QWidget):
                 new_timeouts = self.fallback_dialog.get_model_timeouts()
                 if hasattr(self, "parent_dialog") and hasattr(self.parent_dialog, "model_timeouts_data"):
                     self.parent_dialog.model_timeouts_data[self.provider] = new_timeouts
+
+                # Per-model parameters edited in the dialog's Model Parameters panel
+                if hasattr(self.parent_dialog, "model_variants_data"):
+                    self.parent_dialog.model_variants_data = self.fallback_dialog.get_variant_overrides()
                 tooltip(f"Updated fallback priority for {self.provider.capitalize()}")
             except (RuntimeError, AttributeError):
                 pass

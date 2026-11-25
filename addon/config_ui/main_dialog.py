@@ -23,7 +23,6 @@ from .tab_batch import BatchTabMixin
 from .tab_support import SupportTabMixin
 from .tab_logs import LogTabMixin
 from .tab_mobile import MobileTabMixin
-from .tab_model_variants import ModelVariantsTabMixin
 
 # Import Support Widgets
 from .widgets import (CustomProviderDialog, ProviderRowWidget, ADDON_PACKAGE,
@@ -36,7 +35,7 @@ from .tab_providers import (
 )
 from ..config_io import write_pretty_config_preserve_keys
 
-LAST_ACTIVE_TAB_INDEX = 8  # Fallback static state (Logs is the last tab)
+LAST_ACTIVE_TAB_INDEX = 7  # Fallback static state (Logs is the last tab)
 
 def _set_test_status(status_label, provider, st, tt, col, model_name):
     PERSISTENT_TEST_STATUSES[provider] = (st, tt, col, model_name)
@@ -46,7 +45,7 @@ def _set_test_status(status_label, provider, st, tt, col, model_name):
 
 class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin,
                    ShortcutsTabMixin, BatchTabMixin, SupportTabMixin, LogTabMixin,
-                   MobileTabMixin, ModelVariantsTabMixin):
+                   MobileTabMixin):
     
     def __init__(self, parent, card_ids=None, deck_name=None):
         super().__init__(parent)
@@ -238,7 +237,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self._tab_builders = [
             ("General", self._create_general_tab),
             ("AI Providers", self._create_providers_tab),
-            ("Model Variants", self._create_model_variants_tab),
             ("Advanced", self._create_advanced_tab),
             ("Shortcuts", self._create_shortcuts_tab),
             ("Batch Generation", self._create_batch_tab),
@@ -249,29 +247,24 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self._tab_widgets = [None] * len(self._tab_builders)
         self._tab_built = [False] * len(self._tab_builders)
 
-        # Restore previously selected tab preference. Tabs 2..8 shifted by one
-        # when Model Variants was inserted after AI Providers; the old last
-        # tab (Model Variants at 8) now lives at index 2.
+        # Restore previously selected tab preference. The Model Variants tab
+        # was removed (its editor now lives in both fallback dialogs); shift
+        # saved indices back down by one.
         saved_index = self.config.get("last_active_tab", 0)
         try:
             saved_index = int(saved_index)
         except (TypeError, ValueError):
             saved_index = 0
-        if saved_index == 8:
-            saved_index = 2
-        elif 2 <= saved_index <= 7:
-            saved_index += 1
+        if saved_index == 2:
+            saved_index = 1  # old Model Variants -> AI Providers
+        elif saved_index > 2:
+            saved_index -= 1
         if not (0 <= saved_index < len(self._tab_builders)):
             saved_index = 0
 
         # Build the selected tab + adjacent tabs eagerly so switching is instant.
-        # Model Variants is deliberately excluded: it pre-fills thousands of
-        # rows and is only needed once the user actually opens that tab.
         for idx in {saved_index, max(0, saved_index - 1), min(len(self._tab_builders) - 1, saved_index + 1)}:
-            if self._tab_builders[idx][0] == "Model Variants":
-                QTimer.singleShot(0, lambda i=idx: self._ensure_tab_built(i))
-            else:
-                self._ensure_tab_built(idx)
+            self._ensure_tab_built(idx)
 
         # Add placeholder tabs for the rest (built on demand).
         for idx, (name, _) in enumerate(self._tab_builders):
@@ -361,24 +354,15 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if not checked:
             return
         config = dict(self.config)
-        config["model_variants"] = self._collect_model_variants()
+        config["model_variants"] = self.model_variants_data
         self.raw_editor.setPlainText(json.dumps(config, indent=4, ensure_ascii=False))
 
     def _deferred_load_config(self):
         """Build all tabs and load config into them after the dialog is shown."""
         for idx in range(len(self._tab_builders)):
-            if self._tab_builders[idx][0] == "Model Variants":
-                continue
             self._ensure_tab_built(idx)
         self.load_config_into_ui()
         self._deferred_load_done = True
-        variants_index = next(
-            (i for i, (name, _) in enumerate(self._tab_builders)
-             if name == "Model Variants"), None)
-        if (variants_index is not None
-                and self.tabs.currentIndex() == variants_index
-                and not self._tab_built[variants_index]):
-            QTimer.singleShot(0, lambda i=variants_index: self._ensure_tab_built(i))
 
     def load_config_into_ui(self):
         """Load configuration values into UI elements."""
@@ -514,9 +498,9 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self.custom_providers_data = (c.get("custom_providers", {}) or {}).copy()
         self.model_timeouts_data = (c.get("model_timeouts", {}) or {}).copy()
         self.global_model_timeouts_data = (c.get("global_model_timeouts", {}) or {}).copy()
-        if hasattr(self, "model_variants_table"):
-            self._load_model_variants_into_ui()
-        self._model_variants_loaded = True
+        # Per-model overrides are edited inside the two fallback dialogs and
+        # stored here; the standalone Model Variants table was removed.
+        self.model_variants_data = (c.get("model_variants", {}) or {}).copy()
         self.advanced_fallback_cb.setChecked(c.get("use_global_model_priority", False))
         self.update_fallback_ui_states()
         if hasattr(self, "refresh_local_providers_list"):
@@ -709,14 +693,10 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             self._connect_dirty_tracking_for_tab(widget)
 
     def _on_lazy_tab_changed(self, index):
-        if self._tab_builders[index][0] == "Model Variants" and not self._deferred_load_done:
-            # Initial selection: let the dialog finish loading first.
-            QTimer.singleShot(0, lambda i=index: self._ensure_tab_built(i))
-        else:
-            self._ensure_tab_built(index)
+        self._ensure_tab_built(index)
         # Also pre-build adjacent tabs for instant switching
         for adj in (index - 1, index + 1):
-            if 0 <= adj < len(self._tab_builders) and self._tab_builders[adj][0] != "Model Variants":
+            if 0 <= adj < len(self._tab_builders):
                 QTimer.singleShot(0, lambda a=adj: self._ensure_tab_built(a))
         if hasattr(self, "_on_tab_changed_tracker"):
             self._on_tab_changed_tracker(index)
@@ -1277,13 +1257,6 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         elif tab_text == "Advanced":
             if askUser("⚠️ WARNING: This will immediately restore system prompt and field settings. Continue?"):
                 self.on_restore_advanced()
-        elif tab_text == "Model Variants":
-            if askUser("⚠️ WARNING: This will remove all per-model overrides. Continue?"):
-                self.config["model_variants"] = {}
-                if hasattr(self, "_removed_model_variant_keys"):
-                    self._removed_model_variant_keys.clear()
-                self._load_model_variants_into_ui()
-                self._dirty = True
         else:
             tooltip("No defaults to restore for this tab.")
 
@@ -1384,9 +1357,8 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         try:
             if hasattr(self, 'raw_toggle') and self.raw_toggle.isChecked():
                 raw_config = json.loads(self.raw_editor.toPlainText() or "{}")
-                # Edits made in the Model Variants table must never be lost
-                # just because the raw editor is open.
-                raw_config["model_variants"] = self._collect_model_variants()
+                # Keep per-model overrides even while the raw editor is open.
+                raw_config["model_variants"] = self.model_variants_data
                 write_pretty_config_preserve_keys(
                     ADDON_PACKAGE, self._normalize_config(raw_config))
                 NEWLY_ADDED_MODELS.clear()
@@ -1504,7 +1476,7 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
             new_config["global_model_priority"] = self.global_model_priority_data
             new_config["disabled_global_model_priority"] = self.disabled_global_model_priority_data
             new_config["global_model_timeouts"] = self.global_model_timeouts_data
-            new_config["model_variants"] = self._collect_model_variants()
+            new_config["model_variants"] = self.model_variants_data
             new_config["use_global_model_priority"] = self.advanced_fallback_cb.isChecked()
             new_config["test_question_front"] = self.test_question_edit.text().strip()
             new_config["test_question_back"] = self.test_answer_edit.text().strip()

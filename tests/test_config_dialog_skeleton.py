@@ -136,50 +136,30 @@ class ConfigDialogLoadSaveContractTests(unittest.TestCase):
             "ConfigDialog defines only %d methods; the class was truncated." % len(names),
         )
 
-    def test_model_variants_tab_is_wired(self):
-        """The per-model settings tab must be built, loaded and saved."""
+    def test_model_parameters_live_in_fallback_dialogs(self):
+        """Per-model parameters are edited in both fallback dialogs, not a separate tab."""
         with open(DIALOG_PATH, "r", encoding="utf-8") as fh:
             dialog = fh.read()
-        mixin_path = os.path.join(PROJECT_ROOT, "addon", "config_ui",
-                                  "tab_model_variants.py")
-        with open(mixin_path, "r", encoding="utf-8") as fh:
-            mixin = fh.read()
+        provider_path = os.path.join(PROJECT_ROOT, "addon", "config_ui",
+                                     "tab_providers.py")
+        with open(provider_path, "r", encoding="utf-8") as fh:
+            providers = fh.read()
+        panel_path = os.path.join(PROJECT_ROOT, "addon", "config_ui",
+                                  "model_variant_panel.py")
+        with open(panel_path, "r", encoding="utf-8") as fh:
+            panel = fh.read()
 
-        self.assertIn("ModelVariantsTabMixin", dialog)
-        self.assertIn('("Model Variants", self._create_model_variants_tab)', dialog)
-        self.assertIn("self._collect_model_variants()", dialog)
-        self.assertIn("self._load_model_variants_into_ui()", dialog)
-        for method in ("_create_model_variants_tab", "_collect_model_variants",
-                       "_load_model_variants_into_ui"):
-            self.assertIn(f"def {method}(", mixin)
-        # The table must be pre-filled from the saved model lists, not empty.
-        self.assertIn("known_model_pairs(self.config)", mixin)
-        self.assertIn("table.setRowCount(len(rows))", mixin)
-        # The old "Add from priority/fallback lists" button hung for minutes
-        # because it called insertRow + setCellWidget once per model (thousands
-        # of rows). Refresh must bulk-fill plain items with a shared delegate.
-        self.assertNotIn("setCellWidget", mixin)
-        # Building the 3.7k-row table eagerly on every dialog open makes the
-        # whole settings UI feel slow; the tab must be deferred.
-        with open(DIALOG_PATH, "r", encoding="utf-8") as fh:
-            dialog_src = fh.read()
-        self.assertIn('name == "Model Variants"', dialog_src)
-        self.assertIn("self._deferred_load_done", dialog_src)
-        providers = dialog_src.index('("AI Providers", self._create_providers_tab)')
-        variants = dialog_src.index('("Model Variants", self._create_model_variants_tab)')
-        logs = dialog_src.index('("Logs", self._create_log_tab)')
-        self.assertLess(providers, variants, "Model Variants must follow AI Providers")
-        self.assertLess(variants, logs, "Logs must remain the last tab")
-        load = next(
-            node for node in ast.walk(ast.parse(mixin))
-            if isinstance(node, ast.FunctionDef)
-            and node.name == "_load_model_variants_into_ui"
-        )
-        self.assertNotIn(
-            "insertRow",
-            {n.func.attr for n in ast.walk(load)
-             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)},
-        )
+        self.assertNotIn('("Model Variants", self._create_model_variants_tab)', dialog)
+        self.assertNotIn("ModelVariantsTabMixin", dialog)
+        self.assertIn("self.model_variants_data", dialog)
+        self.assertIn('new_config["model_variants"] = self.model_variants_data', dialog)
+        # Both dialogs embed the shared panel and expose overrides to their parent.
+        self.assertEqual(providers.count("self._init_variant_panel(layout)"), 2)
+        self.assertIn("def get_variant_overrides(self):", providers)
+        self.assertIn("class VariantPanel(", panel)
+        self.assertIn("def collect_variant_values(", panel)
+        self.assertIn("thinking_budget", panel)
+        self.assertIn("prompt_caching", panel)
 
     def test_fallback_dialogs_have_no_thinking_column(self):
         """Thinking is configured in Model Variants, not the fallback tables."""
