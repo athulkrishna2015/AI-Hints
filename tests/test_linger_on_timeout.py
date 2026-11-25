@@ -379,7 +379,8 @@ class LingerOnTimeoutTests(unittest.TestCase):
         # lingering retry, and the late result must rescue the test instead of
         # reporting a bare timeout.
         from addon.logger import log_context
-        raw = {"candidates": [{"content": {"parts": [{"text": '{"hints": ["h1", "h2", "h3"], "options": ["a", "b", "c", "d"], "correct_answer": "a"}'}]}}]}
+        raw = {"steps": [{"type": "model_output", "content": [
+            {"text": '{"hints": ["h1", "h2", "h3"], "options": ["a", "b", "c", "d"], "correct_answer": "a"}'}]}]}
         cfg = base_config(api_keys={"gemini": "k-g"})
         client = AIClient(cfg)
         log_context.source = "model_test"
