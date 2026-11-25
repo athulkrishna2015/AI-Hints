@@ -144,22 +144,22 @@ class ConfigDialogLoadSaveContractTests(unittest.TestCase):
                                      "tab_providers.py")
         with open(provider_path, "r", encoding="utf-8") as fh:
             providers = fh.read()
-        panel_path = os.path.join(PROJECT_ROOT, "addon", "config_ui",
-                                  "model_variant_panel.py")
-        with open(panel_path, "r", encoding="utf-8") as fh:
-            panel = fh.read()
+        columns_path = os.path.join(PROJECT_ROOT, "addon", "config_ui",
+                                    "variant_columns.py")
+        with open(columns_path, "r", encoding="utf-8") as fh:
+            columns = fh.read()
 
         self.assertNotIn('("Model Variants", self._create_model_variants_tab)', dialog)
         self.assertNotIn("ModelVariantsTabMixin", dialog)
         self.assertIn("self.model_variants_data", dialog)
         self.assertIn('new_config["model_variants"] = self.model_variants_data', dialog)
-        # Both dialogs embed the shared panel and expose overrides to their parent.
-        self.assertEqual(providers.count("self._init_variant_panel(layout)"), 2)
+        # Both fallback dialogs install the same parameter columns and expose
+        # per-model overrides to the parent on OK.
+        self.assertEqual(providers.count("self._init_variant_columns()"), 2)
         self.assertIn("def get_variant_overrides(self):", providers)
-        self.assertIn("class VariantPanel(", panel)
-        self.assertIn("def collect_variant_values(", panel)
-        self.assertIn("thinking_budget", panel)
-        self.assertIn("prompt_caching", panel)
+        self.assertIn("def harvest_variant_cells(", columns)
+        self.assertIn("thinking_budget", columns)
+        self.assertIn("prompt_caching", columns)
 
     def test_fallback_dialogs_have_no_thinking_column(self):
         """Thinking is configured in the embedded panel, not the fallback tables."""

@@ -36,8 +36,8 @@ sys.modules["addon"] = pkg
 from addon.config_ui.tab_providers import (  # noqa: E402
     merge_provider_into_global, merge_global_into_provider, remove_pair_from_lists,
 )
-from addon.config_ui.model_variant_panel import (  # noqa: E402
-    collect_variant_values, VariantPanel,
+from addon.config_ui.variant_columns import (  # noqa: E402
+    collect_variant_values,
 )
 from addon.config_ui.tab_providers import (  # noqa: E402
     FallbackOrderDialog, GlobalFallbackOrderDialog, ProvidersTabMixin,
@@ -154,7 +154,7 @@ class VariantValueTests(unittest.TestCase):
         self.assertEqual(collect_variant_values("abc", "-5", "x", "-1", "bad", "Yes"), {})
 
 
-class DialogVariantIntegrationTests(unittest.TestCase):
+class DialogVariantColumnTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -167,28 +167,44 @@ class DialogVariantIntegrationTests(unittest.TestCase):
         parent.disabled_fallback_models_data = {}
         return parent
 
-    def test_per_provider_dialog_loads_and_returns_overrides(self):
+    def test_per_provider_columns_are_per_row_and_loaded(self):
         parent = self._parent()
         dlg = FallbackOrderDialog(parent, "p", "m1", ["m1", "m2"], [])
-        # An existing override is visible when its row is selected.
-        self.assertAlmostEqual(float(dlg._variant_panel.temp_edit.text()), 0.3)
-        dlg._variant_panel.temp_edit.setText("0.9")
+        self.assertEqual(dlg.enabled_table.columnCount(), 8)
+        # Saved override shows in m1's row, not in m2's row.
+        self.assertAlmostEqual(float(dlg.enabled_table.item(0, 2).text()), 0.3)
+        self.assertEqual(dlg.enabled_table.item(1, 2).text(), "")
+        # Edit m2's cells; each row is independent.
+        dlg.enabled_table.item(1, 2).setText("0.9")
+        dlg.enabled_table.item(1, 4).setData(Qt.ItemDataRole.EditRole, "high")
+        dlg.enabled_table.item(1, 7).setData(Qt.ItemDataRole.EditRole, "No")
         out = dlg.get_variant_overrides()
-        self.assertAlmostEqual(out["p|m1"]["temperature"], 0.9)
-        # Editing does not mutate the parent's snapshot before OK.
+        self.assertAlmostEqual(out["p|m1"]["temperature"], 0.3)
+        self.assertEqual(out["p|m2"], {
+            "temperature": 0.9, "reasoning_effort": "high", "prompt_caching": False,
+        })
+        # Parent snapshot is untouched until OK.
         self.assertAlmostEqual(parent.model_variants_data["p|m1"]["temperature"], 0.3)
 
-    def test_global_dialog_loads_and_returns_overrides(self):
+    def test_global_columns_loaded_and_editable(self):
         parent = self._parent()
         dlg = GlobalFallbackOrderDialog(parent, [["p", "m1"], ["p", "m2"]])
-        dlg._variant_panel.temp_edit.setText("1.2")
+        self.assertEqual(dlg.enabled_table.columnCount(), 10)
+        self.assertAlmostEqual(float(dlg.enabled_table.item(0, 4).text()), 0.3)
+        self.assertEqual(dlg.enabled_table.item(1, 4).text(), "")
+        dlg.enabled_table.item(1, 4).setText("1.2")
         out = dlg.get_variant_overrides()
-        self.assertAlmostEqual(out["p|m1"]["temperature"], 1.2)
+        self.assertAlmostEqual(out["p|m1"]["temperature"], 0.3)
+        self.assertAlmostEqual(out["p|m2"]["temperature"], 1.2)
 
-    def test_reset_button_clears_override(self):
+    def test_clearing_all_cells_removes_override(self):
         parent = self._parent()
         dlg = FallbackOrderDialog(parent, "p", "m1", ["m1"], [])
-        dlg._variant_panel.reset_btn.click()
+        for col in range(2, 8):
+            dlg.enabled_table.item(0, col).setText("")
+        dlg.enabled_table.item(0, 4).setData(Qt.ItemDataRole.EditRole, "auto")
+        dlg.enabled_table.item(0, 6).setData(Qt.ItemDataRole.EditRole, "auto")
+        dlg.enabled_table.item(0, 7).setData(Qt.ItemDataRole.EditRole, "Yes")
         self.assertNotIn("p|m1", dlg.get_variant_overrides())
 
 

@@ -267,7 +267,7 @@ class GlobalDialogTableTests(unittest.TestCase):
                     table.horizontalHeader().sectionResizeMode(c),
                     _qw.QHeaderView.ResizeMode.Interactive,
                 )
-        self.assertEqual(dlg.enabled_table.columnCount(), 4)
+        self.assertEqual(dlg.enabled_table.columnCount(), 10)
         self.assertEqual(dlg.enabled_table.rowCount(), 2)
         self.assertEqual(dlg.disabled_table.rowCount(), 0)
         self.assertEqual(dlg.enabled_table.item(0, 0).text(), "Openai")

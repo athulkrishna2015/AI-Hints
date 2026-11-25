@@ -11,7 +11,10 @@ from .widgets import (CustomProviderDialog, ProviderRowWidget, NoWheelComboBox, 
                       GLOBAL_NEWLY_ADDED_MODELS, GLOBAL_MISSING_FROM_FETCH,
                       transient_skip_kwargs,
                       _get_blacklist_remaining)
-from .model_variant_panel import VariantPanel
+from .variant_columns import (
+    HEADERS as VARIANT_HEADERS, WIDTHS as VARIANT_WIDTHS,
+    install_variant_columns, set_variant_cells, harvest_variant_cells,
+)
 
 DEFAULT_TEST_QUESTION = "Why does a rotating magnet fall slower through a copper tube than a non-magnetic mass of the same size?"
 DEFAULT_TEST_ANSWER = "Due to Faraday's law of induction and Lenz's law, the falling magnet induces eddy currents in the copper tube, creating an opposing magnetic field that exerts an upward electromagnetic braking force."
@@ -268,22 +271,44 @@ class _FallbackTable(QTableWidget):
 
 
 class FallbackPriorityDialog(QDialog):
-    def _init_variant_panel(self, layout):
-        """Add the per-model parameter editor shared by both fallback dialogs."""
+    def _init_variant_columns(self):
+        """Install combo delegates for the parameter columns on both lists."""
         parent = self.main_dialog
         overrides = getattr(parent, "model_variants_data", None)
         if not isinstance(overrides, dict):
             overrides = (getattr(parent, "config", {}) or {}).get("model_variants") or {}
         # Work on a copy so Cancel never mutates the parent's config data.
         self._variant_overrides = dict(overrides)
-        self._variant_panel = VariantPanel(self._variant_overrides, self)
-        layout.addWidget(self._variant_panel)
         for table in self._tables():
-            table.itemSelectionChanged.connect(self._on_variant_selection)
-        return self._variant_panel
+            install_variant_columns(table, self._variant_start_col())
+            # Re-apply saved values to rows populated before the delegates
+            # were installed (dialogs populate their tables in __init__).
+            for row in range(table.rowCount()):
+                key = self._variant_key(table, row)
+                if key:
+                    set_variant_cells(
+                        table, row, self._variant_start_col(),
+                        self._variant_overrides.get(key),
+                    )
+
+    def _variant_start_col(self):
+        """Column index where the six parameter columns start."""
+        return 4 if hasattr(self, "_g_timeouts") else 2
+
+    def _variant_key(self, table, row):
+        if hasattr(self, "_g_timeouts"):
+            pair = self._row_pair_opt(table, row)
+            return f"{pair[0]}|{pair[1]}" if pair else None
+        item = table.item(row, 0)
+        name = item.data(Qt.ItemDataRole.UserRole) if item else None
+        return f"{self.provider}|{name}" if name else None
 
     def get_variant_overrides(self):
+        self._harvest_widgets()
         return dict(self._variant_overrides)
+
+    def _drop_variant_override(self, provider, model):
+        self._variant_overrides.pop(f"{provider}|{model}", None)
 
     def remove_pair_rows(self, provider, model):
         """Drop a pair from this dialog's tables after a cross-window removal."""
@@ -296,6 +321,7 @@ class FallbackPriorityDialog(QDialog):
                     match = bool(item and item.data(Qt.ItemDataRole.UserRole) == model)
                 if match:
                     table.removeRow(row)
+        self._drop_variant_override(provider, model)
         self._update_counts()
         self.update_item_labels()
 
@@ -749,8 +775,10 @@ class FallbackOrderDialog(FallbackPriorityDialog):
 
         # Columns: [Model Name] [Timeout] — request parameters (including
         # thinking settings) are edited in the Model Parameters panel below.
-        headers = ["Model Name", "Timeout (s)"]
-        self._build_split_lists(layout, headers, {0: 320, 1: 120},
+        headers = ["Model Name", "Timeout (s)"] + VARIANT_HEADERS
+        widths = {0: 320, 1: 90}
+        widths.update({i + 2: w for i, w in enumerate(VARIANT_WIDTHS)})
+        self._build_split_lists(layout, headers, widths,
                                 "Enabled priority (first row is Active):",
                                 "Disabled / available:",
                                 "Search models...")
@@ -840,10 +868,8 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         btn_layout.addLayout(row2_layout)
         layout.addLayout(btn_layout)
 
-        # Per-model parameters for the selected row (replaces the old
-        # standalone Model Variants tab).
-        self._init_variant_panel(layout)
-        self._on_variant_selection()
+        # Per-model parameters are editable columns in both lists.
+        self._init_variant_columns()
 
         # OK / Cancel
         dlg_btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
@@ -852,12 +878,6 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         layout.addWidget(dlg_btns)
         
         self.update_item_labels()
-
-    def _on_variant_selection(self):
-        table = self._focused_table() or self.enabled_table
-        rows = self._selected_rows(table) or ([0] if table.rowCount() else [])
-        model = self._row_data(table, rows[0]).get("name", "") if rows else ""
-        self._variant_panel.load(self.provider, model)
 
     def apply_global_state(self, pair_states):
         """Acting global window wins: align this provider's rows to global state."""
@@ -943,6 +963,11 @@ class FallbackOrderDialog(FallbackPriorityDialog):
         elif is_missing:
             item.setToolTip("⚠️ The provider no longer returned this model in the latest fetch. It may be retired — consider removing it from the fallback list.")
         table.setItem(row, 0, item)
+        # Parameter columns (plain items with shared combo delegates)
+        set_variant_cells(
+            table, row, 2,
+            self._variant_overrides.get(f"{self.provider}|{model_name}") if hasattr(self, "_variant_overrides") else None,
+        )
 
     # ---- Lazy cell-widget materialization ----------------------------------
     # Creating a QComboBox + QSpinBox for every row made dialogs with hundreds
@@ -1015,6 +1040,9 @@ class FallbackOrderDialog(FallbackPriorityDialog):
                 spin = table.cellWidget(i, 1)
                 if spin is not None:
                     self._model_timeouts[name] = spin.value()
+        if hasattr(self, "_variant_overrides"):
+            for table in (self.enabled_table, self.disabled_table):
+                harvest_variant_cells(table, 2, self._variant_key, self._variant_overrides)
 
     def _refresh_row_widgets(self, table, row):
         """Re-sync an existing row's widgets with its (possibly swapped) model."""
@@ -1715,6 +1743,7 @@ class FallbackOrderDialog(FallbackPriorityDialog):
                 name = table.item(i, 0).data(Qt.ItemDataRole.UserRole)
                 self._model_timeouts.pop(name, None)
                 removed_models.append(name)
+                self._drop_variant_override(self.provider, name)
                 table.removeRow(i)
                 removed += 1
         self.update_item_labels()
@@ -1881,8 +1910,10 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         self._g_timeouts = {p: dict(m) for p, m in (getattr(parent, "global_model_timeouts_data", {}) or {}).items() if isinstance(m, dict)}
         self._per_timeouts = getattr(parent, "model_timeouts_data", {}) or {}
 
-        headers = ["Provider", "Model", "Timeout (s)", "Status"]
-        self._build_split_lists(layout, headers, {0: 150, 1: 280, 2: 90, 3: 160},
+        headers = ["Provider", "Model", "Timeout (s)", "Status"] + VARIANT_HEADERS
+        widths = {0: 150, 1: 280, 2: 90, 3: 160}
+        widths.update({i + 4: w for i, w in enumerate(VARIANT_WIDTHS)})
+        self._build_split_lists(layout, headers, widths,
                                 "Enabled priority order:",
                                 "Disabled / available:",
                                 "Search providers/models...")
@@ -1948,21 +1979,14 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
         btn_layout.addLayout(row2_layout)
         layout.addLayout(btn_layout)
 
-        # Per-model parameters for the selected (provider, model) row.
-        self._init_variant_panel(layout)
-        self._on_variant_selection()
+        # Per-model parameters are editable columns in both lists.
+        self._init_variant_columns()
 
         # OK / Cancel
         dlg_btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         dlg_btns.accepted.connect(self.accept)
         dlg_btns.rejected.connect(self.reject)
         layout.addWidget(dlg_btns)
-
-    def _on_variant_selection(self):
-        table = self._focused_table() or self.enabled_table
-        rows = self._selected_rows(table) or ([0] if table.rowCount() else [])
-        pair = self._row_pair_opt(table, rows[0]) if rows else None
-        self._variant_panel.load(pair[0] if pair else "", pair[1] if pair else "")
 
     def apply_provider_state(self, provider, enabled_models, all_models):
         """Acting per-provider window wins: align this provider's global rows."""
@@ -2244,6 +2268,11 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             table.item(row, 0).setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
         finally:
             table.blockSignals(False)
+        if hasattr(self, "_variant_overrides"):
+            set_variant_cells(
+                table, row, 4,
+                self._variant_overrides.get(f"{provider}|{model}"),
+            )
         self._render_row(table, row, provider, model)
         return row
 
@@ -2306,6 +2335,9 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                     continue
                 provider, model = pair
                 self._g_timeouts.setdefault(provider, {})[model] = spin.value()
+        if hasattr(self, "_variant_overrides"):
+            for table in self._tables():
+                harvest_variant_cells(table, 4, self._variant_key, self._variant_overrides)
 
     def _refresh_row_widgets(self, table, row):
         pair = self._row_pair_opt(table, row)
@@ -2619,6 +2651,7 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
             for i in sorted(set(rows), reverse=True):
                 provider, model = self._row_pair(table, i)
                 removed_pairs.append((provider, model))
+                self._drop_variant_override(provider, model)
                 table.removeRow(i)
                 if provider in self._g_timeouts and model in self._g_timeouts[provider]:
                     del self._g_timeouts[provider][model]
