@@ -2,6 +2,12 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 9.3.0 (2026-11-26)
+- **Gemini migrated to the Interactions API** — generation now works with Gemini 4 / 3.x models (the legacy generateContent endpoint returns 404 for them). Model-list fetching also handles paginated results and array-wrapped JSON.
+- **One provider per name**: built-in providers can be edited in place (stored in `provider_overrides`); a custom provider can no longer shadow a built-in one and break its auth.
+- **Model parameters are now editable columns** in both fallback-priority lists (Temp, Max tokens, Reasoning effort, Thinking budget, Response format, Cache) — the separate Model Variants tab is gone. Columns can be drag-reordered.
+- **Fallback windows stay in sync**: enabling/disabling or fetching/removing a model in a per-provider window updates the Advanced Global window automatically; Match Per-Provider Enabled uses live state and adds new models. Manual priority order is preserved, and Remove acts on both Enabled/Disabled lists. The Advanced window only lists providers enabled in the Providers tab.
+- **Clearer fetch errors**: real reasons (401/403/429/zero-quota) are shown for every provider instead of a generic message; zero-quota projects are parked so they aren't retried constantly.
 ## 9.2.0 (2026-11-25)
 - **Model parameters moved into the fallback lists**: the standalone Model Variants tab is gone; each model row in both the per-provider Fallback Priority dialog and the Advanced Global Fallback Priority dialog now has editable Temp, Max tokens, Reasoning effort, Thinking budget, Response format, and Cache columns (one setting per model).
 - **Drag-reorderable columns**: drag any column header to rearrange the lists; the order is mirrored between Enabled/Disabled and saved per dialog.
