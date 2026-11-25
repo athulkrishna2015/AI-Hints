@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 9.2.0 (2026-11-25)
+- **Model parameters moved into the fallback lists**: the standalone Model Variants tab is gone; each model row in both the per-provider Fallback Priority dialog and the Advanced Global Fallback Priority dialog now has editable Temp, Max tokens, Reasoning effort, Thinking budget, Response format, and Cache columns (one setting per model).
+- **Drag-reorderable columns**: drag any column header to rearrange the lists; the order is mirrored between Enabled/Disabled and saved per dialog.
+- **Fetch/Remove sync across windows**: fetching in one window now updates the other automatically (the window you act in is authoritative); removing a model deletes it from both windows and all priority lists. The Match Global/Match Per-Provider buttons remain as manual overrides.
 ## 9.1.2 (2026-11-19)
 - **UI: Model Variants now sits directly after AI Providers, and Logs is the last tab.** Saved tab positions are migrated automatically.
 - **UI: Thinking Level has been removed from both Fallback Priority windows.** Per-model thinking is now configured only in the Model Variants tab; the Timeout column remains in both windows.
