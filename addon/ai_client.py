@@ -3159,6 +3159,16 @@ class AIClient:
                 f"AI-Hints: Failed to fetch models for {provider}: rate limited on all "
                 f"{attempted_keys} keys. Retry in a minute."
             )
+        elif isinstance(last_err, urllib.error.HTTPError) and last_err.code == 401:
+            LAST_FETCH_ERROR[provider] = (
+                "authentication failed (401) — check the API key and this provider's auth headers"
+            )
+            logger.error(f"AI-Hints: Failed to fetch models for {provider}: authentication failed (401).")
+        elif isinstance(last_err, urllib.error.HTTPError) and last_err.code == 403:
+            LAST_FETCH_ERROR[provider] = (
+                "access denied (403) — check API key permissions for the models endpoint"
+            )
+            logger.error(f"AI-Hints: Failed to fetch models for {provider}: access denied (403).")
         elif isinstance(last_err, urllib.error.HTTPError) and last_err.code == 429:
             LAST_FETCH_ERROR[provider] = "rate limited (429) — retry in a minute"
             logger.error(f"AI-Hints: Failed to fetch models for {provider}: rate limited (429). Retry in a minute.")

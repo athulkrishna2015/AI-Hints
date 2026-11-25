@@ -2843,7 +2843,11 @@ class GlobalFallbackOrderDialog(FallbackPriorityDialog):
                                 GLOBAL_MISSING_FROM_FETCH[p] = missed
                             
                             self.refresh_statuses()
-                            if added_count > 0:
+                            if not ms:
+                                from ..ai_client import LAST_FETCH_ERROR
+                                reason = LAST_FETCH_ERROR.get(p) or "check connection and models URL"
+                                info(f"Could not fetch models for {self._provider_display(p)}: {reason}")
+                            elif added_count > 0:
                                 tooltip(f"Added {added_count} new models for {self._provider_display(p)}.")
                             # Keep the per-provider windows in sync without
                             # pressing "Match Per-Provider Enabled" (this

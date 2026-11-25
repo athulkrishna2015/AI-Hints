@@ -4,7 +4,8 @@ import time
 from aqt import mw
 from aqt.qt import *
 from ..logger import info, tooltip
-from ..ai_client import DEFAULT_MODELS, MODEL_FALLBACKS, PROVIDER_ORDER, MODEL_SUGGESTIONS, AIClient, BUILTIN_PROVIDER_URLS
+from ..ai_client import (DEFAULT_MODELS, MODEL_FALLBACKS, PROVIDER_ORDER, MODEL_SUGGESTIONS,
+                         AIClient, BUILTIN_PROVIDER_URLS, LAST_FETCH_ERROR)
 
 
 def _get_blacklist_remaining(provider, model, config=None):
@@ -225,10 +226,12 @@ class CustomProviderDialog(QDialog):
         except:
             body_params = {}
 
-        # Create temp config for fetching
+        # Use the provider's real name (no fake "TEMP" provider) so logs and
+        # error messages refer to the actual provider being edited.
+        provider_name = self.name_edit.text().strip() or "custom"
         temp_config = self.config.copy()
         temp_config["custom_providers"] = {
-            "TEMP": {
+            provider_name: {
                 "url": url,
                 "models_url": models_url or "",
                 "api_key": api_key,
@@ -241,7 +244,7 @@ class CustomProviderDialog(QDialog):
         self.fetch_btn.setEnabled(False)
         tooltip("Fetching models...")
         try:
-            models = client.fetch_models("TEMP")
+            models = client.fetch_models(provider_name)
             if models:
                 # If model field is empty, automatically set first fetched model as default
                 if not self.model_edit.text().strip():
@@ -253,7 +256,8 @@ class CustomProviderDialog(QDialog):
                     action.triggered.connect(lambda chk, val=m: self.model_edit.setText(val))
                 menu.exec(self.fetch_btn.mapToGlobal(QPoint(0, self.fetch_btn.height())))
             else:
-                info("No models found or endpoint does not support /models.")
+                reason = LAST_FETCH_ERROR.get(provider_name) or "check the models URL and API key"
+                info(f"No models found. {reason}")
         except Exception as e:
             info(f"Fetch failed: {e}")
         finally:
@@ -397,7 +401,7 @@ class CustomProviderDialog(QDialog):
             try:
                 temp_config = self.config.copy()
                 temp_config["custom_providers"] = {
-                    "TEMP": {
+                    self.name_edit.text().strip() or "custom": {
                         "url": self.url_edit.text().strip(),
                         "models_url": self.models_url_edit.text().strip() or "",
                         "api_key": self.key_edit.text().strip(),
@@ -406,7 +410,7 @@ class CustomProviderDialog(QDialog):
                     }
                 }
                 client = AIClient(temp_config)
-                models = client.fetch_models("TEMP")
+                models = client.fetch_models(self.name_edit.text().strip() or "custom")
                 if models:
                     self.model_edit.setText(sorted(models)[0])
             except Exception:
