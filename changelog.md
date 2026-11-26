@@ -2,6 +2,10 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 9.3.2 (2026-11-27)
+- **Pre-generation reliability**: no longer trusts a stale in-memory hint cache over the note on disk — cards whose hints were cleared/edited outside the add-on are correctly re-prepared. Contentless (missing/changing cloze) cards are put on a 30-minute cooldown instead of blocking the whole pre-gen buffer; the cooldown clears once the card generates successfully.
+- **No false "shadows built-in" warnings** for legitimate custom providers (CLIProxyAPI, cline, kilo, etc.).
+- **Config dialog remembers the last tab by name** (fixes always jumping to Shortcuts).
 ## 9.3.1 (2026-11-26)
 - **Fix: the config dialog now reopens the last tab you used**. A stale index-migration step was shifting the saved tab to Shortcuts on every open; the last tab is now remembered by name so it stays correct.
 ## 9.3.0 (2026-11-26)
