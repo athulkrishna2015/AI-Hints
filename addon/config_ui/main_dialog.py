@@ -258,18 +258,16 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         self._tab_widgets = [None] * len(self._tab_builders)
         self._tab_built = [False] * len(self._tab_builders)
 
-        # Restore previously selected tab preference. The Model Variants tab
-        # was removed (its editor now lives in both fallback dialogs); shift
-        # saved indices back down by one.
-        saved_index = self.config.get("last_active_tab", 0)
-        try:
-            saved_index = int(saved_index)
-        except (TypeError, ValueError):
-            saved_index = 0
-        if saved_index == 2:
-            saved_index = 1  # old Model Variants -> AI Providers
-        elif saved_index > 2:
-            saved_index -= 1
+        # Restore the last tab by NAME so adding/removing tabs can never shift
+        # the saved position. Older numeric values are indices in the current
+        # layout — used as-is, never re-shifted on every open.
+        saved = self.config.get("last_active_tab", "General")
+        if isinstance(saved, (int, float)) or (isinstance(saved, str) and str(saved).isdigit()):
+            saved_index = int(saved)
+        else:
+            saved_index = next(
+                (i for i, (name, _) in enumerate(self._tab_builders) if name == saved), 0
+            )
         if not (0 <= saved_index < len(self._tab_builders)):
             saved_index = 0
 
@@ -720,16 +718,17 @@ class ConfigDialog(QDialog, GeneralTabMixin, ProvidersTabMixin, AdvancedTabMixin
         if index == 2 and hasattr(self, "refresh_blacklist_list"):
             self.refresh_blacklist_list()
         if hasattr(self, 'config'):
-            if self.config.get("last_active_tab") == index:
+            saved_name = self.tabs.tabText(index)
+            if self.config.get("last_active_tab") == saved_name:
                 return
-            self.config["last_active_tab"] = index
+            self.config["last_active_tab"] = saved_name
             try:
                 from ..config_io import write_pretty_config_preserve_keys
-                # Persist ONLY the tab index. Writing the whole self.config
+                # Persist ONLY the tab name. Writing the whole self.config
                 # snapshot here silently saved unsaved edits on every tab
                 # switch and rewrote meta.json even when nothing changed.
                 write_pretty_config_preserve_keys(
-                    ADDON_PACKAGE, {"last_active_tab": index}
+                    ADDON_PACKAGE, {"last_active_tab": saved_name}
                 )
             except Exception:
                 pass
