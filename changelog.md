@@ -2,6 +2,8 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 9.3.1 (2026-11-26)
+- **Fix: the config dialog now reopens the last tab you used**. A stale index-migration step was shifting the saved tab to Shortcuts on every open; the last tab is now remembered by name so it stays correct.
 ## 9.3.0 (2026-11-26)
 - **Gemini migrated to the Interactions API** — generation now works with Gemini 4 / 3.x models (the legacy generateContent endpoint returns 404 for them). Model-list fetching also handles paginated results and array-wrapped JSON.
 - **One provider per name**: built-in providers can be edited in place (stored in `provider_overrides`); a custom provider can no longer shadow a built-in one and break its auth.
