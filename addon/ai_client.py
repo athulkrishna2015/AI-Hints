@@ -2967,14 +2967,18 @@ class AIClient:
         if not isinstance(custom_providers, dict):
             custom_providers = {}
         custom_provider_match = None
-        if provider in custom_providers and not _is_builtin_provider(provider):
-            logger.warning(
-                f"AI-Hints: custom provider '{provider}' shadows a built-in provider; "
-                f"ignoring it. Rename the custom provider to use it."
-            )
-            custom_provider_match = provider
+        if provider in custom_providers:
+            if _is_builtin_provider(provider):
+                logger.warning(
+                    f"AI-Hints: custom provider '{provider}' shadows a built-in provider; "
+                    f"ignoring it. Rename the custom provider to use it."
+                )
+            else:
+                custom_provider_match = provider
         else:
             for cp_name in custom_providers:
+                if (_is_builtin_provider(provider)):
+                    break
                 if isinstance(cp_name, str) and cp_name.lower() == provider.lower():
                     custom_provider_match = cp_name
                     break

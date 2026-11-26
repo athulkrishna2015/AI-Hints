@@ -41,6 +41,25 @@ class TestFetchModelsKeyRotation(unittest.TestCase):
             "models": {"gemini": "gemini-flash-latest"},
         })
 
+    def test_normal_custom_provider_does_not_log_shadow_warning(self):
+        """Genuine custom providers must not be warned as built-in shadows."""
+        cfg = {
+            "api_keys": {"cline": "k"},
+            "custom_providers": {"cline": {"url": "https://api.example.com/v1"}},
+        }
+        client = AIClient(cfg)
+        from addon import ai_client as ai_mod
+
+        def _fake(url, headers):
+            return {"data": [{"id": "m1"}]}
+
+        with patch.object(ai_mod, "logger") as mocked:
+            with patch.object(AIClient, "_get_json", side_effect=_fake):
+                models = client.fetch_models("cline")
+        self.assertEqual(models, ["m1"])
+        warnings = " ".join(str(c) for c in mocked.warning.call_args_list)
+        self.assertNotIn("shadows a built-in", warnings)
+
     def test_custom_provider_cannot_shadow_builtin_gemini(self):
         """A custom provider named 'gemini' must not hijack built-in handling."""
         cfg = {
