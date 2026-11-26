@@ -292,6 +292,38 @@ class TestPregeneration(unittest.TestCase):
             self.mock_mw.taskman.run_on_main.assert_not_called()
             mock_generate.assert_not_called()
 
+    def test_pregen_skips_contentless_card_on_cooldown(self):
+        """A contentless card must be skipped (not re-picked) while on cooldown."""
+        from addon import reviewer_hooks as rh
+        import time as _time
+
+        mock_card = MagicMock()
+        mock_card.id = 777
+        mock_proto = MagicMock()
+        mock_proto.card_id = 777
+        queued = MagicMock()
+        queued.cards = [mock_proto]
+        self.mock_mw.col.sched.get_queued_cards.return_value = queued
+        self.mock_mw.col.get_card.return_value = mock_card
+        self.mock_mw.reviewer.card.id = 111
+
+        rh._pregen_contentless_until[777] = _time.time() + 60
+        try:
+            with patch('addon.reviewer_hooks.generate_hints') as mock_generate, \
+                 patch('addon.reviewer_hooks.card_has_hints') as mock_has_hints, \
+                 patch('addon.reviewer_hooks._card_is_skipped') as mock_is_skipped, \
+                 patch('addon.reviewer_hooks.QTimer') as mock_timer:
+                mock_has_hints.return_value = False
+                mock_is_skipped.return_value = False
+                self.mock_mw.taskman.run_on_main.reset_mock()
+                _trigger_next_pregeneration(None)
+                task = mock_timer.singleShot.call_args[0][1]
+                task()
+                mock_generate.assert_not_called()
+                self.mock_mw.taskman.run_on_main.assert_not_called()
+        finally:
+            rh._pregen_contentless_until.pop(777, None)
+
     @patch('addon.reviewer_hooks._trigger_next_pregeneration')
     @patch('addon.reviewer_hooks.card_has_hints')
     @patch('addon.reviewer_hooks.generate_hints')

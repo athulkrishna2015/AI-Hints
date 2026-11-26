@@ -45,6 +45,10 @@ def register_network_state_callback(*args, **kwargs):
 
 _hooks_registered = False
 _generating_card_ids = set()
+# Cards whose note has no usable cloze content right now. Pre-gen must not
+# hammer them in a loop (they can never produce hints) — skip for a cooldown.
+_pregen_contentless_until: dict = {}
+PREGEN_CONTENTLESS_COOLDOWN_SECONDS = 1800
 # Monotonic per-card generation ownership. Cancelling/superseding an attempt
 # invalidates its token so late provider/linger completions cannot write.
 _generation_tokens = {}
@@ -467,7 +471,17 @@ def _trigger_next_pregeneration(current_card_id=None):
                                     continue
                                 if not card:
                                     continue
-                                    
+
+                                # Skip cards that recently had no usable cloze
+                                # content — otherwise a single contentless card
+                                # keeps getting picked and blocks the whole buffer.
+                                until = _pregen_contentless_until.get(cid, 0)
+                                if until > time.time():
+                                    logger.debug(
+                                        f"AI-Hints pre-gen: skipping contentless card {cid} (cooldown)."
+                                    )
+                                    continue
+
                                 if _card_is_skipped(card):
                                     # Deliberately skipped cards are covered: never pre-generate for them.
                                     continue
@@ -652,6 +666,11 @@ def _remember_generated_hints(card, data, toggles):
     key = _card_cache_key(card)
     if key is None:
         return
+    # A card that now generated successfully is no longer contentless.
+    try:
+        _pregen_contentless_until.pop(getattr(card, "id", None), None)
+    except Exception:
+        pass
     _generated_hint_cache[key] = {"data": data, "toggles": toggles or {}}
     while len(_generated_hint_cache) > MAX_HINT_CACHE_SIZE:
         oldest_key = next(iter(_generated_hint_cache))
@@ -3068,6 +3087,9 @@ def generate_hints(is_manual=True, card=None, is_pregen=False, web=None, overrid
             card_id,
         )
         if is_pregen:
+            _pregen_contentless_until[card_id] = (
+                time.time() + PREGEN_CONTENTLESS_COOLDOWN_SECONDS
+            )
             _trigger_next_pregeneration(card_id)
         return
 
