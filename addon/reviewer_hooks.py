@@ -451,6 +451,7 @@ def _trigger_next_pregeneration(current_card_id=None):
                     cards = getattr(queued, "cards", queued)
                     if cards and len(cards) > 0:
                         prepared_count = 0
+                        scan_reasons = []  # diagnostic: why each queued card was skipped
                         for first_item in cards:
                             cid = getattr(first_item, "card_id", None)
                             if cid is None:
@@ -461,6 +462,7 @@ def _trigger_next_pregeneration(current_card_id=None):
                             if cid:
                                 # Skip if it's the current card
                                 if current_card_id and cid == current_card_id:
+                                    scan_reasons.append(f"{cid}:current")
                                     continue
                                 
                                 try:
@@ -480,10 +482,12 @@ def _trigger_next_pregeneration(current_card_id=None):
                                     logger.debug(
                                         f"AI-Hints pre-gen: skipping contentless card {cid} (cooldown)."
                                     )
+                                    scan_reasons.append(f"{cid}:contentless")
                                     continue
 
                                 if _card_is_skipped(card):
                                     # Deliberately skipped cards are covered: never pre-generate for them.
+                                    scan_reasons.append(f"{cid}:skipped")
                                     continue
 
                                 if card_has_hints(card):
@@ -503,10 +507,12 @@ def _trigger_next_pregeneration(current_card_id=None):
                                     # with the card passed in *should* return None if it doesn't have data for it.
                                     if block:
                                         # Already has hints on disk, does not count against our pregen buffer limit
+                                        scan_reasons.append(f"{cid}:has-hints")
                                         continue
                                     
                                 _pregen = _get_pregenerated_data()
                                 if cid in _pregen or cid in _generating_card_ids:
+                                    scan_reasons.append(f"{cid}:buffered")
                                     prepared_count += 1
                                     if prepared_count >= pregen_limit:
                                         logger.debug(f"AI-Hints pre-gen: Buffer is fully saturated with {prepared_count} cards.")
@@ -523,7 +529,10 @@ def _trigger_next_pregeneration(current_card_id=None):
                 return
 
             if not next_card:
-                logger.debug("AI-Hints pre-gen: All upcoming cards are already prepared or have hints.")
+                logger.debug(
+                    "AI-Hints pre-gen: All upcoming cards are already prepared or have hints. "
+                    "scan=%s", ",".join(scan_reasons) if scan_reasons else "(empty)"
+                )
                 return
 
             logger.info(f"AI-Hints: Triggering pre-generation for card {next_card.id} (buffer prepared={prepared_count}/{pregen_limit})")
