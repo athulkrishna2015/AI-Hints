@@ -3342,10 +3342,10 @@ def card_has_hints(card):
     )
     
     try:
-        # Check cache first
-        if _cached_hints_for_card(card):
-            return True
-        # Check note (with block-result cache)
+        # The note on disk is authoritative. The in-memory generation cache
+        # can be stale if the note was edited or its hints cleared outside
+        # the add-on (manual field edit, external tool, undo) — trusting it
+        # made pre-gen treat such cards as already prepared and skip them.
         return bool(_cached_find_hints_block(parser, card.note(), card))
     except Exception:
         return False

@@ -287,6 +287,30 @@ class TestLowUserAgent(unittest.TestCase):
         self.assertEqual(ai_client.USER_AGENT, expected)
 
 
+class TestCardHasHintsStaleCache(unittest.TestCase):
+    def test_stale_generation_cache_does_not_report_hints(self):
+        """A stale in-memory cache must not make a note without hints look prepared."""
+        from addon import reviewer_hooks as rh
+        mw_mock = MagicMock()
+        mw_mock.addonManager.getConfig.return_value = {}
+        note = MagicMock()
+        note.id = 42
+        note.mod = 1
+        note.model.return_value = {"name": "Basic", "type": 0}
+        note.values.return_value = ["Front"]  # no hints block anywhere
+        card = MagicMock()
+        card.id = 1
+        card.ord = 0
+        card.note.return_value = note
+        key = rh._card_cache_key(card)
+        rh._generated_hint_cache[key] = {"data": {"hints": ["stale"]}, "toggles": {}}
+        try:
+            with patch.object(rh, "mw", mw_mock):
+                self.assertFalse(rh.card_has_hints(card))
+        finally:
+            rh._generated_hint_cache.pop(key, None)
+
+
 class TestLowJsEscaping(unittest.TestCase):
     def test_trigger_js_click_escapes_needles(self):
         from addon import reviewer_hooks
