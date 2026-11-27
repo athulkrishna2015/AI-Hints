@@ -2,6 +2,9 @@
 
 All notable changes to the AI-Hints Anki Add-on will be documented in this file.
 
+## 9.3.3 (2026-11-28)
+- **Fix: data bleed when adding a new cloze during review** — the hints-block cache previously keyed on Anki's 1-second `note.mod`, so an edit within the same second could reuse a stale block from a previously viewed card. It now keys on note field content, so edited cards show fresh data immediately.
+- **Logs tab**: level filter now means "and above" (so WARNING shows ERROR/CRITICAL, with a CRITICAL option); Pre-generation and Batch filters match real log wording; search highlighting is case-insensitive; multi-line log entries are grouped and searchable; match counts and copy-selection safety preserved.
 ## 9.3.2 (2026-11-27)
 - **Pre-generation reliability**: no longer trusts a stale in-memory hint cache over the note on disk — cards whose hints were cleared/edited outside the add-on are correctly re-prepared. Contentless (missing/changing cloze) cards are put on a 30-minute cooldown instead of blocking the whole pre-gen buffer; the cooldown clears once the card generates successfully.
 - **No false "shadows built-in" warnings** for legitimate custom providers (CLIProxyAPI, cline, kilo, etc.).
