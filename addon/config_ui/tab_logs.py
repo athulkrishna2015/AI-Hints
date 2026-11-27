@@ -64,26 +64,44 @@ def _line_to_html(line: str) -> str:
     return escaped
 
 
-def _line_matches(line: str, level_filter: str, source_filter: str, search_lower: str) -> bool:
-    if level_filter != "ALL" and f" - {level_filter} - " not in line:
-        return False
+# Thresholds: selecting WARNING must still show ERROR/CRITICAL lines.
+LEVEL_ORDER = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
+HEADER_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} - "
+    r"(DEBUG|INFO|WARNING|ERROR|CRITICAL) - "
+)
+
+
+def _line_matches(line: str, level_filter: str, source_filter: str, search_lower: str,
+                  record_level: str = None) -> bool:
+    low = line.lower()
+    # Level is "and above"; parse the record's level field instead of matching
+    # message text (which may legitimately contain " - ERROR - ").
+    if level_filter != "ALL":
+        wanted = LEVEL_ORDER.get(level_filter, 20)
+        actual = LEVEL_ORDER.get(record_level or "", 0)
+        # A line without a parsed header (continuation) inherits the record level.
+        if not record_level:
+            m = HEADER_RE.match(line)
+            actual = LEVEL_ORDER.get(m.group(1) if m else "", 20)
+        if actual < wanted:
+            return False
     if source_filter == "Batch Processing":
-        if "Batch" not in line and "Queue" not in line:
+        if not any(term in low for term in ("batch", "queue", "job_")):
             return False
     elif source_filter == "Pre-generation":
-        low = line.lower()
-        if "pre-generation" not in low and "pregen" not in low:
+        if not re.search(r"pre[-_ ]?gen(eration)?", low):
             return False
     elif source_filter == "Model Testing":
-        if "[MODEL_TEST]" not in line:
+        if "[model_test]" not in low:
             return False
     elif source_filter == "Lingering":
-        if "AI-Hints Linger" not in line:
+        if "ai-hints linger" not in low:
             return False
     elif source_filter == "Standard Addon":
-        if "[MODEL_TEST]" in line:
+        if "[model_test]" in low:
             return False
-    if search_lower and search_lower not in line.lower():
+    if search_lower and search_lower not in low:
         return False
     return True
 
@@ -100,13 +118,36 @@ def process_log_file(path: str, level_filter: str, source_filter: str, search_fi
     matched_total = 0
     kept = deque(maxlen=max(1, int(max_lines)))
 
+    # Group physical lines into log records: a timestamped header starts a new
+    # record, continuation lines (multi-line JSON / prompts / error bodies)
+    # belong to it so filters and search see the whole entry.
     with open(path, "r", encoding="utf-8", errors="replace") as f:
+        current_level = None
+        current_lines = []
+
+        def _flush():
+            nonlocal current_level, current_lines
+            if not current_lines:
+                return
+            record = "\n".join(current_lines)
+            if _line_matches(record, level_filter, source_filter, search_lower, current_level):
+                nonlocal matched_total
+                matched_total += 1
+                kept.append(record + "\n")
+            current_level = None
+            current_lines = []
+
         for line in f:
             total += 1
-            if not _line_matches(line, level_filter, source_filter, search_lower):
-                continue
-            matched_total += 1
-            kept.append(line)
+            stripped = line.rstrip("\r\n")
+            m = HEADER_RE.match(stripped)
+            if m:
+                _flush()
+                current_level = m.group(1)
+            elif not current_lines:
+                current_level = ""  # stray/unstructured line: no level
+            current_lines.append(stripped)
+        _flush()
 
     truncated = matched_total > len(kept)
     lines = list(kept)
@@ -152,7 +193,7 @@ class LogTabMixin:
         filter_layout = QHBoxLayout()
         filter_layout.addWidget(QLabel("Level:"))
         self.log_level_cb = NoWheelComboBox()
-        self.log_level_cb.addItems(["ALL", "DEBUG", "INFO", "WARNING", "ERROR"])
+        self.log_level_cb.addItems(["ALL", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
         self.log_level_cb.setCurrentText("INFO")
         self.log_level_cb.currentIndexChanged.connect(self.load_log)
         filter_layout.addWidget(self.log_level_cb)
@@ -279,10 +320,10 @@ class LogTabMixin:
             pass
         if fingerprint is not None and fingerprint == getattr(self, "_log_fingerprint", None):
             return
-        self._log_fingerprint = fingerprint
 
         self._log_gen = getattr(self, "_log_gen", 0) + 1
         gen = self._log_gen
+        self._pending_log_fingerprint = fingerprint
 
         def _worker():
             # Heavy part (streaming read, filtering, HTML build) runs off the
@@ -322,7 +363,11 @@ class LogTabMixin:
         self.match_count_label.setText("  ·  ".join(label_parts))
 
         content_plain = result["content_plain"]
+        pattern_changed = getattr(self, "_last_highlight_pattern", None) != search_filter
         if self.log_view.toPlainText() == content_plain:
+            if pattern_changed:
+                self._apply_search_highlighting(search_filter)
+                self._last_highlight_pattern = search_filter
             return
 
         # 🚦 Selection Safety: If user is currently selecting text, DO NOT update
@@ -343,6 +388,8 @@ class LogTabMixin:
 
         # 🖍️ Apply Search Highlighting
         self._apply_search_highlighting(search_filter)
+        self._last_highlight_pattern = search_filter
+        self._log_fingerprint = getattr(self, "_pending_log_fingerprint", None)
 
     def _apply_search_highlighting(self, pattern: str):
         """Highlights all occurrences of the search pattern in the log view."""
@@ -352,8 +399,9 @@ class LogTabMixin:
             self.log_view.setExtraSelections(extra_selections)
             return
 
-        # Case-insensitive search to match the filter logic
-        cursor = self.log_view.document().find(pattern, 0) 
+        # Case-insensitive search to match the case-insensitive filter logic.
+        flags = QTextDocument.FindFlag.FindCaseInsensitive
+        cursor = self.log_view.document().find(pattern, 0, flags)
         
         # Color palette for highlighting (Warm Yellow)
         fmt = QTextCharFormat()
@@ -372,16 +420,16 @@ class LogTabMixin:
             selection.cursor = cursor
             extra_selections.append(selection)
             
-            cursor = self.log_view.document().find(pattern, cursor)
+            cursor = self.log_view.document().find(pattern, cursor, flags)
 
         self.log_view.setExtraSelections(extra_selections)
         
-        # Update match count label
-        if not pattern:
-            self.match_count_label.setText("")
-        else:
+        # Append to the existing line-count label instead of destroying it.
+        if pattern:
             limit_hit = " (limit hit)" if count > 2000 else ""
-            self.match_count_label.setText(f"{count} matches{limit_hit}")
+            existing = self.match_count_label.text()
+            suffix = f"{count} highlighted{limit_hit}"
+            self.match_count_label.setText(f"{existing}  ·  {suffix}" if existing else suffix)
 
     def clear_log(self):
         log_file = self._current_log_path()

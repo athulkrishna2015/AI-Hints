@@ -176,7 +176,8 @@ class ProcessLogFileTests(unittest.TestCase):
         self.assertIn("exploded", err_only["content_plain"])
 
         batch_only = process_log_file(self.path, "ALL", "Batch Processing", "")
-        self.assertEqual(batch_only["matched_total"], 1)
+        # Both the "Batch queue" line and the "pregen queue" line are batch/queue activity.
+        self.assertEqual(batch_only["matched_total"], 2)
         self.assertIn("Batch queue", batch_only["content_plain"])
 
         pregen = process_log_file(self.path, "ALL", "Pre-generation", "")

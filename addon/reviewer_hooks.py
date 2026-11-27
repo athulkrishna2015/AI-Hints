@@ -197,16 +197,24 @@ _HINTS_BLOCK_CACHE: dict = {}
 _HINTS_BLOCK_CACHE_MAX = 50
 
 def _cached_find_hints_block(parser, note, card):
-    """find_hints_block with a (note.id, note.mod) cache.
+    """find_hints_block with a cache keyed on note id + field CONTENT + ord.
 
-    The cached value is invalidated automatically the moment the note is
-    modified (note.mod changes), so stale results never linger.
+    Anki's note.mod has 1-second resolution, so an edit made during review
+    (e.g. adding a new cloze) can keep the same mod value as the pre-edit
+    state. Keying on note.mod alone therefore let a stale block from a
+    previously viewed card "bleed" into the edited card. Hashing the actual
+    field content makes the cache invalid the instant the text changes.
     """
     try:
         note_id = getattr(note, "id", None)
-        note_mod = getattr(note, "mod", None)
-        if note_id is not None and note_mod is not None:
-            cache_key = (note_id, note_mod, getattr(card, "ord", None))
+        if note_id is not None:
+            try:
+                fields = list(note.values()) if hasattr(note, "values") else list(getattr(note, "fields", []))
+            except Exception:
+                fields = []
+            # Cheap order-sensitive fingerprint of the note content.
+            content_key = hash(tuple(str(f) for f in fields))
+            cache_key = (note_id, content_key, getattr(card, "ord", None))
             hit = _HINTS_BLOCK_CACHE.get(cache_key)
             if hit is not None:
                 # Sentinel: we cached a "no block" result as the empty string

@@ -287,6 +287,61 @@ class TestLowUserAgent(unittest.TestCase):
         self.assertEqual(ai_client.USER_AGENT, expected)
 
 
+class TestClozeCacheContentKey(unittest.TestCase):
+    def test_edit_with_same_mod_invalidates_block_cache(self):
+        """A cloze edit inside the same second must not reuse a stale block."""
+        from addon import reviewer_hooks as rh
+        from addon.card_parser import CardParser
+
+        parser = CardParser()
+        note = MagicMock()
+        note.id = 99
+        note.mod = 1000  # unchanged mod (same second)
+        note.model.return_value = {"name": "Cloze", "type": 1}
+        note.values.return_value = ["{{c1::old}}"]
+        note.fields = ["{{c1::old}}"]
+        card = MagicMock()
+        card.id = 5
+        card.ord = 0
+        card.note.return_value = note
+
+        # No block for the original content.
+        rh._HINTS_BLOCK_CACHE.clear()
+        self.assertIsNone(rh._cached_find_hints_block(parser, note, card))
+
+        # User edits the note to add a stale-looking block; same mod, different content.
+        note.values.return_value = [
+            '{{c1::old}} <div class="ai-hints-json" style="display:none">'
+            '{"c1":{"hints":["stale"],"options":["a"],"_src":"old"}}</div>'
+        ]
+        note.fields = list(note.values.return_value)
+        block = rh._cached_find_hints_block(parser, note, card)
+        self.assertIsNotNone(block, "content-keyed cache must see the edit even with same note.mod")
+
+    def test_src_mismatch_is_not_reported_as_hints(self):
+        """A stale _src snapshot must make the card need regeneration (incl. pregen)."""
+        from addon import reviewer_hooks as rh
+        from addon.card_parser import CardParser
+        mw_mock = MagicMock()
+        mw_mock.addonManager.getConfig.return_value = {}
+        parser = CardParser()
+        note = MagicMock()
+        note.id = 98
+        note.mod = 1000
+        note.model.return_value = {"name": "Cloze", "type": 1}
+        note.values.return_value = [
+            '{{c1::NEW}} <div class="ai-hints-json" style="display:none">'
+            '{"c1":{"hints":["stale"],"options":["a"],"_src":"OLD"}}</div>'
+        ]
+        note.fields = list(note.values.return_value)
+        card = MagicMock()
+        card.id = 6
+        card.ord = 0
+        card.note.return_value = note
+        with patch.object(rh, "mw", mw_mock):
+            self.assertFalse(rh.card_has_hints(card))
+
+
 class TestCardHasHintsStaleCache(unittest.TestCase):
     def test_stale_generation_cache_does_not_report_hints(self):
         """A stale in-memory cache must not make a note without hints look prepared."""
